@@ -96,18 +96,18 @@ export default tseslint.config(
           selector:
             "CallExpression[callee.object.object.name='process'][callee.object.property.name='stdout'][callee.property.name='write']",
           message:
-            "Direct process.stdout.write is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notify.ts wrappers.",
+            "Direct process.stdout.write is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
         },
         {
           selector:
             "CallExpression[callee.object.object.name='process'][callee.object.property.name='stderr'][callee.property.name='write']",
           message:
-            "Direct process.stderr.write is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notify.ts wrappers.",
+            "Direct process.stderr.write is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
         },
         {
           selector: "CallExpression[callee.object.name='console'][callee.property.name='log']",
           message:
-            "console.log is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notify.ts wrappers.",
+            "console.log is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
         },
         {
           selector: "CallExpression[callee.object.name='console'][callee.property.name='warn']",
@@ -117,18 +117,18 @@ export default tseslint.config(
         {
           selector: "CallExpression[callee.object.name='console'][callee.property.name='error']",
           message:
-            "console.error is forbidden in the extension (IL-2). Use notify(ctx, pi, NotificationMessage) (failed status carries cause via per-plugin cause?: Error) from shared/notify.ts.",
+            "console.error is forbidden in the extension (IL-2). Use notify(ctx, pi, NotificationMessage) (failed status carries cause via per-plugin cause?: Error) from shared/notification-dispatch.ts.",
         },
         {
           selector: "CallExpression[callee.object.name='console'][callee.property.name='info']",
           message:
-            "console.info is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notify.ts wrappers.",
+            "console.info is forbidden in the extension (IL-2). Use ctx.ui.notify via shared/notification-dispatch.ts wrappers.",
         },
         {
           selector:
             "CallExpression[callee.property.name='notify'][callee.object.property.name='ui']",
           message:
-            "Direct ctx.ui.notify is forbidden -- use notify(ctx, pi, NotificationMessage) or notifyUsageError(ctx, UsageErrorMessage) from shared/notify.ts.",
+            "Direct ctx.ui.notify is forbidden -- use notify(ctx, pi, NotificationMessage) or notifyUsageError(ctx, UsageErrorMessage) from shared/notification-dispatch.ts.",
         },
       ],
       // Catches console.debug / console.trace / console.dir which the AST
@@ -137,9 +137,9 @@ export default tseslint.config(
     },
   },
   {
-    // BLOCK B: Per-file override -- shared/notify.ts IS the sanctioned
+    // BLOCK B: Per-file override -- shared/notification-dispatch.ts IS the sanctioned
     // ctx.ui.notify call site, so its body must be allowed to call it.
-    files: ["extensions/pi-claude-marketplace/shared/notify.ts"],
+    files: ["extensions/pi-claude-marketplace/shared/notification-dispatch.ts"],
     rules: {
       "no-restricted-syntax": "off",
       "no-console": "off",
@@ -149,7 +149,7 @@ export default tseslint.config(
     // Per-file override (OBS-01 / D-59-05) -- shared/debug-log.ts IS the
     // sole sanctioned runtime debug-output seam for the hooks dispatch
     // path, so its env-gated `console.error` call must be allowed. Mirrors
-    // BLOCK B's authorization for shared/notify.ts (sanctioned escape from
+    // BLOCK B's authorization for shared/notification-dispatch.ts (sanctioned escape from
     // IL-2 / IL-3). Scope is the single literal file path so a glob-widening
     // drift surfaces in code review.
     files: ["extensions/pi-claude-marketplace/shared/debug-log.ts"],
@@ -172,7 +172,7 @@ export default tseslint.config(
     },
   },
   {
-    // BLOCK C (D-11): Import-direction enforcement. 9-zone no-restricted-paths
+    // BLOCK C (D-11): Import-direction enforcement. 8-zone no-restricted-paths
     // mapping: each folder declares which sibling folders MUST NOT import from
     // it (i.e. enforces the upward/inward direction of the dep graph).
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
@@ -326,11 +326,21 @@ export default tseslint.config(
     },
   },
   {
-    // BLOCK D: Test fixtures override. Canary fixtures under
-    // tests/fixtures/bad-imports/ INTENTIONALLY violate the import-x rules;
-    // the canary test (Plan 05) spawns eslint manually on them, so normal CI
-    // lint must skip them.
-    ignores: ["tests/fixtures/bad-imports/**"],
+    // The local equivalent of typescript:S107 (too many parameters).
+    // `eslint-plugin-sonarjs` ships no implementation of S107 at any
+    // severity, so the Sonar way spread above does not carry it and the
+    // finding could only ever surface on a pull request.
+    //
+    // 7 is Sonar's own maximum for S107, so the two gates agree by
+    // construction rather than by coincidence.
+    //
+    // Scoped to mirror `sonar.sources`, like the block above. SonarCloud
+    // drops tests/** via `sonar.test.exclusions`, so enforcing there would
+    // gate code Sonar never grades.
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    rules: {
+      "@typescript-eslint/max-params": ["error", { max: 7 }],
+    },
   },
   {
     // Tests deliberately do defensive checking after operations that "should"

@@ -24,8 +24,8 @@ interface ToolDeclaration {
 
 type Same<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
 
-function extensionApiWithTools(tools: ToolDeclaration[]): PiBoundary.ExtensionAPI {
-  return { getAllTools: () => tools } as unknown as PiBoundary.ExtensionAPI;
+function toolInventory(tools: ToolDeclaration[]): PiBoundary.ToolInventory {
+  return { getAllTools: () => tools };
 }
 
 void (true satisfies Same<PiBoundary.AgentEndEvent, Peer.AgentEndEvent>);
@@ -73,6 +73,14 @@ void (true satisfies Same<
   Extract<PiBoundary.AgentMessage, { role: "assistant" }>
 >);
 void (true satisfies Same<PiBoundary.StopReason, PiBoundary.AssistantMessage["stopReason"]>);
+void (true satisfies PiBoundary.ExtensionAPI extends PiBoundary.ToolInventory ? true : false);
+void (true satisfies PiBoundary.ExtensionContext extends PiBoundary.NotificationContext
+  ? true
+  : false);
+void ({ getAllTools: () => [{ name: "subagent" }] } satisfies PiBoundary.ToolInventory);
+void ({
+  ui: { notify: (_message: string): void => undefined },
+} satisfies PiBoundary.NotificationContext);
 
 // @ts-expect-error a text content block requires text
 void ({ type: "text" } satisfies PiBoundary.PiTextContentBlock);
@@ -90,6 +98,10 @@ void ({ role: "unsupported" } satisfies PiBoundary.AgentMessage);
 void ({ role: "user" } satisfies PiBoundary.AssistantMessage);
 // @ts-expect-error a stop reason has a closed value set
 void ("unsupported" satisfies PiBoundary.StopReason);
+// @ts-expect-error a tool inventory must expose getAllTools
+void ({} satisfies PiBoundary.ToolInventory);
+// @ts-expect-error a notification context must expose ui.notify
+void ({ ui: {} } satisfies PiBoundary.NotificationContext);
 
 describe("getAgentDir", () => {
   test("re-exports the peer binding", () => {
@@ -219,7 +231,7 @@ describe("hasLoadedPiSubagents", () => {
   ]) {
     test(behavior, () => {
       // arrange
-      const extensionApi = extensionApiWithTools(tools);
+      const extensionApi = toolInventory(tools);
 
       // act
       const isLoaded = hasLoadedPiSubagents(extensionApi);
@@ -231,11 +243,11 @@ describe("hasLoadedPiSubagents", () => {
 
   test("degrades to unloaded when tool discovery fails", () => {
     // arrange
-    const extensionApi = {
+    const extensionApi: PiBoundary.ToolInventory = {
       getAllTools: () => {
         throw new Error("not ready");
       },
-    } as unknown as PiBoundary.ExtensionAPI;
+    };
 
     // act
     const isLoaded = hasLoadedPiSubagents(extensionApi);
@@ -251,7 +263,7 @@ describe("hasLoadedPiSubagents", () => {
         throw new Error("inaccessible");
       },
     });
-    const extensionApi = extensionApiWithTools([inaccessibleTool]);
+    const extensionApi = toolInventory([inaccessibleTool]);
 
     // act
     const isLoaded = hasLoadedPiSubagents(extensionApi);
@@ -301,7 +313,7 @@ describe("hasLoadedPiMcpAdapter", () => {
   ]) {
     test(behavior, () => {
       // arrange
-      const extensionApi = extensionApiWithTools(tools);
+      const extensionApi = toolInventory(tools);
 
       // act
       const isLoaded = hasLoadedPiMcpAdapter(extensionApi);
@@ -313,11 +325,11 @@ describe("hasLoadedPiMcpAdapter", () => {
 
   test("degrades to unloaded when tool discovery fails", () => {
     // arrange
-    const extensionApi = {
+    const extensionApi: PiBoundary.ToolInventory = {
       getAllTools: () => {
         throw new Error("not ready");
       },
-    } as unknown as PiBoundary.ExtensionAPI;
+    };
 
     // act
     const isLoaded = hasLoadedPiMcpAdapter(extensionApi);
@@ -333,7 +345,7 @@ describe("hasLoadedPiMcpAdapter", () => {
         throw new Error("inaccessible");
       },
     });
-    const extensionApi = extensionApiWithTools([inaccessibleTool]);
+    const extensionApi = toolInventory([inaccessibleTool]);
 
     // act
     const isLoaded = hasLoadedPiMcpAdapter(extensionApi);
@@ -368,7 +380,7 @@ describe("softDepStatus", () => {
   ]) {
     test(behavior, () => {
       // arrange
-      const extensionApi = extensionApiWithTools(tools);
+      const extensionApi = toolInventory(tools);
 
       // act
       const status = softDepStatus(extensionApi);
@@ -380,11 +392,11 @@ describe("softDepStatus", () => {
 
   test("degrades both dependencies to unloaded when discovery fails", () => {
     // arrange
-    const extensionApi = {
+    const extensionApi: PiBoundary.ToolInventory = {
       getAllTools: () => {
         throw new Error("not ready");
       },
-    } as unknown as PiBoundary.ExtensionAPI;
+    };
 
     // act
     const status = softDepStatus(extensionApi);

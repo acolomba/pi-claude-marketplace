@@ -3,6 +3,7 @@
 ## Milestones
 
 - 🚧 **v1.20 transitive-dependencies** — Phases 1-5 (planning opened 2026-09-09, branch `features/manifest`) — record how each installed plugin got there so `uninstall --prune` can remove the ones nothing needs any more, and close the two adjacent gaps that land on the same surfaces
+- ✅ **refine-unit-tests — Refine Unit Tests** — Phases 1-9 (shipped 2026-09-13) — full detail: [`milestones/refine-unit-tests-ROADMAP.md`](milestones/refine-unit-tests-ROADMAP.md)
 - ✅ **v1.19 Unit Test Refactor** — Phases 108-117 (completed 2026-09-04) — full detail: [`milestones/v1.19-ROADMAP.md`](milestones/v1.19-ROADMAP.md)
 
 Earlier milestones are recorded in [`.planning/MILESTONES.md`](MILESTONES.md);

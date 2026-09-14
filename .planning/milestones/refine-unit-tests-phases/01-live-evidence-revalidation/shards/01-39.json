@@ -1,0 +1,645 @@
+{
+  "plan": "01-39",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "category": "first-pass",
+      "assignedPlan": "01-39",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-023"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-001",
+      "findingId": "ABF-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-002",
+      "findingId": "ABF-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-003",
+      "findingId": "ABF-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-004",
+      "findingId": "ABF-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-005",
+      "findingId": "ABF-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-006",
+      "findingId": "ABF-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-007",
+      "findingId": "ABF-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-008",
+      "findingId": "ABF-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-009",
+      "findingId": "ABF-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-010",
+      "findingId": "ABF-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-011",
+      "findingId": "ABF-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-012",
+      "findingId": "ABF-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-013",
+      "findingId": "ABF-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-014",
+      "findingId": "ABF-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-015",
+      "findingId": "ABF-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-016",
+      "findingId": "ABF-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-017",
+      "findingId": "ABF-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-018",
+      "findingId": "ABF-F018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-019",
+      "findingId": "ABF-F019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-020",
+      "findingId": "ABF-F020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-021",
+      "findingId": "ABF-F021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-022",
+      "findingId": "ABF-F022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md",
+      "label": "CLAIM-023",
+      "findingId": "ABF-F023"
+    }
+  ],
+  "findings": [
+    {
+      "id": "ABF-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-001"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ABG-024",
+      "sourceRefs": [{ "path": "tests/architecture/source-scan.ts" }],
+      "testRefs": [
+        { "path": "tests/architecture/source-scan.test.ts" },
+        { "path": "tests/architecture/unit-suite-glob-completeness.test.ts" },
+        { "path": "tests/architecture/integration-materialization-gate.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus focused node:test rerun",
+        "observed": "The report's broad positive assessment overlaps ABG-024: shared source scans, synthetic source-scan controls, independent glob/tree comparison, and materialization behavior remain present; all six focused current suites passed."
+      },
+      "rationale": "Current code and reruns preserve the reported strengths, already canonicalized by ABG-024.",
+      "destination": "Retain as duplicate positive evidence."
+    },
+    {
+      "id": "ABF-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-002"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ABG-011",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/platform/git-credential.ts" },
+        { "path": "tests/architecture/no-credential-leak.test.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/no-credential-leak.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/architecture/no-credential-leak.test.ts <isolated-copy>",
+        "exitCode": 0,
+        "observed": "An isolated copy planted new Error(`credential fill() failed: ${cred.password}`) in git-credential.ts; the complete no-credential-leak suite exited 0. The copy was removed and live source/test files stayed unchanged."
+      },
+      "rationale": "The literal parenthesis still terminates the bounded prefix before the credential interpolation, confirming the historical bypass and overlapping ABG-011.",
+      "destination": "Phase 2 must add full-template planted offender/benign controls for every credential-message matcher."
+    },
+    {
+      "id": "ABF-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "package.json" }],
+      "testRefs": [{ "path": "tests/architecture/import-boundaries.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current test inspection",
+        "observed": "The D-11 case still parses only package.json's fallow script and token allow-list; no architecture or integration case executes fallow against a planted two-file cycle, so fallow configuration or implementation drift outside that string remains unobserved."
+      },
+      "rationale": "This is a structural limitation of the gate boundary, not evidence that current fallow misses cycles.",
+      "destination": "Retain a gate-strength backlog item for a hermetic planted-cycle integration control."
+    },
+    {
+      "id": "ABF-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-004"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ABG-004",
+      "sourceRefs": [{ "path": "eslint.config.js" }],
+      "testRefs": [{ "path": "tests/architecture/import-boundaries.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/architecture/import-boundaries.test.ts <isolated-copy>",
+        "exitCode": 0,
+        "observed": "In an isolated copy, the real import-boundary block's files glob was changed to extensions/pi-claude-marketplace/never/**/*.ts; the suite still exited 0 because loadZones reads the raw block while the canary uses synthetic overrideConfig. The copy was removed."
+      },
+      "rationale": "The real config applicability gap survives and overlaps ABG-004.",
+      "destination": "Phase 2 should calculate the effective config for a known extension source file."
+    },
+    {
+      "id": "ABF-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-005"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ABG-018",
+      "sourceRefs": [{ "path": "package.json" }],
+      "testRefs": [{ "path": "tests/architecture/no-telemetry-deps.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/architecture/no-telemetry-deps.test.ts <isolated-copy>",
+        "exitCode": 0,
+        "observed": "An isolated package.json gained dd-trace while the current no-telemetry suite exited 0; the copy was removed. Current patterns also still omit analytics-node, @vercel/otel, and elastic-apm-node."
+      },
+      "rationale": "A real forbidden telemetry dependency survives the gate, matching the broader ABG-018 finding.",
+      "destination": "Phase 2 should expand the denylist and add direct offender/benign controls."
+    },
+    {
+      "id": "ABF-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-006"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ABG-019",
+      "sourceRefs": [{ "path": "tests/architecture/source-scan.ts" }],
+      "testRefs": [{ "path": "tests/architecture/reconcile-planner-purity.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current source inspection",
+        "observed": "reconcile-planner-purity.test.ts still declares its own stripComments and hand-written read/strip/match loop although source-scan.ts exports stripComments and assertNoForbiddenSurface."
+      },
+      "rationale": "The duplicate helper remains and is already represented by ABG-019.",
+      "destination": "Phase 2 should adopt the shared source-scan helper."
+    },
+    {
+      "id": "ABF-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-007"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ABG-020",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Assertion-style finding is confined to test and test-support files."
+        }
+      ],
+      "testRefs": [
+        { "path": "tests/architecture/no-credential-leak.test.ts" },
+        { "path": "tests/architecture/import-boundaries.test.ts" },
+        { "path": "tests/architecture/no-telemetry-deps.test.ts" },
+        { "path": "tests/architecture/reconcile-planner-purity.test.ts" },
+        { "path": "tests/architecture/source-scan.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current ripgrep census after CodeGraph discovery",
+        "observed": "The scoped files still contain assert.equal/assert.deepEqual calls where the project test rule requires strictEqual/deepStrictEqual."
+      },
+      "rationale": "The mechanical strict-assertion gap remains and overlaps ABG-020.",
+      "destination": "Phase 2 style cleanup after behavior-strength repairs."
+    },
+    {
+      "id": "ABF-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-008"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ABG-020",
+      "sourceRefs": [{ "path": "N/A", "reason": "AAA-structure finding is confined to tests." }],
+      "testRefs": [
+        { "path": "tests/architecture/no-credential-leak.test.ts" },
+        { "path": "tests/architecture/import-boundaries.test.ts" },
+        { "path": "tests/architecture/no-telemetry-deps.test.ts" },
+        { "path": "tests/architecture/reconcile-planner-purity.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "Most scoped cases still omit the required lowercase arrange/act/assert phases; unit-suite-glob-completeness remains a compliant in-tree example."
+      },
+      "rationale": "The test-structure gap remains and overlaps ABG-020.",
+      "destination": "Phase 2 style cleanup after behavior-strength repairs."
+    },
+    {
+      "id": "ABF-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-009"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ABG-020",
+      "sourceRefs": [{ "path": "N/A", "reason": "JSDoc wording is in the test-support module." }],
+      "testRefs": [{ "path": "tests/architecture/source-scan.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "source-scan.ts still begins exported helper summaries with imperative 'Strip' and 'Read' rather than third-person 'Strips' and 'Reads'."
+      },
+      "rationale": "The wording remains and is part of ABG-020's canonical style finding.",
+      "destination": "Phase 2 mechanical documentation cleanup."
+    },
+    {
+      "id": "ABF-F010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-010"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ABG-017",
+      "sourceRefs": [{ "path": "package.json" }],
+      "testRefs": [{ "path": "tests/architecture/unit-suite-glob-completeness.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph trace plus focused node:test rerun",
+        "observed": "Both cases still independently derive on-disk unit tests and package-script glob matches, compare whole sorted paths with deepStrictEqual, and passed against the current manifest."
+      },
+      "rationale": "The reachability proof remains sound and is already retained within ABG-017.",
+      "destination": "Preserve as positive evidence while separately repairing helper-branch gaps."
+    },
+    {
+      "id": "ABF-F011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-011"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ABG-024",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/no-orchestrator-network.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "focused suite rerun and current gate inspection",
+        "observed": "The mandatory orchestrator-network source scan remains executable and clean in the current focused architecture run."
+      },
+      "rationale": "The report's clean assessment remains positive evidence already grouped by ABG-024.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "ABF-F012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-012"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ABG-024",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/no-lifecycle-default-enabled-read.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current gate inspection",
+        "observed": "The lifecycle default-enabled-read scan retains mandatory targets and no additional report-local defect was identified."
+      },
+      "rationale": "The clean assessment overlaps ABG-024.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "ABF-F013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-013"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ABG-024",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/git.ts" }],
+      "testRefs": [{ "path": "tests/architecture/no-shell-out.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current gate inspection",
+        "observed": "The no-shell-out gate remains structurally intact; only the separately recorded non-strict/AAA conventions survive."
+      },
+      "rationale": "The clean behavioral assessment overlaps ABG-024.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "ABF-F014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-014"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ABG-024",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/no-split-01-cast-reads.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current synthetic-control inspection",
+        "observed": "The SPLIT-01 file retains direct offender/benign walker controls; its remaining style issues are linked separately."
+      },
+      "rationale": "The positive gate-the-gate assessment overlaps ABG-024.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "ABF-F015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-015"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ABG-024",
+      "sourceRefs": [{ "path": "tests/architecture/source-scan.ts" }],
+      "testRefs": [{ "path": "tests/architecture/source-scan.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus focused node:test rerun",
+        "observed": "Missing-target, allowMissing, and genuine-offender controls remain, and the focused source-scan suite passed."
+      },
+      "rationale": "The report's positive source-scan assessment overlaps ABG-024.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "ABF-F016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-016"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ABG-024",
+      "sourceRefs": [{ "path": "package.json" }],
+      "testRefs": [{ "path": "tests/architecture/peer-floor.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "The first-pass report identified no peer-floor behavior defect beyond the cross-cutting style findings; broader peer coverage is separately canonicalized in ABG-015."
+      },
+      "rationale": "The narrow clean assessment is retained without erasing the later adversarial finding.",
+      "destination": "Evidence-only closure for this report-local claim."
+    },
+    {
+      "id": "ABF-F017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-017"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ABG-024",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/extension-version.ts" }],
+      "testRefs": [{ "path": "tests/architecture/extension-version-sync.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "The version-sync case still compares the runtime constant with package.json; its strictness and broader ownership limitations are separately preserved."
+      },
+      "rationale": "The narrow clean assessment overlaps ABG-024 while ABG-016 retains later gaps.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "ABF-F018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-018"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ABG-024",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/persistence/locations.ts" }],
+      "testRefs": [{ "path": "tests/architecture/integration-materialization-gate.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "The integration materialization gate retains per-case temporary roots, cleanup, AAA phases, independent expected values, and sibling-target checks."
+      },
+      "rationale": "The fully clean assessment remains positive evidence already canonicalized by ABG-024.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "ABF-F019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-019"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "ABG-021",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/mcp/types.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/mcp/stage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph call-path trace and current source inspection",
+        "observed": "replacePreparedMcp still registers oldText in a module-level WeakMap keyed by the public replacement handle; rollback and finalize retrieve it through requireMcpReplacementInternals."
+      },
+      "rationale": "The hidden module-state design remains, overlaps ABG-021, and changing the opaque replacement contract requires an ownership decision.",
+      "destination": "Operator decision on retaining the registry or introducing a closure-owned opaque handle."
+    },
+    {
+      "id": "ABF-F020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-020"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ABG-024",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/mcp/parse.ts" }],
+      "testRefs": [{ "path": "tests/bridges/mcp/parse.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source/test ownership inspection",
+        "observed": "The report recorded no parse.ts defect; current mirrored ownership remains present, while later malformed-value concerns are preserved by ABG-021."
+      },
+      "rationale": "Retains the first-pass clean claim without suppressing later adversarial evidence.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "ABF-F021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-021"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ABG-024",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/persistence/locations.ts" }],
+      "testRefs": [
+        { "path": "tests/persistence/locations.test.ts" },
+        { "path": "tests/architecture/integration-materialization-gate.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current ownership inspection",
+        "observed": "The report's intentionally limited locations.ts testability review found no defect; the module still has its dedicated mirrored owner and is exercised by materialization."
+      },
+      "rationale": "This limited positive assessment overlaps ABG-024 and is not an exhaustive style verdict.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "ABF-F022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-022"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ABG-024",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/extension-version.ts" }],
+      "testRefs": [
+        { "path": "tests/shared/extension-version.test.ts" },
+        { "path": "tests/architecture/extension-version-sync.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source/test ownership inspection",
+        "observed": "The production constant remains paired and the architecture synchronization assertion remains present; later test-shape concerns are separately preserved by ABG-016."
+      },
+      "rationale": "Retains the first-pass clean production claim without overriding the adversarial refinement.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "ABF-F023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-boundary-gates.md#CLAIM-023"
+      ],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "This claim concerns the historical report's validation method, not production code."
+        }
+      ],
+      "testRefs": [
+        { "path": "tests/architecture/no-credential-leak.test.ts" },
+        { "path": "tests/architecture/import-boundaries.test.ts" },
+        { "path": "tests/architecture/no-telemetry-deps.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current execution log and isolated-probe results",
+        "observed": "The historical report explicitly ran no commands. Current revalidation supersedes that evidence limitation with a six-suite focused rerun plus isolated surviving credential, config-applicability, and telemetry mutations."
+      },
+      "rationale": "The historical limitation remains true of the old report but no longer describes the evidence supporting this shard.",
+      "destination": "Preserve the provenance note as superseded evidence."
+    }
+  ],
+  "decisions": [],
+  "scopeChanges": []
+}

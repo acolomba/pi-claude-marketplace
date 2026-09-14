@@ -16,18 +16,20 @@
 // (orchestrator layer) is part of the user-contract surface.
 //
 // BLOCK A: zero direct ctx.ui.notify calls -- all user-visible messages route
-// through shared/notify.ts wrappers (notifyUsageError).
+// through shared/notification-dispatch.ts wrappers (notifyUsageError).
 // BLOCK C: no imports from persistence/, domain/, bridges/, transaction/,
 // platform/. Only orchestrators/, shared/, edge/ (sibling) imports.
 
-import { installPlugin } from "../../../orchestrators/plugin/install.ts";
-import { notifyUsageError } from "../../../shared/notify.ts";
+import { createNodeInstallPlugin } from "../../../orchestrators/plugin/install-flow.ts";
+import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { passThroughFlagNames } from "../../flag-catalog.ts";
 import { extractLocalFlag } from "../shared.ts";
 
 import { parseMapModelArgs, splitPluginMarketplaceRef } from "./shared.ts";
 
+import type { InstallHooksRouting } from "../../../orchestrators/plugin/install-disable-cascade.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { CompletionCache } from "../../../shared/completion-cache.ts";
 
 const USAGE =
   "Usage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]";
@@ -44,7 +46,10 @@ const PASS_THROUGH_FLAGS = passThroughFlagNames("install");
  */
 export function makeInstallHandler(
   pi: ExtensionAPI,
+  hooksRouting: InstallHooksRouting,
+  completionCache: CompletionCache,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
+  const installPlugin = createNodeInstallPlugin(hooksRouting, completionCache);
   return async (args, ctx): Promise<void> => {
     // Shared scanner; see edge/handlers/shared.ts. The catalog-derived
     // pass-through flags are downstream-consumed; pass through verbatim.

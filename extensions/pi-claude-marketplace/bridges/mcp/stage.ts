@@ -89,14 +89,44 @@ async function readScopedDoc(filePath: string): Promise<{ doc: RawMcpDoc; malfor
   return { doc: parsed as RawMcpDoc, malformed: false };
 }
 
-/** Extract the `mcpServers` map. Missing/malformed -> {}. */
-function getMcpServers(doc: RawMcpDoc): Record<string, unknown> {
-  const m = doc.mcpServers;
-  if (m === undefined || Array.isArray(m)) {
-    return {};
+/** Refusal for a present scoped `mcpServers` field that is not an object map. */
+export class MalformedMcpServersError extends Error {
+  readonly mcpJsonPath: string;
+  readonly valueKind: string;
+
+  constructor(mcpJsonPath: string, valueKind: string) {
+    super(`mcpServers at ${mcpJsonPath} must be an object; received ${valueKind}.`);
+    this.name = "MalformedMcpServersError";
+    this.mcpJsonPath = mcpJsonPath;
+    this.valueKind = valueKind;
+  }
+}
+
+function isMcpServersRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function mcpServersValueKind(value: unknown): string {
+  return Object.prototype.toString.call(value).slice(8, -1).toLowerCase();
+}
+
+/** Classifies the raw scoped field before either MCP bridge enumerates it. */
+export function classifyMcpServers(
+  doc: RawMcpDoc,
+  mcpJsonPath: string,
+):
+  | { readonly kind: "missing" }
+  | { readonly kind: "present"; readonly servers: Record<string, unknown> } {
+  if (!Object.hasOwn(doc, "mcpServers")) {
+    return { kind: "missing" };
   }
 
-  return m;
+  const value = doc.mcpServers;
+  if (isMcpServersRecord(value)) {
+    return { kind: "present", servers: value };
+  }
+
+  throw new MalformedMcpServersError(mcpJsonPath, mcpServersValueKind(value));
 }
 
 function partitionExistingServers(
@@ -212,7 +242,8 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   const { locations, cwd, marketplaceName, pluginName, servers, pluginRoot, pluginData } = input;
 
   const { doc, malformed } = await readScopedDoc(locations.mcpJsonPath);
-  const existing = getMcpServers(doc);
+  const classification = classifyMcpServers(doc, locations.mcpJsonPath);
+  const existing = classification.kind === "missing" ? {} : classification.servers;
 
   // Partition existing into ours-vs-theirs by marker (MC-5).
   const { ours, theirs } = partitionExistingServers(existing, pluginName, marketplaceName);

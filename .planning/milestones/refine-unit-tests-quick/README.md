@@ -1,0 +1,17 @@
+# Archived Quick Tasks
+
+- [260907-l4w-fix-issue-155-agents-bridge-frontmatter-](260907-l4w-fix-issue-155-agents-bridge-frontmatter-/260907-l4w-SUMMARY.md)
+- [260907-m38-implement-skfm-01-repair-single-line-fro](260907-m38-implement-skfm-01-repair-single-line-fro/260907-m38-SUMMARY.md)
+- [260907-q0h-fix-issue-143-make-generated-command-nam](260907-q0h-fix-issue-143-make-generated-command-nam/260907-q0h-SUMMARY.md)
+- [260907-qar-mark-backlog-entries-wflw-01-and-dfen-01](260907-qar-mark-backlog-entries-wflw-01-and-dfen-01/260907-qar-SUMMARY.md)
+- [260907-qqo-hkps-01-if-field-powershell-rule-prefix-](260907-qqo-hkps-01-if-field-powershell-rule-prefix-/260907-qqo-SUMMARY.md)
+- [260907-qsx-adopt-sonarjs-recommended-ruleset-for-ex](260907-qsx-adopt-sonarjs-recommended-ruleset-for-ex/260907-qsx-SUMMARY.md)
+- [260907-uzb-fmbom-01-strip-leading-utf-8-bom-at-skil](260907-uzb-fmbom-01-strip-leading-utf-8-bom-at-skil/260907-uzb-SUMMARY.md)
+- [260909-h38-make-three-cross-process-concurrency-tes](260909-h38-make-three-cross-process-concurrency-tes/260909-h38-SUMMARY.md)
+- [260912-fp0-correct-the-cwd-lifetime-comments-in-ext](260912-fp0-correct-the-cwd-lifetime-comments-in-ext/260912-fp0-SUMMARY.md)
+- [260912-fp1-repoint-two-stale-test-path-references-i](260912-fp1-repoint-two-stale-test-path-references-i/260912-fp1-SUMMARY.md)
+- [260912-fp2-correct-three-stale-documentation-refere](260912-fp2-correct-three-stale-documentation-refere/260912-fp2-SUMMARY.md)
+- [260912-fp3-dispose-every-remaining-open-entry-in-th](260912-fp3-dispose-every-remaining-open-entry-in-th/260912-fp3-SUMMARY.md)
+- [260912-hqq-rename-the-published-bridge-interface-ho](260912-hqq-rename-the-published-bridge-interface-ho/260912-hqq-SUMMARY.md)
+- [260912-pdh-retire-the-revalidation-tooling-with-the](260912-pdh-retire-the-revalidation-tooling-with-the/260912-pdh-SUMMARY.md)
+- [260912-vyi-address-s3863-and-s107](260912-vyi-address-s3863-and-s107/260912-vyi-SUMMARY.md)

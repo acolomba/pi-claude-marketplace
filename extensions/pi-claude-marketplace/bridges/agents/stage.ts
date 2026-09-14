@@ -45,7 +45,7 @@ import {
 } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
-import { assertNoAgentCollisions, convertAgent } from "./convert.ts";
+import { assertNoAgentCollisions, convertAgent, GUIDED_DROPPED_FIELDS } from "./convert.ts";
 import { discoverPluginAgents } from "./discover.ts";
 import { findOwnershipConflicts, partitionByOwner } from "./index-mutation.ts";
 import { isOwnedAgentFile } from "./marker.ts";
@@ -56,12 +56,13 @@ import type {
   DiscoveredAgent,
   PreparedAgentsStaging,
   ReplacePreparedAgentsOptions,
-  StageAgentsCommitResult,
   StageAgentsInput,
+  StageAgentsCommitResult,
   StagedAgentRecord,
   UnstageAgentFailure,
 } from "./types.ts";
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
+import type { RemovalOps } from "../../shared/fs-utils.ts";
 
 type AgentsReplacementInternals = Readonly<{
   backupRoot: string;
@@ -83,7 +84,7 @@ const agentsReplacementInternals = new WeakMap<
  * failure during the staging-dir write.
  *
  * Steps:
- *   1. Discover (or [] if agentsSourceDir === null)
+ *   1. Discover every resolved agent directory in resolver order (or none)
  *   2. AG-12 collision detection within this plugin
  *   3. Convert (AG-7 mapping pipeline)
  *   4. Load index, partition by (marketplace, plugin)
@@ -95,6 +96,7 @@ const agentsReplacementInternals = new WeakMap<
  *  10. Aggregate warnings + index corruptions
  */
 export async function prepareStagePluginAgents(
+  ops: RemovalOps,
   input: StageAgentsInput,
 ): Promise<PreparedAgentsStaging> {
   const {
@@ -103,7 +105,6 @@ export async function prepareStagePluginAgents(
     pluginName,
     pluginRoot,
     pluginDataDir,
-    agentsSourceDir,
     knownSkills,
     mapModel,
     cwd,
@@ -114,18 +115,12 @@ export async function prepareStagePluginAgents(
   // This is the sole point where scope and cwd meet before convertAgent runs.
   const projectDir = locations.scope === "project" ? cwd : undefined;
 
-  // Step 1: discover. D-07 signature: discoverPluginAgents takes
-  // `agentsDirs: readonly string[]`. A null agentsSourceDir means the
-  // plugin has no agents component; a non-null string maps to a
-  // single-element array. Callers building over the
-  // `componentPaths.agents: readonly string[]` shape pass the array
-  // directly (translation lives at the StageAgentsInput boundary).
-  // D-07 warnings (duplicate generated names across array elements)
-  // are folded into `aggregatedWarnings` below.
-  const discoverResult =
-    agentsSourceDir === null
-      ? { discovered: [] as readonly DiscoveredAgent[], warnings: [] as readonly string[] }
-      : await discoverPluginAgents({ pluginName, agentsDirs: [agentsSourceDir] });
+  // Step 1: discover every directory in resolver order. This is the canonical
+  // source representation shared by preview and live staging.
+  const discoverResult = await discoverPluginAgents({
+    pluginName,
+    agentsDirs: input.agentsDirs,
+  });
   const discovered: readonly DiscoveredAgent[] = discoverResult.discovered;
   const discoverWarnings: readonly string[] = discoverResult.warnings;
 
@@ -254,7 +249,7 @@ export async function prepareStagePluginAgents(
       newEntries.push(entry);
     }
   } catch (err) {
-    throw appendLeakToError(err, await cleanupStaging(stagingDir, "agents staging directory"));
+    throw appendLeakToError(err, await cleanupStaging(ops, stagingDir, "agents staging directory"));
   }
 
   // Step 10: assemble the result. recorded[] is the W-05 record the
@@ -299,8 +294,11 @@ function formatAgentWarnings(converted: ConvertedAgent): string[] {
     out.push(`[${converted.sourceName}] ${w}`);
   }
 
-  if (converted.droppedFields.length > 0) {
-    out.push(`[${converted.sourceName}] dropped fields: ${converted.droppedFields.join(", ")}`);
+  // #179: fields with a targeted warning of their own (already in
+  // converted.warnings) stay off the generic summary line.
+  const summarizedDropped = converted.droppedFields.filter((f) => !GUIDED_DROPPED_FIELDS.has(f));
+  if (summarizedDropped.length > 0) {
+    out.push(`[${converted.sourceName}] dropped fields: ${summarizedDropped.join(", ")}`);
   }
 
   if (converted.droppedTools.length > 0) {
@@ -323,6 +321,7 @@ function formatAgentWarnings(converted: ConvertedAgent): string[] {
  * via warnings[] rather than dropping it.
  */
 export async function commitPreparedAgents(
+  ops: RemovalOps,
   prepared: PreparedAgentsStaging,
 ): Promise<string | undefined> {
   if (prepared.kind === "noop") {
@@ -357,7 +356,7 @@ export async function commitPreparedAgents(
   } catch (err) {
     throw appendLeakToError(
       err,
-      await cleanupStaging(prepared.stagingDir, "agents staging directory"),
+      await cleanupStaging(ops, prepared.stagingDir, "agents staging directory"),
     );
   }
 
@@ -391,11 +390,11 @@ export async function commitPreparedAgents(
 
     // Surface BOTH original err AND rollback leaks AND staging-cleanup leak
     // via appendLeaks (sequential-cause chain; preserves Error.cause for the
-    // depth-5 walker in shared/notify.ts). Use appendLeaks here, NOT
+    // rendering owned by shared/notification-grammar.ts). Use appendLeaks here, NOT
     // ManualRecoveryError -- commit-path leaks are transient IO.
     throw appendLeaks(err, [
       ...rollbackLeaks,
-      await cleanupStaging(prepared.stagingDir, "agents staging directory"),
+      await cleanupStaging(ops, prepared.stagingDir, "agents staging directory"),
     ]);
   }
 
@@ -414,7 +413,7 @@ export async function commitPreparedAgents(
 
   // Step 4: best-effort cleanup. Returns leak message (if any) for caller
   // to surface in warnings[]; never throws.
-  return cleanupStaging(prepared.stagingDir, "agents staging directory");
+  return cleanupStaging(ops, prepared.stagingDir, "agents staging directory");
 }
 
 /**
@@ -424,13 +423,14 @@ export async function commitPreparedAgents(
  * surface.
  */
 export async function abortPreparedAgents(
+  ops: RemovalOps,
   prepared: PreparedAgentsStaging,
 ): Promise<string | undefined> {
   if (prepared.kind === "noop") {
     return undefined;
   }
 
-  return cleanupStaging(prepared.stagingDir, "agents staging directory");
+  return cleanupStaging(ops, prepared.stagingDir, "agents staging directory");
 }
 
 /**
@@ -439,6 +439,7 @@ export async function abortPreparedAgents(
  * staged renames so later orchestrator failures can restore the old install.
  */
 export async function replacePreparedAgents(
+  ops: RemovalOps,
   prepared: PreparedAgentsStaging,
   options?: ReplacePreparedAgentsOptions,
 ): Promise<AgentsReplacement> {
@@ -506,6 +507,7 @@ export async function replacePreparedAgents(
     });
   } catch (err) {
     const leaks = await rollbackAgentsReplacementInternal(
+      ops,
       prepared,
       renamed,
       backups,
@@ -533,6 +535,7 @@ export async function replacePreparedAgents(
 }
 
 export async function rollbackAgentsReplacement(
+  ops: RemovalOps,
   replacement: AgentsReplacement,
 ): Promise<readonly string[]> {
   if (replacement.kind === "noop") {
@@ -541,6 +544,7 @@ export async function rollbackAgentsReplacement(
 
   const internals = requireAgentsReplacementInternals(replacement);
   return rollbackAgentsReplacementInternal(
+    ops,
     replacement.prepared,
     internals.renamed,
     internals.backups,
@@ -550,6 +554,7 @@ export async function rollbackAgentsReplacement(
 }
 
 export async function finalizeAgentsReplacement(
+  ops: RemovalOps,
   replacement: AgentsReplacement,
 ): Promise<readonly string[]> {
   if (replacement.kind === "noop") {
@@ -558,8 +563,8 @@ export async function finalizeAgentsReplacement(
 
   const internals = requireAgentsReplacementInternals(replacement);
   const leaks = [
-    await cleanupStaging(internals.backupRoot, "agents replacement backup directory"),
-    await cleanupStaging(replacement.prepared.stagingDir, "agents staging directory"),
+    await cleanupStaging(ops, internals.backupRoot, "agents replacement backup directory"),
+    await cleanupStaging(ops, replacement.prepared.stagingDir, "agents staging directory"),
   ].filter((leak): leak is string => leak !== undefined);
   return Object.freeze(leaks);
 }
@@ -576,6 +581,7 @@ function requireAgentsReplacementInternals(
 }
 
 async function rollbackAgentsReplacementInternal(
+  ops: RemovalOps,
   prepared: Extract<PreparedAgentsStaging, { kind: "staged" }>,
   renamed: readonly { from: string; to: string }[],
   backups: readonly { name: string; from: string; to: string }[],
@@ -583,6 +589,7 @@ async function rollbackAgentsReplacementInternal(
   oldIndexText: string | undefined,
 ): Promise<readonly string[]> {
   return rollbackReplacementCommon({
+    ops,
     renamed,
     backups,
     stagingRoot: prepared.stagingDir,

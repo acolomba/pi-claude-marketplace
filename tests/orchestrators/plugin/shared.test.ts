@@ -18,7 +18,6 @@ import {
   MarketplaceNotAddedSignal,
   missIsNotInstalled,
   maybeWritePluginConfigBack,
-  pickAgentsSourceDir,
   removePluginRecord,
   resolveCrossScopePluginTarget,
   resolveInstalledMarketplaceTarget,
@@ -38,9 +37,10 @@ import {
   CrossPluginConflictError,
   MarketplaceNotFoundError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { type PluginSkippedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 import type { PluginEntry } from "../../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
-import type { MaterializablePlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type { MaterializablePlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 import type { ScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -49,7 +49,6 @@ import type {
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CommandContext } from "../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
-import type { PluginSkippedMessage } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
@@ -1448,41 +1447,6 @@ describe("resolvePluginVersion", () => {
   });
 });
 
-describe("pickAgentsSourceDir", () => {
-  test("returns null when no agent source is declared", () => {
-    // arrange
-    const installable = makeMaterializablePlugin("/plugins/alpha");
-
-    // act
-    const agentsSourceDir = pickAgentsSourceDir(installable);
-
-    // assert
-    assert.equal(agentsSourceDir, null);
-  });
-
-  test("returns an absolute first agent source unchanged", () => {
-    // arrange
-    const installable = makeMaterializablePlugin("/plugins/alpha", ["/shared/agents", "other"]);
-
-    // act
-    const agentsSourceDir = pickAgentsSourceDir(installable);
-
-    // assert
-    assert.equal(agentsSourceDir, "/shared/agents");
-  });
-
-  test("resolves a relative first agent source beneath the plugin root", () => {
-    // arrange
-    const installable = makeMaterializablePlugin("/plugins/alpha", ["agents", "other"]);
-
-    // act
-    const agentsSourceDir = pickAgentsSourceDir(installable);
-
-    // assert
-    assert.equal(agentsSourceDir, "/plugins/alpha/agents");
-  });
-});
-
 describe("assertNoCrossPluginConflicts", () => {
   test("accepts generated names not reserved by another plugin", () => {
     // arrange
@@ -1893,6 +1857,7 @@ describe("emitMarketplaceNotAddedSignal", () => {
       pi,
       cwd: "/work/project",
       context,
+      cardinality: "plural",
       err: new MarketplaceNotAddedSignal("mp", "project", { scope: "project", plugin: "hello" }),
     });
 
@@ -1908,7 +1873,11 @@ describe("emitMarketplaceNotAddedSignal", () => {
     ]);
     assert.deepStrictEqual(notifications, [
       {
-        message: "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped)",
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● mp [project]\n" +
+          "  ⊘ hello (skipped)\n\n" +
+          "Plugin reinstall: 1 failure",
         severity: "error",
       },
     ]);
@@ -1932,6 +1901,7 @@ describe("emitMarketplaceNotAddedSignal", () => {
         pi,
         cwd,
         context,
+        cardinality: "single",
         err: new MarketplaceNotAddedSignal("ghost", "user"),
       });
 

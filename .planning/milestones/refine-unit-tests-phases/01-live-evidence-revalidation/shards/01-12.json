@@ -1,0 +1,2384 @@
+{
+  "version": 1,
+  "inventoryMode": "locked-corpus",
+  "plan": "01-12",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "category": "adversarial",
+      "assignedPlan": "01-12",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-029",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-030",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-031",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-032"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "category": "adversarial",
+      "assignedPlan": "01-12",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-029",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-030",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-031",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-032",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-033",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-034",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-035",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-036",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-037",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-038",
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-039"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-001",
+      "findingId": "HEP-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-002",
+      "findingId": "HEP-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-003",
+      "findingId": "HEP-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-004",
+      "findingId": "HEP-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-005",
+      "findingId": "HEP-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-006",
+      "findingId": "HEP-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-007",
+      "findingId": "HEP-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-008",
+      "findingId": "HEP-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-009",
+      "findingId": "HEP-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-010",
+      "findingId": "HEP-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-011",
+      "findingId": "HEP-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-012",
+      "findingId": "HEP-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-013",
+      "findingId": "HEP-013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-014",
+      "findingId": "HEP-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-015",
+      "findingId": "HEP-015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-016",
+      "findingId": "HEP-016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-017",
+      "findingId": "HEP-017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-018",
+      "findingId": "HEP-018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-019",
+      "findingId": "HEP-019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-020",
+      "findingId": "HEP-020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-021",
+      "findingId": "HEP-021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-022",
+      "findingId": "HEP-022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-023",
+      "findingId": "HEP-023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-024",
+      "findingId": "HEP-024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-025",
+      "findingId": "HEP-025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-026",
+      "findingId": "HEP-026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-027",
+      "findingId": "HEP-027"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-028",
+      "findingId": "HEP-028"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-029",
+      "findingId": "HEP-029"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-030",
+      "findingId": "HEP-030"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-031",
+      "findingId": "HEP-031"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-032",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md",
+      "label": "HEP-032",
+      "findingId": "HEP-032"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-001",
+      "findingId": "HIF-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-002",
+      "findingId": "HIF-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-003",
+      "findingId": "HIF-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-004",
+      "findingId": "HIF-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-005",
+      "findingId": "HIF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-006",
+      "findingId": "HIF-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-007",
+      "findingId": "HIF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-008",
+      "findingId": "HIF-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-009",
+      "findingId": "HIF-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-010",
+      "findingId": "HIF-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-011",
+      "findingId": "HIF-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-012",
+      "findingId": "HIF-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-013",
+      "findingId": "HIF-013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-014",
+      "findingId": "HIF-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-015",
+      "findingId": "HIF-015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-016",
+      "findingId": "HIF-016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-017",
+      "findingId": "HIF-017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-018",
+      "findingId": "HIF-018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-019",
+      "findingId": "HIF-019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-020",
+      "findingId": "HIF-020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-021",
+      "findingId": "HIF-021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-022",
+      "findingId": "HIF-022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-023",
+      "findingId": "HIF-023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-024",
+      "findingId": "HIF-024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-025",
+      "findingId": "HIF-025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-026",
+      "findingId": "HIF-026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-027",
+      "findingId": "HIF-027"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-028",
+      "findingId": "HIF-028"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-029",
+      "findingId": "HIF-029"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-030",
+      "findingId": "HIF-030"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-031",
+      "findingId": "HIF-031"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-032",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-032",
+      "findingId": "HIF-032"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-033",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-033",
+      "findingId": "HIF-033"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-034",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-034",
+      "findingId": "HIF-034"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-035",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-035",
+      "findingId": "HIF-035"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-036",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-036",
+      "findingId": "HIF-036"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-037",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-037",
+      "findingId": "HIF-037"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-038",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-038",
+      "findingId": "HIF-038"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-039",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md",
+      "label": "HIF-039",
+      "findingId": "HIF-039"
+    }
+  ],
+  "findings": [
+    {
+      "id": "HEP-001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/spawn-helpers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/bridges/hooks/spawn-helpers.test.ts (repository-local isolated copy with claim mutation)",
+        "exitCode": 0,
+        "observed": "The focused owner passed with the duplicate _truncated keys survive decoding assertions mutation in an isolated copied tree; live source and tests were unchanged."
+      },
+      "rationale": "Duplicate _truncated keys survive decoding assertions",
+      "destination": "Route remediation for: Duplicate _truncated keys survive decoding assertions."
+    },
+    {
+      "id": "HEP-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/spawn-helpers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/bridges/hooks/spawn-helpers.test.ts (repository-local isolated copy with claim mutation)",
+        "exitCode": 0,
+        "observed": "The focused owner passed with the truncated-object key order is not pinned mutation in an isolated copied tree; live source and tests were unchanged."
+      },
+      "rationale": "Truncated-object key order is not pinned",
+      "destination": "Route remediation for: Truncated-object key order is not pinned."
+    },
+    {
+      "id": "HEP-003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/spawn-helpers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/bridges/hooks/spawn-helpers.test.ts (repository-local isolated copy with claim mutation)",
+        "exitCode": 0,
+        "observed": "The focused owner passed with the non-array args and non-string shell discriminator inputs are untested mutation in an isolated copied tree; live source and tests were unchanged."
+      },
+      "rationale": "Non-array args and non-string shell discriminator inputs are untested",
+      "destination": "Route remediation for: Non-array args and non-string shell discriminator inputs are untested."
+    },
+    {
+      "id": "HEP-004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/spawn-helpers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: A second oversized object string field is untested. The focused baseline passed."
+      },
+      "rationale": "A second oversized object string field is untested",
+      "destination": "Route remediation for: A second oversized object string field is untested."
+    },
+    {
+      "id": "HEP-005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-005"
+      ],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/exec-timer.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Exec-timer diagnostics are not fully asserted. The focused baseline passed."
+      },
+      "rationale": "Exec-timer diagnostics are not fully asserted",
+      "destination": "Close the historical prescription: Exec-timer diagnostics are not fully asserted."
+    },
+    {
+      "id": "HEP-006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/exec-timer.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/bridges/hooks/exec-timer.test.ts (repository-local isolated copy with claim mutation)",
+        "exitCode": 0,
+        "observed": "The focused owner passed with the optional childlike exit fields are not tested as absent mutation in an isolated copied tree; live source and tests were unchanged."
+      },
+      "rationale": "Optional ChildLike exit fields are not tested as absent",
+      "destination": "Route remediation for: Optional ChildLike exit fields are not tested as absent."
+    },
+    {
+      "id": "HEP-007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/exec-timer.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Exec-timer escalation lines use partial regex assertions. The focused baseline passed."
+      },
+      "rationale": "Exec-timer escalation lines use partial regex assertions",
+      "destination": "Route remediation for: Exec-timer escalation lines use partial regex assertions."
+    },
+    {
+      "id": "HEP-008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/wire-protocol.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Wire-protocol diagnostics use fragment booleans instead of exact lines. The focused baseline passed."
+      },
+      "rationale": "Wire-protocol diagnostics use fragment booleans instead of exact lines",
+      "destination": "Route remediation for: Wire-protocol diagnostics use fragment booleans instead of exact lines."
+    },
+    {
+      "id": "HEP-009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/wire-protocol.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/bridges/hooks/wire-protocol.test.ts (repository-local isolated copy with claim mutation)",
+        "exitCode": 0,
+        "observed": "The focused owner passed with the a non-block top-level decision value is not tested mutation in an isolated copied tree; live source and tests were unchanged."
+      },
+      "rationale": "A non-block top-level decision value is not tested",
+      "destination": "Route remediation for: A non-block top-level decision value is not tested."
+    },
+    {
+      "id": "HEP-010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Hooks barrel exact export surface is not pinned. The focused baseline passed."
+      },
+      "rationale": "Hooks barrel exact export surface is not pinned",
+      "destination": "Route remediation for: Hooks barrel exact export surface is not pinned."
+    },
+    {
+      "id": "HEP-011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/timeout.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/timeout.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Six blocking-event default rows lack direct cases. The focused baseline passed."
+      },
+      "rationale": "Six blocking-event default rows lack direct cases",
+      "destination": "Route remediation for: Six blocking-event default rows lack direct cases."
+    },
+    {
+      "id": "HEP-012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/hook-env.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/bridges/hooks/hook-env.test.ts (repository-local isolated copy with claim mutation)",
+        "exitCode": 0,
+        "observed": "The focused owner passed with the claude_env_file containment is not tested mutation in an isolated copied tree; live source and tests were unchanged."
+      },
+      "rationale": "CLAUDE_ENV_FILE containment is not tested",
+      "destination": "Route remediation for: CLAUDE_ENV_FILE containment is not tested."
+    },
+    {
+      "id": "HEP-013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/spawn-helpers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: EXEC-04 comments describe different discriminators than the code. The focused baseline passed."
+      },
+      "rationale": "EXEC-04 comments describe different discriminators than the code",
+      "destination": "Route remediation for: EXEC-04 comments describe different discriminators than the code."
+    },
+    {
+      "id": "HEP-014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/spawn-helpers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: SpawnPlan is exported without an external consumer or direct type proof. The focused baseline passed."
+      },
+      "rationale": "SpawnPlan is exported without an external consumer or direct type proof",
+      "destination": "Route remediation for: SpawnPlan is exported without an external consumer or direct type proof."
+    },
+    {
+      "id": "HEP-015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/translation-context.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: buildTranslationContext accepts an over-wide ExtensionContext. The focused baseline passed."
+      },
+      "rationale": "buildTranslationContext accepts an over-wide ExtensionContext",
+      "destination": "Route remediation for: buildTranslationContext accepts an over-wide ExtensionContext."
+    },
+    {
+      "id": "HEP-016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/hook-env.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: HookEnvContext is exported but not named by its test or consumers. The focused baseline passed."
+      },
+      "rationale": "HookEnvContext is exported but not named by its test or consumers",
+      "destination": "Route remediation for: HookEnvContext is exported but not named by its test or consumers."
+    },
+    {
+      "id": "HEP-017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/hook-env.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Hook environment mutation assertions run after restoration. The focused baseline passed."
+      },
+      "rationale": "Hook environment mutation assertions run after restoration",
+      "destination": "Route remediation for: Hook environment mutation assertions run after restoration."
+    },
+    {
+      "id": "HEP-018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/spawn-helpers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/bridges/hooks/spawn-helpers.test.ts (repository-local isolated copy with claim mutation)",
+        "exitCode": 0,
+        "observed": "The focused owner passed with the truncation tests do not prove maximal emitted bytes mutation in an isolated copied tree; live source and tests were unchanged."
+      },
+      "rationale": "Truncation tests do not prove maximal emitted bytes",
+      "destination": "Route remediation for: Truncation tests do not prove maximal emitted bytes."
+    },
+    {
+      "id": "HEP-019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/timeout.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/timeout.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Timeout debug output is fragment-matched. The focused baseline passed."
+      },
+      "rationale": "Timeout debug output is fragment-matched",
+      "destination": "Route remediation for: Timeout debug output is fragment-matched."
+    },
+    {
+      "id": "HEP-020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-020"
+      ],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/translation-context.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: The translation-context poison-pill literal should be strong-mock. The focused baseline passed."
+      },
+      "rationale": "The translation-context poison-pill literal should be strong-mock",
+      "destination": "Close the historical prescription: The translation-context poison-pill literal should be strong-mock."
+    },
+    {
+      "id": "HEP-021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/hook-env.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: prepareHookEnv hides a process.env dependency. The focused baseline passed."
+      },
+      "rationale": "prepareHookEnv hides a process.env dependency",
+      "destination": "Route remediation for: prepareHookEnv hides a process.env dependency."
+    },
+    {
+      "id": "HEP-022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/spawn-helpers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Decode-before-assert is a cross-cutting byte-contract defect class. The focused baseline passed."
+      },
+      "rationale": "Decode-before-assert is a cross-cutting byte-contract defect class",
+      "destination": "Route remediation for: Decode-before-assert is a cross-cutting byte-contract defect class."
+    },
+    {
+      "id": "HEP-023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/spawn-helpers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Truncation field order changes which oversized field is retained. The focused baseline passed."
+      },
+      "rationale": "Truncation field order changes which oversized field is retained",
+      "destination": "Route remediation for: Truncation field order changes which oversized field is retained."
+    },
+    {
+      "id": "HEP-024",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/wire-protocol.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Fragment checks can be hidden inside whole-object boolean assertions. The focused baseline passed."
+      },
+      "rationale": "Fragment checks can be hidden inside whole-object boolean assertions",
+      "destination": "Route remediation for: Fragment checks can be hidden inside whole-object boolean assertions."
+    },
+    {
+      "id": "HEP-025",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/debug-log.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/wire-protocol.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Hook debug capture setup is duplicated across hook test files. The focused baseline passed."
+      },
+      "rationale": "Hook debug capture setup is duplicated across hook test files",
+      "destination": "Route remediation for: Hook debug capture setup is duplicated across hook test files."
+    },
+    {
+      "id": "HEP-026",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch-exec.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: EXEC-04 and cancellation comments drift across sibling modules. The focused baseline passed."
+      },
+      "rationale": "EXEC-04 and cancellation comments drift across sibling modules",
+      "destination": "Route remediation for: EXEC-04 and cancellation comments drift across sibling modules."
+    },
+    {
+      "id": "HEP-027",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/translation-context.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: The over-wide-context census misses satisfies-built poison literals. The focused baseline passed."
+      },
+      "rationale": "The over-wide-context census misses satisfies-built poison literals",
+      "destination": "Route remediation for: The over-wide-context census misses satisfies-built poison literals."
+    },
+    {
+      "id": "HEP-028",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/spawn-helpers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Whole-byte comparisons should be the truncation-suite pattern. The focused baseline passed."
+      },
+      "rationale": "Whole-byte comparisons should be the truncation-suite pattern",
+      "destination": "Route remediation for: Whole-byte comparisons should be the truncation-suite pattern."
+    },
+    {
+      "id": "HEP-029",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-029"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/source-scan.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Repository conventions cite a removed tests/helpers location. The focused baseline passed."
+      },
+      "rationale": "Repository conventions cite a removed tests/helpers location",
+      "destination": "Route remediation for: Repository conventions cite a removed tests/helpers location."
+    },
+    {
+      "id": "HEP-030",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-030"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/spawn-helpers.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Clean verdicts and structural-only findings do not prove mutation strength. The focused baseline passed."
+      },
+      "rationale": "Clean verdicts and structural-only findings do not prove mutation strength",
+      "destination": "Route remediation for: Clean verdicts and structural-only findings do not prove mutation strength."
+    },
+    {
+      "id": "HEP-031",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-031"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/timeout.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/wire-protocol.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Sibling drift occurs within the exec-protocol test area. The focused baseline passed."
+      },
+      "rationale": "Sibling drift occurs within the exec-protocol test area",
+      "destination": "Route remediation for: Sibling drift occurs within the exec-protocol test area."
+    },
+    {
+      "id": "HEP-032",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-exec-protocol.md#HEP-032"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/dispatch-exec.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Production comments require call-graph verification. The focused baseline passed."
+      },
+      "rationale": "Production comments require call-graph verification",
+      "destination": "Route remediation for: Production comments require call-graph verification."
+    },
+    {
+      "id": "HIF-001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --input-type=module focused probe for HIF-001",
+        "exitCode": 0,
+        "observed": "Bash() compiled to an empty bash predicate; it returned false for a plain command and true for an interpolated command."
+      },
+      "rationale": "Empty-inner prefix forms violate the fail-open contract",
+      "destination": "Route remediation for: Empty-inner prefix forms violate the fail-open contract."
+    },
+    {
+      "id": "HIF-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/bash.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/bridges/hooks/if-field/bash.test.ts (repository-local isolated copy with claim mutation)",
+        "exitCode": 0,
+        "observed": "The focused owner passed with the compound separators inside quoted command substitutions are untested mutation in an isolated copied tree; live source and tests were unchanged."
+      },
+      "rationale": "Compound separators inside quoted command substitutions are untested",
+      "destination": "Route remediation for: Compound separators inside quoted command substitutions are untested."
+    },
+    {
+      "id": "HIF-003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/bash.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/bridges/hooks/if-field/bash.test.ts (repository-local isolated copy with claim mutation)",
+        "exitCode": 0,
+        "observed": "The focused owner passed with the backslashes inside single quotes are not discriminated mutation in an isolated copied tree; live source and tests were unchanged."
+      },
+      "rationale": "Backslashes inside single quotes are not discriminated",
+      "destination": "Route remediation for: Backslashes inside single quotes are not discriminated."
+    },
+    {
+      "id": "HIF-004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/bash.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --input-type=module focused probe for HIF-004",
+        "exitCode": 0,
+        "observed": "The real parser split an unquoted compound substitution at outer separators instead of emitting its inner subcommands."
+      },
+      "rationale": "Unquoted compound command substitutions are mangled without a pinned policy",
+      "destination": "Route remediation for: Unquoted compound command substitutions are mangled without a pinned policy."
+    },
+    {
+      "id": "HIF-005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/bridges/hooks/if-field/index.test.ts (repository-local isolated copy with claim mutation)",
+        "exitCode": 0,
+        "observed": "The focused owner passed with the mcp literal equality is not discriminated from prefix matching mutation in an isolated copied tree; live source and tests were unchanged."
+      },
+      "rationale": "MCP literal equality is not discriminated from prefix matching",
+      "destination": "Route remediation for: MCP literal equality is not discriminated from prefix matching."
+    },
+    {
+      "id": "HIF-006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/hooks-if-field.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Glob DoS commentary names an architecture regression gate that does not exist. The focused baseline passed."
+      },
+      "rationale": "Glob DoS commentary names an architecture regression gate that does not exist",
+      "destination": "Route remediation for: Glob DoS commentary names an architecture regression gate that does not exist."
+    },
+    {
+      "id": "HIF-007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/bash.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Direct bash matches with interpolation and command-only patterns are untested. The focused baseline passed."
+      },
+      "rationale": "Direct bash matches with interpolation and command-only patterns are untested",
+      "destination": "Route remediation for: Direct bash matches with interpolation and command-only patterns are untested."
+    },
+    {
+      "id": "HIF-008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/bash.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: bashSubcommandFires tests depend on the production glob compiler. The focused baseline passed."
+      },
+      "rationale": "bashSubcommandFires tests depend on the production glob compiler",
+      "destination": "Route remediation for: bashSubcommandFires tests depend on the production glob compiler."
+    },
+    {
+      "id": "HIF-009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/glob.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Glob exported types lack proofs in their owning test. The focused baseline passed."
+      },
+      "rationale": "Glob exported types lack proofs in their owning test",
+      "destination": "Route remediation for: Glob exported types lack proofs in their owning test."
+    },
+    {
+      "id": "HIF-010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/glob.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: The trailing-word-boundary guard lacks a discriminating case. The focused baseline passed."
+      },
+      "rationale": "The trailing-word-boundary guard lacks a discriminating case",
+      "destination": "Route remediation for: The trailing-word-boundary guard lacks a discriminating case."
+    },
+    {
+      "id": "HIF-011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/glob.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: The path-glob loop creates dead arrange aliases. The focused baseline passed."
+      },
+      "rationale": "The path-glob loop creates dead arrange aliases",
+      "destination": "Route remediation for: The path-glob loop creates dead arrange aliases."
+    },
+    {
+      "id": "HIF-012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Seven if-field cases use the forbidden bare actual name. The focused baseline passed."
+      },
+      "rationale": "Seven if-field cases use the forbidden bare actual name",
+      "destination": "Route remediation for: Seven if-field cases use the forbidden bare actual name."
+    },
+    {
+      "id": "HIF-013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Index tests are not grouped by their two exported entrypoints. The focused baseline passed."
+      },
+      "rationale": "Index tests are not grouped by their two exported entrypoints",
+      "destination": "Route remediation for: Index tests are not grouped by their two exported entrypoints."
+    },
+    {
+      "id": "HIF-014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: ifFires carries an unread claudeEvent parameter. The focused baseline passed."
+      },
+      "rationale": "ifFires carries an unread claudeEvent parameter",
+      "destination": "Route remediation for: ifFires carries an unread claudeEvent parameter."
+    },
+    {
+      "id": "HIF-015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: The match-all reason field has no producer or consumer. The focused baseline passed."
+      },
+      "rationale": "The match-all reason field has no producer or consumer",
+      "destination": "Route remediation for: The match-all reason field has no producer or consumer."
+    },
+    {
+      "id": "HIF-016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/bash.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: separatorAt has an equivalent two-character branch. The focused baseline passed."
+      },
+      "rationale": "separatorAt has an equivalent two-character branch",
+      "destination": "Route remediation for: separatorAt has an equivalent two-character branch."
+    },
+    {
+      "id": "HIF-017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/bash.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: bashSubcommandFires cases bundle independent scenarios. The focused baseline passed."
+      },
+      "rationale": "bashSubcommandFires cases bundle independent scenarios",
+      "destination": "Route remediation for: bashSubcommandFires cases bundle independent scenarios."
+    },
+    {
+      "id": "HIF-018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/bash.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: ParseResult expected literals lack compile-time proofs. The focused baseline passed."
+      },
+      "rationale": "ParseResult expected literals lack compile-time proofs",
+      "destination": "Route remediation for: ParseResult expected literals lack compile-time proofs."
+    },
+    {
+      "id": "HIF-019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/glob.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Path-glob cases bundle several scenarios per test. The focused baseline passed."
+      },
+      "rationale": "Path-glob cases bundle several scenarios per test",
+      "destination": "Route remediation for: Path-glob cases bundle several scenarios per test."
+    },
+    {
+      "id": "HIF-020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Barrel runtime re-export identities are untested. The focused baseline passed."
+      },
+      "rationale": "Barrel runtime re-export identities are untested",
+      "destination": "Route remediation for: Barrel runtime re-export identities are untested."
+    },
+    {
+      "id": "HIF-021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Index tests monkey-patch global built-in prototypes. The focused baseline passed."
+      },
+      "rationale": "Index tests monkey-patch global built-in prototypes",
+      "destination": "Route remediation for: Index tests monkey-patch global built-in prototypes."
+    },
+    {
+      "id": "HIF-022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: An error assertion uses a message regex instead of the exact error. The focused baseline passed."
+      },
+      "rationale": "An error assertion uses a message regex instead of the exact error",
+      "destination": "Route remediation for: An error assertion uses a message regex instead of the exact error."
+    },
+    {
+      "id": "HIF-023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Index row tables use map inside single cases. The focused baseline passed."
+      },
+      "rationale": "Index row tables use map inside single cases",
+      "destination": "Route remediation for: Index row tables use map inside single cases."
+    },
+    {
+      "id": "HIF-024",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Index tests force narrow contexts through ExtensionContext casts. The focused baseline passed."
+      },
+      "rationale": "Index tests force narrow contexts through ExtensionContext casts",
+      "destination": "Route remediation for: Index tests force narrow contexts through ExtensionContext casts."
+    },
+    {
+      "id": "HIF-025",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: One index assertion uses assert.equal. The focused baseline passed."
+      },
+      "rationale": "One index assertion uses assert.equal",
+      "destination": "Route remediation for: One index assertion uses assert.equal."
+    },
+    {
+      "id": "HIF-026",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/bash.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Bash comments still describe ifFires as future work. The focused baseline passed."
+      },
+      "rationale": "Bash comments still describe ifFires as future work",
+      "destination": "Route remediation for: Bash comments still describe ifFires as future work."
+    },
+    {
+      "id": "HIF-027",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/glob.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Glob comments still describe projectRoot fallback as future work. The focused baseline passed."
+      },
+      "rationale": "Glob comments still describe projectRoot fallback as future work",
+      "destination": "Route remediation for: Glob comments still describe projectRoot fallback as future work."
+    },
+    {
+      "id": "HIF-028",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Index header still describes implemented functions as future work. The focused baseline passed."
+      },
+      "rationale": "Index header still describes implemented functions as future work",
+      "destination": "Route remediation for: Index header still describes implemented functions as future work."
+    },
+    {
+      "id": "HIF-029",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-029"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: ifFires and resolveTarget accept an over-wide ExtensionContext. The focused baseline passed."
+      },
+      "rationale": "ifFires and resolveTarget accept an over-wide ExtensionContext",
+      "destination": "Route remediation for: ifFires and resolveTarget accept an over-wide ExtensionContext."
+    },
+    {
+      "id": "HIF-030",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-030"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: The PiToolName cast obscures arbitrary-string membership intent. The focused baseline passed."
+      },
+      "rationale": "The PiToolName cast obscures arbitrary-string membership intent",
+      "destination": "Route remediation for: The PiToolName cast obscures arbitrary-string membership intent."
+    },
+    {
+      "id": "HIF-031",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-031"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Never-throw compiler catches are dead code propped up by global patches. The focused baseline passed."
+      },
+      "rationale": "Never-throw compiler catches are dead code propped up by global patches",
+      "destination": "Route remediation for: Never-throw compiler catches are dead code propped up by global patches."
+    },
+    {
+      "id": "HIF-032",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-032"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/hooks-if-field.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Gate-attribution claims should be swept across production headers. The focused baseline passed."
+      },
+      "rationale": "Gate-attribution claims should be swept across production headers",
+      "destination": "Route remediation for: Gate-attribution claims should be swept across production headers."
+    },
+    {
+      "id": "HIF-033",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-033"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Parse-time rejection comments require matching guards. The focused baseline passed."
+      },
+      "rationale": "Parse-time rejection comments require matching guards",
+      "destination": "Route remediation for: Parse-time rejection comments require matching guards."
+    },
+    {
+      "id": "HIF-034",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-034"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Optional discriminated-union fields need producer and consumer proof. The focused baseline passed."
+      },
+      "rationale": "Optional discriminated-union fields need producer and consumer proof",
+      "destination": "Route remediation for: Optional discriminated-union fields need producer and consumer proof."
+    },
+    {
+      "id": "HIF-035",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-035"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/glob.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Case-owned corruption is the hermetic replacement for prototype patching. The focused baseline passed."
+      },
+      "rationale": "Case-owned corruption is the hermetic replacement for prototype patching",
+      "destination": "Route remediation for: Case-owned corruption is the hermetic replacement for prototype patching."
+    },
+    {
+      "id": "HIF-036",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-036"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Meta-findings names the wrong if-field files as prototype patchers. The focused baseline passed."
+      },
+      "rationale": "Meta-findings names the wrong if-field files as prototype patchers",
+      "destination": "Route remediation for: Meta-findings names the wrong if-field files as prototype patchers."
+    },
+    {
+      "id": "HIF-037",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-037"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: The operator choice is delete dead catches or accept uncovered lines. The focused baseline passed."
+      },
+      "rationale": "The operator choice is delete dead catches or accept uncovered lines",
+      "destination": "Route remediation for: The operator choice is delete dead catches or accept uncovered lines."
+    },
+    {
+      "id": "HIF-038",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-038"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Findings-bearing files still require behavioral mutation review. The focused baseline passed."
+      },
+      "rationale": "Findings-bearing files still require behavioral mutation review",
+      "destination": "Route remediation for: Findings-bearing files still require behavioral mutation review."
+    },
+    {
+      "id": "HIF-039",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/bridges-hooks-if-field.md#HIF-039"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/hooks/if-field/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test inspection and focused baseline",
+        "observed": "Current code and owner evidence were compared for: Type-proof and describe structure drift between sibling if-field tests. The focused baseline passed."
+      },
+      "rationale": "Type-proof and describe structure drift between sibling if-field tests",
+      "destination": "Route remediation for: Type-proof and describe structure drift between sibling if-field tests."
+    }
+  ]
+}

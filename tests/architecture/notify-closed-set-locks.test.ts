@@ -24,7 +24,7 @@ import {
   PLUGIN_STATUSES,
   REASONS,
   STATUS_TOKENS,
-} from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 test("OUT-08: REASONS is the closed 44-entry reason set", () => {
   // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).

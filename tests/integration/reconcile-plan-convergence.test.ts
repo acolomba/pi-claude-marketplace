@@ -179,3 +179,63 @@ test("config migration, merge, and planning converge populated state for user sc
     sourceMismatches: [],
   });
 });
+
+test("a distinct declared alias resolves to the canonical recorded marketplace", () => {
+  // arrange
+  const config = {
+    schemaVersion: 1 as const,
+    marketplaces: { "declared-name": { source: "./local-marketplace" } },
+    plugins: { "formatter@declared-name": {} },
+  };
+  const merged = mergeScopeConfigs(config, {});
+  const state: ExtensionState = {
+    schemaVersion: 2,
+    marketplaces: {
+      "canonical-name": {
+        name: "canonical-name",
+        scope: "project",
+        source: pathSource("./local-marketplace"),
+        addedFromCwd: "/workspace",
+        manifestPath: "/marketplaces/canonical-name/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/marketplaces/canonical-name",
+        plugins: {
+          formatter: {
+            version: "1.0.0",
+            resolvedSource: "/marketplaces/canonical-name/formatter",
+            compatibility: {
+              installable: true,
+              notes: [],
+              supported: ["prompts"],
+              unsupported: [],
+            },
+            resources: {
+              skills: [],
+              prompts: ["format"],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+            },
+            enabled: true,
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+
+  // act
+  const result = planReconcile(merged, state, "project");
+
+  // assert
+  assert.deepStrictEqual(result, {
+    scope: "project",
+    marketplacesToAdd: [],
+    marketplacesToRemove: [],
+    pluginsToInstall: [],
+    pluginsToUninstall: [],
+    pluginsToEnable: [],
+    pluginsToDisable: [],
+    sourceMismatches: [],
+  });
+});

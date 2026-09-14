@@ -29,6 +29,12 @@ const wrappedMcpDoc: RawMcpDoc = {
 } satisfies RawMcpDoc;
 void wrappedMcpDoc;
 
+void ({ mcpServers: null } satisfies RawMcpDoc);
+void ({ mcpServers: "malformed" } satisfies RawMcpDoc);
+void ({ mcpServers: ["malformed"] } satisfies RawMcpDoc);
+void ({ mcpServers: true } satisfies RawMcpDoc);
+void ({ mcpServers: 17 } satisfies RawMcpDoc);
+
 const unwrappedMcpDoc: RawMcpDoc = {
   search: { command: "search-server" },
 } satisfies RawMcpDoc;
@@ -137,8 +143,8 @@ type IsMutableArray<T extends readonly unknown[]> = T extends unknown[] ? true :
 
 // @ts-expect-error MCP sources have a closed precedence vocabulary
 void ("plugin-entry" satisfies McpServersSource);
-// @ts-expect-error wrapped MCP documents require a server record
-void ({ mcpServers: ["search"] } satisfies RawMcpDoc);
+// @ts-expect-error validated stage inputs require a server record
+void ({ ...stageMcpInput, servers: ["search"] } satisfies StageMcpInput);
 // @ts-expect-error resolved MCP servers always identify their source
 const resolvedMcpServersWithoutSource: ResolvedMcpServers = {
   servers: {},

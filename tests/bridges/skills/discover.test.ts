@@ -6,7 +6,7 @@ import test, { type TestContext } from "node:test";
 
 import { discoverPluginSkills } from "../../../extensions/pi-claude-marketplace/bridges/skills/discover.ts";
 
-import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 async function createPluginRoot(t: TestContext, prefix: string): Promise<string> {
   const pluginRoot = await mkdtemp(path.join(tmpdir(), prefix));
@@ -84,12 +84,12 @@ test("discovers a relative skill parent in stable source-name order", async (t) 
     discovered: [
       {
         sourceName: "acme-knowledge",
-        generatedName: "acme-knowledge",
+        generatedName: "acme:knowledge",
         skillDir: knowledgeDirectory,
       },
       {
         sourceName: "helper",
-        generatedName: "acme-helper",
+        generatedName: "acme:helper",
         skillDir: helperDirectory,
       },
     ],
@@ -128,9 +128,9 @@ test("preserves declared parent order while sorting each absolute parent", async
   // assert
   assert.deepStrictEqual(discovery, {
     discovered: [
-      { sourceName: "beta", generatedName: "acme-beta", skillDir: betaDirectory },
-      { sourceName: "zeta", generatedName: "acme-zeta", skillDir: zetaDirectory },
-      { sourceName: "alpha", generatedName: "acme-alpha", skillDir: alphaDirectory },
+      { sourceName: "beta", generatedName: "acme:beta", skillDir: betaDirectory },
+      { sourceName: "zeta", generatedName: "acme:zeta", skillDir: zetaDirectory },
+      { sourceName: "alpha", generatedName: "acme:alpha", skillDir: alphaDirectory },
     ],
     warnings: [],
   });
@@ -164,7 +164,7 @@ test("discovers a declared relative path that is itself a skill directory", asyn
     discovered: [
       {
         sourceName: "implement",
-        generatedName: "mattpocock-skills-implement",
+        generatedName: "mattpocock-skills:implement",
         skillDir: skillDirectory,
       },
     ],
@@ -236,8 +236,8 @@ test("filters hidden, non-regular, nested-only, linked, and undeclared entries",
   // assert
   assert.deepStrictEqual(discovery, {
     discovered: [
-      { sourceName: "opaque", generatedName: "acme-opaque", skillDir: opaqueDirectory },
-      { sourceName: "visible", generatedName: "acme-visible", skillDir: visibleDirectory },
+      { sourceName: "opaque", generatedName: "acme:opaque", skillDir: opaqueDirectory },
+      { sourceName: "visible", generatedName: "acme:visible", skillDir: visibleDirectory },
     ],
     warnings: [],
   });
@@ -269,13 +269,13 @@ test("keeps the first generated name when sources collide within one parent", as
     discovered: [
       {
         sourceName: "acme-foo",
-        generatedName: "acme-foo",
+        generatedName: "acme:foo",
         skillDir: prefixedDirectory,
       },
     ],
     warnings: [
       `skill source "foo" in "${skillsDirectory}" elides to generated name ` +
-        `"acme-foo", already produced by skill source "acme-foo"; ignoring duplicate.`,
+        `"acme:foo", already produced by skill source "acme-foo"; ignoring duplicate.`,
     ],
   });
 });
@@ -307,13 +307,13 @@ test("keeps the first generated name when sources collide across parents", async
     discovered: [
       {
         sourceName: "acme-shared",
-        generatedName: "acme-shared",
+        generatedName: "acme:shared",
         skillDir: winningDirectory,
       },
     ],
     warnings: [
       `skill source "shared" in "${losingParent}" elides to generated name ` +
-        `"acme-shared", already produced by skill source "acme-shared"; ignoring duplicate.`,
+        `"acme:shared", already produced by skill source "acme-shared"; ignoring duplicate.`,
     ],
   });
 });
@@ -347,13 +347,13 @@ test("keeps a self skill when a later parent produces the same generated name", 
     discovered: [
       {
         sourceName: "implement",
-        generatedName: "mattpocock-skills-implement",
+        generatedName: "mattpocock-skills:implement",
         skillDir: selfDirectory,
       },
     ],
     warnings: [
       `skill source "implement" in "${parentDirectory}" elides to generated name ` +
-        `"mattpocock-skills-implement", already produced by skill source "implement"; ` +
+        `"mattpocock-skills:implement", already produced by skill source "implement"; ` +
         `ignoring duplicate.`,
     ],
   });
@@ -393,13 +393,13 @@ test("reports a self skill loss without traversing its nested directories", asyn
     discovered: [
       {
         sourceName: "mattpocock-skills-implement",
-        generatedName: "mattpocock-skills-implement",
+        generatedName: "mattpocock-skills:implement",
         skillDir: winningDirectory,
       },
     ],
     warnings: [
       `skill source "implement" in "${selfDirectory}" elides to generated name ` +
-        `"mattpocock-skills-implement", already produced by skill source ` +
+        `"mattpocock-skills:implement", already produced by skill source ` +
         `"mattpocock-skills-implement"; ignoring duplicate.`,
     ],
   });
@@ -432,8 +432,8 @@ test("MANF-03 a declared skill subdir and its conventional parent yield one skil
   // assert
   assert.deepStrictEqual(discovery, {
     discovered: [
-      { sourceName: "help", generatedName: "acme-help", skillDir: helpDirectory },
-      { sourceName: "tokens", generatedName: "acme-tokens", skillDir: tokensDirectory },
+      { sourceName: "help", generatedName: "acme:help", skillDir: helpDirectory },
+      { sourceName: "tokens", generatedName: "acme:tokens", skillDir: tokensDirectory },
     ],
     warnings: [],
   });
@@ -454,8 +454,8 @@ test("MANF-03 keeps an undeclared sibling skill when a subdir is also declared",
   // assert
   assert.deepStrictEqual(discovery, {
     discovered: [
-      { sourceName: "help", generatedName: "acme-help", skillDir: helpDirectory },
-      { sourceName: "other", generatedName: "acme-other", skillDir: otherDirectory },
+      { sourceName: "help", generatedName: "acme:help", skillDir: helpDirectory },
+      { sourceName: "other", generatedName: "acme:other", skillDir: otherDirectory },
     ],
     warnings: [],
   });
@@ -473,7 +473,7 @@ test("silently skips a direct skill already discovered through its parent", asyn
 
   // assert
   assert.deepStrictEqual(discovery, {
-    discovered: [{ sourceName: "help", generatedName: "acme-help", skillDir: helpDirectory }],
+    discovered: [{ sourceName: "help", generatedName: "acme:help", skillDir: helpDirectory }],
     warnings: [],
   });
 });
@@ -493,7 +493,7 @@ test("MANF-03 a trailing separator keys the same directory as one already seen",
     discovered: [
       {
         sourceName: "help",
-        generatedName: "acme-help",
+        generatedName: "acme:help",
         skillDir: helpDirectory + path.sep,
       },
     ],

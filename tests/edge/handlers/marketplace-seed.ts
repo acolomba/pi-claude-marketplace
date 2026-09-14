@@ -35,8 +35,8 @@ export interface SeededRecordInput {
   readonly disabled?: boolean;
   /**
    * FSTAT-01 / D-66-01: the persisted `compatibility.unsupported` kinds. A
-   * non-empty value reproduces a record that resolved `unsupported` at install
-   * time, which is what makes `installable` false.
+   * non-empty value reproduces a record that resolved `partially-available` at
+   * install time, which is what makes `installable` false.
    */
   readonly unsupported?: readonly string[];
   readonly resolvedSource?: string;

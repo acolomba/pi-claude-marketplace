@@ -1,0 +1,2553 @@
+{
+  "version": 1,
+  "inventoryMode": "shard",
+  "plan": "01-44",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "category": "first-pass",
+      "assignedPlan": "01-44",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-022"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "category": "first-pass",
+      "assignedPlan": "01-44",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-019"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "category": "first-pass",
+      "assignedPlan": "01-44",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-027"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-001",
+      "findingId": "BMFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-002",
+      "findingId": "BMFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-003",
+      "findingId": "BMFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-004",
+      "findingId": "BMFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-005",
+      "findingId": "BMFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-006",
+      "findingId": "BMFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-007",
+      "findingId": "BMFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-008",
+      "findingId": "BMFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-009",
+      "findingId": "BMFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-010",
+      "findingId": "BMFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-011",
+      "findingId": "BMFP-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-012",
+      "findingId": "BMFP-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-013",
+      "findingId": "BMFP-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-014",
+      "findingId": "BMFP-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-015",
+      "findingId": "BMFP-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-016",
+      "findingId": "BMFP-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-017",
+      "findingId": "BMFP-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-018",
+      "findingId": "BMFP-F018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-019",
+      "findingId": "BMFP-F019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-020",
+      "findingId": "BMFP-F020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-021",
+      "findingId": "BMFP-F021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-mcp.md",
+      "label": "CLAIM-022",
+      "findingId": "BMFP-F022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-001",
+      "findingId": "BSFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-002",
+      "findingId": "BSFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-003",
+      "findingId": "BSFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-004",
+      "findingId": "BSFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-005",
+      "findingId": "BSFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-006",
+      "findingId": "BSFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-007",
+      "findingId": "BSFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-008",
+      "findingId": "BSFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-009",
+      "findingId": "BSFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-010",
+      "findingId": "BSFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-011",
+      "findingId": "BSFP-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-012",
+      "findingId": "BSFP-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-013",
+      "findingId": "BSFP-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-014",
+      "findingId": "BSFP-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-015",
+      "findingId": "BSFP-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-016",
+      "findingId": "BSFP-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-017",
+      "findingId": "BSFP-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-018",
+      "findingId": "BSFP-F018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-skills.md",
+      "label": "CLAIM-019",
+      "findingId": "BSFP-F019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-001",
+      "findingId": "DCHF-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-002",
+      "findingId": "DCHF-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-003",
+      "findingId": "DCHF-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-004",
+      "findingId": "DCHF-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-005",
+      "findingId": "DCHF-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-006",
+      "findingId": "DCHF-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-007",
+      "findingId": "DCHF-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-008",
+      "findingId": "DCHF-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-009",
+      "findingId": "DCHF-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-010",
+      "findingId": "DCHF-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-011",
+      "findingId": "DCHF-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-012",
+      "findingId": "DCHF-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-013",
+      "findingId": "DCHF-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-014",
+      "findingId": "DCHF-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-015",
+      "findingId": "DCHF-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-016",
+      "findingId": "DCHF-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-017",
+      "findingId": "DCHF-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-018",
+      "findingId": "DCHF-F018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-019",
+      "findingId": "DCHF-F019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-020",
+      "findingId": "DCHF-F020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-021",
+      "findingId": "DCHF-F021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-022",
+      "findingId": "DCHF-F022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-023",
+      "findingId": "DCHF-F023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-024",
+      "findingId": "DCHF-F024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-025",
+      "findingId": "DCHF-F025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-026",
+      "findingId": "DCHF-F026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md",
+      "label": "CLAIM-027",
+      "findingId": "DCHF-F027"
+    }
+  ],
+  "findings": [
+    {
+      "id": "BMFP-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-001"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/unstage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/unstage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/collision-slots.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "Current MCP owners still use case-owned temporary roots and cleanup, with filesystem effects confined to those roots."
+      },
+      "rationale": "The first-pass hermetic-fixture observation remains current, apart from the separately recorded hidden home-directory boundary.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BMFP-F002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-002"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/substitute.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/substitute.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "Expected MCP documents and substitution bytes remain independently authored whole values rather than production-computed or normalized answers."
+      },
+      "rationale": "The byte-exact expected-value discipline remains current.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BMFP-F003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-003"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/unstage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/unstage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/collision-slots.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "The reviewed MCP bridge exposes filesystem behavior directly and the owner tests use real case-owned files rather than inappropriate interaction doubles."
+      },
+      "rationale": "The reported absence of double misuse remains current.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BMFP-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-004"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns review process rather than a production file."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/unstage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/collision-slots.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "Current MCP owner files contain no committed only, skip, todo, placeholder case titles, or nested describe hierarchy."
+      },
+      "rationale": "The structural test observations remain true.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BMFP-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-005"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "All nine direct MCP production modules still have one mirrored owner test and no reverse-direction orphan exists."
+      },
+      "rationale": "The 1:1 pairing claim remains current.",
+      "destination": "Retain as pairing evidence."
+    },
+    {
+      "id": "BMFP-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-006"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "BMCP-020",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/unstage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/unstage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/mcp/{stage,unstage}.ts plus current JSON-path inspection",
+        "exitCode": 0,
+        "observed": "Both focused owners pass and reach their lines, but production still returns null or scalar mcpServers past incomplete narrowing into Object.entries; current coverage reaches the branch using artificial/benign shapes rather than correcting behavior."
+      },
+      "rationale": "The summary's null-crash and scalar-corruption diagnosis duplicates the canonical production-defect finding.",
+      "destination": "Use canonical finding BMCP-020."
+    },
+    {
+      "id": "BMFP-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-007"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "BMCP-019",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/types.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/types.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph production caller census",
+        "observed": "sourcePath remains optional with a synthetic fallback, although install/update/reinstall production callers all provide it; current type tests retain the optional branch."
+      },
+      "rationale": "The summary's unverified fallback diagnosis duplicates the canonical dead-fallback finding.",
+      "destination": "Use canonical finding BMCP-019."
+    },
+    {
+      "id": "BMFP-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-008"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "BMCP-020",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/unstage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/unstage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/mcp/{stage,unstage}.ts plus current JSON-path inspection",
+        "exitCode": 0,
+        "observed": "Both focused owners pass and reach their lines, but production still returns null or scalar mcpServers past incomplete narrowing into Object.entries; current coverage reaches the branch using artificial/benign shapes rather than correcting behavior."
+      },
+      "rationale": "The prescribed null/scalar guard and negative cases are remediation for canonical finding BMCP-020.",
+      "destination": "Use canonical finding BMCP-020."
+    },
+    {
+      "id": "BMFP-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-009"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "BMCP-019",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/types.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/types.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph production caller census",
+        "observed": "sourcePath remains optional with a synthetic fallback, although install/update/reinstall production callers all provide it; current type tests retain the optional branch."
+      },
+      "rationale": "Changing the fallback to acme:broken-provenance left the complete stage owner green in the isolated copy, confirming the detailed assertion-strength claim.",
+      "destination": "Use canonical finding BMCP-019."
+    },
+    {
+      "id": "BMFP-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-010"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "BMCP-020",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/unstage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/unstage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/mcp/{stage,unstage}.ts plus current JSON-path inspection",
+        "exitCode": 0,
+        "observed": "Both focused owners pass and reach their lines, but production still returns null or scalar mcpServers past incomplete narrowing into Object.entries; current coverage reaches the branch using artificial/benign shapes rather than correcting behavior."
+      },
+      "rationale": "The missing stage null/scalar cases duplicate the canonical defect-and-owner-gap finding.",
+      "destination": "Use canonical finding BMCP-020."
+    },
+    {
+      "id": "BMFP-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-011"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "BMCP-020",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/unstage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/unstage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/mcp/{stage,unstage}.ts plus current JSON-path inspection",
+        "exitCode": 0,
+        "observed": "Both focused owners pass and reach their lines, but production still returns null or scalar mcpServers past incomplete narrowing into Object.entries; current coverage reaches the branch using artificial/benign shapes rather than correcting behavior."
+      },
+      "rationale": "The unstage null omission and accidental string behavior duplicate the same canonical narrowing defect.",
+      "destination": "Use canonical finding BMCP-020."
+    },
+    {
+      "id": "BMFP-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-012"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "BMCP-021",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns a test helper signature."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/unstage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "The local unstage scope helper still has no explicit Promise return annotation."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding BMCP-021.",
+      "destination": "Use canonical finding BMCP-021."
+    },
+    {
+      "id": "BMFP-F013",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-013"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "BMCP-022",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns import style rather than production source."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/unstage.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/unstage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current repository import census",
+        "observed": "Default node:test imports remain common across bridge owner suites, including sibling unstage tests; named import is not a repository-wide convention."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding BMCP-022.",
+      "destination": "Use canonical finding BMCP-022."
+    },
+    {
+      "id": "BMFP-F014",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-014"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "BMCP-023",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns assertion strength."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/collision-slots.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion inspection",
+        "observed": "The final collision-slot I/O case still asserts only code EISDIR rather than error class/name plus syscall."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding BMCP-023.",
+      "destination": "Use canonical finding BMCP-023."
+    },
+    {
+      "id": "BMFP-F015",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-015"],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/marker.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/substitute.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/marker.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/substitute.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "The listed files still pass, but the later adversarial pass identified live marker projection and substitute ownership gaps, so the first-pass clean classification is no longer authoritative."
+      },
+      "rationale": "A deeper current review supersedes the broad clean-file label without deleting it.",
+      "destination": "Use the linked adversarial MCP findings for active scope."
+    },
+    {
+      "id": "BMFP-F016",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-016"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "BMCP-020",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/unstage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/unstage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/mcp/{stage,unstage}.ts plus current JSON-path inspection",
+        "exitCode": 0,
+        "observed": "Both focused owners pass and reach their lines, but production still returns null or scalar mcpServers past incomplete narrowing into Object.entries; current coverage reaches the branch using artificial/benign shapes rather than correcting behavior."
+      },
+      "rationale": "Repository-local failing probes reproduced TypeError for both stage and unstage mcpServers:null paths with exit 1, duplicating canonical BMCP-020.",
+      "destination": "Use canonical finding BMCP-020."
+    },
+    {
+      "id": "BMFP-F017",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-017"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "BMCP-024",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns missing API documentation."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current exported-function inspection",
+        "observed": "replacePreparedMcp, rollbackMcpReplacement, and finalizeMcpReplacement remain exported without their own API comments."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding BMCP-024.",
+      "destination": "Use canonical finding BMCP-024."
+    },
+    {
+      "id": "BMFP-F018",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-018"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "BMCP-020",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/unstage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/unstage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/bridges/mcp/{stage,unstage}.ts plus current JSON-path inspection",
+        "exitCode": 0,
+        "observed": "Both focused owners pass and reach their lines, but production still returns null or scalar mcpServers past incomplete narrowing into Object.entries; current coverage reaches the branch using artificial/benign shapes rather than correcting behavior."
+      },
+      "rationale": "The detailed unstage crash report duplicates canonical BMCP-020 and was reproduced in an isolated copy.",
+      "destination": "Use canonical finding BMCP-020."
+    },
+    {
+      "id": "BMFP-F019",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-019"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "BMCP-001",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "prepareStageMcpServers still reaches homedir/getAgentDir through loadEffectiveServerNames, while createProjectScope does not pin HOME and only one case pins PI_CODING_AGENT_DIR."
+      },
+      "rationale": "The hidden homedir/getAgentDir dependency prescription overlaps the canonical MCP hermeticity finding.",
+      "destination": "Use canonical finding BMCP-001."
+    },
+    {
+      "id": "BMFP-F020",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-020"],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/marker.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/substitute.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/marker.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/substitute.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "The production files remain present, but later claim-complete inspection found live projection, direct-owner, and safe-set issues inside the first-pass clean set."
+      },
+      "rationale": "The production clean-file classification is superseded by current deeper evidence.",
+      "destination": "Retain historical classification only."
+    },
+    {
+      "id": "BMFP-F021",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-021"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/unstage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/unstage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/collision-slots.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test <isolated-copy>/tests/{architecture/no-hooks-strict-additional-properties,bridges/mcp/*,bridges/skills/*,domain/components/hooks/*}.test.ts",
+        "exitCode": 0,
+        "observed": "All 21 selected current owner and architecture test files passed in a repository-local isolated copy; the copy was removed and live source/test files were unchanged."
+      },
+      "rationale": "The report's unrun-test limitation no longer holds: all selected current MCP owners passed in the isolated rerun.",
+      "destination": "Close the historical execution limitation."
+    },
+    {
+      "id": "BMFP-F022",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-mcp.md#CLAIM-022"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/unstage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/mcp/unstage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node isolated MCP null-shape probes in <isolated-copy>",
+        "exitCode": 1,
+        "observed": "Both public operations threw the expected current TypeError for mcpServers:null; unlike the historical review, this revalidation executed the real bridge paths in an isolated copy."
+      },
+      "rationale": "The claim that only standalone Object.entries semantics were exercised is positively stale after equivalent public-path probes.",
+      "destination": "Close only the historical probe limitation; BMCP-020 remains live."
+    },
+    {
+      "id": "BSFP-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-001"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/skills/discover.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/rewrite-frontmatter.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "The skills owners retain case-owned temporary roots, exact emitted-byte assertions, independent literals, current-context doubles, and explicit AAA phases."
+      },
+      "rationale": "The broad positive suite characteristics remain current, subject to separately linked gaps.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BSFP-F002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-002"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/skills/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "All eight direct skills production modules retain one mirrored owner test; index and type-only ownership remain explicit."
+      },
+      "rationale": "The 1:1 pairing claim remains current.",
+      "destination": "Retain as pairing evidence."
+    },
+    {
+      "id": "BSFP-F003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-003"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/skills/frontmatter-degrade.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/rewrite-frontmatter.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "Current frontmatter owners compare complete emitted strings and do not reparse or call an emitter to derive expected output."
+      },
+      "rationale": "The named byte-exactness discipline remains current.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BSFP-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-004"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "BSKL-028",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns repeated test arrangement."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/skills/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current fixture census",
+        "observed": "ResolvedPluginInstallable literals remain repeatedly authored in stage tests while discover tests retain a suitable concern-local factory."
+      },
+      "rationale": "The summary's high-volume arrange duplication duplicates canonical BSKL-028.",
+      "destination": "Use canonical finding BSKL-028."
+    },
+    {
+      "id": "BSFP-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-005"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "BSKL-031",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/unstage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns JSDoc register across production modules."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current repository house-style comparison",
+        "observed": "Imperative and noun-phrase JSDoc openings remain pervasive in sibling bridges and shared modules, so the six skills instances are not area-specific deviations."
+      },
+      "rationale": "The summary's area-wide third-person JSDoc prescription duplicates the canonical stale house-style finding.",
+      "destination": "Use canonical finding BSKL-031."
+    },
+    {
+      "id": "BSFP-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-006"],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/skills/discover.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/rewrite-frontmatter.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "Later adversarial revalidation found live skills assertion, hermeticity, ordering, and ownership gaps despite the first pass assigning no BLOCKER label."
+      },
+      "rationale": "The pass-local severity conclusion is superseded by deeper current evidence.",
+      "destination": "Use adversarial findings rather than the historical no-blocker conclusion."
+    },
+    {
+      "id": "BSFP-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-007"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "BSKL-028",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns repeated test arrangement."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/skills/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/discover.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current fixture census",
+        "observed": "ResolvedPluginInstallable literals remain repeatedly authored in stage tests while discover tests retain a suitable concern-local factory."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding BSKL-028.",
+      "destination": "Use canonical finding BSKL-028."
+    },
+    {
+      "id": "BSFP-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-008"],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/skills/discover.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/frontmatter-degrade.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/frontmatter-scan.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/rewrite-frontmatter.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/types.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/unstage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "The listed owners pass, but later evidence found live ordering, type ownership, error-contract, and hermeticity gaps among the files classified clean."
+      },
+      "rationale": "The clean-file list is superseded without erasing its source claim.",
+      "destination": "Use canonical skills findings for active work."
+    },
+    {
+      "id": "BSFP-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-009"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "BSKL-031",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/unstage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns JSDoc register across production modules."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current repository house-style comparison",
+        "observed": "Imperative and noun-phrase JSDoc openings remain pervasive in sibling bridges and shared modules, so the six skills instances are not area-specific deviations."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding BSKL-031.",
+      "destination": "Use canonical finding BSKL-031."
+    },
+    {
+      "id": "BSFP-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-010"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "BSKL-031",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/unstage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns JSDoc register across production modules."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current repository house-style comparison",
+        "observed": "Imperative and noun-phrase JSDoc openings remain pervasive in sibling bridges and shared modules, so the six skills instances are not area-specific deviations."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding BSKL-031.",
+      "destination": "Use canonical finding BSKL-031."
+    },
+    {
+      "id": "BSFP-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-011"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "BSKL-031",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/unstage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns JSDoc register across production modules."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current repository house-style comparison",
+        "observed": "Imperative and noun-phrase JSDoc openings remain pervasive in sibling bridges and shared modules, so the six skills instances are not area-specific deviations."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding BSKL-031.",
+      "destination": "Use canonical finding BSKL-031."
+    },
+    {
+      "id": "BSFP-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-012"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "BSKL-031",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/unstage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns JSDoc register across production modules."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current repository house-style comparison",
+        "observed": "Imperative and noun-phrase JSDoc openings remain pervasive in sibling bridges and shared modules, so the six skills instances are not area-specific deviations."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding BSKL-031.",
+      "destination": "Use canonical finding BSKL-031."
+    },
+    {
+      "id": "BSFP-F013",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-013"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "BSKL-027",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/skills/rewrite-frontmatter.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current error construction inspection",
+        "observed": "Three skills bridge failure sites still encode structured values only in plain Error messages."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding BSKL-027.",
+      "destination": "Use canonical finding BSKL-027."
+    },
+    {
+      "id": "BSFP-F014",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-014"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "BSKL-031",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/unstage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns JSDoc register across production modules."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current repository house-style comparison",
+        "observed": "Imperative and noun-phrase JSDoc openings remain pervasive in sibling bridges and shared modules, so the six skills instances are not area-specific deviations."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding BSKL-031.",
+      "destination": "Use canonical finding BSKL-031."
+    },
+    {
+      "id": "BSFP-F015",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-015"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "BSKL-029",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/skills/stage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current dependency and assertion inspection",
+        "observed": "randomUUID remains imported inline for staging and backups, forcing nondeterministic inventory assertions."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding BSKL-029.",
+      "destination": "Use canonical finding BSKL-029."
+    },
+    {
+      "id": "BSFP-F016",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-016"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "BSKL-030",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns a style rule on production declarations."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current declaration inspection",
+        "observed": "SkillsReplacementInternals remains a Readonly object-literal type alias rather than an interface."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding BSKL-030.",
+      "destination": "Use canonical finding BSKL-030."
+    },
+    {
+      "id": "BSFP-F017",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-017"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "BSKL-031",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/unstage.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns JSDoc register across production modules."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current repository house-style comparison",
+        "observed": "Imperative and noun-phrase JSDoc openings remain pervasive in sibling bridges and shared modules, so the six skills instances are not area-specific deviations."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding BSKL-031.",
+      "destination": "Use canonical finding BSKL-031."
+    },
+    {
+      "id": "BSFP-F018",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-018"],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/index.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/types.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/skills/index.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/types.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "The two listed modules remain healthy, but the first-pass aggregate clean classification cannot override live findings elsewhere in the same production set."
+      },
+      "rationale": "Preserve the historical list while using claim-level current dispositions.",
+      "destination": "Retain as evidence only."
+    },
+    {
+      "id": "BSFP-F019",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-skills.md#CLAIM-019"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/discover.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/skills/discover.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/stage.test.ts"
+        },
+        {
+          "path": "tests/bridges/skills/rewrite-frontmatter.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test <isolated-copy>/tests/{architecture/no-hooks-strict-additional-properties,bridges/mcp/*,bridges/skills/*,domain/components/hooks/*}.test.ts",
+        "exitCode": 0,
+        "observed": "All 21 selected current owner and architecture test files passed in a repository-local isolated copy; the copy was removed and live source/test files were unchanged."
+      },
+      "rationale": "The historical unrun-test limitation no longer holds after the isolated current-owner rerun.",
+      "destination": "Close the historical execution limitation."
+    },
+    {
+      "id": "DCHF-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-001"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "DCH-038",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/domain/components/hooks/matcher.test.ts"
+        },
+        {
+          "path": "tests/domain/components/hooks/partition.test.ts"
+        },
+        {
+          "path": "tests/domain/components/hooks/schema.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current import census",
+        "observed": "Each of the three paired tests still imports exactly its mirrored production module and no sibling production module."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-038.",
+      "destination": "Use canonical finding DCH-038."
+    },
+    {
+      "id": "DCHF-F002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-002"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-035",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/domain/components/hooks/partition.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "isolated copy: drop passthrough fields while retaining whole-value output checks",
+        "exitCode": 0,
+        "observed": "Every partition case still compares the whole result, yet the field-dropping mutation survives because no arranged value supplies those fields."
+      },
+      "rationale": "The first-pass close-to-clean partition assessment is qualified by the current field-dropping mutation that survives the whole-result assertions.",
+      "destination": "Use canonical finding DCH-035."
+    },
+    {
+      "id": "DCHF-F003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-003"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-014",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/domain/components/hooks/matcher.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph consumer and current title inspection",
+        "observed": "The sole production consumer uses Set membership, while two matcher titles still promise source and first-occurrence order that production does not require."
+      },
+      "rationale": "The summary order-test diagnosis duplicates the canonical consumer-aware order-title finding.",
+      "destination": "Use canonical finding DCH-014."
+    },
+    {
+      "id": "DCHF-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-004"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "DCH-018",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/domain/components/hooks/schema.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion inspection",
+        "observed": "Every reject row still asserts only Check(config) equals false; none asserts the structured Errors(config) contract consumed by firstHookValidationDetail."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-018.",
+      "destination": "Use canonical finding DCH-018."
+    },
+    {
+      "id": "DCHF-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-005"],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "DCH-021",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/no-hooks-strict-additional-properties.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source-target inspection",
+        "observed": "The textual gate still scans domain/components/hooks.ts while the TypeBox literals remain in hooks/schema.ts; comments are stripped but trailing line comments are not."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-021.",
+      "destination": "Use canonical finding DCH-021."
+    },
+    {
+      "id": "DCHF-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-006"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-034",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/no-hooks-strict-additional-properties.test.ts"
+        },
+        {
+          "path": "tests/architecture/hooks-foundation.test.ts"
+        },
+        {
+          "path": "tests/domain/components/hooks/schema.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph split-artifact cross-reference inspection",
+        "observed": "The textual gate, HOOK-03 rationale, runtime-export ownership, and partition cast rationale still point across the split rather than following the moved symbols."
+      },
+      "rationale": "The summary's cross-cutting post-split documentation and gate theme duplicates canonical DCH-034.",
+      "destination": "Use canonical finding DCH-034."
+    },
+    {
+      "id": "DCHF-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-007"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-014",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/domain/components/hooks/matcher.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph consumer and current title inspection",
+        "observed": "The sole production consumer uses Set membership, while two matcher titles still promise source and first-occurrence order that production does not require."
+      },
+      "rationale": "Reversing Set insertion order left the complete matcher owner green in the isolated copy, while CodeGraph confirms the only consumer uses membership; use the canonical calibrated finding.",
+      "destination": "Use canonical finding DCH-014."
+    },
+    {
+      "id": "DCHF-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-008"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-015",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns test control flow."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/domain/components/hooks/matcher.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current row and conditional inspection",
+        "observed": "The unmapped-token loop still contains token.includes('|') although every listed token lacks a pipe, leaving its true branch dead."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-015.",
+      "destination": "Use canonical finding DCH-015."
+    },
+    {
+      "id": "DCHF-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-009"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-016",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns test case structure."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/domain/components/hooks/matcher.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current case inspection",
+        "observed": "The final malformed-MCP case still calls parseMatcher twice and performs two independent assertions."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-016.",
+      "destination": "Use canonical finding DCH-016."
+    },
+    {
+      "id": "DCHF-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-010"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-017",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/domain/components/hooks/partition.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current literal and import census",
+        "observed": "All eleven partition configurations remain inferred literals and the test imports no HooksConfig type."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-017.",
+      "destination": "Use canonical finding DCH-017."
+    },
+    {
+      "id": "DCHF-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-011"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-035",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/domain/components/hooks/partition.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "isolated copy: drop passthrough fields while retaining whole-value output checks",
+        "exitCode": 0,
+        "observed": "Every partition case still compares the whole result, yet the field-dropping mutation survives because no arranged value supplies those fields."
+      },
+      "rationale": "Dropping passthrough group fields while preserving matcher/hooks left the partition owner green in the isolated copy, confirming canonical DCH-035.",
+      "destination": "Use canonical finding DCH-035."
+    },
+    {
+      "id": "DCHF-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-012"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "DCH-018",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/domain/components/hooks/schema.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion inspection",
+        "observed": "Every reject row still asserts only Check(config) equals false; none asserts the structured Errors(config) contract consumed by firstHookValidationDetail."
+      },
+      "rationale": "Replacing the schema with an always-rejecting schema left all reject-named cases green in the isolated copy, confirming the wrong-reason weakness.",
+      "destination": "Use canonical finding DCH-018."
+    },
+    {
+      "id": "DCHF-F013",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-013"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "DCH-019",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/domain/components/hooks/schema.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "tsc isolated type probe for a runtime-accepted futureGroupField configuration",
+        "exitCode": 1,
+        "observed": "TypeScript reports TS2353 for futureGroupField although HOOKS_VALIDATOR.Check accepts the identical shape at runtime; invalid reject rows correctly remain typed unknown."
+      },
+      "rationale": "The blanket satisfies prescription duplicates the canonical static/runtime leniency mismatch and cannot land honestly before that repair.",
+      "destination": "Use canonical finding DCH-019."
+    },
+    {
+      "id": "DCHF-F014",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-014"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-020",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns test diagnosis granularity."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/domain/components/hooks/schema.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current case inspection",
+        "observed": "The large command-handler accept row still combines group leniency and many handler field contracts in one kitchen-sink value."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-020.",
+      "destination": "Use canonical finding DCH-020."
+    },
+    {
+      "id": "DCHF-F015",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-015"],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "DCH-021",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/no-hooks-strict-additional-properties.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source-target inspection",
+        "observed": "The textual gate still scans domain/components/hooks.ts while the TypeBox literals remain in hooks/schema.ts; comments are stripped but trailing line comments are not."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-021.",
+      "destination": "Use canonical finding DCH-021."
+    },
+    {
+      "id": "DCHF-F016",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-016"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-022",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns production documentation."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current declaration inspection",
+        "observed": "ParsedMatcher remains undocumented and parseMatcher's JSDoc still begins with the imperative 'Parse'."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-022.",
+      "destination": "Use canonical finding DCH-022."
+    },
+    {
+      "id": "DCHF-F017",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-017"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-023",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/domain/components/hooks/matcher.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current guard and discriminator inspection",
+        "observed": "isMcpLiteral still uses an undocumented last separator; empty-segment guard halves overlap MCP_SEGMENT while mcp__server___ distinguishes lastIndexOf from indexOf."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-023.",
+      "destination": "Use canonical finding DCH-023."
+    },
+    {
+      "id": "DCHF-F018",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-018"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-024",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns a production type assertion."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current declaration inspection",
+        "observed": "The CLAUDE_TO_PI_TOOL_NAMES lookup still uses an unexplained Record assertion."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-024.",
+      "destination": "Use canonical finding DCH-024."
+    },
+    {
+      "id": "DCHF-F019",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-019"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-025",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns exported production documentation."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current declaration inspection",
+        "observed": "DroppedHook and HooksPartition remain undocumented and partitionHooks still begins with the imperative 'Separate'."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-025.",
+      "destination": "Use canonical finding DCH-025."
+    },
+    {
+      "id": "DCHF-F020",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-020"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-026",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hook-events.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns a cross-file type invariant."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph cross-file type inspection",
+        "observed": "partition.ts still asserts event to the NON_TOOL_EVENT_CLOSED_SETS key union; hook-events.ts carries the completeness pin that makes the assertion sound."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-026.",
+      "destination": "Use canonical finding DCH-026."
+    },
+    {
+      "id": "DCHF-F021",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-021"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-027",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns repeated production type expressions."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current type-expression census",
+        "observed": "HooksConfig[string][number] remains repeated twice and HooksConfig[string] remains repeated across partition helpers and storage declarations."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-027.",
+      "destination": "Use canonical finding DCH-027."
+    },
+    {
+      "id": "DCHF-F022",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-022"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-028",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns exported interface documentation and modifiers."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current interface and reference inspection",
+        "observed": "HookHandlerEntry remains undocumented and only if is readonly; current consumers read entries and no field reassignment was found."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-028.",
+      "destination": "Use canonical finding DCH-028."
+    },
+    {
+      "id": "DCHF-F023",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-023"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-029",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns production schema documentation."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current declaration inspection",
+        "observed": "The Type.Unsafe raw JSON Schema conditional remains without a comment explaining why the standard builder form is insufficient."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-029.",
+      "destination": "Use canonical finding DCH-029."
+    },
+    {
+      "id": "DCHF-F024",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-024"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "DCH-030",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns placement of production rationale."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current comment-location comparison",
+        "observed": "HOOK-03 leniency rationale remains in the former aggregate hooks.ts module and not beside the schema literals that implement it."
+      },
+      "rationale": "This first-pass claim duplicates canonical finding DCH-030.",
+      "destination": "Use canonical finding DCH-030."
+    },
+    {
+      "id": "DCHF-F025",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-025"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/domain/components/hooks/matcher.test.ts"
+        },
+        {
+          "path": "tests/domain/components/hooks/partition.test.ts"
+        },
+        {
+          "path": "tests/domain/components/hooks/schema.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "Every reviewed owner and module still has at least one linked live finding in the claim-complete adversarial ledger, so the historical zero-clean-file statement remains accurate."
+      },
+      "rationale": "The aggregate no-clean-file observation remains current but creates no separate implementation item.",
+      "destination": "Retain as review metadata."
+    },
+    {
+      "id": "DCHF-F026",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-026"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "DCH-037",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/domain/components/hooks/matcher.test.ts"
+        },
+        {
+          "path": "tests/domain/components/hooks/partition.test.ts"
+        },
+        {
+          "path": "tests/domain/components/hooks/schema.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct for matcher.ts, partition.ts, and schema.ts",
+        "exitCode": 0,
+        "observed": "Each current source-test pair passed at 100% function, line, and branch coverage; this replaces the report's explicitly unmeasured coverage state."
+      },
+      "rationale": "The first-pass unmeasured-test limitation duplicates the canonical positive stale-proof closure.",
+      "destination": "Use canonical finding DCH-037."
+    },
+    {
+      "id": "DCHF-F027",
+      "claimIds": [".planning/reviews/unit-test-adversarial/domain-components-hooks.md#CLAIM-027"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/hooks-foundation.test.ts"
+        },
+        {
+          "path": "tests/architecture/no-hooks-strict-additional-properties.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "The runtime schema-walk architecture gate still targets HOOKS_CONFIG_SCHEMA and remains the functioning primary HOOK-03 guard; only the textual defense-in-depth scan is blind."
+      },
+      "rationale": "The report's primary-gate-positive observation remains current and is distinct from DCH-021.",
+      "destination": "Retain as positive gate evidence."
+    }
+  ],
+  "decisions": [],
+  "scopeChanges": []
+}

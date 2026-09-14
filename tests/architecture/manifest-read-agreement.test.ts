@@ -10,7 +10,7 @@
  * against it.
  *
  * The halves asserted here:
- *   - `domain/resolver.ts::readManifest`, reached through `resolveStrict` with
+ *   - `domain/plugin-resolver.ts::readManifest`, reached through `resolveStrict` with
  *     no seams injected so it reads real disk.
  *   - `orchestrators/plugin/shared.ts::resolvePluginVersion` tier 1.
  *   - `orchestrators/plugin/info.ts`'s own `dependencies` read, reached through
@@ -32,7 +32,7 @@ import test, { type TestContext } from "node:test";
 import {
   requireInstallable,
   resolveStrict,
-} from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
+} from "../../extensions/pi-claude-marketplace/domain/plugin-resolver.ts";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import { getPluginInfo } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import { resolvePluginVersion } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";

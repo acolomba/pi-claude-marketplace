@@ -5,7 +5,7 @@
 // Each orchestration emits exactly one `notify(ctx, pi,...)` call with a
 // discriminated `NotificationMessage` payload. Severity, reload-hint,
 // soft-dep marker, and per-row glyph dispatch are owned by the renderer in
-// `shared/notify.ts`.
+// `shared/notification-grammar.ts`.
 //
 // Outcomes -> NotificationMessage payloads:
 //  - autoupdate OFF (manifest-only refresh): UXG-05 distinguishes a no-op from
@@ -99,7 +99,6 @@ import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../../platform/git-credential.ts";
-import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   InvalidMarketplaceManifestError,
   MarketplaceUpdateError,
@@ -107,6 +106,8 @@ import {
   composeErrorWithCauseChain,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -138,13 +139,14 @@ import type { ParsedSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
 
 export interface UpdateMarketplaceOptions {
-  readonly ctx: ExtensionContext;
+  readonly completionCache: CompletionCache;
+  readonly ctx: NotificationContext;
   /** Single marketplace by name. Required for `updateMarketplace`; rejected by `updateAllMarketplaces` (which derives the list from state). */
   readonly name: string;
   readonly scope?: Scope;
@@ -161,7 +163,7 @@ export interface UpdateMarketplaceOptions {
    * optional) so every `notify(ctx, pi, ...)` call has a non-null reference;
    * the renderer threads `softDepStatus(pi)` internally at notify-time.
    */
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
@@ -178,13 +180,14 @@ export interface UpdateMarketplaceOptions {
 }
 
 export interface UpdateAllMarketplacesOptions {
-  readonly ctx: ExtensionContext;
+  readonly completionCache: CompletionCache;
+  readonly ctx: NotificationContext;
   readonly scope?: Scope;
   readonly cwd: string;
   readonly gitOps?: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
   /** See `UpdateMarketplaceOptions.pi`. */
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
@@ -216,8 +219,10 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
   }
 
   await refreshOneMarketplace({
+    completionCache: opts.completionCache,
     ctx: opts.ctx,
     pi: opts.pi,
+    cardinality: "single",
     name: opts.name,
     scope: resolved.scope,
     locations: resolved.locations,
@@ -256,15 +261,17 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
     // OUT-07 / D-12: empty inventory -> Plural (zero rows). Renders the
     // `(no marketplaces)` sentinel via the central seam the spine reuses.
     const emptyRows: Plural<MarketplaceRows<UpdateRowMsg>> = [];
-    notifyWithContext(opts.ctx, opts.pi, UPDATE_CONTEXT, emptyRows);
+    notifyWithContext(opts.ctx, opts.pi, UPDATE_CONTEXT, emptyRows, undefined, "plural");
     return;
   }
 
   // Process sequentially.
   for (const t of targets) {
     await refreshOneMarketplace({
+      completionCache: opts.completionCache,
       ctx: opts.ctx,
       pi: opts.pi,
+      cardinality: "plural",
       name: t.name,
       scope: t.scope,
       locations: t.locations,
@@ -277,13 +284,15 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
 }
 
 interface RefreshOneArgs {
-  readonly ctx: ExtensionContext;
+  readonly completionCache: CompletionCache;
+  readonly ctx: NotificationContext;
+  readonly cardinality: "single" | "plural";
   readonly name: string;
   readonly scope: Scope;
   readonly locations: ScopedLocations;
   readonly gitOps: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
 }
@@ -656,7 +665,7 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
  * (a declined or failed Device Flow), and network errno -- delegates to
  * `classifyGitTransportFailure` (`shared/git-failure-classifiers.ts`)
  * instead of a hand-rolled copy, so `update` cannot drift out of sync with
- * `install.ts`/`fetch.ts` (plugin), which already delegate to it.
+ * `install-outcome.ts`/`fetch.ts` (plugin), which already delegate to it.
  */
 function transportReason(err: Error): ContentReason | undefined {
   let bearer: NodeJS.ErrnoException | undefined;
@@ -682,7 +691,7 @@ function transportReason(err: Error): ContentReason | undefined {
 }
 
 async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
-  const { ctx, name, scope, locations, pluginUpdate, pi } = args;
+  const { ctx, cardinality, name, scope, locations, pluginUpdate, pi } = args;
 
   let snapshot: RefreshSnapshot | undefined;
   try {
@@ -695,7 +704,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     // (and its retry-hint, carried in the cause chain) via a synthetic
     // failed-plugin child whose `cause` drives the depth-5 cause-chain
     // trailer the renderer appends. Mirrors the reinstall synthetic-failed
-    // recipe (orchestrators/plugin/reinstall.ts).
+    // recipe (orchestrators/plugin/reinstall-flow.ts).
     const typedReasons = reasonsFromCascadeError(err);
     const failedRow: PluginFailedMessage = {
       status: "failed",
@@ -713,7 +722,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       // D-03: a failed marketplace update -> error.
       { name, scope, status: "failed", severity: "error", plugins: [failedRow] },
     ];
-    notifyWithContext(ctx, pi, UPDATE_CONTEXT, failedRows);
+    notifyWithContext(ctx, pi, UPDATE_CONTEXT, failedRows, undefined, cardinality);
     return;
   }
 
@@ -727,18 +736,24 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     return;
   }
 
-  // Post-state-commit completion-cache invalidation. Manifest refresh may
-  // have changed the plugin set; drop the cached plugin index so the next
-  // completion read rebuilds from the freshly updated marketplace.json.
-  // Defense-in-depth try/catch.
-  try {
-    await dropMarketplaceCache(await locations.pluginCacheFile(name), scope, name);
-  } catch {
-    // Intentional non-surfacing (PU-4 / AS-6): this cleanup runs AFTER the
-    // durable atomic state save, so a leak here cannot corrupt state. A
-    // cache-refresh failure is deliberately NOT surfaced -- emitting a second
-    // notify after the primary would double severity routing. The cache `rm`
-    // still runs above; only the user-facing warning is suppressed.
+  // Post-state-commit completion-cache invalidation. Only a changed manifest
+  // can change the marketplace's plugin index; an up-to-date refresh retains
+  // the exact existing row. The successful target drop completes before any
+  // plugin cascade observes the persisted state.
+  if (snapshot.changed) {
+    try {
+      await args.completionCache.dropMarketplaceCache(
+        await locations.pluginCacheFile(name),
+        scope,
+        name,
+      );
+    } catch {
+      // Intentional non-surfacing (PU-4 / AS-6): this cleanup runs AFTER the
+      // durable atomic state save, so a leak here cannot corrupt state. A
+      // cache-refresh failure is deliberately NOT surfaced -- emitting a second
+      // notify after the primary would double severity routing. The cache `rm`
+      // still runs above; only the user-facing warning is suppressed.
+    }
   }
 
   // CASCADE OUTSIDE the outer guard. Honors MU-4 literal
@@ -772,7 +787,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       const skippedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
         { name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] },
       ];
-      notifyWithContext(ctx, pi, UPDATE_CONTEXT, skippedRows);
+      notifyWithContext(ctx, pi, UPDATE_CONTEXT, skippedRows, undefined, cardinality);
       return;
     }
 
@@ -780,7 +795,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     const updatedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
       { name, scope, status: "updated", plugins: [] },
     ];
-    notifyWithContext(ctx, pi, UPDATE_CONTEXT, updatedRows);
+    notifyWithContext(ctx, pi, UPDATE_CONTEXT, updatedRows, undefined, cardinality);
     return;
   }
 
@@ -808,7 +823,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     const noopRows: Single<MarketplaceRows<UpdateRowMsg>> = [
       { name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] },
     ];
-    notifyWithContext(ctx, pi, UPDATE_CONTEXT, noopRows);
+    notifyWithContext(ctx, pi, UPDATE_CONTEXT, noopRows, undefined, cardinality);
     return;
   }
 
@@ -834,7 +849,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       plugins: outcomes.map((o) => outcomeToCascadePluginMessage(o, scope)),
     },
   ];
-  notifyWithContext(ctx, pi, UPDATE_CONTEXT, cascadeRows);
+  notifyWithContext(ctx, pi, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);
 }
 
 /**

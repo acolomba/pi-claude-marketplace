@@ -9,8 +9,10 @@ import {
   buildCloneAuth,
   hostFromCloneUrl,
 } from "../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
+import { buildAuthCallbacks } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
+import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
 import type { AuthAttemptResult } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -709,22 +711,85 @@ describe("buildCloneAuth", () => {
     verify(ui);
   });
 
-  test("forwards a URL host while truly omitting optional collaborators", () => {
+  test("uses a stored credential while truly omitting optional collaborators", async () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [["gitlab.com", { username: "oauth2", password: "stored-secret" }]],
+    });
     const authOptions = { credentialOps: credentials.credentialOps, ctx };
+    const auth = buildCloneAuth("https://gitlab.com/team/plugin.git", "url", authOptions);
+    assert.ok(auth !== undefined);
+    const callbacks = buildAuthCallbacks(auth);
 
     // act
-    const auth = buildCloneAuth("https://gitlab.com/team/plugin.git", "url", authOptions);
+    const credential = await callbacks.onAuth("https://gitlab.com/team/plugin.git");
 
     // assert
-    assert.deepStrictEqual(auth, {
-      credentialOps: credentials.credentialOps,
-      host: "gitlab.com",
-      onAuthRequired: auth?.onAuthRequired,
+    assert.deepStrictEqual(credential, {
+      username: "oauth2",
+      password: "stored-secret",
+    });
+    assert.deepStrictEqual(credentials.calls, {
+      fill: [{ host: "gitlab.com" }],
+      approve: [],
+      reject: [],
     });
     assert.deepStrictEqual(Object.keys(authOptions), ["credentialOps", "ctx"]);
+    verify(ctx);
+  });
+
+  test("preserves a Device Flow failure through the shared Git call ledger", async () => {
+    // arrange
+    const cloneUrl = "https://gitlab.com/team/plugin.git";
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const initializationError = new Error("provider unavailable");
+    const deviceFlow = createDeviceFlowFake({
+      boundary: "memory",
+      network: "disabled",
+      deviceCode: {
+        device_code: "unused-device-code",
+        user_code: "UNUSED",
+        verification_uri: "https://gitlab.com/-/profile/personal_access_tokens",
+        expires_in: 900,
+        interval: 0,
+      },
+      requestCodeError: initializationError,
+    });
+    const auth = buildCloneAuth(cloneUrl, "url", {
+      ctx,
+      credentialOps: credentials.credentialOps,
+      deviceFlowHttp: deviceFlow.http,
+    });
+    assert.ok(auth !== undefined);
+    const git = createGitOpsFake({ boundary: "memory", allowedRemoteUrls: [cloneUrl] });
+    await git.gitOps.clone({ dir: "/memory/plugin", url: cloneUrl, auth });
+    const recordedAuth = git.state.calls.clone[0]?.auth;
+    assert.ok(recordedAuth !== undefined);
+
+    // act
+    const authentication = await recordedAuth.onAuthRequired();
+
+    // assert
+    assert.strictEqual(recordedAuth, auth);
+    assert.strictEqual(recordedAuth.onAuthRequired, auth.onAuthRequired);
+    assert.deepStrictEqual(authentication, {
+      ok: false,
+      reason: "Device Flow initialization failed: provider unavailable",
+      authAttempted: true,
+    });
+    assert.deepStrictEqual(deviceFlow.calls, {
+      requestCode: [
+        {
+          clientId: "bb5b5605c21f02f3b41991e3d5f713488b4f0c5cf969de8f7d82f2811f99192d",
+          scope: "read_repository",
+        },
+      ],
+      pollToken: [],
+    });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
     verify(ctx);
   });
 

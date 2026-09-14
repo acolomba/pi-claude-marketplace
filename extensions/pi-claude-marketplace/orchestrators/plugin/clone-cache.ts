@@ -2,7 +2,7 @@
 //
 // PURL-02 / PURL-04 / D-77-03..06: the plugin clone-cache seam.
 //
-// install.ts is forbidden the git surface by the `no-orchestrator-network`
+// install-outcome.ts is forbidden the git surface by the `no-orchestrator-network`
 // architecture gate (NFR-5). The clone lives HERE, in a sibling seam install
 // calls by name; this file imports DEFAULT_GIT_OPS from marketplace/shared.ts
 // (the same re-export update.ts uses) and is legally allowed the git surface
@@ -28,7 +28,13 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { ensureGitSuffix, parsePluginSource } from "../../domain/source.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { appendLeakToError } from "../../shared/errors.ts";
-import { cleanupStaging, pathExists, resolveGitSubdirRoot } from "../../shared/fs-utils.ts";
+import {
+  cleanupStaging,
+  createRemovalOps,
+  pathExists,
+  resolveGitSubdirRoot,
+  type RemovalOps,
+} from "../../shared/fs-utils.ts";
 import {
   DEFAULT_GIT_OPS,
   refreshGitHubClone,
@@ -36,7 +42,7 @@ import {
   type GitOps,
 } from "../marketplace/shared.ts";
 
-import type { GitPluginRootResult } from "../../domain/resolver.ts";
+import type { GitPluginRootResult } from "../../domain/resolver-types.ts";
 import type {
   GitBackedSource,
   GitHubSource,
@@ -74,6 +80,7 @@ function isGitCommitNotFetchedError(err: unknown): boolean {
  * appended (MA-9).
  */
 async function promoteStagingToClone(
+  ops: RemovalOps,
   stagingDir: string,
   cloneRoot: string,
   stagingLabel: string,
@@ -84,7 +91,7 @@ async function promoteStagingToClone(
     return "renamed";
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
-    const leak = await cleanupStaging(stagingDir, stagingLabel);
+    const leak = await cleanupStaging(ops, stagingDir, stagingLabel);
     if (code === "EEXIST" || code === "ENOTEMPTY") {
       return "raced";
     }
@@ -164,6 +171,11 @@ export async function materializePluginClone(args: {
   auth?: GitAuthBundle;
 }): Promise<string> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
+  // D-08-12: this verb owns a staging lifecycle, so it is the composition root
+  // that constructs the removal operations its cleanup and promotion paths run
+  // through. The port is required with no default, so a new cleanup site here
+  // cannot go uninjected.
+  const removalOps = createRemovalOps();
   const key = pluginCloneKey(args.cloneUrl, args.pin);
   // MURL-01 / D-77-04: the key hashes the canonical suffix-less url so a dir
   // keyed before the suffix change still hits warm; only the wire url is
@@ -189,13 +201,13 @@ export async function materializePluginClone(args: {
     });
     await checkoutPinWithRefetch(gitOps, stagingDir, args);
   } catch (err) {
-    const leak = await cleanupStaging(stagingDir, "plugin clone staging");
+    const leak = await cleanupStaging(removalOps, stagingDir, "plugin clone staging");
     throw appendLeakToError(err, leak);
   }
 
   // A `raced` promotion means a concurrent install of the same url+sha won;
   // its tree is byte-equivalent, so the existing root is a warm cache win.
-  await promoteStagingToClone(stagingDir, cloneRoot, "plugin clone staging");
+  await promoteStagingToClone(removalOps, stagingDir, cloneRoot, "plugin clone staging");
   return cloneRoot;
 }
 
@@ -241,6 +253,11 @@ export async function materializeOrRefreshPluginMirror(args: {
   auth?: GitAuthBundle;
 }): Promise<{ pluginRoot: string; resolvedSha: string }> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
+  // D-08-12: this verb owns a staging lifecycle, so it is the composition root
+  // that constructs the removal operations its cleanup and promotion paths run
+  // through. The port is required with no default, so a new cleanup site here
+  // cannot go uninjected.
+  const removalOps = createRemovalOps();
   const mirrorRoot = await args.locations.pluginCloneDir(pluginMirrorKey(args.cloneUrl));
   // MURL-01 / D-77-04: same split as `materializePluginClone` -- the mirror key
   // hashes the canonical suffix-less url (warm mirrors stay valid), the clone
@@ -260,14 +277,14 @@ export async function materializeOrRefreshPluginMirror(args: {
         ...(args.auth !== undefined && { auth: args.auth }),
       });
     } catch (err) {
-      const leak = await cleanupStaging(stagingDir, "plugin mirror staging");
+      const leak = await cleanupStaging(removalOps, stagingDir, "plugin mirror staging");
       throw appendLeakToError(err, leak);
     }
 
     // MIRR-03 / D-79.1-03: a `raced` promotion falls through to the refresh
     // path exactly like a `renamed` one -- the winner's byte-equivalent tree
     // still needs an in-place refresh plus a HEAD read.
-    await promoteStagingToClone(stagingDir, mirrorRoot, "plugin mirror staging");
+    await promoteStagingToClone(removalOps, stagingDir, mirrorRoot, "plugin mirror staging");
   }
 
   // MIRR-02 / D-79.1-02: refresh the mirror in place (marketplace parity). A
@@ -367,6 +384,7 @@ async function deriveMarketplaceUrl(
  * SC-7/NFR-10 containment chokepoint; no manifest/user string joins the path.
  */
 async function seedOnePluginMirror(
+  ops: RemovalOps,
   locations: ScopedLocations,
   gitOps: GitOps,
   source: UrlSource | GitSubdirSource | GitHubSource,
@@ -401,7 +419,7 @@ async function seedOnePluginMirror(
     try {
       await gitOps.checkout({ dir: staging, ref: source.sha });
     } catch {
-      await cleanupStaging(staging, "plugin mirror seed staging");
+      await cleanupStaging(ops, staging, "plugin mirror seed staging");
       return;
     }
   }
@@ -415,7 +433,7 @@ async function seedOnePluginMirror(
     // byte-equivalent, so clean staging and treat dest as a warm-cache win. Any
     // other rename error cleans staging and rethrows to the per-entry boundary.
     const code = (err as NodeJS.ErrnoException).code;
-    await cleanupStaging(staging, "plugin mirror seed staging");
+    await cleanupStaging(ops, staging, "plugin mirror seed staging");
     if (code !== "EEXIST" && code !== "ENOTEMPTY") {
       throw err;
     }
@@ -450,6 +468,11 @@ export async function seedSameRepoPluginMirrors(args: {
   gitOps?: GitOps;
 }): Promise<void> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
+  // D-08-12: this verb owns a staging lifecycle, so it is the composition root
+  // that constructs the removal operations its cleanup and promotion paths run
+  // through. The port is required with no default, so a new cleanup site here
+  // cannot go uninjected.
+  const removalOps = createRemovalOps();
   const { locations, marketplaceName } = args;
 
   const state = await loadState(locations.extensionRoot);
@@ -477,7 +500,14 @@ export async function seedSameRepoPluginMirrors(args: {
     }
 
     try {
-      await seedOnePluginMirror(locations, gitOps, src, marketplaceUrl, mp.marketplaceRoot);
+      await seedOnePluginMirror(
+        removalOps,
+        locations,
+        gitOps,
+        src,
+        marketplaceUrl,
+        mp.marketplaceRoot,
+      );
     } catch {
       // Best-effort (D-SEED-01): a per-entry seed failure leaves the plugin
       // `(remote)` for the normal network path; the committed add is untouched.
@@ -538,7 +568,7 @@ export async function resolvePluginPin(args: {
 // PURL-03 / NFR-10 / D-77-03: `resolveGitSubdirRoot` lives in shared/fs-utils.ts
 // so the network-free presence probe can share it without pulling this seam's git
 // surface. Re-exported here under the same name so the update / reinstall
-// import sites need no change. `install.ts` calls this file's
+// import sites need no change. `install-clone-probe.ts` calls this file's
 // `resolveGitPluginRootWithSubdir`, which wraps it, rather than importing it directly.
 export { resolveGitSubdirRoot } from "../../shared/fs-utils.ts";
 

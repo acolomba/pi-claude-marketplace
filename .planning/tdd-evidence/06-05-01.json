@@ -1,0 +1,9 @@
+{
+  "command": "node --test-reporter tap tests/domain/resolver-types.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: exports the exact three-arm resolver schema\nnot ok 1 - exports the exact three-arm resolver schema\n  ---\n  error: Got unwanted rejection. resolver-types.ts is absent\n  code: ERR_ASSERTION\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n",
+  "targetTest": "exports the exact three-arm resolver schema",
+  "targetFile": "tests/domain/resolver-types.test.ts",
+  "expected": "The named resolver-types owner exports the exact three-arm schema.",
+  "actual": "The dynamic import rejected because resolver-types.ts does not exist before extraction."
+}

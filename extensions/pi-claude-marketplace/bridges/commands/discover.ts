@@ -52,7 +52,7 @@ import { causeChainTrailer, errorMessage, isErrnoException } from "../../shared/
 import { isPlainMarkdownFile, readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
 import type { DiscoveredCommand } from "./types.ts";
-import type { MaterializablePlugin } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { Dirent } from "node:fs";
 
 /** D-07 return shape: `{ discovered, warnings }`. */
@@ -164,7 +164,7 @@ const TOLERATED_WALK_ERRNOS: ReadonlySet<string> = new Set([
 ]);
 
 function isToleratedWalkError(err: unknown): boolean {
-  return isErrnoException(err) && TOLERATED_WALK_ERRNOS.has(err.code ?? "");
+  return isErrnoException(err) && TOLERATED_WALK_ERRNOS.has(err.code);
 }
 
 /**

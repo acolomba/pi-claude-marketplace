@@ -1,0 +1,10 @@
+{
+  "taskId": "06-46-01",
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/orchestrators/plugin/reinstall-flow.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: owns plugin reinstall flow composition\nnot ok 1 - owns plugin reinstall flow composition\n  error: Got unwanted rejection: reinstall-flow.ts must own the public reinstall factories\n  code: ERR_ASSERTION\n1..1\n# tests 1\n# pass 0\n# fail 1",
+  "targetTest": "owns plugin reinstall flow composition",
+  "targetFile": "tests/orchestrators/plugin/reinstall-flow.test.ts",
+  "expected": "the named reinstall-flow owner exports the public reinstall factories",
+  "actual": "the target assertion rejects because reinstall-flow.ts does not exist"
+}

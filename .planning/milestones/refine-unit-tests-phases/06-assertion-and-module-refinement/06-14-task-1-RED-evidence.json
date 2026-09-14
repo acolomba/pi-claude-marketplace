@@ -1,0 +1,9 @@
+{
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/shared/notification-summary.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: exports notification summary folding from its named owner\nnot ok 1 - exports notification summary folding from its named owner\n  error: Got unwanted rejection: notification-summary.ts must own summary folding\n  code: ERR_ASSERTION\n  actual: ERR_MODULE_NOT_FOUND\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1",
+  "targetTest": "exports notification summary folding from its named owner",
+  "targetFile": "tests/shared/notification-summary.test.ts",
+  "expected": "the named notification summary owner can be imported",
+  "actual": "ERR_MODULE_NOT_FOUND for extensions/pi-claude-marketplace/shared/notification-summary.ts"
+}

@@ -15,7 +15,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
  * normalization happens in the consumers.
  */
 export interface RawMcpDoc {
-  readonly mcpServers?: Record<string, unknown>;
+  readonly mcpServers?: unknown;
   readonly [extra: string]: unknown;
 }
 

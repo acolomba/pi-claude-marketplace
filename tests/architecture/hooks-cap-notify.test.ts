@@ -18,14 +18,18 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test, { mock } from "node:test";
-import { fileURLToPath } from "node:url";
 
-import { notifyStopHookOverrideCap } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+import { notifyStopHookOverrideCap } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+
+import { VOCABULARY_GUARD_DOC_TARGETS } from "./gate-targets.ts";
+import { REPO_ROOT } from "./source-scan.ts";
 
 import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const CATALOG_PATH = path.join(REPO_ROOT, "docs/output-catalog.md");
+// D-07-05: the catalog is the registry's target, not a path spelled here. The
+// group is a tuple, so the binding is positional and `readCatalogBlock` states
+// the basename it expects.
+const [OUTPUT_CATALOG_REL] = VOCABULARY_GUARD_DOC_TARGETS;
 
 // The plugin id baked into the catalog's `stop-override-cap` fenced block. The
 // byte-equality assertion drives the seam with this exact id so the emitted
@@ -38,7 +42,12 @@ const CATALOG_PLUGIN_ID = "ralph-wiggum";
  * fence-walk (the body is the lines between the ``` fences, joined by "\n").
  */
 async function readCatalogBlock(state: string): Promise<string> {
-  const catalog = await readFile(CATALOG_PATH, "utf8");
+  assert.strictEqual(
+    path.posix.basename(OUTPUT_CATALOG_REL),
+    "output-catalog.md",
+    `D-07-05: this gate reads the output catalog, but the registry target bound to it is ${OUTPUT_CATALOG_REL}`,
+  );
+  const catalog = await readFile(path.join(REPO_ROOT, OUTPUT_CATALOG_REL), "utf8");
   const lines = catalog.split("\n");
   const marker = `<!-- catalog-state: ${state} -->`;
 
@@ -63,13 +72,22 @@ async function readCatalogBlock(state: string): Promise<string> {
     }
 
     if (line.startsWith("```")) {
-      return body.join("\n");
+      const block = body.join("\n");
+
+      // D-07-03: an empty fence would hand the byte-equality assertion an empty
+      // expectation, turning a documentation-parity pin into a comparison
+      // against nothing.
+      assert.ok(
+        block.length > 0,
+        `D-07-03: the '${state}' block in ${OUTPUT_CATALOG_REL} is empty, so this gate compares against nothing`,
+      );
+      return block;
     }
 
     body.push(line);
   }
 
-  throw new Error(`catalog block for state '${state}' not found in ${CATALOG_PATH}`);
+  throw new Error(`catalog block for state '${state}' not found in ${OUTPUT_CATALOG_REL}`);
 }
 
 interface MockCtx {
