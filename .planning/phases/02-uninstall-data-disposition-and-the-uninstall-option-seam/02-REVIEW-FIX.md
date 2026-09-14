@@ -4,8 +4,8 @@ fixed_at: 2026-09-14T20:05:00Z
 review_path: .planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/02-REVIEW.md
 iteration: 1
 findings_in_scope: 13
-fixed: 10
-skipped: 3
+fixed: 9
+skipped: 4
 status: partial
 ---
 
@@ -18,8 +18,9 @@ status: partial
 **Summary:**
 
 - Findings in scope: 13 (the review's full set)
-- Fixed: 10 (WR-01, WR-02, WR-03, WR-06, WR-07, IN-01..IN-05)
-- Skipped: 3 (CR-01, WR-04, WR-05 — explicitly out of scope per the operator)
+- Fixed: 9 (WR-01, WR-02, WR-03, WR-06, IN-01..IN-05)
+- Skipped: 4 (CR-01, WR-04, WR-05 — explicitly out of scope per the operator;
+  WR-07 — applied then reverted per operator decision, see below)
 
 **Verification:** `npm run check` ran in the **main checkout** (`workflow.use_worktrees` is
 false for this project; no worktree was created, so the numbers below are reproducible from
@@ -126,19 +127,6 @@ sonarjs still scored it under its own ceiling — the two algorithms disagree, a
 CONVENTIONS.md warns). Extracting the row construction into `buildUninstalledRow` returns it
 to 14.
 
-### WR-07: A symlinked data directory makes the default disposition throw out of the command handler after the state commit
-
-**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts`,
-`tests/orchestrators/plugin/uninstall.test.ts`
-**Commit:** `0cf56ba9`
-**Applied fix:** `locations.pluginDataDir(...)` now resolves inside the same `try` that guards
-the `rm`, so a `SymlinkRefusedError` on the cleanup path is swallowed like every other
-post-commit hygiene outcome (D-19-01). Containment is unchanged — the assertion still fires
-before the `rm`, so the escape target is never touched. Added the deleting half of the symlink
-fixture the preservation case already plants (`WR-07: deletion over a symlinked data dir is
-refused, and the rest of the hygiene still runs`), asserting the `(uninstalled)` row renders,
-the symlink and its target survive, and the clone GC that follows the data step still runs.
-
 ### IN-01: Handler file header documents the pre-change flag set
 
 **Files modified:** `extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts`
@@ -214,6 +202,28 @@ finding offers as its alternative: the `(uninstalled)` token row now records tha
 `marketplace remove` has no such opt-out and its rows are always bare. The threading of
 `keepData` through those two verbs remains open.
 
+### WR-07: A symlinked data directory makes the default disposition throw out of the command handler after the state commit
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:480-493`
+**Reason:** Applied, then reverted per operator decision (commit `0cf56ba9`, reverted by
+`eeeb80eb`). The fix moved `pluginDataDir(...)`'s resolution inside the `try` guarding `rm`, so
+a `SymlinkRefusedError` on the cleanup path would be swallowed like an ordinary hygiene leak
+instead of propagating. That reversed a deliberate, comment-documented prior decision: "a
+containment failure must propagate rather than be mistaken for an rm leak. D-19-01 sanctions
+swallowing the cleanup, not the assertion guarding it." Presented to the operator as a
+decision — silent success vs. a loud but confusing post-commit error for an anomaly (a data
+directory replaced with a symlink escaping the scope root) that is arguably worth surfacing.
+The operator chose to keep the original propagating behavior. The two tests WR-07 rewrote
+(`NFR-10 / WR-07: ...` and the `retry proof` symlink-escape case) are restored to their
+original assertions; the new deleting-half symlink test WR-07 added was removed with the
+revert, since it asserted the now-reverted swallowed behavior.
+**Original issue:** `locations.pluginDataDir()` resolves outside `runPostUninstallCleanup`'s
+`try`, so a symlinked data directory makes the default (delete) disposition throw an uncaught
+`SymlinkRefusedError` after the state commit already succeeded — the operator sees a raw error
+instead of the `(uninstalled)` row and `/reload` hint. This is confirmed, intentional behavior
+under NFR-10, not a defect; whether the resulting UX confusion is worth accepting is the
+operator's call, and it was made.
+
 ### WR-05: Data retained by `--keep-data` has no supported removal path afterwards
 
 **File:** `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:771-773,793-800`
@@ -226,16 +236,13 @@ removed by `uninstall`, is invisible to `list`, and is not swept by
 
 ## Notes for the reviewer
 
-1. **WR-07 reverses a previously-pinned invariant.** Two cases pinned the OPPOSITE contract —
-   `NFR-10: pluginDataDir containment failure PROPAGATES; it is not swallowed as a cleanup
-   leak` and the `retry proof` for a refused data-dir escape — with the stated rationale
-   "D-19-01 sanctions swallowing the cleanup, not the assertion guarding it." Applying WR-07 as
-   written required rewriting both to the new contract (no throw; escape target intact; the
-   `(uninstalled)` row still renders; the clone GC after the data step now runs, which it did
-   not when the refusal escaped). Containment itself is unaffected — nothing outside the scope
-   root is read, written or deleted on that path. **Worth a human confirmation** that trading
-   the loud refusal for a silent one is the intended direction, since it is a decision reversal
-   rather than a defect repair.
+1. **WR-07 was applied, reviewed, and reverted.** It reversed a previously-pinned invariant —
+   two cases pinned the OPPOSITE contract (`NFR-10: pluginDataDir containment failure
+   PROPAGATES; it is not swallowed as a cleanup leak` and the `retry proof` for a refused
+   data-dir escape), citing "D-19-01 sanctions swallowing the cleanup, not the assertion
+   guarding it." Flagged for human confirmation in this report's first draft; the operator
+   reviewed the tradeoff and chose to keep the original propagating behavior. Commit `0cf56ba9`
+   was reverted by `eeeb80eb`. See WR-07's entry under Skipped Issues.
 2. **WR-06 narrows D-02-01.** The decision reads "Preserve the current uninstall success
    format; do not introduce a separate retained-data report or path trailer." A reason brace is
    neither of the two named prohibitions and is the house convention for exactly this kind of
