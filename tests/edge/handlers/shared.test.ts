@@ -33,6 +33,8 @@ import { passThroughFlagNames } from "../../../extensions/pi-claude-marketplace/
 import { extractLocalFlag } from "../../../extensions/pi-claude-marketplace/edge/handlers/shared.ts";
 import { createNotificationBoundary } from "../notification-boundary.ts";
 
+import type { ConsumeLongFlags } from "../../../extensions/pi-claude-marketplace/edge/handlers/shared.ts";
+
 type Scan = NonNullable<ReturnType<typeof extractLocalFlag>>;
 
 const ENABLE_USAGE =
@@ -270,3 +272,117 @@ test("reports the flag off with an empty residual when no argument text is suppl
   assert.deepStrictEqual(notifications, []);
   verifyBoundary();
 });
+
+test("consuming mode returns an empty flag set when no boolean is present", () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const options: ConsumeLongFlags = { consumeLongFlags: ["--keep-data"] };
+
+  // act
+  const scanned = extractLocalFlag("alpha@official", ctx, ENABLE_USAGE, options);
+
+  // assert
+  assert.deepStrictEqual(scanned, {
+    local: false,
+    residualArgs: "alpha@official",
+    consumedFlags: new Set(),
+  });
+  assert.deepStrictEqual(notifications, []);
+  verifyBoundary();
+});
+
+for (const { args, local, residualArgs, flags } of [
+  {
+    args: "--keep-data alpha@official",
+    local: false,
+    residualArgs: "alpha@official",
+    flags: ["--keep-data"],
+  },
+  {
+    args: "alpha@official --keep-data",
+    local: false,
+    residualArgs: "alpha@official",
+    flags: ["--keep-data"],
+  },
+  {
+    args: "--keep-data --local alpha@official --keep-data --local --scope project",
+    local: true,
+    residualArgs: "alpha@official --scope project",
+    flags: ["--keep-data"],
+  },
+  {
+    args: "--scope user --keep-data alpha@official",
+    local: false,
+    residualArgs: "--scope user alpha@official",
+    flags: ["--keep-data"],
+  },
+  { args: "--keep-data --scope", local: false, residualArgs: "--scope", flags: ["--keep-data"] },
+  { args: "", local: false, residualArgs: "", flags: [] },
+  {
+    args: "--another alpha@official --keep-data",
+    local: false,
+    residualArgs: "alpha@official",
+    flags: ["--another", "--keep-data"],
+  },
+]) {
+  test(`consuming mode extracts the supplied booleans from "${args}"`, () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+
+    // act
+    const scanned = extractLocalFlag(args, ctx, ENABLE_USAGE, {
+      consumeLongFlags: ["--keep-data", "--another"],
+    });
+
+    // assert
+    assert.deepStrictEqual(scanned, { local, residualArgs, consumedFlags: new Set(flags) });
+    assert.deepStrictEqual(notifications, []);
+    verifyBoundary();
+  });
+}
+
+for (const scopeValue of ["--keep-data", "--local", "--delete-data", "-y", "--yes", "--prune"]) {
+  test(`consuming mode retains "${scopeValue}" as a scope value without enabling a boolean`, () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+
+    // act
+    const scanned = extractLocalFlag(`--scope ${scopeValue} alpha@official`, ctx, ENABLE_USAGE, {
+      consumeLongFlags: ["--keep-data"],
+    });
+
+    // assert
+    assert.deepStrictEqual(scanned, {
+      local: false,
+      residualArgs: `--scope ${scopeValue} alpha@official`,
+      consumedFlags: new Set(),
+    });
+    assert.deepStrictEqual(notifications, []);
+    verifyBoundary();
+  });
+}
+
+for (const flag of ["--delete-data", "-y", "--yes", "--prune", "--keep-data=false", "-"]) {
+  for (const placement of ["before", "after"]) {
+    test(`consuming mode rejects "${flag}" ${placement} the reference`, () => {
+      // arrange
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+      const args = placement === "before" ? `${flag} alpha@official` : `alpha@official ${flag}`;
+
+      // act
+      const scanned = extractLocalFlag(args, ctx, ENABLE_USAGE, {
+        consumeLongFlags: ["--keep-data"],
+      });
+
+      // assert
+      assert.strictEqual(scanned, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `Unknown flag: "${flag}".\n\nUsage: /claude:plugin enable <plugin>@<marketplace> [--scope user|project] [--local]`,
+          severity: "error",
+        },
+      ]);
+      verifyBoundary();
+    });
+  }
+}

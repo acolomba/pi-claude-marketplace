@@ -24,59 +24,82 @@ import { SCOPE_TARGET_FLAG } from "../flag-catalog.ts";
 
 import type { ExtensionCommandContext } from "../../platform/pi-api.ts";
 
+/** Selects strict extraction of caller-supplied boolean long flags. */
+export interface ConsumeLongFlags {
+  readonly consumeLongFlags: readonly string[];
+}
+
 /**
- * Position-independent `--local` flag scanner. Walks the tokenised args,
- * recognises `--scope <value>` as a downstream-consumed pair, recognises
- * the catalog-owned scope-target flag (`SCOPE_TARGET_FLAG`, `--local`) as
- * the flag this helper extracts, and rejects any other long flag via
- * `notifyUsageError` UNLESS listed in `passThroughLongFlags` (a
- * caller-supplied allow-list of additional boolean long flags handled by
- * the downstream domain parser, e.g. install/update's `--map-model`).
- *
- * Returns `{ local, residualArgs }` where `residualArgs` has every `--local`
- * token REMOVED (other passthrough flags are preserved verbatim for the
- * downstream parser). Returns `undefined` when an unknown long flag was
- * found (the usage error has already been notified; caller should early-
- * return).
+ * Extracts local and accepted boolean flags in one position-independent scan.
+ * Scope/value pairs remain for the downstream parser. Array-form callers keep
+ * their pass-through flags and legacy residual shape; consuming callers receive
+ * a flag set and reject unknown short options as well as unknown long options.
  */
 export function extractLocalFlag(
   args: string,
   ctx: ExtensionCommandContext,
   usage: string,
-  passThroughLongFlags: readonly string[] = [],
-): { local: boolean; residualArgs: string } | undefined {
+  flags: ConsumeLongFlags,
+): { local: boolean; residualArgs: string; consumedFlags: ReadonlySet<string> } | undefined;
+export function extractLocalFlag(
+  args: string,
+  ctx: ExtensionCommandContext,
+  usage: string,
+  flags?: readonly string[],
+): { local: boolean; residualArgs: string } | undefined;
+export function extractLocalFlag(
+  args: string,
+  ctx: ExtensionCommandContext,
+  usage: string,
+  flags: readonly string[] | ConsumeLongFlags = [],
+): { local: boolean; residualArgs: string; consumedFlags?: ReadonlySet<string> } | undefined {
+  const consuming = "consumeLongFlags" in flags;
+  const acceptedFlags = consuming ? flags.consumeLongFlags : flags;
+  const consumedFlags = new Set<string>();
+  const residualTokens: string[] = [];
   let local = false;
-  const tokens = args.split(/\s+/).filter((t) => t.length > 0);
   let skipValue = false;
-  for (const tok of tokens) {
+  for (const token of args.split(/\s+/).filter((text) => text.length > 0)) {
+    residualTokens.push(token);
     if (skipValue) {
-      // The `--scope` value, handled by the downstream domain parser. ER-F19:
-      // skipping it here is what keeps it out of the flag tests below.
       skipValue = false;
       continue;
     }
 
-    if (tok === "--scope") {
+    if (token === "--scope") {
       skipValue = true;
       continue;
     }
 
-    if (tok === SCOPE_TARGET_FLAG) {
+    if (token === SCOPE_TARGET_FLAG) {
       local = true;
+      residualTokens.pop();
       continue;
     }
 
-    if (tok.startsWith("--")) {
-      if (passThroughLongFlags.includes(tok)) {
-        // Known downstream-consumed long flag (e.g. --map-model). Preserve
-        // verbatim in residualArgs for the domain parser.
-        continue;
-      }
+    if (consuming && acceptedFlags.includes(token)) {
+      consumedFlags.add(token);
+      residualTokens.pop();
+      continue;
+    }
 
-      notifyUsageError(ctx, { message: `Unknown flag: "${tok}".`, usage });
+    if (isUnknownFlag(token, acceptedFlags, consuming)) {
+      notifyUsageError(ctx, { message: `Unknown flag: "${token}".`, usage });
       return undefined;
     }
   }
 
-  return { local, residualArgs: tokens.filter((t) => t !== SCOPE_TARGET_FLAG).join(" ") };
+  // Preserve the legacy removal of --local even when it was a scope value.
+  const residualArgs = residualTokens
+    .filter((token) => consuming || token !== SCOPE_TARGET_FLAG)
+    .join(" ");
+  return consuming ? { local, residualArgs, consumedFlags } : { local, residualArgs };
+}
+
+function isUnknownFlag(
+  token: string,
+  acceptedFlags: readonly string[],
+  consuming: boolean,
+): boolean {
+  return token.startsWith(consuming ? "-" : "--") && !acceptedFlags.includes(token);
 }
