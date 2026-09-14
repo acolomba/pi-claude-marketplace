@@ -53,3 +53,51 @@ the owner file so a later bounded plan can pick it up; none is a gate failure.
   `extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts` to
   `NETWORK_FREE_TARGETS` during a wave reconciliation, or in whichever later
   plan next owns the composition module (05-16 through 05-18 all extend it).
+
+- Comments in non-owned files still name the four closed-set tuples by their
+  retired identifiers
+  status: open
+  **What:** `REASONS`, `STATUS_TOKENS`, `PLUGIN_STATUSES` and
+  `MARKETPLACE_STATUSES` are no longer declarations of any kind -- the four
+  vocabularies are now the literal unions `Reason`, `StatusToken`,
+  `PluginStatus` and `MarketplaceStatus`. Fourteen files outside plan 05-23's
+  declared owner set still name the retired identifiers in comments or a test
+  title: `orchestrators/marketplace/autoupdate.ts:38`,
+  `orchestrators/plugin/fetch.messaging.ts:26,27,81`,
+  `orchestrators/plugin/fetch.ts:327,427,529`,
+  `orchestrators/plugin/info.ts:1541`,
+  `orchestrators/plugin/install.messaging.ts:355`,
+  `orchestrators/plugin/reinstall.messaging.ts:435`,
+  `orchestrators/plugin/shared.ts:217,219,1285`,
+  `orchestrators/plugin/uninstall.ts:203`,
+  `orchestrators/reconcile/apply-outcomes.ts:176`,
+  `orchestrators/reconcile/notify.ts:124,182,474,475,482,487`,
+  `orchestrators/reconcile/reconcile.messaging.ts:151`,
+  `shared/concerns/soft-dep.ts:15,33`,
+  `shared/git-failure-classifiers.ts:54`,
+  `shared/probe-classifiers.ts:69,88`,
+  `tests/architecture/catalog-uat/fixtures/plugin-install.ts:60`,
+  `tests/architecture/scope-fences-63.test.ts:18,144,215,220,253`,
+  `tests/orchestrators/marketplace/update.test.ts:711` and
+  `tests/orchestrators/plugin/update-flow.test.ts:7153`.
+  **Why it is deferred:** every claim each comment makes is still true -- the
+  vocabularies hold the same members and the same order, and "a new REASONS
+  member" still names the same closed set the reader has to amend. Only the
+  identifier drifted. The `scope-fences-63.test.ts` clause is a live gate and is
+  unaffected: it asserts the owner's source contains `"unsupported hooks"`,
+  which it does. 05-CONTEXT's execution rules forbid editing an owner a plan
+  does not declare.
+  **Suggested fix:** rename the identifier in each comment to the union it
+  became, in whichever later plan next owns those files.
+
+- Two comments name `ICON_PARTIALLY_AVAILABLE` from outside its module
+  status: open
+  **What:** `orchestrators/plugin/fetch.messaging.ts:67` and
+  `orchestrators/plugin/list.messaging.ts:118` describe the row they compose by
+  naming the glyph constant, which plan 05-23 made module-private to
+  `shared/notification-grammar.ts`.
+  **Why it is deferred:** both comments also spell the glyph itself (`⊖`) and
+  the `(partially-available)` token, so the sentence still identifies the row
+  correctly without the constant. Neither file is in 05-23's owner set.
+  **Suggested fix:** drop the constant name and keep the glyph and token, in
+  whichever later plan next owns those files.

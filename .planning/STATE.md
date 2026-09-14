@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 05
 current_phase_name: Production Export Ownership
 status: executing
-last_updated: "2026-09-14T20:46:01Z"
+last_updated: "2026-09-15T00:02:00Z"
 last_activity: 2026-09-14
-last_activity_desc: Wave 6 plan 05-19 plugin outcome and replacement owners complete
-state_head: 0f5f9d4c
+last_activity_desc: Wave 6 plan 05-23 notification vocabulary and delivery owners complete
+state_head: 3997bbda
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 54
-  completed_plans: 28
-  percent: 52
+  completed_plans: 29
+  percent: 54
 milestone_name: test-backlog
 ---
 
@@ -31,9 +31,16 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 05 (Production Export Ownership) — EXECUTING
-Plan: 18 of 28 — 05-19 complete; Wave 6 source writing is under way
+Plan: 19 of 28 — 05-23 complete; Wave 6 source writing is under way
 Status: Executing Phase 05 Wave 6, awaiting the Wave 6 census reconciliation
-Last activity: 2026-09-14 — 05-19 privatized install reason narrowing, plugin-PATH
+Last activity: 2026-09-14 — 05-23 retired the four notification vocabulary tuples
+in favour of bare literal unions, privatized `ICON_REMOTE`,
+`ICON_PARTIALLY_AVAILABLE` and `emitWithSummary`, and folded the reason coverage
+proof into the per-kind malformed-reason map, committed in `b191b2bc`,
+`5e7d0ef3`, `95cf4929` and `3997bbda`. Eight identities leave the production
+census, 24 to 16, with zero additions and no transitive finding.
+
+Earlier activity: 2026-09-14 — 05-19 privatized install reason narrowing, plugin-PATH
 bin collection, the four reinstall replacement steps and the reinstall row
 projection, committed in `accb1fcd` and `0f5f9d4c`. Seven identities leave the
 production census, 31 to 24, with zero additions; the one transitive finding the
@@ -206,6 +213,37 @@ Correction to the handoff record: `.planning/config.json` no longer carries the
 runtime is `claude`.
 
 ### Wave 6 progress
+
+Plan 05-23 is complete. `Reason`, `StatusToken`, `PluginStatus` and
+`MarketplaceStatus` are declared directly as literal unions -- the four `as const`
+tuples they used to derive from were values nothing iterated, and privatizing them
+would only have moved an unreferenced runtime artifact behind a `_` prefix.
+COMPAT-01 keeps its full promise: the catalog-stable ORDER is asserted by reading
+the declaration as data, and membership by a bidirectional union proof, so a pure
+transposition still fails while typecheck stays clean. The length tripwires count
+exhaustive `Record<Vocabulary, true>` maps, which is a count and a membership
+check in one annotation.
+
+`ICON_REMOTE` and `ICON_PARTIALLY_AVAILABLE` are module-private and pinned through
+`renderRemoteRow` and `renderPartiallyAvailableRow`; the eighth-glyph clause now
+counts declarations rather than exports, so a private eighth glyph is caught.
+`emitWithSummary` is module-private: its eleven cases stayed with their own owner
+against the public `composeWithSummary`, which returns the exact argument tuple the
+emitter spreads, and six delivery cases joined the dispatch owner. That split was
+forced by measurement -- moving all eleven dropped `notification-summary.ts` direct
+coverage to 605/631 lines. `_ReasonsCoverageProof` is retired as an export and
+consumed by `MALFORMED_REASON_BY_KIND`'s annotation, so a reason without a topic
+home fails the build at the map.
+
+Evidence: 6256 unit tests, 6254 pass, 2 fail -- both the parent-owned census
+equality gates. Integration 32/32, exit 0. All five changed direct owners measure
+hit == found. Typecheck, lint, prettier, fallow and the direct-coverage pair gate
+pass. Ten planted offenders discriminate the rewritten gates, including one proving
+the order assertion survived the move off a runtime tuple.
+
+Open, parent-owned: the eight identities this plan removes are listed in
+`05-23-SUMMARY.md`. Combined with 05-15 and 05-19 the live census reads 16, zero
+additions.
 
 Plan 05-19 is complete. `narrowResolverReasons`, `collectBinDirs`,
 `replaceReinstalledPlugin`, `rollbackReinstalledPlugin`,
