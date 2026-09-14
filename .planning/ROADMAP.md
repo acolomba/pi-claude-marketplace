@@ -166,13 +166,14 @@ imports it directly. 204 pairs, corresponding-test gate at zero violations.
 4. A dependency cycle terminates and reports instead of installing forever, and a dependency that is already installed is left alone rather than reinstalled. (RESV-04, RESV-05)
 5. A dependency that cannot be installed tells the user which dependency failed and why, leaves no half-materialized plugin behind, and re-running the same command produces the same result. (RESV-06, NFR-3)
 
-**Plans**: 6 plans
+**Plans**: 7 plans
 
 Plans:
 
 - [ ] 03-01-PLAN.md — Tracer: the dependency cascade end to end on the unconstrained path, plus the closure walk's cycle, diamond, already-installed and unadded-marketplace edges and the all-or-nothing rollback footprint (wave 1)
 - [ ] 03-02-PLAN.md — `semver` as a declared runtime dependency and the pure cross-manifest range intersection and satisfaction algebra (wave 2)
 - [ ] 03-03-PLAN.md — The NFR-5 network-policy amendment, the corrected ledger-consumer claim, and the written version-constraint grammar (wave 2)
+- [ ] 03-07-PLAN.md — The plugin-manifest-first dependency declaration read, so a dependency declared only in a bare plugin manifest is visible to the cascade (wave 2)
 - [ ] 03-04-PLAN.md — Remote tag listing through the single git chokepoint and the network-legal tag probe, behind a one-way decision gate (wave 3)
 - [ ] 03-05-PLAN.md — Constraint resolution wired into the cascade, including the already-installed conflict check (wave 4)
 - [ ] 03-06-PLAN.md — The closed reason-vocabulary amendment and per-member cascade reporting (wave 5)
