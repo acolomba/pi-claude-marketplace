@@ -49,7 +49,7 @@ const EVENT_TO_TRANSLATOR_EXPORT: Readonly<Record<DispatchableEvent, string>> = 
   PostToolUse: "translatePostToolUse",
   PostToolUseFailure: "translatePostToolUseFailure",
   PreCompact: "translatePreCompact",
-  PostCompact: "translate",
+  PostCompact: "translatePostCompact",
   SessionEnd: "translateSessionEnd",
   Stop: "translate",
   StopFailure: "translate",

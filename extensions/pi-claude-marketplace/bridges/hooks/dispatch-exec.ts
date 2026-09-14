@@ -59,7 +59,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import { spawnAndRegister } from "./async-rewake/registry.ts";
 import { installTimerLadder } from "./exec-timer.ts";
 import { prepareHookEnv } from "./hook-env.ts";
-import { translate as translatePostCompact } from "./payloads/post-compact.ts";
+import { translatePostCompact } from "./payloads/post-compact.ts";
 import { translatePostToolUseFailure } from "./payloads/post-tool-use-failure.ts";
 import { translatePostToolUse } from "./payloads/post-tool-use.ts";
 import { translatePreCompact } from "./payloads/pre-compact.ts";
