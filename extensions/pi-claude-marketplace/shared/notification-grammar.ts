@@ -68,8 +68,11 @@ export const ICON_DISABLED = "◍";
  * `(remote)` row -- a not-installed git-source plugin whose clone/mirror is not
  * yet materialized locally. The dotted circle reads "declared but not
  * present". Distinct from `ICON_DISABLED`, which uses `◍` (U+25CD).
+ *
+ * Module-private: `renderRemoteRow` below is the only place this glyph reaches
+ * a row, so that row's bytes are its public contract.
  */
-export const ICON_REMOTE = "◌";
+const ICON_REMOTE = "◌";
 
 /**
  * FSTAT-02 / D-66-03: dedicated glyph for a `partially-installed` row -- a
@@ -91,8 +94,11 @@ export const ICON_PARTIALLY_INSTALLED = "◉";
  * components dropped" rather than "blocked". DISTINCT from `⊘`
  * (`ICON_UNINSTALLABLE`, reserved for unavailable / blocked / failed / manual-
  * recovery) and from `◉` (`ICON_PARTIALLY_INSTALLED`, the *installed*-degraded row).
+ *
+ * Module-private: `renderPartiallyAvailableRow` below is the only place this
+ * glyph reaches a row, so that row's bytes are its public contract.
  */
-export const ICON_PARTIALLY_AVAILABLE = "⊖";
+const ICON_PARTIALLY_AVAILABLE = "⊖";
 
 /**
  * PL-4 column-66 description truncation. Strings longer than 66 chars are

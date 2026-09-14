@@ -11,9 +11,7 @@ import {
   ICON_AVAILABLE,
   ICON_DISABLED,
   ICON_INSTALLED,
-  ICON_PARTIALLY_AVAILABLE,
   ICON_PARTIALLY_INSTALLED,
-  ICON_REMOTE,
   ICON_UNINSTALLABLE,
   installedLikeRow,
   joinTokens,
@@ -680,7 +678,7 @@ function neitherLoadedProbe(): Probe {
 
 test("notification glyph constants preserve exact public values", () => {
   // arrange
-  const expectedGlyphs = ["●", "○", "⊘", "◍", "◌", "◉", "⊖"];
+  const expectedGlyphs = ["●", "○", "⊘", "◍", "◉"];
 
   // act
   const glyphs = [
@@ -688,9 +686,34 @@ test("notification glyph constants preserve exact public values", () => {
     ICON_AVAILABLE,
     ICON_UNINSTALLABLE,
     ICON_DISABLED,
-    ICON_REMOTE,
     ICON_PARTIALLY_INSTALLED,
-    ICON_PARTIALLY_AVAILABLE,
+  ];
+
+  // assert
+  assert.deepStrictEqual(glyphs, expectedGlyphs);
+});
+
+test("the remote and partially-available glyphs preserve exact values on their rows", () => {
+  // arrange
+  // `◌` and `⊖` are module-private, and each is carried by exactly one row
+  // renderer, so the glyph the row leads with is the value under test. The row
+  // cases further down pin the whole line; this case pins the glyph alone, which
+  // is what the constant comparison above states for the other five.
+  const expectedGlyphs = ["◌", "⊖"];
+
+  // act
+  const glyphs = [
+    renderRemoteRow(
+      { status: "remote", name: "alpha" },
+      bothLoadedProbe(),
+      "user",
+      undefined,
+    ).slice(0, 1),
+    renderPartiallyAvailableRow(
+      { status: "partially-available", name: "alpha", reasons: [] },
+      bothLoadedProbe(),
+      "user",
+    ).slice(0, 1),
   ];
 
   // assert

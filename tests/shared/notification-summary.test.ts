@@ -5,10 +5,10 @@ import {
   emitContextCascade,
   emitReconcileAppliedContextCascade,
   emitUpdateNoOpCascade,
-  emitWithSummary,
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import {
   composeTally,
+  composeWithSummary,
   foldTallyAndHint,
   isInfoKind,
   shouldEmitReloadHint,
@@ -415,6 +415,16 @@ test("cascade messages are not standalone", () => {
   assert.equal(isInfoKind(message), false);
 });
 
+/*
+ * Summary composition for the payload the dispatcher delivers.
+ *
+ * `composeWithSummary` returns exactly the argument tuple the dispatcher spreads
+ * into the host notify call, so each case below keeps its original expected
+ * array verbatim. That the tuple is really delivered -- one call, those exact
+ * arguments -- is asserted against the public entry points in
+ * `notification-dispatch.test.ts`.
+ */
+
 for (const { name, message, expected } of [
   {
     name: "marketplace absence emits an error summary",
@@ -453,21 +463,17 @@ for (const { name, message, expected } of [
   readonly message: NotificationMessage;
   readonly expected: readonly unknown[];
 }[]) {
-  test(name, (t) => {
-    // arrange
-    const ctx = createContext(t);
-
+  test(name, () => {
     // act
-    emitWithSummary(ctx as never, message, "body");
+    const composed = composeWithSummary(message, "body");
 
     // assert
-    assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, expected);
+    assert.deepStrictEqual(composed, expected);
   });
 }
 
-test("mixed warning rows emit a plural summary", (t) => {
+test("mixed warning rows emit a plural summary", () => {
   // arrange
-  const ctx = createContext(t);
   const message = {
     marketplaces: [
       {
@@ -490,18 +496,14 @@ test("mixed warning rows emit a plural summary", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  emitWithSummary(ctx as never, message, "body");
+  const composed = composeWithSummary(message, "body");
 
   // assert
-  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "Some operations need attention.\n\nbody",
-    "warning",
-  ]);
+  assert.deepStrictEqual(composed, ["Some operations need attention.\n\nbody", "warning"]);
 });
 
-test("a marketplace-only failure emits a marketplace summary", (t) => {
+test("a marketplace-only failure emits a marketplace summary", () => {
   // arrange
-  const ctx = createContext(t);
   const message = {
     marketplaces: [
       {
@@ -515,18 +517,14 @@ test("a marketplace-only failure emits a marketplace summary", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  emitWithSummary(ctx as never, message, "body");
+  const composed = composeWithSummary(message, "body");
 
   // assert
-  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "A marketplace operation has failed.\n\nbody",
-    "error",
-  ]);
+  assert.deepStrictEqual(composed, ["A marketplace operation has failed.\n\nbody", "error"]);
 });
 
-test("read-only marketplace info emits unchanged info bytes", (t) => {
+test("read-only marketplace info emits unchanged info bytes", () => {
   // arrange
-  const ctx = createContext(t);
   const message = {
     kind: "marketplace-info",
     name: "official",
@@ -536,15 +534,14 @@ test("read-only marketplace info emits unchanged info bytes", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  emitWithSummary(ctx as never, message, "body");
+  const composed = composeWithSummary(message, "body");
 
   // assert
-  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, ["body"]);
+  assert.deepStrictEqual(composed, ["body"]);
 });
 
-test("an unstamped cascade plugin defaults to info severity and success tally", (t) => {
+test("an unstamped cascade plugin defaults to info severity and success tally", () => {
   // arrange
-  const ctx = createContext(t);
   const message = {
     cardinality: "plural",
     label: "Plugin list",
@@ -558,15 +555,14 @@ test("an unstamped cascade plugin defaults to info severity and success tally", 
   } satisfies NotificationMessage;
 
   // act
-  emitWithSummary(ctx as never, message, composeTally(message));
+  const composed = composeWithSummary(message, composeTally(message));
 
   // assert
-  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, ["Plugin list: 1 success"]);
+  assert.deepStrictEqual(composed, ["Plugin list: 1 success"]);
 });
 
-test("reconcile summary counts mixed failed subjects", (t) => {
+test("reconcile summary counts mixed failed subjects", () => {
   // arrange
-  const ctx = createContext(t);
   const message = {
     kind: "reconcile-applied-cascade",
     marketplaces: [
@@ -589,18 +585,14 @@ test("reconcile summary counts mixed failed subjects", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  emitWithSummary(ctx as never, message, "body");
+  const composed = composeWithSummary(message, "body");
 
   // assert
-  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "Some operations have failed.\n\nbody",
-    "error",
-  ]);
+  assert.deepStrictEqual(composed, ["Some operations have failed.\n\nbody", "error"]);
 });
 
-test("reconcile summary counts marketplace-only warnings", (t) => {
+test("reconcile summary counts marketplace-only warnings", () => {
   // arrange
-  const ctx = createContext(t);
   const message = {
     kind: "reconcile-applied-cascade",
     marketplaces: [
@@ -615,33 +607,28 @@ test("reconcile summary counts marketplace-only warnings", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  emitWithSummary(ctx as never, message, "body");
+  const composed = composeWithSummary(message, "body");
 
   // assert
-  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "A marketplace operation needs attention.\n\nbody",
-    "warning",
-  ]);
+  assert.deepStrictEqual(composed, ["A marketplace operation needs attention.\n\nbody", "warning"]);
 });
 
-test("summary preserves its read-only empty fallback after narrowing", (t) => {
+test("summary preserves its read-only empty fallback after narrowing", () => {
   // arrange
-  const ctx = createContext(t);
   const message = messageWithKindSequence({}, [
     ...Array<string>(6).fill("marketplace-not-added"),
     "marketplace-info",
   ]);
 
   // act
-  emitWithSummary(ctx as never, message as never, "body");
+  const composed = composeWithSummary(message as never, "body");
 
   // assert
-  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, ["\n\nbody", "error"]);
+  assert.deepStrictEqual(composed, ["\n\nbody", "error"]);
 });
 
-test("summary preserves its available-plugin empty fallback after narrowing", (t) => {
+test("summary preserves its available-plugin empty fallback after narrowing", () => {
   // arrange
-  const ctx = createContext(t);
   const message = messageWithKindSequence(
     {
       plugin: { name: "alpha", status: "available", componentsResolved: false },
@@ -650,15 +637,14 @@ test("summary preserves its available-plugin empty fallback after narrowing", (t
   );
 
   // act
-  emitWithSummary(ctx as never, message as never, "body");
+  const composed = composeWithSummary(message as never, "body");
 
   // assert
-  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, ["\n\nbody", "error"]);
+  assert.deepStrictEqual(composed, ["\n\nbody", "error"]);
 });
 
-test("severity rejects a discriminator changed after narrowing", (t) => {
+test("severity rejects a discriminator changed after narrowing", () => {
   // arrange
-  const ctx = createContext(t);
   const message = messageWithKindSequence({}, [
     ...Array<string>(5).fill("marketplace-not-added"),
     "corrupted",
@@ -667,7 +653,7 @@ test("severity rejects a discriminator changed after narrowing", (t) => {
   // act & assert
   assert.throws(
     () => {
-      emitWithSummary(ctx as never, message as never, "body");
+      composeWithSummary(message as never, "body");
     },
     {
       name: "Error",
@@ -676,9 +662,8 @@ test("severity rejects a discriminator changed after narrowing", (t) => {
   );
 });
 
-test("summary rejects a discriminator changed after narrowing", (t) => {
+test("summary rejects a discriminator changed after narrowing", () => {
   // arrange
-  const ctx = createContext(t);
   const message = messageWithKindSequence({}, [
     ...Array<string>(11).fill("marketplace-not-added"),
     "corrupted",
@@ -687,7 +672,7 @@ test("summary rejects a discriminator changed after narrowing", (t) => {
   // act & assert
   assert.throws(
     () => {
-      emitWithSummary(ctx as never, message as never, "body");
+      composeWithSummary(message as never, "body");
     },
     {
       name: "Error",

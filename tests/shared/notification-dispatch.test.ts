@@ -6066,3 +6066,173 @@ test("reconcile context dispatch suppresses reload and stamps error severity", (
   ]);
   assert.equal(renderRow.mock.callCount(), 1);
 });
+
+/*
+ * Summary delivery through the public entry points.
+ *
+ * The seam that prepends the summary line is module-private, so each case below
+ * drives it from the path production uses. The assertion is therefore the
+ * complete emitted string and the exact notify argument list, not a body the
+ * test handed in.
+ */
+
+test("a mixed actionable-skip cascade emits the plural attention summary", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const pi = piWithBothLoaded();
+  const message = {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        status: "skipped",
+        severity: "warning",
+        reasons: ["not found"],
+        plugins: [
+          {
+            name: "alpha",
+            status: "skipped",
+            reasons: ["not installed"],
+            severity: "warning",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+  } satisfies CascadeNotificationMessage;
+
+  // act
+  emitContextCascade(ctx as never, pi, message, (row) => `${row.name} (${row.status})`);
+
+  // assert
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "Some operations need attention.\n\n● official [user] (skipped) {not found}\n  alpha (skipped)",
+    "warning",
+  ]);
+});
+
+test("a marketplace-only failure cascade emits the marketplace failure summary", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const pi = piWithBothLoaded();
+  const message = {
+    marketplaces: [
+      { name: "official", scope: "user", status: "failed", severity: "error", plugins: [] },
+    ],
+  } satisfies CascadeNotificationMessage;
+
+  // act
+  emitContextCascade(ctx as never, pi, message, (row) => `${row.name} (${row.status})`);
+
+  // assert
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "A marketplace operation has failed.\n\n⊘ official [user] (failed)",
+    "error",
+  ]);
+});
+
+test("an unstamped cascade plugin defaults to info severity and a success tally", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const pi = piWithBothLoaded();
+  const message = {
+    cardinality: "plural",
+    label: "Plugin list",
+    marketplaces: [
+      { name: "official", scope: "user", plugins: [{ name: "alpha", status: "available" }] },
+    ],
+  } satisfies CascadeNotificationMessage;
+
+  // act
+  emitContextCascade(ctx as never, pi, message, (row) => `${row.name} (${row.status})`);
+
+  // assert
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● official [user]\n  alpha (available)\n\nPlugin list: 1 success",
+  ]);
+});
+
+test("an applied reconcile with a failed plugin emits the plural failure summary", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const pi = piWithBothLoaded();
+  const message = {
+    kind: "reconcile-applied-cascade",
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        status: "failed",
+        severity: "error",
+        plugins: [
+          {
+            name: "alpha",
+            status: "failed",
+            reasons: ["not found"],
+            severity: "error",
+            needsReload: true,
+          },
+        ],
+      },
+    ],
+  } satisfies NotificationMessage;
+
+  // act
+  notify(ctx as never, pi, message);
+
+  // assert
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "Some operations have failed.\n\n⊘ official [user] (failed)\n  ⊘ alpha (failed) {not found}",
+    "error",
+  ]);
+});
+
+test("an applied reconcile with only a skipped marketplace emits the marketplace attention summary", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const pi = piWithBothLoaded();
+  const message = {
+    kind: "reconcile-applied-cascade",
+    marketplaces: [
+      { name: "official", scope: "user", status: "skipped", severity: "warning", plugins: [] },
+    ],
+  } satisfies NotificationMessage;
+
+  // act
+  notify(ctx as never, pi, message);
+
+  // assert
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "A marketplace operation needs attention.\n\n● official [user] (skipped)",
+    "warning",
+  ]);
+});
+
+test("summary computation preserves its available-plugin empty fallback after narrowing", (t) => {
+  // arrange
+  // The sibling case above lands the summary switch on a read-only kind; this
+  // one lands it on a `plugin-info` whose row is NOT failed, which is the other
+  // arm that yields no summary sentence. The body is still the
+  // marketplace-absence render, because the body is composed from an earlier
+  // read -- what this case pins is that the arm reached at the summary read
+  // contributes an empty sentence rather than a hard-count-1 one.
+  const ctx = createContext(t);
+  const pi = piWithBothLoaded();
+  const message = messageWithKindSequence(
+    {
+      name: "official",
+      scope: "user",
+      plugin: { name: "alpha", status: "available", componentsResolved: false },
+    },
+    [...Array<string>(17).fill("marketplace-not-added"), "plugin-info"],
+  );
+
+  // act
+  notify(ctx as never, pi, message as never);
+
+  // assert
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "\n\n⊘ official [user] (failed) {marketplace not added}",
+    "error",
+  ]);
+});
