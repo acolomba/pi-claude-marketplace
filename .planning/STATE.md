@@ -4,9 +4,9 @@ milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
 status: Awaiting next milestone
 stopped_at: "Milestone closed and archived. PR #181 has since merged to main; quick tasks 260913-csn (PR #180 evaluation and suite repair, branch pr-180) and 260913-skt (SKTK-01 skill-token rewrite, branch features/skill-token-rewrite) followed, then 260913-f6a and 260913-l07 hardened the CI workflows."
-last_updated: "2026-09-13T22:35:00.000Z"
+last_updated: "2026-09-14T02:40:00.000Z"
 last_activity: 2026-09-13
-last_activity_desc: Quick task 260913-r2h made a FIFO harness over-read fail loudly
+last_activity_desc: Quick task 260913-ttl closed the SonarQube branch-coverage gap
 state_head: 6551dfbf387d166f655004ec9e0421686b86cb1d
 progress:
   total_phases: 9
@@ -114,6 +114,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
+| 260913-ttl | Close the remaining SonarQube branch-coverage gap to reach 100% line and 100% branch coverage | 2026-09-13 | d2ef20fa..46815bd6 | Complete | [260913-ttl-close-the-remaining-sonarqube-branch-cov](./quick/260913-ttl-close-the-remaining-sonarqube-branch-cov/) |
 | 260913-r2h | Make a FIFO state-harness over-read fail loudly instead of hanging to the test timeout | 2026-09-13 | c45850af | Complete | [260913-r2h-make-a-fifo-harness-over-read-fail-loudl](./quick/260913-r2h-make-a-fifo-harness-over-read-fail-loudl/) |
 | 260913-n7w | Fix the FIFO state server so each reader open receives exactly one payload | 2026-09-13 | e4f12cce | Complete | [260913-n7w-fix-the-fifo-state-server-reader-pairing](./quick/260913-n7w-fix-the-fifo-state-server-reader-pairing/) |
 | 260913-l07 | Fix every remaining zizmor finding, drop the severity floor, and simplify the gate comments | 2026-09-13 | 729348b4 | Complete | [260913-l07-fix-remaining-zizmor-findings-and-simpli](./quick/260913-l07-fix-remaining-zizmor-findings-and-simpli/) |
@@ -130,6 +131,12 @@ three cross-process concurrency proofs deterministic, 260913-f6a and 260913-l07
 hardened the CI workflows and gated them, and 260913-n7w fixed a reader-pairing race
 the first of those introduced. 260913-r2h then closed that harness's remaining over-read hang. That branch is
 PR #183, awaiting merge.
+
+Quick task 260913-ttl then landed on `features/100-coverage`: it measured the
+SonarQube 98.6% branch reading as ~133 phantom lcov-merge conditions plus one
+real branch, retired that branch by narrowing `isErrnoException`, and pointed
+`sonar.javascript.lcov.reportPaths` at `coverage/unit.lcov` alone — proven
+locally at 100.00% line and 100.00% branch coverage. Awaiting PR.
 
 **Next:** merge PR #183, then `/gsd-new-milestone`.
 

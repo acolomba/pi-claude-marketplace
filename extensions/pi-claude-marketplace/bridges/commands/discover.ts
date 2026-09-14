@@ -175,7 +175,7 @@ const TOLERATED_WALK_ERRNOS: ReadonlySet<string> = new Set([
 ]);
 
 function isToleratedWalkError(err: unknown): boolean {
-  return isErrnoException(err) && TOLERATED_WALK_ERRNOS.has(err.code ?? "");
+  return isErrnoException(err) && TOLERATED_WALK_ERRNOS.has(err.code);
 }
 
 /**
