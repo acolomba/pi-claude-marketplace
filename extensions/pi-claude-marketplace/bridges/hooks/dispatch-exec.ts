@@ -60,7 +60,7 @@ import { spawnAndRegister } from "./async-rewake/registry.ts";
 import { installTimerLadder } from "./exec-timer.ts";
 import { prepareHookEnv } from "./hook-env.ts";
 import { translate as translatePostCompact } from "./payloads/post-compact.ts";
-import { translate as translatePostToolUseFailure } from "./payloads/post-tool-use-failure.ts";
+import { translatePostToolUseFailure } from "./payloads/post-tool-use-failure.ts";
 import { translatePostToolUse } from "./payloads/post-tool-use.ts";
 import { translate as translatePreCompact } from "./payloads/pre-compact.ts";
 import { translatePreToolUse } from "./payloads/pre-tool-use.ts";
