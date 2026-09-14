@@ -51,9 +51,11 @@ import { setMarketplaceAutoupdate } from "../../extensions/pi-claude-marketplace
 import { removeMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
 import { updateMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
 import { getPluginInfo } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
-import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
+import {
+  createInstallOperation,
+  createUninstallOperation,
+} from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { createNodeReinstallPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
-import { createNodeUninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
@@ -161,7 +163,7 @@ const INVOKERS: Record<string, Invoker> = {
   },
   // uninstall. uninstall.test.ts ATTR-04 / D-03.
   uninstall: async ({ ctx, pi, cwd, mode }) => {
-    await createNodeUninstallPlugin(
+    await createUninstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
     )({
