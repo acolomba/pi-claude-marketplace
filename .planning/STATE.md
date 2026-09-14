@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 05
 current_phase_name: Production Export Ownership
 status: executing
-last_updated: "2026-09-14T18:32:00Z"
+last_updated: "2026-09-14T19:02:00Z"
 last_activity: 2026-09-14
-last_activity_desc: Wave 5 plan 05-12 persistence and cache schema ownership complete
-state_head: 6051a028fd8b94eee5bc078411eb46ebb51ac67d
+last_activity_desc: Wave 5 plan 05-24 payload translator export ownership complete
+state_head: 0afdd4f4
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 54
-  completed_plans: 25
-  percent: 46
+  completed_plans: 26
+  percent: 48
 milestone_name: test-backlog
 ---
 
@@ -31,11 +31,12 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 05 (Production Export Ownership) — EXECUTING
-Plan: 15 of 28 — 05-12 complete; Wave 5 continues with 05-24
-Status: Executing Phase 05, Wave 5
-Last activity: 2026-09-14 — 05-12 persistence and cache schema ownership committed in
-`13a65732` and `fccb598a`; production findings 39 → 32; the shared census pin edit is
-deferred to the parent wave reconciliation
+Plan: 16 of 28 — 05-24 complete; Wave 5 source writing is finished
+Status: Executing Phase 05, awaiting the Wave 5 census reconciliation
+Last activity: 2026-09-14 — 05-24 payload translator export ownership committed in
+`a8c1dd60`, `4832bda3`, `19a1d92e` and `0afdd4f4`; the `translate` duplicate-export
+group drops from ten members to seven with the production census total unchanged at
+32; the shared census pin edit remains deferred to the parent wave reconciliation
 
 ### Historical refine-unit-tests closeout: `override_closeout`
 
@@ -112,7 +113,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–4 are complete;
-Phase 5 has completed fifteen of twenty-eight plans. Phase 6 and Phase 7 plans are
+Phase 5 has completed sixteen of twenty-eight plans. Phase 6 and Phase 7 plans are
 approved; their production acceptance follows Phase 5 completion. Earlier milestone continuity is preserved in
 `inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 
@@ -125,6 +126,22 @@ and verify by diff. Two further CLI gaps were worked around at this close and wi
 recur: `milestone complete` leaves the original-path deletions **unstaged**
 (`git add -u .planning/`), and it wrote `completed_phases: 1` / `percent: 11` for a
 9-of-9 milestone, which was corrected by hand.
+
+### Wave 5 complete — census reconciliation pending
+
+Stopped at: completed `05-24-PLAN.md`. Resume file: none. All three Wave 5 plans
+(05-07, 05-12, 05-24) are committed and no source writer is active, so the tree is
+frozen for the reconciliation.
+
+Full unit run on the finished tree: 6244 tests, 6242 pass, 2 fail. Both failures are
+the `tests/architecture/unowned-exports-census.test.ts` pin-equality gates, red by
+design until the parent applies its single pin edit. Integration: 32/32, exit 0.
+Every direct owner touched in the wave measures hit == found.
+
+The parent's one pin edit covers thirteen changes to `tests/architecture/gate-targets.ts`
+(42 pinned -> 32 live): ten identity removals from 05-07 and 05-12, and three location
+removals from the single `duplicate_exports` `translate` entry. Zero additions. The
+exact identity strings are listed in `05-24-SUMMARY.md`.
 
 ## Operator Next Steps
 
@@ -141,7 +158,7 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 - Phase 2: complete, independently verified 4/4; all pre-commit checks passed.
 - Phase 3: complete in b663bc68; review clean and independent verification 18/18.
 - Phase 4: complete in a8ef0dac; review clean and independent verification 7/7.
-- Next: execute Phase 5 Wave 5; then complete the remaining approved export, member-gate and coverage work.
+- Next: reconcile the Wave 5 census pin, then execute Wave 6 and the remaining approved export, member-gate and coverage work.
 
 ### Live baseline correction
 
