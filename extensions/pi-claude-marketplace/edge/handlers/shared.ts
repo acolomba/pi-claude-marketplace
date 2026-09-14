@@ -56,6 +56,7 @@ export function extractLocalFlag(
   const consuming = "consumeLongFlags" in flags;
   const acceptedFlags = consuming ? flags.consumeLongFlags : flags;
   const consumedFlags = new Set<string>();
+  const isRejected = rejectionTestFor(flags);
   const residualTokens: string[] = [];
   let local = false;
   let skipValue = false;
@@ -83,7 +84,7 @@ export function extractLocalFlag(
       continue;
     }
 
-    if (isUnknownFlag(token, acceptedFlags, consuming)) {
+    if (isRejected(token)) {
       notifyUsageError(ctx, { message: `Unknown flag: "${token}".`, usage });
       return undefined;
     }
@@ -104,10 +105,37 @@ export function extractLocalFlag(
   return consuming ? { local, residualArgs, consumedFlags } : { local, residualArgs };
 }
 
-function isUnknownFlag(
-  token: string,
-  acceptedFlags: readonly string[],
-  consuming: boolean,
-): boolean {
-  return token.startsWith(consuming ? "-" : "--") && !acceptedFlags.includes(token);
+/**
+ * IN-02: the rejection test this scan runs on a token the loop did not claim,
+ * chosen ONCE from the caller's own flags argument. The two modes reject
+ * different token shapes for different reasons, so each predicate below states
+ * its own rule and neither carries a term that is dead in its own mode.
+ */
+function rejectionTestFor(flags: readonly string[] | ConsumeLongFlags): (token: string) => boolean {
+  if ("consumeLongFlags" in flags) {
+    return isOptionToken;
+  }
+
+  return (token: string): boolean => isUnacceptedLongFlag(token, flags);
+}
+
+/**
+ * D-02-05: the consuming mode's rejection test. Every accepted flag has already
+ * been consumed by the time this runs, so any surviving `-`-prefixed token is
+ * unknown by construction -- short options included, which is what lets a
+ * consuming caller reject `-y` rather than hand it to the reference parser.
+ */
+function isOptionToken(token: string): boolean {
+  return token.startsWith("-");
+}
+
+/**
+ * The array-form mode's rejection test: long flags only, and only those outside
+ * the caller's pass-through list. Pass-through flags stay in the residual for
+ * the downstream parser, so the allow-list is live in this mode and this mode
+ * alone. Short options stay in the residual too -- the array-form callers'
+ * downstream parser owns that verdict.
+ */
+function isUnacceptedLongFlag(token: string, acceptedFlags: readonly string[]): boolean {
+  return token.startsWith("--") && !acceptedFlags.includes(token);
 }
