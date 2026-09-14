@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 05
 current_phase_name: Production Export Ownership
 status: executing
-last_updated: "2026-09-15T00:52:00Z"
+last_updated: "2026-09-14T23:24:18Z"
 last_activity: 2026-09-14
-last_activity_desc: Wave 6 plan 05-25 session and prompt payload translator names complete
-state_head: fefd6fe9
+last_activity_desc: Wave 7 plan 05-16 enable and uninstall composition complete
+state_head: 4d48f853
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 54
-  completed_plans: 30
-  percent: 56
+  completed_plans: 31
+  percent: 57
 milestone_name: test-backlog
 ---
 
@@ -31,9 +31,16 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 05 (Production Export Ownership) — EXECUTING
-Plan: 20 of 28 — 05-25 complete; Wave 6 source writing is finished
-Status: Executing Phase 05 Wave 6, awaiting the Wave 6 census reconciliation
-Last activity: 2026-09-15 — 05-25 gave the SessionStart, SessionEnd and
+Plan: 21 of 28 — 05-16 complete; Wave 7 is in progress
+Status: Executing Phase 05 Wave 7, awaiting the Wave 7 census reconciliation
+Last activity: 2026-09-14 — 05-16 added `createEnableOperation` and
+`createUninstallOperation` to the plugin composition owner, switched both command
+handlers and reconcile onto them, and retired `createNodeSetPluginEnabled` and
+`createNodeUninstallPlugin` with no-caller evidence. Committed in `d3d7abba`,
+`11fe18f3` and `4d48f853`. Two identities leave the census with zero additions;
+the live total moves 16 -> 14.
+
+Earlier activity: 2026-09-15 — 05-25 gave the SessionStart, SessionEnd and
 UserPromptSubmit payload modules their event-specific export names, committed in
 `fbce2dfc`, `6823c071` and `fefd6fe9`. The `translate` duplicate-export group
 drops from seven members to four; the census total stays 16 with zero additions.
@@ -135,7 +142,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–4 are complete;
-Phase 5 has completed sixteen of twenty-eight plans. Phase 6 and Phase 7 plans are
+Phase 5 has completed twenty-one of twenty-eight plans. Phase 6 and Phase 7 plans are
 approved; their production acceptance follows Phase 5 completion. Earlier milestone continuity is preserved in
 `inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 
@@ -216,6 +223,30 @@ deliberately retained until Wave 5 lands. Next action: execute Phase 5 Wave 5
 Correction to the handoff record: `.planning/config.json` no longer carries the
 `model_profile_overrides.codex.opus` Astra entry and is clean in git; the active
 runtime is `claude`.
+
+### Wave 7 progress
+
+Plan 05-16 is complete. `orchestrators/plugin/operations.ts` now composes the
+enable/disable and uninstall operations as well as install. Its enable binding is
+built here from the five capabilities other modules own; uninstall's binding stays
+in `uninstall.ts` and is imported, because three of its six members are steps of
+the uninstall algorithm itself and exporting them would leak that module's
+internals. `createNodeSetPluginEnabled` and `createNodeUninstallPlugin` are gone,
+and `createSetPluginEnabled` / `createUninstallPlugin` are now production-consumed.
+
+Evidence: 6260 unit tests, 6258 pass, 2 fail -- both the parent-owned census
+equality gates. Integration 32/32, exit 0. All six changed direct owners measure
+hit == found; the direct-coverage pin is untouched. Typecheck, lint, prettier,
+fallow, the corresponding-test gate and both negative controls pass. Four planted
+offenders discriminate the new composition cases (eager timer, eager owner call,
+and each transaction's cascade replaced by a no-op); the benign control passes.
+
+Open, parent-owned: the two identities to remove at the Wave 7 reconciliation are
+`unused_exports|extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts|createSetPluginEnabled`
+and
+`unused_exports|extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts|createUninstallPlugin`,
+with the matching `UNOWNED_EXPORT_CENSUS` keys. Zero additions. Plan 05-26
+contributes its own delta.
 
 ### Wave 6 progress
 
