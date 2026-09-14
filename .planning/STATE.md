@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 05
 current_phase_name: Production Export Ownership
 status: executing
-last_updated: "2026-09-15T00:02:00Z"
+last_updated: "2026-09-15T00:52:00Z"
 last_activity: 2026-09-14
-last_activity_desc: Wave 6 plan 05-23 notification vocabulary and delivery owners complete
-state_head: 3997bbda
+last_activity_desc: Wave 6 plan 05-25 session and prompt payload translator names complete
+state_head: fefd6fe9
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 54
-  completed_plans: 29
-  percent: 54
+  completed_plans: 30
+  percent: 56
 milestone_name: test-backlog
 ---
 
@@ -31,9 +31,14 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 05 (Production Export Ownership) — EXECUTING
-Plan: 19 of 28 — 05-23 complete; Wave 6 source writing is under way
+Plan: 20 of 28 — 05-25 complete; Wave 6 source writing is finished
 Status: Executing Phase 05 Wave 6, awaiting the Wave 6 census reconciliation
-Last activity: 2026-09-14 — 05-23 retired the four notification vocabulary tuples
+Last activity: 2026-09-15 — 05-25 gave the SessionStart, SessionEnd and
+UserPromptSubmit payload modules their event-specific export names, committed in
+`fbce2dfc`, `6823c071` and `fefd6fe9`. The `translate` duplicate-export group
+drops from seven members to four; the census total stays 16 with zero additions.
+
+Earlier activity: 2026-09-14 — 05-23 retired the four notification vocabulary tuples
 in favour of bare literal unions, privatized `ICON_REMOTE`,
 `ICON_PARTIALLY_AVAILABLE` and `emitWithSummary`, and folded the reason coverage
 proof into the per-kind malformed-reason map, committed in `b191b2bc`,
@@ -213,6 +218,29 @@ Correction to the handoff record: `.planning/config.json` no longer carries the
 runtime is `claude`.
 
 ### Wave 6 progress
+
+Plan 05-25 is complete, and with it Wave 6 source writing. The SessionStart,
+SessionEnd and UserPromptSubmit payload modules publish `translateSessionStart`,
+`translateSessionEnd` and `translateUserPromptSubmit` -- the names both dispatch
+modes already supplied at import -- so the identity lives in the module instead of
+being re-supplied at each call site. Both `dispatch-exec.ts` and
+`async-rewake/registry.ts` import the names directly; their event-keyed translator
+maps are untouched, so both modes still reach the same event translator. The
+per-event export-name table in `tests/architecture/hooks-translators.test.ts` pins
+all three new names.
+
+Evidence: 6256 unit tests, 6254 pass, 2 fail -- both the parent-owned census
+equality gates. Integration 32/32, exit 0. All five changed direct owners measure
+hit == found. Typecheck, lint, prettier, fallow and the direct-coverage pair gate
+pass. Two planted offenders discriminate the updated export table, one naming an
+export the module does not publish and one renaming a published export without
+updating the table.
+
+Open, parent-owned: the live census total stays 16. This plan changes membership,
+not count: the single `duplicate_exports` `translate` entry loses its `session-end`,
+`session-start` and `user-prompt-submit` locations and keeps `post-compact`,
+`pre-compact`, `stop-failure` and `stop`. Zero additions; no other identity moved.
+The exact before/after identity strings are in `05-25-SUMMARY.md`.
 
 Plan 05-23 is complete. `Reason`, `StatusToken`, `PluginStatus` and
 `MarketplaceStatus` are declared directly as literal unions -- the four `as const`
