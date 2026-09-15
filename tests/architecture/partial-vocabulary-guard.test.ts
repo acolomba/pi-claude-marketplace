@@ -263,6 +263,12 @@ const TOKEN_WAIVERS: readonly TokenWaiver[] = [
     why: '`Object.hasOwn(clean, "unsupported")` reads the SAME component-kind field as the fixture above, as a property key. NREG-01 needs the absent-key fact, which cannot be asserted without naming the key.',
   },
   {
+    file: "tests/scripts/check-unused-type-members.audit.test.ts",
+    token: '"unsupported"',
+    category: "homonym",
+    why: "the unused-type-member audit names its own refusal categories, one of which is the members the analysis could not settle. The case asserts that category by name, and it is the audit's vocabulary, not this project's plugin verdict vocabulary.",
+  },
+  {
     file: "tests/edge/handlers/plugin/reinstall.test.ts",
     token: "--force",
     category: "subject",
