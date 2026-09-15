@@ -1,3 +1,4 @@
+import { collectFlowObservations } from "./check-unused-type-members.flow.mjs";
 import {
   AnalysisSetupError,
   collectCandidates,
@@ -27,8 +28,11 @@ import {
  *   opaque expression could have reached, and against no others.
  * - A contract decision is an `{ id, reason }` pair naming a candidate the
  *   inventory already holds.
- * - `transfers` is the directed value-transfer graph. It is part of the context
- *   handed to the contract evaluator and is empty until directed flow lands.
+ * - `transfers` is the directed value-transfer graph: one record per actual
+ *   transfer site, naming the source expression and the place it flows into. It
+ *   is part of the context handed to the contract evaluator.
+ * - A witness proved through a transfer carries `via`, the site of the source
+ *   expression that carried the value into the consumer that read it.
  *
  * `runtime-observed`, `test-only-observed` and `explicit-contract` pass;
  * `unread` and `unsupported-analysis` fail. A setup or internal analysis failure
@@ -41,6 +45,29 @@ const productionRoot = "extensions/pi-claude-marketplace";
 // default leaves room for the tree to grow many times over while still bounding
 // a runaway walk, and running out is a refusal rather than a partial answer.
 const defaultNodeBudget = 20_000_000;
+
+// The transfer walk answers one question per read site and memoises each
+// question, so its work scales with read sites rather than with syntax nodes.
+// Measured against this repository: see the flow counters in the plan summary.
+const defaultTransferBudget = 4_000_000;
+
+/**
+ * Folds one candidate-keyed map of entries into another, preserving the order
+ * the source map recorded them in. The model's own observations stay first, so
+ * a transferred witness never displaces the direct one that outranks it.
+ */
+function mergeByCandidate(target, extra) {
+  for (const [id, entries] of extra) {
+    const existing = target.get(id);
+
+    if (existing === undefined) {
+      target.set(id, [...entries]);
+      continue;
+    }
+
+    existing.push(...entries);
+  }
+}
 
 function assertContractShape(evaluated) {
   const decisions = evaluated?.decisions;
@@ -162,7 +189,7 @@ function buildMembers(candidates, witnesses, unsupported, contractReasons) {
  * model and the observation graph, and returns validated decisions plus its own
  * diagnostics. It can only ever excuse declarations the inventory already knows.
  */
-export function analyzeProject({ root, overlay, contractEvaluator, budget }) {
+export function analyzeProject({ root, overlay, contractEvaluator, budget, flowBudget }) {
   const { program, checker, projectRoot } = createProjectProgram({ root, overlayPath: overlay });
   const productionFiles = productionFileCount({ program, projectRoot });
 
@@ -176,7 +203,7 @@ export function analyzeProject({ root, overlay, contractEvaluator, budget }) {
     throw new AnalysisSetupError(`No member declarations found under ${productionRoot}`);
   }
 
-  const { witnesses, unsupported, exhausted } = collectObservations({
+  const { witnesses, unsupported, reads, exhausted } = collectObservations({
     program,
     checker,
     projectRoot,
@@ -190,13 +217,31 @@ export function analyzeProject({ root, overlay, contractEvaluator, budget }) {
     );
   }
 
+  const flow = collectFlowObservations({
+    program,
+    checker,
+    projectRoot,
+    byDeclaration,
+    reads,
+    budget: flowBudget ?? defaultTransferBudget,
+  });
+
+  if (flow.exhausted !== undefined) {
+    throw new AnalysisSetupError(
+      `Transfer budget of ${flow.exhausted.budget} steps exhausted while tracing ${flow.exhausted.path}`,
+    );
+  }
+
+  mergeByCandidate(witnesses, flow.witnesses);
+  mergeByCandidate(unsupported, flow.unsupported);
+
   const { reasons, diagnostics } = evaluateContracts(contractEvaluator, {
     program,
     checker,
     projectRoot,
     candidates,
     witnesses,
-    transfers: [],
+    transfers: flow.transfers,
   });
   const members = buildMembers(candidates, witnesses, unsupported, reasons);
   const findings = members.filter(
