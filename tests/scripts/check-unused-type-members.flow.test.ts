@@ -618,7 +618,8 @@ export function readOptional(first: number, slot?: Slot): string {
 }
 
 export function readRest(...slots: readonly Slot[]): string {
-  return slots.map((slot) => slot.kept).join("");
+  const first = slots[0];
+  return first.kept;
 }
 
 export function send(held: Held): string {

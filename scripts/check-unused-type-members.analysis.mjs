@@ -46,9 +46,10 @@ const productionRoot = "extensions/pi-claude-marketplace";
 // a runaway walk, and running out is a refusal rather than a partial answer.
 const defaultNodeBudget = 20_000_000;
 
-// The transfer walk answers one question per read site and memoises each
-// question, so its work scales with read sites rather than with syntax nodes.
-// Measured against this repository: see the flow counters in the plan summary.
+// The transfer walk indexes every transfer site once, then answers one memoised
+// question per read site. Measured against this repository: 1,458,064 steps for
+// 67,167 reads, so the default leaves the tree room to grow several times over
+// while still bounding a runaway walk.
 const defaultTransferBudget = 4_000_000;
 
 /**
