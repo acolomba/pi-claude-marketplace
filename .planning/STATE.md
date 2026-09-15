@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
 status: executing
-stopped_at: "completed `06-04-PLAN.md`. Resume file: none."
-last_updated: "2026-09-15T15:28:54.608Z"
+stopped_at: Completed 06-05-PLAN.md
+last_updated: "2026-09-15T16:26:36.966Z"
 last_activity: 2026-09-15
-last_activity_desc: Plan 06-04 complete (whole-object operations and validated wrapper summaries)
-state_head: 5ec1710ecd4a4290b934c0cc2617563ba9cd6670
+last_activity_desc: Plan 06-05 complete (closure audit and the stable live population record)
+state_head: 1d72168a7bb354f51104367f26fb83bd32bf0ede
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 54
-  completed_plans: 42
+  completed_plans: 43
   percent: 63
 milestone_name: test-backlog
 ---
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 06 (Unused Type Member Gate) — EXECUTING
-Plan: 5 of 8
+Plan: 6 of 8
 Status: Ready to execute
-Last activity: 2026-09-15 — Plan 06-04 complete (whole-object operations and validated wrapper summaries)
+Last activity: 2026-09-15 — Plan 06-05 complete (closure audit and the stable live population record)
 
 Plan 06-01 landed the member gate's compiler tracer: `node
 scripts/check-unused-type-members.mjs` compiles the project once, inventories
@@ -99,6 +99,33 @@ takes 80.2 s and peaks at 2.05 GiB, spending 2,889,809 of a 12,000,000-step
 transfer budget over 82,164 traced reads and 939,556 operation reads. Still
 interim: 06-06 reconciles every remaining row. `lint:type-members` exists as a
 package alias but is deliberately NOT in `npm run check` until 06-08.
+
+Plan 06-05 added the closure audit in
+`scripts/check-unused-type-members.audit.mjs` and recorded the live population.
+It separates two answers a single count cannot give. `--inventory` records the
+complete current population, always succeeds, and says in its own output that it
+is not a clean-gate verdict. `--check` re-runs the analysis, recomputes the
+source digest from disk, and fails eight distinct ways: `unread`,
+`unsupported`, `missing`, `duplicate`, `stale-source`, `stale-record`,
+`incomplete` and `invalid`. Neither command can change an analyzer verdict.
+A recorded explanation is carried across a regeneration only when its row's status
+did not move.
+
+`06-LIVE-TRIAGE.md` records 3,464 candidates over 236 production files, bound to
+digest `08023619` over 602 hashed source files at revision `0dc3666b`. 483 of
+those rows need a disposition -- 261 unread plus 222 test-only -- and every one is
+still pending, which is exactly what `--check` reports today: exit 1 with 744
+problems and zero stale, missing, duplicate or invalid rows. The inherited
+261 / 0 / 261 baseline holds exactly; the inventory takes 77.4 s at 2.00 GiB and
+the check 81.7 s at 2.04 GiB.
+
+All four current `EdgeDeps` members are runtime-observed, including the optional
+`importClaudeSettings`, which a directed transfer settles through
+`edge/register.ts:103`. Leads handed to 06-06: `kind` is the largest unread key
+at 46 rows and a window scan puts 76 of the 261 inside an `Extract<>`/`Exclude<>`
+selection filter, which is the contract engine's `type-selection` category.
+`lint:type-members:audit` is a real package entry and is deliberately not in
+`npm run check`.
 
 All five analyzer suites pass together at 134/134 (06-03's 101 plus 33 new).
 Typecheck, lint, format, all four fallow links and both corresponding-test gates
@@ -199,7 +226,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-15T15:28:54.365Z
+**Last session:** 2026-09-15T16:25:53.673Z
 **Resume file:** None
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–5 are complete.
@@ -219,7 +246,7 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 
 ### Phase 6 Plan 1 complete
 
-Stopped at: Completed 06-04-PLAN.md
+Stopped at: Completed 06-05-PLAN.md
 (directed value transfers) and 06-03 (validated contracts), which the plan
 graph runs together in Wave 2 over disjoint files.
 
@@ -498,6 +525,7 @@ target of 42 → 32 is already reached; 05-24 should leave the total at 32 while
 | Phase 06 P02 | 1h 50m | 3 tasks | 4 files |
 | Phase 06 P03 | 2h 0m | 2 tasks | 5 files |
 | Phase 06 P04 | 2h 20m | 3 tasks | 6 files |
+| Phase 06 P05 | 50 min | 2 tasks | 4 files |
 
 ## Decisions
 
@@ -507,3 +535,7 @@ target of 42 → 32 is already reached; 05-24 should leave the total at 32 while
 - [Phase 06]: A whole-object operation is settled by the declaration the checker resolved, and a local wrapper earns the same summary only from its own body, applied at the call site — Resolving by name would let any function called stringify or deepStrictEqual excuse a member; applying the summary at the call site is what keeps a record alive through an unknown-typed parameter
 - [Phase 06]: push, unshift and fill are directed element writes, not whole-object reads — Placing a value into an array reads none of its members; 73 of the 76 unmodeled container rows were push, and crediting them as bulk reads would have accepted records that were only stored
 - [Phase 06]: Provenance is traced from the operand only; members below it are credited on the operand own declaration — Tracing nested paths exhausted a tenfold transfer budget on the live tree; the bound under-credits, which leaves a finding to investigate rather than accepting a member
+- [Phase 06]: An inventory and a verdict are different answers, so they are different commands: --inventory always succeeds and states its own limits, --check fails every unresolved row.
+- [Phase 06]: A member settled by a production witness needs no recorded disposition; only the 483 rows resting on judgment do, of 3,464 candidates.
+- [Phase 06]: The audit fingerprint covers analysed source only, because an analyzer change is caught more precisely by per-row status reconciliation than by a digest.
+- [Phase 06]: A carried explanation is dropped when its row status moves, since the prose was written about a row that no longer exists.

@@ -100,7 +100,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 - [x] 06-02-PLAN.md
 - [x] 06-03-PLAN.md
 - [x] 06-04-PLAN.md
-- [ ] 06-05-PLAN.md
+- [x] 06-05-PLAN.md
 - [ ] 06-06-PLAN.md
 - [ ] 06-07-PLAN.md
 - [ ] 06-08-PLAN.md
@@ -138,6 +138,6 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 | 3. Reachable Agent Collision Contract | 4/4 | Complete | 2026-09-14 |
 | 4. Strict Command Arguments | 3/3 | Complete | 2026-09-14 |
 | 5. Production Export Ownership | 28/28 | Complete | 2026-09-15 |
-| 6. Unused Type Member Gate | 4/8 | In Progress|  |
+| 6. Unused Type Member Gate | 5/8 | In Progress|  |
 | 7. Reliable Coverage Metrics | 0/8 | Plans approved | - |
 | 8. Final Verification and Reconciliation | 0/TBD | Not started | - |
