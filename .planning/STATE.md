@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 05
 current_phase_name: Production Export Ownership
 status: executing
-last_updated: "2026-09-15T00:05:00Z"
+last_updated: "2026-09-15T00:30:00Z"
 last_activity: 2026-09-14
-last_activity_desc: Wave 7 plan 05-26 compact translator export ownership complete
-state_head: 94b46e37
+last_activity_desc: Wave 8 plan 05-17 reinstall composition owner complete
+state_head: e7fe8c47
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 54
-  completed_plans: 32
-  percent: 59
+  completed_plans: 33
+  percent: 61
 milestone_name: test-backlog
 ---
 
@@ -31,9 +31,16 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 05 (Production Export Ownership) — EXECUTING
-Plan: 22 of 28 — 05-26 complete; Wave 7 source writing is done
-Status: Executing Phase 05 Wave 7, awaiting the Wave 7 census reconciliation
-Last activity: 2026-09-15 — 05-26 gave the PreCompact and PostCompact payload
+Plan: 23 of 28 — 05-17 complete; 05-27 is the other Wave 8 plan
+Status: Executing Phase 05 Wave 8
+Last activity: 2026-09-15 — 05-17 added `createReinstallOperation` to the plugin
+composition owner, pointed the load-time backfill scan at it, migrated the two
+outside single-reinstall call sites, and made `createNodeReinstallPlugin`
+module-private behind a TS2578-discriminating missing-export proof. Committed in
+`5ac7e4fe` and `e7fe8c47`. One identity leaves the census with zero additions;
+the live total moves 14 -> 13.
+
+Earlier activity: 2026-09-15 — 05-26 gave the PreCompact and PostCompact payload
 modules their event-specific export names, `translatePreCompact` and
 `translatePostCompact`, committed in `42477b85` and `94b46e37`. The `translate`
 duplicate-export group drops from four members to two; the census total stays 14
@@ -148,7 +155,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–4 are complete;
-Phase 5 has completed twenty-two of twenty-eight plans. Phase 6 and Phase 7 plans are
+Phase 5 has completed twenty-three of twenty-eight plans. Phase 6 and Phase 7 plans are
 approved; their production acceptance follows Phase 5 completion. Earlier milestone continuity is preserved in
 `inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 
