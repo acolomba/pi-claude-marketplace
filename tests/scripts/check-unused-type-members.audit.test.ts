@@ -138,7 +138,7 @@ interface LedgerCounts {
 
 interface LedgerOwner {
   readonly owner: string;
-  readonly candidates: number;
+  candidates: number;
 }
 
 interface LedgerDisposition {
@@ -156,7 +156,7 @@ interface Ledger {
   readonly revision: string;
   readonly fingerprint: LedgerFingerprint;
   readonly counts: LedgerCounts;
-  readonly owners: readonly LedgerOwner[];
+  readonly owners: LedgerOwner[];
   readonly dispositions: LedgerDisposition[];
 }
 
@@ -618,6 +618,18 @@ test("the check accepts the fully explained counterpart", async (t) => {
   assert.strictEqual(result.counts.unsupportedAnalysis, 0);
 });
 
+/**
+ * The gate's verdict is every member, witness and finding it reports. The
+ * report's `work` block is a wall-clock measurement of the run that varies by a
+ * millisecond between two identical runs, so comparing it would assert timing
+ * stability instead of the claim this case makes.
+ */
+function verdictOf(stdout: string): Record<string, unknown> {
+  const report = JSON.parse(stdout) as Record<string, unknown>;
+  delete report.work;
+  return report;
+}
+
 test("the audit reports the gate's verdict and never changes it", async (t) => {
   // arrange
   const root = await populationFixture(t);
@@ -631,7 +643,7 @@ test("the audit reports the gate's verdict and never changes it", async (t) => {
   // assert
   assert.strictEqual(before.status, 1);
   assert.strictEqual(after.status, 1);
-  assert.strictEqual(after.stdout, before.stdout);
+  assert.deepStrictEqual(verdictOf(after.stdout), verdictOf(before.stdout));
 });
 
 test("the fingerprint follows the analysed source and ignores everything else", async (t) => {
@@ -705,4 +717,121 @@ test("the package exposes the audit as a real executable entry", async () => {
   // assert
   assert.strictEqual(alias, "node scripts/check-unused-type-members.audit.mjs --check");
   assert.strictEqual(manifest.scripts.check?.includes("lint:type-members:audit"), false);
+});
+
+// The same probe, widened to read the member nothing else reads. Adding it moves
+// `neverReadAnywhere` from unread to test-only-observed without moving any
+// declaration coordinate.
+const widenedTestRead = `import type { EdgeDeps } from "../../extensions/pi-claude-marketplace/edge/types.ts";
+
+export function probe(deps: EdgeDeps): string {
+  return deps.probeOnly + (deps.neverReadAnywhere ?? "");
+}
+`;
+
+function noteFor(ledger: Ledger, id: string): LedgerDisposition {
+  const row = ledger.dispositions.find((entry) => entry.id === id);
+
+  if (row === undefined) {
+    throw new Error(`The recorded ledger carries no row for ${id}`);
+  }
+
+  return row;
+}
+
+test("a recorded explanation survives a regeneration that did not move its row", async (t) => {
+  // arrange
+  const root = await populationFixture(t);
+  runAudit(root, ["--inventory"]);
+  await explainEvery(root, "the probe case is the only reader");
+
+  // act
+  runAudit(root, ["--inventory"]);
+  const row = noteFor(await readLedger(root), probeOnlyId);
+
+  // assert
+  assert.strictEqual(row.status, "test-only-observed");
+  assert.strictEqual(row.disposition, "explained");
+  assert.strictEqual(row.note, "the probe case is the only reader");
+});
+
+test("a recorded explanation is dropped once the member's status changes", async (t) => {
+  // arrange
+  const root = await populationFixture(t);
+  runAudit(root, ["--inventory"]);
+  await explainEvery(root, "believed dead, kept for the declared shape");
+  await writeFiles(root, { [testReadPath]: widenedTestRead });
+
+  // act
+  runAudit(root, ["--inventory"]);
+  const ledger = await readLedger(root);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      status: noteFor(ledger, neverReadId).status,
+      disposition: noteFor(ledger, neverReadId).disposition,
+      note: noteFor(ledger, neverReadId).note,
+    },
+    { status: "test-only-observed", disposition: "pending", note: "" },
+  );
+  assert.strictEqual(
+    noteFor(ledger, probeOnlyId).note,
+    "believed dead, kept for the declared shape",
+  );
+});
+
+test("the check refuses an owner table that leaves candidates unaccounted for", async (t) => {
+  // arrange
+  const root = await explainedFixture(t);
+  runAudit(root, ["--inventory"]);
+  await explainEvery(root, "read by the probe case only");
+  await editLedger(root, (ledger) => {
+    const [owner] = ledger.owners;
+
+    if (owner === undefined) {
+      throw new Error("The recorded ledger carries no owner group to truncate");
+    }
+
+    owner.candidates -= 1;
+  });
+
+  // act
+  const run = runAudit(root, ["--check"]);
+
+  // assert
+  assert.strictEqual(run.status, 1);
+  assert.deepStrictEqual(categoriesOf(parseAudit(run.stdout)), ["incomplete"]);
+});
+
+const layerMember = (name: string): string => `export interface ${name} {
+  readonly held: string;
+}
+`;
+
+test("each architectural layer is its own conceptual owner", async (t) => {
+  // arrange
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    "extensions/pi-claude-marketplace/index.ts": layerMember("Entry"),
+    "extensions/pi-claude-marketplace/shared/types.ts": layerMember("Shared"),
+    "extensions/pi-claude-marketplace/bridges/agents/stage.ts": layerMember("AgentStage"),
+    "extensions/pi-claude-marketplace/bridges/skills/stage.ts": layerMember("SkillStage"),
+  });
+
+  // act
+  runAudit(root, ["--inventory"]);
+  const ledger = await readLedger(root);
+
+  // assert
+  assert.deepStrictEqual(
+    ledger.owners.map((owner) => [owner.owner, owner.candidates]),
+    [
+      ["bridges/agents", 1],
+      ["bridges/skills", 1],
+      ["entry", 1],
+      ["shared", 1],
+    ],
+  );
+  assert.strictEqual(ledger.counts.productionFiles, 4);
 });

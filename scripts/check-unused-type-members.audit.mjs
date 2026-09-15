@@ -357,15 +357,19 @@ function dispositionRowsOf(report, recorded) {
   }
 
   return membersWithStatus(report, dispositionStatuses).map((member) => {
+    // An explanation is written about the status the row had when it was
+    // written. Once the status moves, the prose behind it is about a row that no
+    // longer exists, so it is dropped rather than carried onto its successor.
     const before = kept.get(member.id);
+    const carried = before?.status === member.status ? before : undefined;
     return {
       id: member.id,
       path: member.path,
       owner: member.owner,
       key: member.key,
       status: member.status,
-      disposition: typeof before?.disposition === "string" ? before.disposition : "pending",
-      note: typeof before?.note === "string" ? before.note : "",
+      disposition: typeof carried?.disposition === "string" ? carried.disposition : "pending",
+      note: typeof carried?.note === "string" ? carried.note : "",
     };
   });
 }
