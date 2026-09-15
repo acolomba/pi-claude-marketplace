@@ -3,7 +3,12 @@ import path from "node:path";
 import ts from "typescript";
 
 import { resolveCandidates } from "./check-unused-type-members.model.mjs";
-import { createOperationModel, readsOfOperand } from "./check-unused-type-members.operations.mjs";
+import {
+  createOperationModel,
+  readsOfOperand,
+  restSummary,
+  spreadSummary,
+} from "./check-unused-type-members.operations.mjs";
 
 /**
  * Directed value transfers for the unused-type-member gate.
@@ -63,7 +68,19 @@ const mapNames = new Set(["Map", "WeakMap", "ReadonlyMap"]);
 // Array methods whose result is built by a callback, whose result keeps the
 // receiver's shape, and whose result is one element of the receiver.
 const mappingMethods = new Set(["map", "flatMap"]);
-const shapeKeepingMethods = new Set(["filter", "slice", "concat"]);
+
+// `sort`, `reverse` and `splice` return the receiver, or a run taken out of it,
+// so their result holds the very elements the receiver already held.
+const shapeKeepingMethods = new Set([
+  "filter",
+  "slice",
+  "concat",
+  "sort",
+  "reverse",
+  "splice",
+  "toSorted",
+  "toReversed",
+]);
 const pickingMethods = new Set(["find", "findLast", "at", "pop", "shift"]);
 const arrayCallbackMethods = new Set([
   "map",
@@ -71,19 +88,36 @@ const arrayCallbackMethods = new Set([
   "filter",
   "find",
   "findLast",
+  "findIndex",
+  "findLastIndex",
   "forEach",
   "some",
   "every",
+  "sort",
 ]);
+
+// A comparator is handed two elements, one per parameter; every other callback
+// here receives the element at its first parameter only.
+const comparatorMethods = new Set(["sort", "toSorted"]);
+
+// Members that place a value into the receiver rather than take one out of it.
+const elementWriteMethods = new Set(["push", "unshift", "fill"]);
+
+// `entries` pairs each element with its position, so the element sits at the
+// second slot of the pair and the first slot carries nothing.
+const pairedMembers = new Set(["entries"]);
 
 const arrayModeled = new Set([
   ...mappingMethods,
   ...shapeKeepingMethods,
   ...pickingMethods,
   ...arrayCallbackMethods,
+  ...elementWriteMethods,
+  ...pairedMembers,
+  "flat",
 ]);
 const promiseModeled = new Set(["then", "catch", "finally"]);
-const mapModeled = new Set(["get", "set", "values", "forEach"]);
+const mapModeled = new Set(["get", "set", "values", "forEach", "entries"]);
 
 /**
  * Container members that move no member provenance at all: they answer a
@@ -203,6 +237,16 @@ function sortNode(node, syntax) {
     return;
   }
 
+  if (ts.isSpreadAssignment(node)) {
+    syntax.spreads.push(node);
+    return;
+  }
+
+  if (ts.isBindingElement(node) && node.dotDotDotToken !== undefined) {
+    syntax.restBindings.push(node);
+    return;
+  }
+
   const assigning =
     ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken;
 
@@ -218,7 +262,7 @@ function sortNode(node, syntax) {
  * in this program.
  */
 function collectSyntax(program, state) {
-  const syntax = { variables: [], assignments: [], calls: [] };
+  const syntax = { variables: [], assignments: [], calls: [], spreads: [], restBindings: [] };
 
   for (const sourceFile of program.getSourceFiles()) {
     const projectPath = projectPathOf(state, sourceFile);
@@ -549,30 +593,75 @@ function inwardSegmentOf(kind, name) {
   return arrayCallbackMethods.has(name) ? elementSegment : undefined;
 }
 
-function indexCallbackInput(call, receiver, segment, state) {
+function indexCallbackInput(call, receiver, segment, positions, state) {
   for (const argument of call.arguments ?? []) {
     for (const literal of functionLiteralsOf(argument, state)) {
-      const parameter = literal.parameters[0];
+      for (let position = 0; position < positions; position += 1) {
+        const parameter = literal.parameters[position];
 
-      if (parameter !== undefined) {
-        pushInto(state.byParameter, parameter, { node: receiver, from: [segment] }, state);
-        recordTransfer(state, "container-element", receiver, parameter.name);
+        if (parameter !== undefined) {
+          pushInto(state.byParameter, parameter, { node: receiver, from: [segment] }, state);
+          recordTransfer(state, "container-element", receiver, parameter.name);
+        }
       }
     }
   }
 }
 
-function indexMapSet(call, receiver, state) {
-  const value = (call.arguments ?? [])[1];
-  const symbol = ts.isIdentifier(receiver)
-    ? state.checker.getSymbolAtLocation(receiver)
-    : undefined;
+/**
+ * The binding a receiver expression names, and the keys selected along the way.
+ * A value written into `report.rows` lands at an element of the `rows` key of
+ * whatever `report` holds, which is the exact path a later read of that element
+ * consumes.
+ */
+function placeOf(receiver, state) {
+  const keys = [];
+  let current = receiver;
 
-  if (value === undefined || symbol === undefined) {
+  while (ts.isPropertyAccessExpression(current)) {
+    keys.unshift(current.name.text);
+    current = current.expression;
+  }
+
+  const symbol = symbolOfName(current, state);
+  return symbol === undefined ? undefined : { symbol, keys };
+}
+
+/**
+ * Indexes a member that places its arguments into the receiver. A spread
+ * argument hands over its own elements rather than becoming one, so it answers
+ * the receiver's element path directly instead of below it.
+ */
+function indexElementWrite(call, receiver, state) {
+  const place = placeOf(receiver, state);
+
+  if (place === undefined) {
     return;
   }
 
-  pushInto(state.bySymbol, symbol, { node: value, at: [mapValueSegment] }, state);
+  for (const argument of call.arguments ?? []) {
+    const spread = ts.isSpreadElement(argument);
+    const node = spread ? argument.expression : argument;
+    const at = spread ? place.keys : [...place.keys, elementSegment];
+    pushInto(state.bySymbol, place.symbol, { node, at }, state);
+    recordTransfer(state, "container-write", node, receiver);
+  }
+}
+
+function indexMapSet(call, receiver, state) {
+  const value = (call.arguments ?? [])[1];
+  const place = placeOf(receiver, state);
+
+  if (value === undefined || place === undefined) {
+    return;
+  }
+
+  pushInto(
+    state.bySymbol,
+    place.symbol,
+    { node: value, at: [...place.keys, mapValueSegment] },
+    state,
+  );
   recordTransfer(state, "map-value", value, receiver);
 }
 
@@ -600,8 +689,10 @@ function indexContainerCall(call, state) {
 
   if (kind === "map" && name === "set") {
     indexMapSet(call, receiver, state);
+  } else if (kind === "array" && elementWriteMethods.has(name)) {
+    indexElementWrite(call, receiver, state);
   } else if (inward !== undefined) {
-    indexCallbackInput(call, receiver, inward, state);
+    indexCallbackInput(call, receiver, inward, comparatorMethods.has(name) ? 2 : 1, state);
   } else {
     reportUnmodeledMember(kind, name, receiver, state);
   }
@@ -942,6 +1033,22 @@ function callbackReturns(call, rest, state) {
   return next;
 }
 
+/**
+ * An element of the receiver, reached through the pair `entries` builds. The
+ * element sits at the pair's second slot, so a read of the first slot -- the
+ * position -- reaches nothing, which is what keeps an index from inheriting the
+ * members of the value beside it.
+ */
+function pairedElement(receiver, step) {
+  const [outer, inner, ...rest] = step.trail;
+
+  if (outer === undefined || !isPositional(outer) || inner === undefined) {
+    return [];
+  }
+
+  return indexPositionOf(inner) === 1 ? [stepAt(receiver, [elementSegment, ...rest])] : [];
+}
+
 function arrayResult(name, receiver, call, step, state) {
   const [segment, ...rest] = step.trail;
   const positional = segment !== undefined && isPositional(segment);
@@ -950,8 +1057,17 @@ function arrayResult(name, receiver, call, step, state) {
     return positional ? callbackReturns(call, rest, state) : [];
   }
 
+  if (pairedMembers.has(name)) {
+    return pairedElement(receiver, step);
+  }
+
+  if (name === "flat") {
+    return positional ? [stepAt(receiver, [elementSegment, ...step.trail])] : [];
+  }
+
   if (shapeKeepingMethods.has(name)) {
-    return [stepAt(receiver, step.trail), ...call.arguments.map((a) => stepAt(a, step.trail))];
+    const joined = name === "concat" ? call.arguments : [];
+    return [stepAt(receiver, step.trail), ...joined.map((a) => stepAt(a, step.trail))];
   }
 
   return pickingMethods.has(name) ? [stepAt(receiver, [elementSegment, ...step.trail])] : [];
@@ -972,9 +1088,23 @@ function mapResult(name, receiver, step) {
     return [stepAt(receiver, [mapValueSegment, ...step.trail])];
   }
 
-  const [segment, ...rest] = step.trail;
-  const iterating = name === "values" && segment !== undefined && isPositional(segment);
-  return iterating ? [stepAt(receiver, [mapValueSegment, ...rest])] : [];
+  const [segment, inner, ...rest] = step.trail;
+  const positional = segment !== undefined && isPositional(segment);
+
+  if (pairedMembers.has(name)) {
+    return positional && indexPositionOf(inner ?? "") === 1
+      ? [stepAt(receiver, [mapValueSegment, ...rest])]
+      : [];
+  }
+
+  return name === "values" && positional
+    ? [
+        stepAt(
+          receiver,
+          [mapValueSegment, inner, ...rest].filter((s) => s !== undefined),
+        ),
+      ]
+    : [];
 }
 
 function promiseStatic(name, call, step) {
@@ -1295,13 +1425,16 @@ function creditRead(read, state) {
  */
 function collectOperationReads(syntax, state) {
   const reads = [];
+  const summaries = [
+    ...syntax.calls.map((call) => state.operations.summaryOfCall(call)),
+    ...syntax.spreads.map((property) => spreadSummary(property)),
+    ...syntax.restBindings.map((element) => restSummary(element)),
+  ];
 
-  for (const call of syntax.calls) {
+  for (const summary of summaries) {
     if (state.exhausted !== undefined) {
       return reads;
     }
-
-    const summary = state.operations.summaryOfCall(call);
 
     for (const operand of summary?.operands ?? []) {
       addOperationOperand(summary, operand, state, reads);

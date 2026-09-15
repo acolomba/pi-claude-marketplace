@@ -462,3 +462,388 @@ export function write(withMethod: WithMethod): string {
   assert.deepStrictEqual(shapesFor(report, "WithMethod", "render"), []);
   assert.strictEqual(statusFor(report, "WithMethod", "render"), "unread");
 });
+
+// ---------------------------------------------------------------------------
+// Copies: what a spread, a rest binding and the Object enumerators really read.
+// ---------------------------------------------------------------------------
+
+test("a spread reads the source's own values and stops there", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Nested {
+  readonly deep: string;
+}
+
+export interface Copied {
+  readonly shallow: string;
+  readonly nested: Nested;
+}
+
+export function copy(copied: Copied): Copied {
+  return { ...copied };
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Copied", "shallow"), [
+    "value-read/object-copy/production",
+  ]);
+  assert.deepStrictEqual(shapesFor(report, "Copied", "nested"), [
+    "value-read/object-copy/production",
+  ]);
+  assert.deepStrictEqual(shapesFor(report, "Nested", "deep"), []);
+  assert.strictEqual(statusFor(report, "Nested", "deep"), "unread");
+});
+
+test("a property written after a spread does not undo the spread's own read", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Overwritten {
+  readonly replaced: string;
+  readonly kept: string;
+}
+
+export function copy(overwritten: Overwritten): Overwritten {
+  return { ...overwritten, replaced: "written" };
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Overwritten", "replaced"), [
+    "value-read/object-copy/production",
+  ]);
+  assert.deepStrictEqual(shapesFor(report, "Overwritten", "kept"), [
+    "value-read/object-copy/production",
+  ]);
+});
+
+test("a copy whose result is never used still read its source", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Discarded {
+  readonly value: string;
+}
+
+export function copyAndDrop(discarded: Discarded): void {
+  const copy = { ...discarded };
+  void copy;
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Discarded", "value"), [
+    "value-read/object-copy/production",
+  ]);
+  assert.strictEqual(statusFor(report, "Discarded", "value"), "runtime-observed");
+});
+
+test("a rest binding copies every key the pattern did not name", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Divided {
+  readonly picked: string;
+  readonly carried: string;
+  readonly alsoCarried: string;
+}
+
+export function divide(divided: Divided): void {
+  const { picked, ...remainder } = divided;
+  void picked;
+  void remainder;
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Divided", "picked"), [
+    "value-read/binding-destructuring/production",
+  ]);
+  assert.deepStrictEqual(shapesFor(report, "Divided", "carried"), [
+    "value-read/object-copy/production",
+  ]);
+  assert.deepStrictEqual(shapesFor(report, "Divided", "alsoCarried"), [
+    "value-read/object-copy/production",
+  ]);
+});
+
+test("Object.values and Object.entries read the values they enumerate", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Valued {
+  readonly one: string;
+  readonly two: string;
+}
+
+export interface Paired {
+  readonly three: string;
+}
+
+export function values(valued: Valued): unknown[] {
+  return Object.values(valued);
+}
+
+export function pairs(paired: Paired): unknown[] {
+  return Object.entries(paired);
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Valued", "one"), [
+    "value-read/object-enumeration/production",
+  ]);
+  assert.deepStrictEqual(shapesFor(report, "Valued", "two"), [
+    "value-read/object-enumeration/production",
+  ]);
+  assert.deepStrictEqual(shapesFor(report, "Paired", "three"), [
+    "value-read/object-enumeration/production",
+  ]);
+});
+
+test("Object.keys enumerates names and reads no value at all", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Named {
+  readonly one: string;
+}
+
+export function names(named: Named): string[] {
+  return Object.keys(named);
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Named", "one"), []);
+  assert.strictEqual(statusFor(report, "Named", "one"), "unread");
+});
+
+test("Object.assign reads its sources and not the target it writes into", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Written {
+  filled: string;
+}
+
+export interface Supplied {
+  readonly filled: string;
+}
+
+export function merge(written: Written, supplied: Supplied): Written {
+  return Object.assign(written, supplied);
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Supplied", "filled"), [
+    "value-read/object-copy/production",
+  ]);
+  assert.deepStrictEqual(shapesFor(report, "Written", "filled"), []);
+  assert.strictEqual(statusFor(report, "Written", "filled"), "unread");
+});
+
+test("an accessor member leaves own-property eligibility unproven", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Computed {
+  readonly plain: string;
+  get derived(): string;
+}
+
+export function copy(computed: Computed): Computed {
+  return { ...computed };
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Computed", "plain"), []);
+  assert.deepStrictEqual(reasonsFor(report, "Computed", "plain"), ["unproven-own-properties"]);
+  assert.strictEqual(statusFor(report, "Computed", "plain"), "unsupported-analysis");
+});
+
+test("a class instance in the operand leaves own-property eligibility unproven", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Declared {
+  readonly value: string;
+}
+
+export class Implementation {
+  readonly value = "written";
+}
+
+export function copy(source: Declared | Implementation): Declared {
+  return { ...source };
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Declared", "value"), []);
+  assert.deepStrictEqual(reasonsFor(report, "Declared", "value"), ["unproven-own-properties"]);
+});
+
+// ---------------------------------------------------------------------------
+// Containers: the array members whose semantics move member provenance.
+// ---------------------------------------------------------------------------
+
+test("a pushed record is credited when the array it landed in is read", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Pushed {
+  readonly carried: string;
+  readonly spare?: string;
+}
+
+export interface Held {
+  readonly carried: string;
+}
+
+export function show(held: Held): string {
+  return held.carried;
+}
+
+export function collect(pushed: Pushed): string {
+  const rows: Held[] = [];
+  rows.push(pushed);
+  return show(rows[0]);
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Pushed", "carried"), [
+    "value-read/value-transfer/production",
+  ]);
+  assert.deepStrictEqual(reasonsFor(report, "Pushed", "carried"), []);
+  assert.deepStrictEqual(shapesFor(report, "Pushed", "spare"), []);
+});
+
+test("a comparator receives an element at both of its parameters", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Ordered {
+  readonly first: string;
+  readonly second: string;
+}
+
+export interface Row {
+  readonly first: string;
+  readonly second: string;
+}
+
+export function order(rows: Row[]): Row[] {
+  return rows.sort((left, right) => (left.first < right.second ? -1 : 1));
+}
+
+export function start(ordered: Ordered[]): Row[] {
+  return order(ordered);
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Ordered", "first"), [
+    "value-read/value-transfer/production",
+  ]);
+  assert.deepStrictEqual(shapesFor(report, "Ordered", "second"), [
+    "value-read/value-transfer/production",
+  ]);
+});
+
+test("entries pairs an index with the element, and only the element carries members", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Walked {
+  readonly value: string;
+}
+
+export interface Shown {
+  readonly value: string;
+}
+
+export function show(shown: Shown): string {
+  return shown.value;
+}
+
+export function walk(rows: Walked[]): void {
+  for (const pair of rows.entries()) {
+    show(pair[1]);
+  }
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Walked", "value"), [
+    "value-read/value-transfer/production",
+  ]);
+  assert.deepStrictEqual(reasonsFor(report, "Walked", "value"), []);
+});
+
+test("reverse hands back the same elements it was given", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Reversed {
+  readonly value: string;
+}
+
+export interface Seen {
+  readonly value: string;
+}
+
+export function show(seen: Seen): string {
+  return seen.value;
+}
+
+export function lastOf(rows: Reversed[]): string {
+  const ordered = rows.reverse();
+  return show(ordered[0]);
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Reversed", "value"), [
+    "value-read/value-transfer/production",
+  ]);
+  assert.deepStrictEqual(reasonsFor(report, "Reversed", "value"), []);
+});
+
+test("an array member with no modeled semantics is still an open question", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Folded {
+  readonly value: string;
+}
+
+export function fold(rows: Folded[], join: (total: string, row: Folded) => string): string {
+  return rows.reduce(join, "");
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Folded", "value"), []);
+  assert.deepStrictEqual(reasonsFor(report, "Folded", "value"), ["unmodeled-container-operation"]);
+  assert.strictEqual(statusFor(report, "Folded", "value"), "unsupported-analysis");
+});

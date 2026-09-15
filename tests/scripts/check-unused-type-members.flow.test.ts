@@ -914,7 +914,7 @@ test("an unmodeled container operation is reported, not assumed clean", async (t
   // arrange
   const report = await analyze(
     t,
-    `export interface Sorted {
+    `export interface Folded {
   readonly maybe?: string;
 }
 
@@ -922,8 +922,8 @@ export interface Filtered {
   readonly alsoMaybe?: string;
 }
 
-export function shuffle(items: Sorted[]): Sorted[] {
-  return items.sort();
+export function fold(items: Folded[], join: (total: string, item: Folded) => string): string {
+  return items.reduce(join, "");
 }
 
 export function keep(items: readonly Filtered[]): readonly Filtered[] {
@@ -933,8 +933,8 @@ export function keep(items: readonly Filtered[]): readonly Filtered[] {
   );
 
   // act & assert
-  assert.deepStrictEqual(reasonsFor(report, "Sorted", "maybe"), ["unmodeled-container-operation"]);
-  assert.strictEqual(statusFor(report, "Sorted", "maybe"), "unsupported-analysis");
+  assert.deepStrictEqual(reasonsFor(report, "Folded", "maybe"), ["unmodeled-container-operation"]);
+  assert.strictEqual(statusFor(report, "Folded", "maybe"), "unsupported-analysis");
   assert.deepStrictEqual(reasonsFor(report, "Filtered", "alsoMaybe"), []);
   assert.strictEqual(statusFor(report, "Filtered", "alsoMaybe"), "unread");
 });

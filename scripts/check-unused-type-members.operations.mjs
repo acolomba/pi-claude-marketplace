@@ -29,6 +29,14 @@ import ts from "typescript";
 /** A serialization whose surviving keys this analysis cannot name. */
 const serializerGap = "unmodeled-serializer-options";
 
+/**
+ * An operand whose members are not provably its own enumerable values. A
+ * declared type states which members exist, not how the object carrying them
+ * was built, so an accessor or a class instance leaves a whole-object read as a
+ * question rather than an observation.
+ */
+const ownPropertiesGap = "unproven-own-properties";
+
 // A path this deep is already past the point a reader follows by hand, and the
 // transfer walk bounds its own trails at four segments. Stopping early
 // under-credits, which leaves a finding to investigate rather than accepting a
@@ -39,7 +47,11 @@ const deepestReach = 3;
 // is not a wrapper anybody reads as one.
 const deepestWrapperHop = 2;
 
-const defaultLibraryOwners = new Set(["JSON"]);
+const defaultLibraryOwners = new Set(["JSON", "ObjectConstructor"]);
+
+// `Object.keys` is deliberately absent: it enumerates names and reads no value,
+// so it moves nothing and excuses nothing.
+const enumeratingMembers = new Set(["values", "entries"]);
 
 /**
  * The interface a symbol is declared on inside the compiler's own default
@@ -61,6 +73,12 @@ function defaultLibraryOwnerOf(symbol, program) {
   }
 
   return undefined;
+}
+
+function isAccessorMember(symbol) {
+  return (symbol.declarations ?? []).some(
+    (declaration) => ts.isGetAccessor(declaration) || ts.isSetAccessor(declaration),
+  );
 }
 
 function isMethodMember(symbol) {
@@ -99,6 +117,10 @@ function constituentsOf(type) {
  * crediting them would be an invention.
  */
 function eligibleKeysOf(type, summary, checker) {
+  if (type.symbol !== undefined && (type.symbol.flags & ts.SymbolFlags.Class) !== 0) {
+    return { keys: [], gap: ownPropertiesGap };
+  }
+
   if (summary.skipMethods && checker.getPropertyOfType(type, "toJSON") !== undefined) {
     return { keys: [], gap: serializerGap };
   }
@@ -106,6 +128,10 @@ function eligibleKeysOf(type, summary, checker) {
   const keys = [];
 
   for (const property of checker.getPropertiesOfType(type)) {
+    if (isAccessorMember(property)) {
+      return { keys: [], gap: ownPropertiesGap };
+    }
+
     const key = spelledKeyOf(property);
 
     if (key === undefined || (summary.skipMethods && isMethodMember(property))) {
@@ -247,6 +273,40 @@ function serializationSummary(call) {
   };
 }
 
+/**
+ * A copy reads its source's values and hands them on unchanged. It stops at
+ * those values: copying a record does not read the members of the records it
+ * holds, so the operation is shallow by the same rule that makes it a copy.
+ */
+function copySummary(nodes) {
+  return {
+    syntax: "object-copy",
+    recursive: false,
+    skipMethods: false,
+    allow: undefined,
+    gap: undefined,
+    operands: operandsOf(nodes),
+  };
+}
+
+/**
+ * `Object.assign` reads its sources and writes its target. Naming the target as
+ * a source too would credit every member of a shape that was only written into.
+ */
+function objectConstructorSummary(call, name) {
+  const args = call.arguments ?? [];
+
+  if (name === "assign") {
+    return copySummary(args.slice(1));
+  }
+
+  if (!enumeratingMembers.has(name)) {
+    return undefined;
+  }
+
+  return { ...copySummary([args[0]]), syntax: "object-enumeration" };
+}
+
 function defaultLibrarySummary(call, symbol, program) {
   const owner = defaultLibraryOwnerOf(symbol, program);
 
@@ -254,9 +314,48 @@ function defaultLibrarySummary(call, symbol, program) {
     return undefined;
   }
 
-  return owner === "JSON" && symbol.getName() === "stringify"
-    ? serializationSummary(call)
-    : undefined;
+  const name = symbol.getName();
+
+  if (owner === "ObjectConstructor") {
+    return objectConstructorSummary(call, name);
+  }
+
+  return name === "stringify" ? serializationSummary(call) : undefined;
+}
+
+/** The copy an object spread carries out on the expression it spreads. */
+export function spreadSummary(property) {
+  return copySummary([property.expression]);
+}
+
+/**
+ * The copy a rest binding carries out, and the keys the pattern already took
+ * out of it. The source is the expression the pattern destructures, so the
+ * members settle on the type actually written there rather than on the
+ * synthesized remainder, and the walk carries on from it exactly as it does for
+ * any other expression. A pattern with no expression to destructure -- a nested
+ * one, or a loop binding -- is left alone rather than guessed at.
+ */
+export function restSummary(element) {
+  const pattern = element.parent;
+  const owner = pattern.parent;
+  const source = ts.isVariableDeclaration(owner) ? owner.initializer : owner;
+
+  if (source === undefined || (!ts.isVariableDeclaration(owner) && !ts.isParameter(owner))) {
+    return undefined;
+  }
+
+  const exclude = [];
+
+  for (const sibling of pattern.elements) {
+    const name = sibling.propertyName ?? sibling.name;
+
+    if (sibling !== element && ts.isIdentifier(name)) {
+      exclude.push(name.text);
+    }
+  }
+
+  return { ...copySummary([source]), operands: [{ node: source, exclude }] };
 }
 
 /** The parameter position an expression names, following local aliases. */
