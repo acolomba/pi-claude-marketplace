@@ -635,7 +635,7 @@ fallow coverage on all five barrels.
 Distinct from FLOW-09: that one is about internals exported for TESTS, a
 different cause with a different fix.
 
-## FLOW-09: internals exported only for tests -- EXPLICIT SEAMS CLOSED; PRODUCTION MODE OPEN
+## FLOW-09: internals exported only for tests -- CLOSED
 
 **Promoted 2026-09-14:** test-backlog Phase 5 owns the ordinary-helper population
 and production-mode gate (EXPORT-01/02). Fallow 3.22.0 on this checkout reports
@@ -655,9 +655,31 @@ The retired historical `scripts/check-phase-06-hub-ledger.mjs` census verifier i
 the unused file: its work is complete, its archives are preserved, and it had no
 package-script, workflow or production caller.
 
-**Production mode: still open at this line.** It closes below once the shipping
-dead-code command runs under production reachability and returns an empty
-report. Nothing here claims that yet.
+**Production mode: DONE, and this closes the item.** `.fallowrc.json` sets
+`production` per analysis to `{deadCode: true, health: false, dupes: false}`,
+keeping `includeEntryExports` and every existing boundary, rule, health and
+duplication setting. `npm run fallow` -- the command the quality gate runs, with
+no production flag of its own -- discovers 11 production entry points and
+reports zero issues. `unowned-exports-census.test.ts` requires that report to
+equal the explicit `--production` report and requires both to be empty in every
+category; `fallow-production-mode.test.ts` runs its offender and benign controls
+against the shipping settings verbatim, so reverting the config fails them.
+
+Exactly two declarations carry an exception, each one line, each adjacent to its
+own declaration, each naming its real consumer: the entry default that
+`pi.extensions` loads from the package manifest, and `RingBuffer.read`, which
+the async-rewake registry's exit handler calls through the entry's stderr and
+stdout buffer fields. Controls prove neither exception covers a sibling export,
+an unrelated default, or the same member name on another class. There are no
+`health.thresholdOverrides`, no widened patterns, and no pinned identities
+standing in for an answer.
+
+Closing evidence, one snapshot: `npm run check` exit 0 with 6,263 unit tests and
+32 integration tests passing; production aggregate unit coverage exactly 100%
+(62,889/62,889 lines, 1,834/1,834 functions, 9,050/9,050 branches across 227
+emitted modules, the remaining nine production files being type-only and so
+emitting no records); 236 direct pairs green with the two existing pinned
+shortfalls matched exactly and unchanged.
 
 The explicit-seam/reset-export portion closed 2026-09-11 by the `refine-unit-tests` milestone. Disposition:
 `implemented`, carried by `TREF-05` and `TREF-06` (Phases 5-6), with the

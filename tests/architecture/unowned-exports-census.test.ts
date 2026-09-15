@@ -11,7 +11,6 @@ import test from "node:test";
 
 import {
   assertFindingCensus,
-  findingIdentities,
   readAnalyzerReport,
   type AnalyzerReport,
   type FindingGroups,
@@ -35,8 +34,25 @@ const CENSUS_ARGS = [
   "--fail-on-issues",
 ];
 
-/** The same question asked with the committed entry-point set. */
-const CONTROL_ARGS = ["dead-code", "--no-cache", "--format", "json", "--fail-on-issues"];
+/**
+ * The shipping command, with no forced production flag.
+ *
+ * The `fallow` npm script invokes `dead-code` exactly this way, so this argv is
+ * what the quality gate actually runs. Production reachability reaches it only
+ * through the committed config, which is the point: if that config stops
+ * requesting it, this command answers a different question than `CENSUS_ARGS`
+ * and the equality clause below says so.
+ */
+const SHIPPING_ARGS = ["dead-code", "--no-cache", "--format", "json", "--fail-on-issues"];
+
+/** Every finding category, so a clean report is asserted collection by collection. */
+const EMPTY_FINDINGS: FindingGroups = {
+  unused_exports: [],
+  unused_types: [],
+  unused_files: [],
+  unused_class_members: [],
+  duplicate_exports: [],
+};
 
 /** The measured census, keyed by publishing file exactly as the pin is. */
 type Census = Record<string, string[]>;
@@ -168,24 +184,42 @@ for (const drift of [
   });
 }
 
-test("D-07-20: shipping and production reports measure the entry-point transition", () => {
+test("D-07-20: the shipping command and the explicit production command agree", () => {
   // arrange
   const production = readDeadCodeReport(CENSUS_ARGS);
 
   // act
-  const shipping = readDeadCodeReport(CONTROL_ARGS);
+  const shipping = readDeadCodeReport(SHIPPING_ARGS);
 
   // assert
-  assert.ok(shipping.entryPointCount >= production.entryPointCount);
-  if (shipping.entryPointCount === production.entryPointCount) {
-    assert.deepStrictEqual(
-      findingIdentities(shipping.findings),
-      findingIdentities(production.findings),
-    );
-  } else {
-    assert.strictEqual(shipping.totalIssues, 0);
-    assert.deepStrictEqual(findingIdentities(shipping.findings), []);
-  }
+  assert.deepStrictEqual(
+    shipping,
+    production,
+    "D-07-20: the command the quality gate runs and the command this census runs no longer measure the same thing, so a finding can exist in one and not the other. Production reachability belongs in the committed config, not in a flag only the gate passes.",
+  );
+});
+
+test("D-07-20: the shipping report is complete and entirely clean", () => {
+  // arrange
+  const shipping = readDeadCodeReport(SHIPPING_ARGS);
+
+  // act
+  const measured = {
+    findings: shipping.findings,
+    totalIssues: shipping.totalIssues,
+    exitStatus: shipping.exitStatus,
+  };
+
+  // assert
+  assert.ok(
+    shipping.entryPointCount > 0,
+    "D-07-20: the analyzer discovered no production entry point, so it reached no code and its empty report means nothing",
+  );
+  assert.deepStrictEqual(
+    measured,
+    { findings: EMPTY_FINDINGS, totalIssues: 0, exitStatus: 0 },
+    "D-07-20 / EXPORT-02: the shipping dead-code report is no longer empty. Answer the finding with a real production consumer, a private declaration, a retirement, or an exact adjacent annotation -- never by pinning the identity here.",
+  );
 });
 
 /**

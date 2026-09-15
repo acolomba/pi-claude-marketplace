@@ -66,6 +66,13 @@ const SELF = path.relative(REPO_ROOT, fileURLToPath(import.meta.url));
  * Naming the roots rather than counting files is what makes the widening
  * checkable: a walk that silently stopped matching, or one pointed at the wrong
  * directory, still returns "a lot of files" but stops naming one of these.
+ *
+ * Every root here has to EXIST, because the clause below asserts each one
+ * contributed a file. That is the opposite of an allow-list: the walk itself is
+ * the whole of `tests/` minus the two separately-scripted roots, so a root that
+ * is absent from this list is still read and still policed -- it simply has no
+ * standing claim that it was reached. `tests/scripts` is absent for exactly that
+ * reason and no other.
  */
 const POLICED_TEST_ROOTS = [
   "architecture",
@@ -75,7 +82,6 @@ const POLICED_TEST_ROOTS = [
   "orchestrators",
   "persistence",
   "platform",
-  "scripts",
   "shared",
   "transaction",
 ] as const;
