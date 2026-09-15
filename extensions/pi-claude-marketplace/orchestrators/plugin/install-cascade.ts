@@ -133,9 +133,6 @@ export type CascadeTagProbe = typeof probeDependencyTags;
 /** The per-URL tag listing memo one cascade run threads through every query. */
 export type CascadeTagMemo = NonNullable<DependencyTagProbeOptions["tagMemo"]>;
 
-/** The snapshot record one marketplace's catalog and clone root are read from. */
-type CascadeMarketplaceRecord = ExtensionState["marketplaces"][string];
-
 /**
  * Resolves the marketplace record a member's source is read from.
  *
@@ -148,7 +145,7 @@ type CascadeMarketplaceRecord = ExtensionState["marketplaces"][string];
  */
 export type CascadeMarketplaceLookup = (
   marketplace: string,
-) => Promise<CascadeMarketplaceRecord | undefined>;
+) => Promise<ExtensionState["marketplaces"][string] | undefined>;
 
 /**
  * Why a member's accumulated version constraint produced no install.
