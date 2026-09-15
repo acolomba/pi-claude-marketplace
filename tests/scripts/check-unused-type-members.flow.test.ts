@@ -319,3 +319,358 @@ export function relay(origin: Origin): string {
   assert.deepStrictEqual(shapesFor(report, "Origin", "dropped"), []);
   assert.deepStrictEqual(reasonsFor(report, "Origin", "dropped"), []);
 });
+
+// Every carrier case below sends a `Held` where a `Slot` is expected, so the
+// only member a reader can name directly is `Slot.kept`. `Held.kept` is proof
+// that a transfer was found and `Held.spare` is proof that the transfer carried
+// one member rather than a whole shape.
+const carrier = `export interface Held {
+  readonly kept: string;
+  readonly spare?: string;
+}
+
+export interface Slot {
+  readonly kept: string;
+}
+
+export function read(slot: Slot): string {
+  return slot.kept;
+}
+`;
+
+function assertCarried(report: GateReport): void {
+  assert.deepStrictEqual(shapesFor(report, "Held", "kept"), [
+    "value-read/value-transfer/production",
+  ]);
+  assert.deepStrictEqual(shapesFor(report, "Held", "spare"), []);
+  assert.strictEqual(statusFor(report, "Held", "spare"), "unread");
+}
+
+test("an alias and an annotated assignment keep the origin", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export function relay(held: Held): string {
+  const first = held;
+  let second: Held = first;
+  second = first;
+  return read(second);
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+});
+
+test("a conditional keeps every branch it could have taken", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export interface Other {
+  readonly kept: string;
+  readonly unrelated?: string;
+}
+
+export function choose(held: Held, other: Other, flag: boolean): string {
+  return read(flag ? held : other);
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+  assert.deepStrictEqual(shapesFor(report, "Other", "kept"), [
+    "value-read/value-transfer/production",
+  ]);
+  assert.deepStrictEqual(shapesFor(report, "Other", "unrelated"), []);
+});
+
+test("a nested object literal keeps the path it was built at", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export interface Envelope<T> {
+  readonly payload: T;
+}
+
+export function open(envelope: Envelope<Slot>): string {
+  return envelope.payload.kept;
+}
+
+export function ship(held: Held): string {
+  return open({ payload: held });
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+});
+
+test("a returned value keeps the origin the body returned", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export function narrow(held: Held): Slot {
+  return held;
+}
+
+export function use(held: Held): string {
+  return narrow(held).kept;
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+});
+
+test("a destructured result binding keeps the origin", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export function narrow(held: Held): Slot {
+  return held;
+}
+
+export function use(held: Held): string {
+  const { kept } = narrow(held);
+  return kept;
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+});
+
+test("an imported value alias keeps the origin across modules", async (t) => {
+  // arrange
+  const root = await createRoot(t, {
+    [casesPath]: carrier,
+    "extensions/pi-claude-marketplace/caller.ts": `import { read } from "./cases.ts";
+
+import type { Held } from "./cases.ts";
+
+export const forward = read;
+
+export function send(held: Held): string {
+  return forward(held);
+}
+`,
+  });
+
+  // act
+  const report = analysis.analyzeProject({ root });
+
+  // assert
+  assertCarried(report);
+});
+
+test("a callback parameter receives the value the caller supplied", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export function drive(step: (given: Slot) => string, given: Held): string {
+  return step(given);
+}
+
+export function start(held: Held): string {
+  return drive((given) => given.kept, held);
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+});
+
+test("a callback result flows outward to the caller of the callback", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export function collect(make: () => Slot): string {
+  return make().kept;
+}
+
+export function supply(held: Held): string {
+  return collect(() => held);
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+});
+
+test("declaring a callback and never invoking it reads nothing", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Never {
+  readonly untouched?: string;
+}
+
+export type Handler = (value: Never) => void;
+
+export const declared: Handler = (value) => {
+  void value;
+};
+
+export function keep(): Handler {
+  return declared;
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Never", "untouched"), []);
+  assert.strictEqual(statusFor(report, "Never", "untouched"), "unread");
+});
+
+test("a passed-but-unread parameter stays unread", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Handed {
+  readonly given?: string;
+}
+
+export interface Ignored {
+  readonly given?: string;
+}
+
+export function drop(ignored: Ignored): number {
+  void ignored;
+  return 1;
+}
+
+export function hand(handed: Handed): number {
+  return drop(handed);
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Handed", "given"), []);
+  assert.deepStrictEqual(shapesFor(report, "Ignored", "given"), []);
+  assert.strictEqual(statusFor(report, "Handed", "given"), "unread");
+});
+
+test("a type-only alias transfers nothing", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Phantom {
+  readonly never?: string;
+}
+
+export type PhantomAlias = Phantom;
+export type PhantomKeys = keyof Phantom;
+
+export function describe(keys: PhantomKeys, alias: PhantomAlias): unknown {
+  return [keys, alias];
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Phantom", "never"), []);
+  assert.strictEqual(statusFor(report, "Phantom", "never"), "unread");
+});
+
+test("an overload resolves to the parameter its implementation actually reads", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export function widen(value: Slot): string;
+export function widen(value: number): string;
+export function widen(value: Slot | number): string {
+  return typeof value === "number" ? String(value) : value.kept;
+}
+
+export function send(held: Held): string {
+  return widen(held);
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+});
+
+test("an optional and a rest parameter keep the arguments they receive", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export function readOptional(first: number, slot?: Slot): string {
+  return slot === undefined ? "" : slot.kept;
+}
+
+export function readRest(...slots: readonly Slot[]): string {
+  return slots.map((slot) => slot.kept).join("");
+}
+
+export function send(held: Held): string {
+  return readOptional(1, held) + readRest(held);
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Held", "kept"), [
+    "value-read/value-transfer/production",
+    "value-read/value-transfer/production",
+  ]);
+  assert.deepStrictEqual(shapesFor(report, "Held", "spare"), []);
+});
+
+test("a satisfies view keeps the lineage of the value it annotates", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export function send(held: Held): string {
+  return read(held satisfies Held);
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+});
+
+test("an erased call that could consume a candidate is reported, not assumed clean", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Handed {
+  readonly maybeUsed?: string;
+}
+
+export interface Untouched {
+  readonly alone?: string;
+}
+
+export function hand(handed: Handed, sink: any): void {
+  sink(handed);
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(reasonsFor(report, "Handed", "maybeUsed"), ["erased-call-consumer"]);
+  assert.strictEqual(statusFor(report, "Handed", "maybeUsed"), "unsupported-analysis");
+  assert.deepStrictEqual(reasonsFor(report, "Untouched", "alone"), []);
+  assert.strictEqual(statusFor(report, "Untouched", "alone"), "unread");
+});
