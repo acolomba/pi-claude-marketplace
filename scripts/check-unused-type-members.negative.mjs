@@ -50,6 +50,32 @@ export function probeNeverReadAnywhere(deps: ${plantedOwner}): number {
 }
 `;
 
+/**
+ * A second declaration spelling the same key, read for real from production.
+ *
+ * A gate that matched members by property spelling would see this read and let
+ * the offender go, so the offender has to survive it. The read is production, so
+ * this member must come back `runtime-observed` -- a control that only checked
+ * the offender would pass even if this read were never observed at all.
+ */
+const unrelatedOwner = "UnrelatedSameSpelling";
+const unrelatedDeclaration = `
+export interface ${unrelatedOwner} {
+${plantedLine}
+}
+
+export function readUnrelatedSameSpelling(unrelated: ${unrelatedOwner}): number {
+  return unrelated.neverReadAnywhere?.length ?? 0;
+}
+`;
+
+/** An unclosed declaration: the compiler cannot parse it, so no verdict exists. */
+const brokenDeclaration = "\nexport interface UnclosedShape {\n";
+
+/** The reasons the gate must give for the two runs it cannot complete. */
+const syntaxReason = `Compiler input has a syntax error: ${edgeDepsPath}`;
+const budgetReason = "Option --budget needs a positive whole number, not 0";
+
 /** A gate report can name every member in the tree, so the pipe is bounded high. */
 const outputBudget = 256 * 1024 * 1024;
 
@@ -116,6 +142,40 @@ function edgeDepsDeclaration(sourceText) {
 }
 
 /**
+ * The record the gate must report for the unrelated declaration: the same key,
+ * a different owner, and one production witness of its own.
+ */
+function unrelatedMemberOf(unrelatedText, appendedAt) {
+  const declaredAt = unrelatedText.indexOf(plantedLine, appendedAt);
+  const readAt = unrelatedText.indexOf(`unrelated.${plantedKey}`) + "unrelated.".length;
+  const declaredSite = siteOf(unrelatedText, declaredAt + plantedLine.indexOf("readonly"));
+  const readSite = siteOf(unrelatedText, readAt);
+
+  return {
+    id: `${edgeDepsPath}:${declaredSite.line}:${declaredSite.column}`,
+    path: edgeDepsPath,
+    line: declaredSite.line,
+    column: declaredSite.column,
+    owner: unrelatedOwner,
+    key: plantedKey,
+    optional: true,
+    category: "interface-member",
+    status: "runtime-observed",
+    witnesses: [
+      {
+        path: edgeDepsPath,
+        line: readSite.line,
+        column: readSite.column,
+        kind: "value-read",
+        origin: "production",
+        syntax: "property-access",
+      },
+    ],
+    reasons: [],
+  };
+}
+
+/**
  * The offender overlay, the benign overlay and the exact facts the gate must
  * report for each.
  *
@@ -138,12 +198,16 @@ function buildPlant(sourceText, ownerTestText) {
   const insertAt = members[members.length - 1].end;
   const offenderText = `${sourceText.slice(0, insertAt)}\n${plantedLine}${sourceText.slice(insertAt)}`;
   const benignText = `${ownerTestText}${benignProbe}`;
+  const unrelatedText = `${offenderText}${unrelatedDeclaration}`;
   const memberSite = siteOf(offenderText, insertAt + 1 + plantedLine.indexOf("readonly"));
   const witnessSite = siteOf(benignText, benignText.indexOf(`deps.${plantedKey}`) + "deps.".length);
 
   return {
     offenderText,
     benignText,
+    unrelatedText,
+    brokenText: `${sourceText}${brokenDeclaration}`,
+    unrelatedMember: unrelatedMemberOf(unrelatedText, offenderText.length),
     member: {
       id: `${edgeDepsPath}:${memberSite.line}:${memberSite.column}`,
       path: edgeDepsPath,
@@ -192,15 +256,55 @@ function runGate(options, extra) {
   };
 }
 
-function reportFrom(label, run, expectedStatus) {
-  if (run.status !== expectedStatus) {
+function firstLine(text) {
+  return text.split("\n", 1)[0].slice(0, 200);
+}
+
+function parseReport(label, stdout) {
+  try {
+    return JSON.parse(stdout);
+  } catch {
+    throw new ControlFailure(label, `the gate wrote no parsable report: ${firstLine(stdout)}`);
+  }
+}
+
+/**
+ * The report of a run that was expected to reach a verdict.
+ *
+ * The exit status is checked against what the report itself says rather than
+ * against a number stated here: the contract is 0 for no findings and 1 for
+ * findings, so a gate whose status and report disagree is caught without the
+ * control having to guess which one to believe. A run that wrote no report at
+ * all never reached a verdict, and saying so is what keeps "could not analyse"
+ * from reading as "found nothing".
+ */
+function reportFrom(label, run) {
+  if (run.error !== undefined) {
+    throw new ControlFailure(label, `the gate did not launch: ${run.error.message}`);
+  }
+
+  if (run.signal !== null && run.signal !== undefined) {
+    throw new ControlFailure(label, `the gate was ended by signal ${run.signal}`);
+  }
+
+  if (run.stdout.trim() === "") {
     throw new ControlFailure(
       label,
-      `the gate exited ${run.status} rather than ${expectedStatus}: ${run.stderr.trim()}`,
+      `the gate produced no report (exit ${run.status}): ${firstLine(run.stderr)}`,
     );
   }
 
-  return JSON.parse(run.stdout);
+  const report = parseReport(label, run.stdout);
+  const expected = report.findings.length === 0 ? 0 : 1;
+
+  if (run.status !== expected) {
+    throw new ControlFailure(
+      label,
+      `the gate exited ${run.status} with ${report.findings.length} finding(s)`,
+    );
+  }
+
+  return report;
 }
 
 function findingIds(report) {
@@ -270,7 +374,7 @@ function requireSameDiagnostics(label, report, baseline) {
 
 function baselineControl(options, plant) {
   const label = "baseline";
-  const report = reportFrom(label, runGate(options, []), 1);
+  const report = reportFrom(label, runGate(options, []));
   requireCensusOnly(label, report);
 
   if (findingIds(report).includes(plant.member.id)) {
@@ -282,7 +386,7 @@ function baselineControl(options, plant) {
 
 function offenderControl(options, plant, baseline, overlayPath) {
   const label = "offender-plant";
-  const report = reportFrom(label, runGate(options, ["--overlay", overlayPath]), 1);
+  const report = reportFrom(label, runGate(options, ["--overlay", overlayPath]));
   requireSameDiagnostics(label, report, baseline);
   compareFindings(
     label,
@@ -295,7 +399,7 @@ function offenderControl(options, plant, baseline, overlayPath) {
 
 function benignControl(options, plant, baseline, overlayPath) {
   const label = "benign-receiver-read";
-  const report = reportFrom(label, runGate(options, ["--overlay", overlayPath]), 1);
+  const report = reportFrom(label, runGate(options, ["--overlay", overlayPath]));
   requireSameDiagnostics(label, report, baseline);
   compareFindings(label, "finding set", findingIds(baseline), findingIds(report));
   requireMember(label, report, {
@@ -305,9 +409,55 @@ function benignControl(options, plant, baseline, overlayPath) {
   });
 }
 
+function unrelatedControl(options, plant, baseline, overlayPath) {
+  const label = "unrelated-same-spelling-read";
+  const report = reportFrom(label, runGate(options, ["--overlay", overlayPath]));
+  requireSameDiagnostics(label, report, baseline);
+  compareFindings(
+    label,
+    "overlay finding set",
+    [...findingIds(baseline), plant.member.id],
+    findingIds(report),
+  );
+  requireMember(label, report, plant.member);
+  requireMember(label, report, plant.unrelatedMember);
+}
+
+/**
+ * A run the gate cannot complete: exit 2, no report at all, and a reason naming
+ * what it could not read. Keeping this separate from exit 1 is what stops a
+ * broken launch or an unparsable input from being read as a clean tree, and
+ * requiring the reason is what stops any refusal from standing in for this one.
+ */
+function refusalControl(label, options, extra, reason) {
+  const run = runGate(options, extra);
+
+  if (run.error !== undefined) {
+    throw new ControlFailure(label, `the gate did not launch: ${run.error.message}`);
+  }
+
+  if (run.status !== 2) {
+    throw new ControlFailure(
+      label,
+      `the gate exited ${run.status} rather than refusing, so a run it could not complete reads as a member verdict`,
+    );
+  }
+
+  if (run.stdout !== "") {
+    throw new ControlFailure(label, "the gate wrote a report for a run it could not complete");
+  }
+
+  if (!run.stderr.includes(reason)) {
+    throw new ControlFailure(
+      label,
+      `the refusal does not name ${reason}: ${firstLine(run.stderr)}`,
+    );
+  }
+}
+
 function removedControl(options, baseline) {
   const label = "plant-removed";
-  const report = reportFrom(label, runGate(options, []), 1);
+  const report = reportFrom(label, runGate(options, []));
 
   try {
     assert.deepStrictEqual(withoutWork(report), withoutWork(baseline));
@@ -361,14 +511,26 @@ function executeControls(options, plant) {
       [edgeDepsPath]: plant.offenderText,
       [ownerTestPath]: plant.benignText,
     });
+    const unrelatedPath = writeOverlay(directory, "unrelated.json", {
+      [edgeDepsPath]: plant.unrelatedText,
+    });
+    const brokenPath = writeOverlay(directory, "broken.json", {
+      [edgeDepsPath]: plant.brokenText,
+    });
     const baseline = baselineControl(options, plant);
     process.stdout.write("baseline: ok\n");
     offenderControl(options, plant, baseline, offenderPath);
     process.stdout.write("offender-plant: ok\n");
     benignControl(options, plant, baseline, benignPath);
     process.stdout.write("benign-receiver-read: ok\n");
+    unrelatedControl(options, plant, baseline, unrelatedPath);
+    process.stdout.write("unrelated-same-spelling-read: ok\n");
     removedControl(options, baseline);
     process.stdout.write("plant-removed: ok\n");
+    refusalControl("compiler-failure", options, ["--overlay", brokenPath], syntaxReason);
+    process.stdout.write("compiler-failure: ok\n");
+    refusalControl("option-failure", options, ["--budget", "0"], budgetReason);
+    process.stdout.write("option-failure: ok\n");
   } finally {
     rmSync(directory, { force: true, recursive: true });
   }
@@ -399,15 +561,17 @@ function runControls(options) {
     throw failure;
   }
 
-  process.stdout.write("Unused type member negative controls passed (4 of 4).\n");
+  process.stdout.write("Unused type member negative controls passed (7 of 7).\n");
 }
 
 function main() {
   const options = parseOptions(process.argv.slice(2));
 
   if (options.printPlant) {
-    const { member, insertedLine, benignWitness } = readPlant(options.root);
-    process.stdout.write(`${JSON.stringify({ member, insertedLine, benignWitness })}\n`);
+    const { member, insertedLine, benignWitness, unrelatedMember } = readPlant(options.root);
+    process.stdout.write(
+      `${JSON.stringify({ member, insertedLine, benignWitness, unrelatedMember })}\n`,
+    );
     return;
   }
 
