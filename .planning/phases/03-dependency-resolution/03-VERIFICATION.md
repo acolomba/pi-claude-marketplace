@@ -67,7 +67,7 @@ covered_files:
   - tests/orchestrators/plugin/shared.test.ts
   - tests/platform/git.test.ts
   - tests/shared/notification-types.test.ts
-covered_digest: "v1:sha256:095827eeb7700b55fcbf961be33b5928bb5eb5bdd1513f95bb7cd360de2da072"
+covered_digest: "v1:sha256:d829ff84ffd638856602c80a8c3fe4d1bc098d6068b518b42d7063c8d026c3bc"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
@@ -123,6 +123,29 @@ github.com and gitlab.com (PROV-01), so a self-hosted remote cannot reach the
 Device Flow path by construction. The 401 arm WAS verified end to end,
 including the server-side single-challenge-with-no-retry signature that
 distinguishes "no credential was ever built" from "a credential was rejected".
+
+## Fingerprint Refresh (2026-09-15)
+
+This report's `covered_digest` was recomputed and rewritten in place after
+commit `0cf968f6` changed exactly one covered file:
+`tests/architecture/notify-closed-set-locks.test.ts`. The change is a
+one-word test title fix -- "closed 52-entry reason set" -> "53-entry" --
+resolving the cosmetic Anti-Patterns finding recorded below. The assertion
+body was not touched.
+
+Independently re-verified before rewriting the digest:
+- `git diff 0cf968f6^ 0cf968f6 -- tests/architecture/notify-closed-set-locks.test.ts`
+  shows only the title-string line changed; no assertion, import, or logic
+  line moved.
+- `node --test tests/architecture/notify-closed-set-locks.test.ts` -- 4/4
+  pass, including the retitled test.
+- `git diff --name-only 0cf968f6^ HEAD` intersected against this report's
+  `covered_files` list contains exactly one entry, the same test file --
+  confirming no other covered file moved.
+
+`status: passed` and `score: 5/5` are unchanged; this refresh did not
+re-derive or re-litigate any Observable Truth, artifact, or code-review fix
+below -- all of that stands from the 2026-09-15 initial verification.
 
 ## Goal Achievement
 
