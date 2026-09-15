@@ -570,9 +570,6 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
   "extensions/pi-claude-marketplace/index.ts": ["default"],
   "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts": ["createFetchPlugins"],
   "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts": ["createGetPluginInfo"],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts": [
-    "createReinstallPlugin",
-  ],
   "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts": ["createApplyReconcile"],
   "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts": [
     "scanForceInstalledBackfills",
@@ -609,10 +606,6 @@ export const PRODUCTION_FINDING_CENSUS = {
     {
       path: "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
       export_name: "createGetPluginInfo",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
-      export_name: "createReinstallPlugin",
     },
     {
       path: "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
@@ -657,17 +650,5 @@ export const PRODUCTION_FINDING_CENSUS = {
       kind: "class_method",
     },
   ],
-  duplicate_exports: [
-    {
-      export_name: "translate",
-      locations: [
-        {
-          path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts",
-        },
-        {
-          path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts",
-        },
-      ],
-    },
-  ],
+  duplicate_exports: [],
 } as const;
