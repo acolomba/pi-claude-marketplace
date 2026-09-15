@@ -7,9 +7,9 @@
   "firecrawl": false,
   "exa_search": false,
   "git": {
-    "branching_strategy": "none",
+    "branching_strategy": "milestone",
     "phase_branch_template": "gsd/phase-{phase}-{slug}",
-    "milestone_branch_template": "gsd/{milestone}-{slug}",
+    "milestone_branch_template": "features/{milestone}",
     "quick_branch_template": null,
     "create_tag": false
   },
@@ -31,7 +31,7 @@
     "code_review": true,
     "code_review_depth": "standard",
     "_auto_chain_active": false,
-    "use_worktrees": false
+    "use_worktrees": true
   },
   "hooks": {
     "context_warnings": true
@@ -42,7 +42,6 @@
   "features": {},
   "mode": "yolo",
   "granularity": "standard",
-  "context_window": 1000000,
   "claude_md_assembly": {
     "mode": "link",
     "blocks": {
@@ -50,5 +49,5 @@
     }
   },
   "claude_md_path": "CLAUDE.md",
-  "runtime": "claude"
+  "context_window": 1000000
 }
