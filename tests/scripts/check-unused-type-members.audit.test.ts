@@ -85,7 +85,7 @@ const grownTypes = `export interface EdgeDeps {
 }
 
 export function useDeps(deps: EdgeDeps): string {
-  return deps.gitOps;
+  return deps.gitOps + (deps.neverReadAnywhere ?? "");
 }
 `;
 
@@ -507,10 +507,7 @@ test("the check refuses a candidate that appeared after the inventory was taken"
   runAudit(root, ["--inventory"]);
   await explainEvery(root, "read by the probe case only");
   await writeFiles(root, {
-    [typesPath]: grownTypes.replace(
-      "return deps.gitOps;",
-      'return deps.gitOps + deps.neverReadAnywhere ?? "";',
-    ),
+    [typesPath]: grownTypes,
     [testReadPath]: grownTestOnlyRead,
   });
 
