@@ -525,9 +525,12 @@ function selectionOf(node) {
 }
 
 /**
- * The unit types each constituent declares for one key, or nothing when the key
- * does not tell the constituents apart. A key every variant spells the same way
- * selects nothing, so no filter over it can be doing type-system work.
+ * The distinct unit types the constituents declare for one key, or nothing when
+ * the key does not tell them apart. Every constituent has to spell the key as a
+ * unit type, and at least two of those spellings have to differ: a key every
+ * variant spells the same way selects nothing, so no filter over it can be
+ * doing type-system work. Two variants sharing one spelling is not that case --
+ * the key still sorts the union into groups, and a filter selects one of them.
  */
 function discriminantTypes(union, key, context) {
   const seen = [];
@@ -542,14 +545,16 @@ function discriminantTypes(union, key, context) {
 
     const type = context.checker.getTypeOfSymbolAtLocation(property, declaration);
 
-    if ((type.flags & ts.TypeFlags.Unit) === 0 || seen.includes(type)) {
+    if ((type.flags & ts.TypeFlags.Unit) === 0) {
       return undefined;
     }
 
-    seen.push(type);
+    if (!seen.includes(type)) {
+      seen.push(type);
+    }
   }
 
-  return seen;
+  return seen.length > 1 ? seen : undefined;
 }
 
 function unionSize(type) {
@@ -743,9 +748,14 @@ function refinementPathOf(node, intersection) {
   return undefined;
 }
 
-/** The type one chain of keys leads to, or nothing when the chain breaks. */
-function typeAlongPath(type, path, context) {
+/**
+ * The slot one chain of keys leads to -- its type and whether the shape may
+ * leave it out -- or nothing when the chain breaks. Both sides of a comparison
+ * are read this way so an optional slot's type is spelled the same on each.
+ */
+function slotAlongPath(type, path, context) {
   let current = type;
+  let optional = false;
 
   for (const key of path) {
     const property = context.checker.getPropertyOfType(current, key);
@@ -755,10 +765,11 @@ function typeAlongPath(type, path, context) {
       return undefined;
     }
 
+    optional = (property.flags & ts.SymbolFlags.Optional) !== 0;
     current = context.checker.getTypeOfSymbolAtLocation(property, declaration);
   }
 
-  return current;
+  return { type: current, optional };
 }
 
 function constituentsOf(type) {
@@ -769,14 +780,14 @@ function narrowsShape(refined, wider, context, depth) {
   let narrowed = false;
 
   for (const property of context.checker.getPropertiesOfType(refined)) {
-    const inner = typeAlongPath(refined, [property.name], context);
-    const outer = typeAlongPath(wider, [property.name], context);
+    const inner = slotAlongPath(refined, [property.name], context);
+    const outer = slotAlongPath(wider, [property.name], context);
 
     if (inner === undefined || outer === undefined) {
       return false;
     }
 
-    narrowed = narrows(inner, outer, context, depth - 1) || narrowed;
+    narrowed = narrowsSlot(inner, outer, context, depth - 1) || narrowed;
   }
 
   return narrowed;
@@ -801,21 +812,26 @@ function narrows(refined, wider, context, depth) {
   return chosen.length < allowed.length && chosen.every((part) => allowed.includes(part));
 }
 
-function refinedTypeOf(node, context) {
-  return node.type === undefined ? undefined : context.checker.getTypeFromTypeNode(node.type);
+/**
+ * Whether one slot narrows another. Insisting on a slot the wider shape lets a
+ * value omit is a narrowing in its own right: the refined shape then admits
+ * strictly fewer values than one that could leave the slot out.
+ */
+function narrowsSlot(refined, wider, context, depth) {
+  return (wider.optional && !refined.optional) || narrows(refined.type, wider.type, context, depth);
 }
 
 /**
- * The type the rest of the intersection already gives this slot, or nothing
+ * The slot the rest of the intersection already gives this path, or nothing
  * when no other operand declares it at all.
  */
-function widerTypeFor(intersection, operand, path, context) {
+function widerSlotFor(intersection, operand, path, context) {
   for (const member of intersection.types) {
     if (member === operand) {
       continue;
     }
 
-    const found = typeAlongPath(context.checker.getTypeFromTypeNode(member), path, context);
+    const found = slotAlongPath(context.checker.getTypeFromTypeNode(member), path, context);
 
     if (found !== undefined) {
       return found;
@@ -846,7 +862,7 @@ function proveTypeRefinement(entry, candidate, context) {
     fail(`${entry.id} is not a member of the intersection at ${entry.refines}`);
   }
 
-  const wider = widerTypeFor(intersection, found.operand, found.path, context);
+  const wider = widerSlotFor(intersection, found.operand, found.path, context);
 
   if (wider === undefined) {
     fail(
@@ -854,9 +870,10 @@ function proveTypeRefinement(entry, candidate, context) {
     );
   }
 
-  const refined = refinedTypeOf(node, context);
+  const operandType = context.checker.getTypeFromTypeNode(found.operand);
+  const refined = slotAlongPath(operandType, found.path, context);
 
-  if (refined === undefined || !narrows(refined, wider, context, deepestRefinement)) {
+  if (refined === undefined || !narrowsSlot(refined, wider, context, deepestRefinement)) {
     fail(`${entry.id} refines ${entry.refines} does not narrow ${candidate.key}`);
   }
 
