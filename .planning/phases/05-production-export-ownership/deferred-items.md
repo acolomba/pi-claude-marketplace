@@ -38,7 +38,10 @@ the owner file so a later bounded plan can pick it up; none is a gate failure.
 
 - The new plugin operations owner is not named by the network-free
   architecture gate
-  status: open
+  status: closed -- `orchestrators/plugin/operations.ts` is now a member of
+  `NETWORK_FREE_TARGETS` in `tests/architecture/gate-targets.ts`, so the
+  module is scanned for `platform/git.ts` / `gitOps` / `DEFAULT_GIT_OPS` /
+  `refreshGitHubClone` surface like every other named owner.
   **What:** `tests/architecture/no-orchestrator-network.test.ts` gates a NAMED
   list of orchestrator modules (`NETWORK_FREE_TARGETS` in
   `tests/architecture/gate-targets.ts`) against `platform/git.ts` / `gitOps` /
@@ -104,7 +107,12 @@ the owner file so a later bounded plan can pick it up; none is a gate failure.
 
 - The new git authentication-callback module is not named by the AUTH-09
   credential-leak gate
-  status: open
+  status: closed -- `platform/git-auth-callbacks.ts` is now a member of
+  `CREDENTIAL_LEAK_TARGETS`, the destructuring and `DECLARED_MODULE_ORDER` in
+  `no-credential-leak.test.ts` were extended with it, and the `hookDebugLog`
+  interpolation scan loops over both that module and `platform/git.ts`. The
+  scan also counts its subject first and fails when no `hookDebugLog(` call
+  site exists in either file, so the same gap cannot reopen silently.
   **What:** `tests/architecture/no-credential-leak.test.ts` scans a NAMED list
   of credential-handling modules (`CREDENTIAL_LEAK_TARGETS` in
   `tests/architecture/gate-targets.ts`). One of its tests aims a `hookDebugLog`
@@ -145,3 +153,20 @@ the owner file so a later bounded plan can pick it up; none is a gate failure.
   **Suggested fix:** update the `CONVENTIONS.md` sentence to nine during the
   next codebase-map refresh, and append a dated line to `02-SONAR-POLICY.md`
   recording the population change rather than editing its scan row.
+
+- The persistence load/save boundaries report validity from the validator's
+  first `Errors()` entry rather than from a `Check()` type guard
+  status: closed -- deliberate and approved, recorded here so a later reader
+  does not "repair" it
+  **What:** `loadState`, `saveState`, `loadConfig` and `saveConfig` take both
+  validity and the diagnostic from `VALIDATOR.Errors(value)`, then assert the
+  public shape rather than narrowing through `VALIDATOR.Check(value)`. A code
+  review filed this as a fail-closed to fail-open trade, because a value that
+  `Check` rejects while `Errors` returns nothing would now be accepted.
+  **Why it stands:** in `typebox@1.3.28` `Validator.Errors` calls the same
+  accelerated `Check` first and returns its result, so the first error IS the
+  validity answer for these schemas. The reviewer could not construct an input
+  on which the two disagree. The operator reviewed and approved the shape.
+  **Do not:** restore the `Check` guard on the strength of the review note
+  alone. If the validator dependency changes its `Errors` implementation, that
+  is the event that reopens this, not the shape itself.
