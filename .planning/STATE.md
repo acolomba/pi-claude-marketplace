@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
 status: executing
-stopped_at: "completed `06-03-PLAN.md`. Resume file: none."
-last_updated: "2026-09-15T14:03:51.543Z"
+stopped_at: "completed `06-04-PLAN.md`. Resume file: none."
+last_updated: "2026-09-15T15:28:54.608Z"
 last_activity: 2026-09-15
-last_activity_desc: Plan 06-03 complete (validated external and type-system contracts)
-state_head: fc1b769f67963701b628b7e4b6d40a0a43832049
+last_activity_desc: Plan 06-04 complete (whole-object operations and validated wrapper summaries)
+state_head: 5ec1710ecd4a4290b934c0cc2617563ba9cd6670
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 54
-  completed_plans: 41
+  completed_plans: 42
   percent: 63
 milestone_name: test-backlog
 ---
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 06 (Unused Type Member Gate) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
-Last activity: 2026-09-15 — Plan 06-03 complete (validated external and type-system contracts)
+Last activity: 2026-09-15 — Plan 06-04 complete (whole-object operations and validated wrapper summaries)
 
 Plan 06-01 landed the member gate's compiler tracer: `node
 scripts/check-unused-type-members.mjs` compiles the project once, inventories
@@ -73,16 +73,37 @@ cannot answer" apart from "this member is unread".
 `scripts/check-unused-type-members.contracts.json` ships with no entries by
 design; live ones are 06-06's after the tree is reconciled.
 
-Live run unchanged at 3,464 candidates, 2,891 runtime-observed, 105 test-only, 0
-explicit-contract, 392 unread, 76 unsupported. Still interim: whole-object
-operations (06-04) are not in the model, and 06-06 reconciles every remaining
-row. `lint:type-members` exists as a package alias but is deliberately NOT in
-`npm run check` until 06-08.
+Plan 06-04 added whole-object operations in
+`scripts/check-unused-type-members.operations.mjs`. An operation is settled by
+the declaration the checker resolved -- a default-library interface for
+`JSON.stringify` and the `Object` enumerators, an ambient `assert` module for the
+deep comparisons -- so a local function carrying the name summarises nothing. A
+local wrapper earns the same summary only by passing one of its own parameters
+into an already-summarised operation, and the summary is applied at the call site
+against the argument written there, which is what carries a caller's record
+through an `unknown`-typed parameter. A body changed to discard or return its
+input loses the summary with it. Copies are shallow and a rest copy omits the
+keys the pattern named; a deep comparison credits only the operand whose value
+came out of production code, so a typed fixture a test wrote for itself proves
+nothing. Two refusals replace credit rather than shrinking it:
+`unmodeled-serializer-options` for a run-time replacer or a `toJSON` member, and
+`unproven-own-properties` where an accessor or a class constituent makes
+own-enumerability unprovable. All 76 of 06-02's unmodeled container rows are now
+explained: 73 were `array.push`, which is a directed element write and not a
+bulk read, and `sort`, `reverse`, `splice`, `flat` and `entries` are modelled by
+their real result semantics. `reduce` stays unmodeled and still raises its gap.
 
-`npm test` 6366/6366 (06-02's 6332 plus 34 new). `npm run check` exit 0.
-Typecheck, lint, format and all four fallow links green. No production source
-under `extensions/` changed in 06-02 or 06-03, so the wave's aggregate
-production unit coverage snapshot still holds.
+Live run now 3,464 candidates, 2,981 runtime-observed, 222 test-only, 0
+explicit-contract, 261 unread, 0 unsupported -- 468 findings down to 261. The run
+takes 80.2 s and peaks at 2.05 GiB, spending 2,889,809 of a 12,000,000-step
+transfer budget over 82,164 traced reads and 939,556 operation reads. Still
+interim: 06-06 reconciles every remaining row. `lint:type-members` exists as a
+package alias but is deliberately NOT in `npm run check` until 06-08.
+
+All five analyzer suites pass together at 134/134 (06-03's 101 plus 33 new).
+Typecheck, lint, format, all four fallow links and both corresponding-test gates
+are green. No production source under `extensions/` changed in 06-02, 06-03 or
+06-04, so the wave's aggregate production unit coverage snapshot still holds.
 
 Phase 05 closed: all 28 plans landed and the production
 dead-code census drained from 111 to 0 with zero net additions at every step.
@@ -178,7 +199,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-15T14:03:39.715Z
+**Last session:** 2026-09-15T15:28:54.365Z
 **Resume file:** None
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–5 are complete.
@@ -198,7 +219,7 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 
 ### Phase 6 Plan 1 complete
 
-Stopped at: Completed 06-03-PLAN.md
+Stopped at: Completed 06-04-PLAN.md
 (directed value transfers) and 06-03 (validated contracts), which the plan
 graph runs together in Wave 2 over disjoint files.
 
@@ -476,9 +497,13 @@ target of 42 → 32 is already reached; 05-24 should leave the total at 32 while
 |------|----------|-------|-------|
 | Phase 06 P02 | 1h 50m | 3 tasks | 4 files |
 | Phase 06 P03 | 2h 0m | 2 tasks | 5 files |
+| Phase 06 P04 | 2h 20m | 3 tasks | 6 files |
 
 ## Decisions
 
 - [Phase 06]: An invalid contract is an exit-2 setup failure, not an exit-1 finding, which keeps "the gate cannot answer" apart from "this member is unread" — The research fail-closed list names invalid contracts alongside a malformed tsconfig; treating a stale contract as a finding would let it be triaged away instead of fixed
 - [Phase 06]: A type-selection contract covers the filter literal own member, not the union discriminants it selects on — Measuring the inventory showed Extract<Msg, { status: K }> contributes its own status member that no runtime syntax can read, while the variants status members are ordinary discriminants real code switches on
 - [Phase 06]: Contract identity is settled through the inventory declaration map, never through the coordinate string alone — A coordinate only locates syntax; requiring the node found there to be the one byDeclaration recorded is what stops a drifted entry from being proved against the wrong member
+- [Phase 06]: A whole-object operation is settled by the declaration the checker resolved, and a local wrapper earns the same summary only from its own body, applied at the call site — Resolving by name would let any function called stringify or deepStrictEqual excuse a member; applying the summary at the call site is what keeps a record alive through an unknown-typed parameter
+- [Phase 06]: push, unshift and fill are directed element writes, not whole-object reads — Placing a value into an array reads none of its members; 73 of the 76 unmodeled container rows were push, and crediting them as bulk reads would have accepted records that were only stored
+- [Phase 06]: Provenance is traced from the operand only; members below it are credited on the operand own declaration — Tracing nested paths exhausted a tenfold transfer budget on the live tree; the bound under-credits, which leaves a finding to investigate rather than accepting a member
