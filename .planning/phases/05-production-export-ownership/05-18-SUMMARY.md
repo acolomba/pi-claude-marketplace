@@ -348,3 +348,9 @@ None - no external service configuration required.
 ---
 *Phase: 05-production-export-ownership*
 *Completed: 2026-09-14*
+
+## Self-Check: PASSED
+
+- All nine `key-files.modified` entries and this summary exist on disk.
+- All four commits resolve: `44925576`, `e2ad1efd`, `f712f031`, `b47b9820`.
+- The plan's change set is exactly twelve files: the nine `files_modified` entries plus `STATE.md`, `ROADMAP.md` and this summary. `tests/architecture/gate-targets.ts` is NOT among them.
