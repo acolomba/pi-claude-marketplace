@@ -5,16 +5,16 @@ milestone_name: transitive-dependencies
 current_phase: 3
 current_phase_name: Dependency resolution
 status: executing
-stopped_at: Completed 03-07-PLAN.md
-last_updated: "2026-09-15T03:02:17.874Z"
-last_activity: 2026-09-14
-last_activity_desc: Phase 3 execution started
-state_head: a499e811476ad0a499c651df3d4debc2fed17667
+stopped_at: Completed 03-04-PLAN.md
+last_updated: "2026-09-15T10:27:54.506Z"
+last_activity: 2026-09-15
+last_activity_desc: Phase 3 plan 03-04 complete — live tag resolution
+state_head: 1481bdf9754510cde9ae863e50f7418a3674561b
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 13
-  completed_plans: 10
+  completed_plans: 11
   percent: 40
 ---
 
@@ -35,8 +35,35 @@ is archived under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 3 (Dependency resolution) — EXECUTING
-Plan: 5 of 7
-Status: Plans 03-01, 03-02, 03-03 and 03-07 complete; 03-04 next
+Plan: 5 of 7 complete
+Status: Plans 03-01, 03-02, 03-03, 03-04 and 03-07 complete; 03-05 next
+Plan 03-04 gave the phase live tag resolution, the one genuinely new
+capability RESV-03 introduces. `platform/git.ts::listRemoteTags` reads a
+remote's tag advertisement through the single `isomorphic-git` chokepoint
+with `prefix: "refs/tags/"` and `peelTags: true`, so an annotated tag
+resolves to the commit it points at and yields one result, not two.
+`orchestrators/plugin/dependency-tag-probe.ts` turns an intersected
+constraint into the highest `<pluginName>--v<semver>` release tag that
+satisfies it, or into `no-matching-tag` / `tag-listing-failed`. Only tags
+carrying the dependency's OWN release prefix are candidates, so a crafted
+tag named for a different plugin can never be selected and no arbitrary
+unpinned ref is reachable. Satisfaction comes from
+`domain/dependency-range.ts`, not a second evaluator. The probe is absent
+from `NETWORK_FREE_TARGETS` while both install owners stay in it — the
+`install-clone-probe.ts` arrangement — so the NFR-5 gate needed no edit and
+neither owner gained a git surface.
+Task 2 was a `blocking-human` decision checkpoint on D-03-02's one-way
+rating. The developer replied `proceed-as-decided`, so D-03-09 stands: a
+no-match is the same failure in BOTH query arms and there is no fallback to
+the repository head anywhere, even where upstream soft-degrades. RESV-03
+stays Pending in REQUIREMENTS.md because plans 03-05 and 03-06 also declare
+it.
+One gate drift was found and closed: `tests/architecture/gate-targets.ts`'s
+`UNOWNED_EXPORT_CENSUS` had not been amended for `listRemoteTags`, so
+`npm run check` had been red since this plan's own task-1 commit. The census
+now records `domain/dependency-range.ts`'s three exports with the removal
+condition named inline — the commit in which the cascade composes the probe
+MUST drop that entry or the gate fails in the opposite direction.
 Plan 03-07 closed the phase's stated dependency on the manifest-read work.
 `orchestrators/plugin/dependency-declaration-read.ts` answers what one plugin
 declares in the D-01-32 order — the plugin's own manifest wherever it is
@@ -290,6 +317,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 03 P02 | 41min | 2 tasks | 4 files |
 | Phase 03 P03 | 4min | 2 tasks | 6 files |
 | Phase 03 P07 | 43min | 2 tasks | 6 files |
+| Phase 03 P04 | 7h 5m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -522,6 +550,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: D-03-23: the declaration read requires an entry and carries no no-entry arm — without an entry there is no source, so no plugin root and no manifest, and install-flow already returns absent for a plugin its marketplace does not declare; the arm would have been unreachable from production, which the direct-coverage gate does not admit
 - [Phase 03]: D-03-24: the declaration read's options omit the plugin key's name and marketplace because nothing in the read consumes them — the entry already answers which plugin this is
 - [Phase 03]: D-03-25: a seeded declareDependencies declaration now lands on BOTH the marketplace entry and the plugin's own manifest — under D-01-32 an entry-only fixture has its own manifest suppress the declaration, which silently turned three cascade cases vacuous, one of them still passing while proving nothing
+- [Phase 03]: D-03-09 confirmed on the record: the tag probe hard-fails a no-match in BOTH query arms, with no fallback to the repository head — Answered at a blocking-human decision checkpoint; the developer replied proceed-as-decided over soften-no-match and stop-and-rescope. Upstream soft-degrades a marketplace-repository no-match to a head copy; this project does not port that asymmetry, matching D-03-08.
+- [Phase 03]: D-03-26: dependency-tag-probe.ts is NOT a CREDENTIAL_LEAK_TARGETS member — It composes a host credential bundle and threads it into the listing call without reading, storing or rendering a credential value, exactly as install-clone-probe.ts does. The gate scans state-write field names and git-credential.ts error interpolation, neither of which has a surface here, and its members are destructured positionally against a pinned module order.
+- [Phase 03]: The tag probe parses and orders candidate versions with semver, but asks domain/dependency-range.ts whether a version satisfies a range — Parsing and ordering a version is not evaluating a range, so one module keeps owning the satisfaction contract and no second evaluator exists.
 
 ### Pending Todos
 
@@ -608,13 +639,13 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 03-07-PLAN.md
+**Stopped at:** Completed 03-04-PLAN.md
 
 **Resume file:** None
 
 **Read beside it:** `.planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/02-VERIFICATION.md`
 
-Last session: 2026-09-15T03:01:08.603Z
+Last session: 2026-09-15T10:27:42.787Z
 closed out plan 02-01 task 3, executed plan 02-02, ran the full code-review
 fix cycle, then Nyquist and security gates, then verification and transition)
 
