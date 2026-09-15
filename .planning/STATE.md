@@ -5,17 +5,17 @@ milestone_name: transitive-dependencies
 current_phase: 3
 current_phase_name: Dependency resolution
 status: executing
-stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-09-15T11:40:00.000Z"
+stopped_at: Completed 03-06-PLAN.md
+last_updated: "2026-09-15T12:54:49.933Z"
 last_activity: 2026-09-15
-last_activity_desc: Phase 3 plan 03-05 complete — constraint resolution in the cascade
-state_head: 97dde264
+last_activity_desc: Phase 3 plan 03-06 complete — the cascade block a user reads
+state_head: bae2e5b73647300c5d2822f638ed95cff65dedd9
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 13
-  completed_plans: 12
-  percent: 46
+  completed_plans: 13
+  percent: 40
 ---
 
 # Project State
@@ -35,8 +35,34 @@ is archived under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 3 (Dependency resolution) — EXECUTING
-Plan: 6 of 7 complete
-Status: Plans 03-01, 03-02, 03-03, 03-04, 03-05 and 03-07 complete; 03-06 next
+Plan: 7 of 7 complete
+Status: All seven plans complete (03-01 through 03-07); phase verification next
+Plan 03-06 made the cascade legible. A dependency cascade now renders one row
+per closure member beside the requesting plugin's own row, and a cascade that
+failed names the DEPENDENCY as the row's subject with a closed-set reason and
+its cause — not the plugin the user typed, for something one of its
+dependencies did. The closed reason vocabulary grew by exactly seven members
+(`no matching version`, `version conflict`, `constraint too complex`,
+`invalid version constraint`, `dependency marketplace not added`,
+`dependency cycle`, `dependency failed`), each carrying an inline note
+recording why no inherited member states the same fact; four of the twelve
+outcomes are carried by members that already existed, including the probe's
+own transport classification for a listing that could not be read. One token
+covers both `version conflict` subjects, separated by `{already installed,
+version conflict}` and the recorded version beside it rather than by a second
+member. The COMPAT-01 pinned enumeration was amended by equality in the same
+commit as the members — not loosened — and the length lock, the owner's own
+vocabulary test and both catalog counts moved with it.
+`install-cascade.messaging.ts` SPREADS install's render map instead of
+restating it, so a no-dependency install's bytes stay frozen and the one added
+arm (the RESV-05 skip) is the whole diff. Both interim prose formatters were
+deleted rather than extended: `cascadeFailureCause` hands the orchestrator the
+SAME Error the row carries. Twelve catalog states record the rendered bytes,
+produced by running the composition rather than typed by hand (the file moved
+24,145 → 27,100 UTF-8 bytes). RESV-01, RESV-03, RESV-04 and RESV-06 are
+Complete. Decision IDs through D-03-35 are allocated; a later plan mints from
+D-03-36. One UAT item is open (D10): the block has never been read by an
+operator in a live Pi session.
 Plan 03-05 is where RESV-03 actually fires. `resolveMemberConstraints` in
 `install-cascade.ts` sits between the closure walk and the ledger phase
 array, and that position is the whole rollback story: every constraint
@@ -349,6 +375,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 03 P03 | 4min | 2 tasks | 6 files |
 | Phase 03 P07 | 43min | 2 tasks | 6 files |
 | Phase 03 P04 | 7h 5m | 3 tasks | 5 files |
+| Phase 03 P06 | 72 min | 2 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -584,6 +611,10 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: D-03-09 confirmed on the record: the tag probe hard-fails a no-match in BOTH query arms, with no fallback to the repository head — Answered at a blocking-human decision checkpoint; the developer replied proceed-as-decided over soften-no-match and stop-and-rescope. Upstream soft-degrades a marketplace-repository no-match to a head copy; this project does not port that asymmetry, matching D-03-08.
 - [Phase 03]: D-03-26: dependency-tag-probe.ts is NOT a CREDENTIAL_LEAK_TARGETS member — It composes a host credential bundle and threads it into the listing call without reading, storing or rendering a credential value, exactly as install-clone-probe.ts does. The gate scans state-write field names and git-credential.ts error interpolation, neither of which has a surface here, and its members are destructured positionally against a pinned module order.
 - [Phase 03]: The tag probe parses and orders candidate versions with semver, but asks domain/dependency-range.ts whether a version satisfies a range — Parsing and ordering a version is not evaluating a range, so one module keeps owning the satisfaction contract and no second evaluator exists.
+- [Phase 03]: D-03-30: the dependency cascade mints exactly seven closed-set reason members and reuses four inherited ones; a listing that could not be read keeps the probe's own transport classification
+- [Phase 03]: D-03-31: dependency marketplace not added is a ContentReason on the marketplace in user scope precedent; the three structural markers are Excluded from ContentReason and cannot type-check into a plugin row
+- [Phase 03]: D-03-32/33: the cascade emits cardinality single and always routes through CASCADE_CONTEXT, so a no-dependency install's bytes stay frozen with no branch
+- [Phase 03]: D-03-34/35: a root-keyed member failure stays on the single-plugin path, and the cascade error is derived from the subject rather than the caught value, which removed an uncoverable branch instead of pinning it
 
 ### Pending Todos
 
@@ -670,13 +701,13 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 03-04-PLAN.md
+**Stopped at:** Completed 03-06-PLAN.md
 
 **Resume file:** None
 
 **Read beside it:** `.planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/02-VERIFICATION.md`
 
-Last session: 2026-09-15T10:27:42.787Z
+Last session: 2026-09-15T12:54:06.767Z
 closed out plan 02-01 task 3, executed plan 02-02, ran the full code-review
 fix cycle, then Nyquist and security gates, then verification and transition)
 

@@ -43,16 +43,16 @@ upstream documents as the primary use case.
 New scope. Supersedes the PI-13 / PR-5 no-auto-resolution decision, which is
 retired by this milestone rather than worked around.
 
-- [ ] **RESV-01**: Installing a plugin also installs the plugins it declares as
+- [x] **RESV-01**: Installing a plugin also installs the plugins it declares as
   dependencies.
 - [x] **RESV-02**: A dependency that names a marketplace resolves from that
   marketplace; one that names none resolves from the depending plugin's
   marketplace.
-- [ ] **RESV-03**: A dependency whose version constraint no available plugin
+- [x] **RESV-03**: A dependency whose version constraint no available plugin
   satisfies fails the install with a reason naming the constraint.
-- [ ] **RESV-04**: A dependency cycle terminates instead of installing forever.
+- [x] **RESV-04**: A dependency cycle terminates instead of installing forever.
 - [x] **RESV-05**: A dependency that is already installed is not reinstalled.
-- [ ] **RESV-06**: When a dependency cannot be installed, the user learns which
+- [x] **RESV-06**: When a dependency cannot be installed, the user learns which
   dependency failed and why, and the install does not leave a half-materialized
   plugin behind.
 
@@ -136,12 +136,12 @@ this milestone.
 | MANF-05 | Phase 1 | Complete |
 | DEPS-01 | Phase 1 | Complete |
 | DEPS-02 | Phase 1 | Complete |
-| RESV-01 | Phase 3 | Pending |
+| RESV-01 | Phase 3 | Complete |
 | RESV-02 | Phase 3 | Complete |
-| RESV-03 | Phase 3 | Pending |
-| RESV-04 | Phase 3 | Pending |
+| RESV-03 | Phase 3 | Complete |
+| RESV-04 | Phase 3 | Complete |
 | RESV-05 | Phase 3 | Complete |
-| RESV-06 | Phase 3 | Pending |
+| RESV-06 | Phase 3 | Complete |
 | PROV-01 | Phase 4 | Pending |
 | PROV-02 | Phase 4 | Pending |
 | PROV-03 | Phase 4 | Pending |

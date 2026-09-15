@@ -166,7 +166,7 @@ imports it directly. 204 pairs, corresponding-test gate at zero violations.
 4. A dependency cycle terminates and reports instead of installing forever, and a dependency that is already installed is left alone rather than reinstalled. (RESV-04, RESV-05)
 5. A dependency that cannot be installed tells the user which dependency failed and why, leaves no half-materialized plugin behind, and re-running the same command produces the same result. (RESV-06, NFR-3)
 
-**Plans**: 6/7 plans executed
+**Plans**: 7/7 plans executed
 
 Plans:
 **Wave 1**
@@ -189,7 +189,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 03-06-PLAN.md — The closed reason-vocabulary amendment and per-member cascade reporting (wave 5)
+- [x] 03-06-PLAN.md — The closed reason-vocabulary amendment and per-member cascade reporting (wave 5)
 
 **Notes.** Criterion 1's reload clause is the load-bearing half. `buildUninstallBucket` (`orchestrators/reconcile/plan.ts:352`) plans an uninstall for every recorded plugin the merged declared config does not name, so a cascade install that never reaches `claude-plugins.json` is removed on the next session start and RESV-01 is not actually delivered. Settling that is open decision 2, and it belongs to this phase's discuss because it governs what the cascade writes. The transaction shape is also this phase's problem, not a later one: `withLockedStateTransaction` is not re-entrant (`proper-lockfile`, `retries: 0`), so a cascade that recursively calls the guarded `installPlugin` self-deadlocks — the guard-free ledger bodies (`runInstallLedger`, `runInstallLedgerBody`) exist for exactly this class of caller.
 
@@ -262,7 +262,7 @@ plugin names — so plan these phases with the UI gate skipped.
 |-------|-----------|----------------|--------|-----------|
 | 1. Manifest read fidelity | v1.20 | 4/4 | Complete   | 2026-09-14 |
 | 2. Uninstall data disposition and the uninstall option seam | v1.20 | 2/2 | Complete    | 2026-09-14 |
-| 3. Dependency resolution | v1.20 | 6/7 | In Progress|  |
+| 3. Dependency resolution | v1.20 | 7/7 | In Progress|  |
 | 4. Install provenance | v1.20 | 0/— | Not started | — |
 | 5. Prune on uninstall | v1.20 | 0/— | Not started | — |
 
