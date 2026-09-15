@@ -46,16 +46,22 @@ interface CandidateInventory {
   readonly byDeclaration: unknown;
 }
 
+interface BudgetExhaustion {
+  readonly path: string;
+  readonly budget: number;
+}
+
 interface ObservationResult {
   readonly witnesses: ReadonlyMap<string, readonly Witness[]>;
   readonly unsupported: ReadonlyMap<string, readonly string[]>;
+  readonly exhausted: BudgetExhaustion | undefined;
 }
 
 interface ModelModule {
   createProjectProgram(options: { readonly root: string }): ProjectProgram;
   collectCandidates(input: ProjectProgram): CandidateInventory;
   collectObservations(
-    input: ProjectProgram & { readonly byDeclaration: unknown },
+    input: ProjectProgram & { readonly byDeclaration: unknown; readonly budget: number },
   ): ObservationResult;
 }
 
@@ -84,9 +90,17 @@ interface Inspection {
   readonly candidates: readonly Candidate[];
   readonly witnesses: ReadonlyMap<string, readonly Witness[]>;
   readonly unsupported: ReadonlyMap<string, readonly string[]>;
+  readonly exhausted: BudgetExhaustion | undefined;
 }
 
-async function inspect(t: TestContext, production: string, testText?: string): Promise<Inspection> {
+const generousBudget = 1_000_000;
+
+async function inspect(
+  t: TestContext,
+  production: string,
+  testText?: string,
+  budget: number = generousBudget,
+): Promise<Inspection> {
   const root = await mkdtemp(path.join(tmpdir(), "unused-type-members-model-"));
 
   t.after(async () => {
@@ -110,8 +124,12 @@ async function inspect(t: TestContext, production: string, testText?: string): P
 
   const project = model.createProjectProgram({ root });
   const { candidates, byDeclaration } = model.collectCandidates(project);
-  const { witnesses, unsupported } = model.collectObservations({ ...project, byDeclaration });
-  return { candidates, witnesses, unsupported };
+  const { witnesses, unsupported, exhausted } = model.collectObservations({
+    ...project,
+    byDeclaration,
+    budget,
+  });
+  return { candidates, witnesses, unsupported, exhausted };
 }
 
 function idFor(inspection: Inspection, owner: string, key: string): string {
@@ -574,4 +592,28 @@ export function accept(input: { readonly passed: string }): { readonly returned:
       },
     ],
   );
+});
+
+test("the observation walk stops at its budget and names the file it was walking", async (t) => {
+  // arrange
+  const source = `export interface Bounded {
+  readonly seen: string;
+}
+
+export function read(bounded: Bounded): string {
+  return bounded.seen;
+}
+`;
+
+  // act
+  const cutOff = await inspect(t, source, undefined, 4);
+  const complete = await inspect(t, source);
+
+  // assert
+  assert.deepStrictEqual(cutOff.exhausted, { path: casesPath, budget: 4 });
+  assert.deepStrictEqual(shapesFor(cutOff, "Bounded", "seen"), []);
+  assert.strictEqual(complete.exhausted, undefined);
+  assert.deepStrictEqual(shapesFor(complete, "Bounded", "seen"), [
+    "value-read/property-access/production",
+  ]);
 });

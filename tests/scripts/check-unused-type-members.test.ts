@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -306,4 +307,216 @@ test("importing the command-line module does not run the gate", () => {
   // assert
   assert.strictEqual(completed.status, 0);
   assert.strictEqual(completed.stdout, "inert");
+});
+
+const testReadPath = "tests/edge/types.test.ts";
+
+const testOnlyRead = `import { useDeps } from "../../extensions/pi-claude-marketplace/edge/types.ts";
+
+import type { EdgeDeps } from "../../extensions/pi-claude-marketplace/edge/types.ts";
+
+export function probe(deps: EdgeDeps): string {
+  return useDeps(deps) + (deps.neverReadAnywhere ?? "");
+}
+`;
+
+function memberById(report: GateReport, id: string): MemberRecord {
+  const member = report.members.find((entry) => entry.id === id);
+
+  if (member === undefined) {
+    throw new Error(`The report has no member for ${id}`);
+  }
+
+  return member;
+}
+
+test("a member read only by a test is reported as test-only and does not fail the run", async (t) => {
+  // arrange
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    [typesPath]: offenderTypes,
+    [testReadPath]: testOnlyRead,
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+
+  // assert
+  assert.strictEqual(run.status, 0);
+  assert.deepStrictEqual(memberById(parseReport(run.stdout), `${typesPath}:3:3`), {
+    id: `${typesPath}:3:3`,
+    path: typesPath,
+    line: 3,
+    column: 3,
+    owner: "EdgeDeps",
+    key: "neverReadAnywhere",
+    optional: true,
+    category: "interface-member",
+    status: "test-only-observed",
+    witnesses: [
+      {
+        path: testReadPath,
+        line: 6,
+        column: 32,
+        kind: "value-read",
+        origin: "test",
+        syntax: "property-access",
+      },
+    ],
+    reasons: [],
+  });
+});
+
+test("removing the only test read leaves the same member unread", async (t) => {
+  // arrange
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    [typesPath]: offenderTypes,
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+
+  // assert
+  assert.strictEqual(run.status, 1);
+  assert.strictEqual(memberById(parseReport(run.stdout), `${typesPath}:3:3`).status, "unread");
+});
+
+test("an independent production read is reported as runtime-observed", async (t) => {
+  // arrange
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    [typesPath]: benignTypes,
+    [testReadPath]: testOnlyRead,
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+
+  // assert
+  assert.strictEqual(run.status, 0);
+  assert.deepStrictEqual(
+    memberById(parseReport(run.stdout), `${typesPath}:3:3`).witnesses.map(
+      (witness) => `${witness.origin}:${witness.path}`,
+    ),
+    [`production:${typesPath}`, `test:${testReadPath}`],
+  );
+});
+
+test("analysed source is parsed and never executed", async (t) => {
+  // arrange
+  const root = await createFixture(t, { "tsconfig.json": fixtureTsconfig });
+  const sentinelPath = path.join(root, "executed.txt");
+  await mkdir(path.dirname(path.join(root, typesPath)), { recursive: true });
+  await writeFile(
+    path.join(root, typesPath),
+    `declare const require: (name: string) => {
+  writeFileSync(target: string, text: string): void;
+};
+
+export interface EdgeDeps {
+  readonly gitOps: string;
+  readonly neverReadAnywhere?: string;
+}
+
+export function useDeps(deps: EdgeDeps): string {
+  return deps.gitOps;
+}
+
+require("node:fs").writeFileSync(${JSON.stringify(sentinelPath)}, "executed");
+
+throw new Error("analysed source must never run");
+`,
+  );
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+
+  // assert
+  assert.strictEqual(run.status, 1);
+  assert.deepStrictEqual(
+    parseReport(run.stdout).findings.map((finding) => finding.id),
+    [`${typesPath}:7:3`],
+  );
+  assert.strictEqual(existsSync(sentinelPath), false);
+  assert.doesNotMatch(run.stderr, /analysed source must never run/);
+});
+
+test("an exhausted analysis budget fails instead of reporting a clean tree", async (t) => {
+  // arrange
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    [typesPath]: benignTypes,
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json", "--budget", "5"]);
+
+  // assert
+  assert.strictEqual(run.status, 2);
+  assert.strictEqual(run.stdout, "");
+  assert.match(run.stderr, /Analysis budget of 5 nodes exhausted while walking /);
+});
+
+test("a budget that is not a positive whole number is a setup failure", () => {
+  // act
+  const run = runGate(["--budget", "0"]);
+
+  // assert
+  assert.strictEqual(run.status, 2);
+  assert.match(run.stderr, /Option --budget needs a positive whole number, not 0/);
+});
+
+test("members are reported in a deterministic order across files", async (t) => {
+  // arrange
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    "extensions/pi-claude-marketplace/shared/second.ts": `export interface Second {
+  readonly later?: string;
+}
+`,
+    "extensions/pi-claude-marketplace/edge/first.ts": `export interface First {
+  readonly earlier?: string;
+  readonly alsoEarlier?: string;
+}
+`,
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+
+  // assert
+  assert.deepStrictEqual(
+    parseReport(run.stdout).members.map((member) => member.id),
+    [
+      "extensions/pi-claude-marketplace/edge/first.ts:2:3",
+      "extensions/pi-claude-marketplace/edge/first.ts:3:3",
+      "extensions/pi-claude-marketplace/shared/second.ts:2:3",
+    ],
+  );
+});
+
+test("the help text states the bounded claim the gate makes and the claims it does not", () => {
+  // arrange
+  const expectedScope = [
+    "Scope: this is a bounded may-observe analysis. It reports that some run-time",
+    "syntax could read a declared member: property and optional-chain access, element",
+    "access under a literal or finite literal-union key, binding and assignment",
+    "destructuring, compound and update expressions, and exact `in` presence tests.",
+    "",
+    "It does not claim the reading branch ever executes, that the value influences",
+    "behaviour, or that an asserting test is a useful one. Coverage, dead-code",
+    "analysis and test review remain necessary. Declarations, type-only references",
+    "and key enumeration are not reads.",
+  ].join("\n");
+
+  // act
+  const run = runGate(["--help"]);
+
+  // assert
+  assert.strictEqual(run.status, 0);
+  assert.ok(
+    run.stdout.includes(expectedScope),
+    `The help text does not state the bounded claim:\n${run.stdout}`,
+  );
 });
