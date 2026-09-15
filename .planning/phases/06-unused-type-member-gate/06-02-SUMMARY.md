@@ -184,7 +184,7 @@ coverage:
     human_judgment: true
     rationale: "The live counts are still an interim measurement: contracts and whole-object operations are not in the model yet. Whether each remaining row is a defect, a contract or an analyzer gap is 06-06's reconciliation, not a verdict this plan can reach."
 
-duration: 2h 5m
+duration: 1h 50m
 completed: 2026-09-15
 status: complete
 ---
@@ -195,9 +195,9 @@ status: complete
 
 ## Performance
 
-- **Duration:** 2h 5m
-- **Started:** 2026-09-15T09:30:00Z
-- **Completed:** 2026-09-15T11:35:00Z
+- **Duration:** 1h 50m
+- **Started:** 2026-09-15T10:15:00Z
+- **Completed:** 2026-09-15T12:05:00Z
 - **Tasks:** 3
 - **Files modified:** 4 (2 created, 2 modified)
 
