@@ -7,8 +7,10 @@
 //
 // Every reader that looks for a manifest walks this list instead of joining a
 // path of its own: `domain/resolver.ts::readManifest`,
-// `orchestrators/plugin/shared.ts::resolvePluginVersion` tier 1, and the
-// `orchestrators/plugin/info.ts` dependency read. Each keeps its own I/O and
+// `orchestrators/plugin/shared.ts::resolvePluginVersion` tier 1, the
+// `orchestrators/plugin/info.ts` dependency read, and
+// `orchestrators/plugin/dependency-declaration-read.ts`, the cascade's read of
+// the same field. Each keeps its own I/O and
 // its own error contract; only the ordering is shared (D-01-06). Readers
 // locating one file independently is how a fallback lands in one of them and
 // not in the others.

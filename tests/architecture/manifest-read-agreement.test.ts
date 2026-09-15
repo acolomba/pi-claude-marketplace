@@ -18,6 +18,10 @@
  *     than location: the entry and the manifest declare DIFFERENT dependencies,
  *     so the rendered line proves which file the surface treated as
  *     authoritative, not merely that it opened one.
+ *   - `orchestrators/plugin/dependency-declaration-read.ts`, the read the
+ *     install cascade resolves a plugin's dependencies through. It answers the
+ *     same question `info` renders, against the same planted tree, so the two
+ *     cannot disagree about which file declares what a plugin depends on.
  *
  * The list is deliberately open: a reader added later is added here too
  * (MANF-01, MANF-02, MANF-05).
@@ -34,6 +38,7 @@ import {
   resolveStrict,
 } from "../../extensions/pi-claude-marketplace/domain/plugin-resolver.ts";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
+import { readDependencyDeclaration } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-declaration-read.ts";
 import { getPluginInfo } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import { resolvePluginVersion } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -43,6 +48,7 @@ import {
 } from "../edge/handlers/marketplace-seed.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
+import type { ClosureLookupResult } from "../../extensions/pi-claude-marketplace/domain/dependency-closure.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 /** The marketplace entry every case resolves. Its own version is tier 2. */
@@ -131,6 +137,26 @@ const ENTRY_DEPENDENCY = "stale-dep@mp";
 /** What the plugin's OWN bare manifest declares -- the authoritative source. */
 const MANIFEST_DEPENDENCY = "fresh-dep@mp";
 
+/**
+ * The fourth reader, driven against the very same planted tree: the read the
+ * install cascade resolves a plugin's dependencies through.
+ */
+async function readCascadeDeclaration(
+  marketplaceRoot: string,
+  cwd: string,
+): Promise<ClosureLookupResult> {
+  return readDependencyDeclaration({
+    marketplaceRoot,
+    entry: { ...ENTRY, dependencies: [ENTRY_DEPENDENCY] },
+    locations: locationsFor("user", cwd),
+  });
+}
+
+/** The parsed form of a `<name>@mp` token either side may declare. */
+function declares(name: string): ClosureLookupResult {
+  return { kind: "found", dependencies: [{ name, marketplace: "mp" }] };
+}
+
 for (const { label, prepare } of [
   {
     label: "malformed JSON",
@@ -147,7 +173,7 @@ for (const { label, prepare } of [
     },
   },
 ]) {
-  test(`all three readers stop at ${label} instead of using the bare sibling`, async () => {
+  test(`all four readers stop at ${label} instead of using the bare sibling`, async () => {
     await withHermeticHome(async ({ home, cwd }) => {
       // arrange
       const marketplaceRoot = await seedScopedMarketplace(home, cwd);
@@ -166,16 +192,19 @@ for (const { label, prepare } of [
       const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
       const version = await resolvePluginVersion(ENTRY, previousResolution);
       await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+      const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
 
-      // assert
+      // assert -- the fourth reader falls back to the ENTRY, so the bare
+      // sibling's rejected `[42]` list cannot reach it either.
       assert.deepStrictEqual(
-        { state: resolved.state, version, notifications },
+        { state: resolved.state, version, notifications, declaration },
         {
           state: "unavailable",
           version: "1.0.0",
           notifications: [
             "● mp [user] <no autoupdate>\n  ⊘ alpha v1.0.0 (unavailable) {unsupported source}",
           ],
+          declaration: declares("stale-dep"),
         },
       );
     });
@@ -200,7 +229,7 @@ for (const { label, prepare } of [
     },
   },
 ]) {
-  test(`all three readers fall through ${label} to the bare manifest`, async () => {
+  test(`all four readers fall through ${label} to the bare manifest`, async () => {
     await withHermeticHome(async ({ home, cwd }) => {
       // arrange
       const marketplaceRoot = await seedScopedMarketplace(home, cwd);
@@ -212,16 +241,18 @@ for (const { label, prepare } of [
       requireInstallable(resolved);
       const version = await resolvePluginVersion(ENTRY, resolved);
       await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+      const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
 
       // assert
       assert.deepStrictEqual(
-        { state: resolved.state, version, notifications },
+        { state: resolved.state, version, notifications, declaration },
         {
           state: "installable",
           version: "9.9.9",
           notifications: [
             "● mp [user] <no autoupdate>\n  ○ alpha v1.0.0 (available)\n    dependencies: fresh-dep@mp",
           ],
+          declaration: declares("fresh-dep"),
         },
       );
     });
@@ -313,7 +344,7 @@ async function seedScopedMarketplace(home: string, cwd: string): Promise<string>
   return marketplaceRoot;
 }
 
-test("all three readers locate one bare manifest, and info lets it outrank the entry", async () => {
+test("all four readers locate one bare manifest, and two let it outrank the entry", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange -- one tree, one manifest, at the bare candidate only.
     const marketplaceRoot = await seedScopedMarketplace(home, cwd);
@@ -324,13 +355,15 @@ test("all three readers locate one bare manifest, and info lets it outrank the e
     requireInstallable(resolved);
     const version = await resolvePluginVersion(ENTRY, resolved);
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
 
-    // assert -- readers one and two found the file; reader three not only found
-    // it but preferred it to the entry's competing claim.
+    // assert -- readers one and two found the file; readers three and four not
+    // only found it but preferred it to the entry's competing claim.
     assert.strictEqual(resolved.defaultEnabled, false);
     assert.strictEqual(version, "9.9.9");
     assert.strictEqual(notifications.length, 1);
     assert.match(notifications[0]!, new RegExp(`dependencies: ${MANIFEST_DEPENDENCY}`));
     assert.doesNotMatch(notifications[0]!, new RegExp(ENTRY_DEPENDENCY));
+    assert.deepStrictEqual(declaration, declares("fresh-dep"));
   });
 });
