@@ -52,7 +52,7 @@ const EVENT_TO_TRANSLATOR_EXPORT: Readonly<Record<DispatchableEvent, string>> = 
   PostCompact: "translatePostCompact",
   SessionEnd: "translateSessionEnd",
   Stop: "translateStop",
-  StopFailure: "translate",
+  StopFailure: "translateStopFailure",
 };
 
 type Translator = (event: unknown, context: TranslationContext) => unknown;
