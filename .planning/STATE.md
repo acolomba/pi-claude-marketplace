@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
 status: executing
-stopped_at: Completed 06-09-PLAN.md
-last_updated: "2026-09-16T02:05:00.000Z"
+stopped_at: Completed 06-14-PLAN.md
+last_updated: "2026-09-16T03:45:00.000Z"
 last_activity: 2026-09-15
-last_activity_desc: Plan 06-09 complete (bridges/hooks repaired, 138 -> 113 unread measured, zero findings gained)
-state_head: 3d334a1f
+last_activity_desc: Plan 06-14 complete (shared repaired, 113 -> 103 unread measured, zero findings gained)
+state_head: 9046b74f
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 60
-  completed_plans: 46
+  completed_plans: 47
   percent: 63
 milestone_name: test-backlog
 ---
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 06 (Unused Type Member Gate) — EXECUTING
-Plan: 9 of 14
-Status: Executing the six bounded repair plans (06-09 -> 06-14 -> 06-10 -> 06-11 -> 06-13 -> 06-12)
-Last activity: 2026-09-15 — Plan 06-09 complete (bridges/hooks repaired, 138 -> 113 unread measured, zero findings gained)
+Plan: 10 of 14
+Status: Executing the six bounded repair plans (06-09 ✅ -> 06-14 ✅ -> 06-10 -> 06-11 -> 06-13 -> 06-12)
+Last activity: 2026-09-15 — Plan 06-14 complete (shared repaired, 113 -> 103 unread measured, zero findings gained)
 
 Plan 06-01 landed the member gate's compiler tracer: `node
 scripts/check-unused-type-members.mjs` compiles the project once, inventories
@@ -651,6 +651,40 @@ pin; the wave reconciliation updates it once after 05-24 also lands. The combine
 target of 42 → 32 is already reached; 05-24 should leave the total at 32 while changing
 `translate` duplicate-group membership, so compare group member identities, not the count.
 
+Plan 06-14 is the second repair plan and cleared the `shared` owner group. The
+two hand-written `{ cause?: unknown }` mirrors in `shared/errors-bridges.ts` take
+the ambient `ErrorOptions` the rest of the error family already annotates. The
+`(marketplace, plugin)` pair spelled three times in that same file collapses onto
+one `PluginCoordinate`, so the surviving declaration is the one production
+reads -- the frozen copy, its freeze assertion and the refusal-message bytes are
+untouched, because two suites assert them. `Phase3Failure.cause` is gone on
+measured evidence: its three siblings carry production witnesses reaching them
+through `Omit<Phase3Failure, "cause">`, while `cause` -- the one member that
+`Omit` removes -- carries none, and `update-flow.ts`'s `rollbackPartialCauseSlot`
+reads the narrower `UpdatePhase3Failure.cause` instead.
+
+`CommandContext`, `dispatchRow` and the reconcile emitter each ran an `Extract`
+filter over an unbounded type parameter; bounding the parameter by
+`PluginNotificationMessage` made each one a selection the contract engine
+accepts, with all 21 instantiations across 16 orchestrator files unchanged. The
+reconcile emitter's intersection bound was drafted as a `type-refinement` first
+and the engine REFUSED it by name ("does not narrow status"); the bound was
+re-expressed as a selection rather than dropped, and a control measured under the
+old bound, the new bound and no bound proves nothing was lost. The fallback
+severity write now goes through a mapped view over the row's own declared slot,
+and `isDescriptionBearingRow` narrows by the status discriminant its runtime map
+already keys on, with the status set derived from that map.
+
+Live population 113 -> 103, measured by a `(path, owner, key)` set difference at
+every task: ten rows lost, zero gained. Contracts 81 -> 85 (four accepted, one
+refused and recorded). `06-LIVE-TRIAGE.md` is regenerated against digest
+`90d45a1f` at revision `12d3292e` and `--check` reports 103 problems that are ALL
+`unread` -- zero stale, missing, duplicate, incomplete or invalid. Production
+aggregate unit coverage holds at 1,834/1,834 functions and 9,050/9,050 branches
+with no module below 100%, and both direct pins matched exactly. The one `shared/`
+row still standing is `shared/fs-utils.ts:225:32`, which 06-10 owns and must move
+together with its three bridge declaration sites. Next is 06-10.
+
 ## Performance Metrics
 
 | Plan | Duration | Tasks | Files |
@@ -661,6 +695,7 @@ target of 42 → 32 is already reached; 05-24 should leave the total at 32 while
 | Phase 06 P05 | 50 min | 2 tasks | 4 files |
 | Phase 06 P06 | 3h 10m | 2 tasks | 8 files |
 | Phase 06 P09 | 1h 11m | 3 tasks | 12 files |
+| Phase 06 P14 | 1h 37m | 4 tasks | 11 files |
 
 ## Decisions
 
@@ -681,3 +716,7 @@ target of 42 → 32 is already reached; 05-24 should leave the total at 32 while
 - [Phase 06]: A published duplicate is repaired by aliasing it to the declaration its reads already resolve to, never by deleting the published name — structural compatibility is not a read (D-03), so the fifteen AsyncRewakeEntry rows leave the population without the runtime row's own count moving
 - [Phase 06]: `WriteHookConfigResult.written` stays unread on purpose: nine `assert.deepStrictEqual` sites read the whole result, so the row is an analyzer under-credit, not a dead member — `assertionSummary` demands production lineage and `isProductionDerived` does not reach production through a factory-returned closure, which the sibling `RemoveHookConfigResult.removed` proves by carrying two deep-comparison witnesses from the same file
 - [Phase 06]: A repair's delta is measured by a `(path, owner, key)` set difference against a pre-edit baseline, not by comparing totals — a flat total would hide a repair that pushed some other member into `unread`
+- [Phase 06]: A repeated inline shape is repaired by collapsing it onto one named declaration, not by deleting the copy a test asserts — `AgentOwnershipConflictError.stagingFor` is read by two suites and frozen against caller mutation, so the dead rows were the duplication, not the field
+- [Phase 06]: An `Extract` filter over an unbounded type parameter proves nothing, because the parameter stands for everything; bounding it by the union the filter selects within is what makes the selection contract available
+- [Phase 06]: A `type-refinement` proof cannot reach a slot typed by a type parameter — `narrows()` asks whether the refined constituents are a strict subset of the wider ones, and a type parameter is not one of the union's constituents; measured as an exit-2 refusal, and answered by re-expressing the bound as a selection rather than by dropping the constraint
+- [Phase 06]: `Phase3Failure.cause` is a genuine dead slot, not an analyzer under-credit — its three siblings carry production witnesses reaching them through `Omit<Phase3Failure, "cause">`, so the model demonstrably reaches the declaration, and `cause` is the one member the `Omit` removes
