@@ -59,7 +59,7 @@ export type RenderFn<M> = (row: M, probe: SoftDepStatus, mpScope: Scope) => stri
  * `Extract<Msg, { status: K }>` narrows each arm to exactly the message shape
  * that carries status `K`.
  */
-export interface CommandContext<Status extends string, Msg> {
+export interface CommandContext<Status extends string, Msg extends PluginNotificationMessage> {
   readonly Messaging: { readonly label: string };
   readonly render: { [K in Status]: RenderFn<Extract<Msg, { status: K }>> };
 }
@@ -265,8 +265,8 @@ export function notifyUpdateNoOpWithContext<
  * (`emitReconcileAppliedContextCascade` -> `emitWithSummary`).
  */
 export function notifyReconcileAppliedWithContext<
-  Status extends string,
-  Msg extends PluginNotificationMessage & { status: Status },
+  Status extends PluginNotificationMessage["status"],
+  Msg extends Extract<PluginNotificationMessage, { status: Status }>,
 >(
   ctx: NotificationContext,
   pi: ToolInventory,
@@ -291,6 +291,15 @@ export function notifyReconcileAppliedWithContext<
 }
 
 /**
+ * A writable view of a row's own `severity` slot. The slot's type is read off
+ * the declared field rather than spelled again here, so a change to the
+ * severity vocabulary reaches the one localized write in `dispatchRow` instead
+ * of being asserted past by a hand-written literal. A mapped type declares no
+ * members of its own.
+ */
+type WritableRowSeverity = { -readonly [K in "severity"]?: PluginNotificationMessage[K] };
+
+/**
  * Dispatch a single plugin row through the command's render map. The row's
  * `status` selects the arm; the arm reproduces the verbatim bytes of the
  * central switch arm it lifted, so the output is byte-identical. The cast
@@ -313,7 +322,7 @@ export function notifyReconcileAppliedWithContext<
  * degrades gracefully -- the row still flows through the cascade and reaches the
  * user, carrying a self-describing diagnostic instead of vanishing.
  */
-function dispatchRow<Status extends string, Msg>(
+function dispatchRow<Status extends string, Msg extends PluginNotificationMessage>(
   context: CommandContext<Status, Msg>,
   p: PluginNotificationMessage,
   probe: SoftDepStatus,
@@ -329,7 +338,7 @@ function dispatchRow<Status extends string, Msg>(
     // floor the envelope at error. The field is declared `readonly`; this single
     // localized write is the seam that lets the fallback contribute its severity.
     try {
-      (p as { severity?: "error" }).severity = "error";
+      (p as WritableRowSeverity).severity = "error";
     } catch {
       // A frozen/sealed out-of-band row rejects the write in ESM strict mode. The
       // throw must not escape the single `ctx.ui.notify` seam, so degrade: keep
