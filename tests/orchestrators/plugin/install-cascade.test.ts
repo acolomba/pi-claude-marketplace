@@ -469,7 +469,11 @@ test("D-03-07 a member installed BEFORE the run survives a later member's failur
 });
 
 test("RESV-06 an undo that itself fails surfaces a rollback partial without throwing", async (t) => {
-  // arrange
+  // arrange: the double REPORTS the failure the way the production primitive
+  // does. `cascadeUnstagePlugin` wraps its whole body in a try/catch and
+  // returns `{ok: false, dropped, cause}`, so a double that rejects would
+  // exercise a failure mode the real primitive cannot produce -- it would prove
+  // the ledger's plumbing and nothing about the path that ships.
   const environment = await createHermeticEnvironment(t, "install-cascade-undo-fault-");
   const state = await seedMarketplace(environment.cwd, ["bar", "foo"], ["foo"]);
   const locations = locationsFor("project", environment.cwd);
@@ -477,7 +481,11 @@ test("RESV-06 an undo that itself fails surfaces a rollback partial without thro
     runInstallLedger,
     cascadeUnstagePlugin: (plugin, marketplace, memberLocations, installed) =>
       plugin === "bar"
-        ? Promise.reject(new Error("unstage denied"))
+        ? Promise.resolve({
+            ok: false,
+            dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+            cause: new Error("unstage denied"),
+          })
         : cascadeUnstagePlugin(plugin, marketplace, memberLocations, installed),
   };
 
@@ -499,6 +507,68 @@ test("RESV-06 an undo that itself fails surfaces a rollback partial without thro
     cascade.rollbackPartials.map((partial) => ({ phase: partial.phase, msg: partial.msg })),
     [{ phase: `bar@${MARKETPLACE}`, msg: "unstage denied" }],
   );
+  assert.ok(
+    state.marketplaces[MARKETPLACE]?.plugins.bar !== undefined,
+    "the record of a member whose unstage did not finish still owns what is on disk",
+  );
+});
+
+test("RESV-06 an unstage that dropped part of its inventory keeps the record honest", async (t) => {
+  // arrange: the primitive reports the two axes it DID clear before it failed.
+  // The surviving record must name only what is still on disk, or a later
+  // uninstall walks names nothing owns.
+  const environment = await createHermeticEnvironment(t, "install-cascade-undo-partial-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"], ["foo"]);
+  const locations = locationsFor("project", environment.cwd);
+  const seam: InstallCascadeLedgerSeam = {
+    runInstallLedger: (memberState, memberLocations, options, capture, transaction) =>
+      runInstallLedger(memberState, memberLocations, options, capture, transaction).then(
+        (result) => {
+          if (options.plugin === "bar" && result.kind === "installed") {
+            const record = memberState.marketplaces[MARKETPLACE]?.plugins.bar;
+            if (record !== undefined) {
+              record.resources.skills = ["bar-kept", "bar-dropped"];
+              record.resources.prompts = ["bar-prompt"];
+            }
+          }
+
+          return result;
+        },
+      ),
+    cascadeUnstagePlugin: (plugin, marketplace, memberLocations, installed) =>
+      plugin === "bar"
+        ? Promise.resolve({
+            ok: false,
+            dropped: {
+              skills: ["bar-dropped"],
+              commands: ["bar-prompt"],
+              agents: [],
+              hooks: [],
+              mcpServers: [],
+            },
+            cause: new Error("unstage denied"),
+          })
+        : cascadeUnstagePlugin(plugin, marketplace, memberLocations, installed),
+  };
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam,
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "member-failed");
+  assert.deepStrictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.resources.skills, [
+    "bar-kept",
+  ]);
+  assert.deepStrictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.resources.prompts, []);
 });
 
 for (const { label, materializedMarketplace } of [

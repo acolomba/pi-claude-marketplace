@@ -76,6 +76,7 @@ import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
 import { probeDependencyTags } from "./dependency-tag-probe.ts";
 import { runInstallLedger } from "./install-outcome.ts";
+import { applyPartialCascadeFold } from "./shared.ts";
 
 import type {
   DependencyTagListingFailureReason,
@@ -556,6 +557,14 @@ export async function resolveMemberConstraints(
  * closing over the one `do` wrote: a member whose OWN bridge ledger already
  * rolled itself back has no record left, and unstaging against a stale handle
  * would remove artifacts nothing owns any more.
+ *
+ * An unstage that did not finish is RE-THROWN, because a throw is the ledger's
+ * only partial-rollback channel and `{rollback partial}` is what the user is
+ * owed when artifacts survive the unwind. `docs/output-catalog.md`'s
+ * `dependency-install-failed` state promises everything this command
+ * materialized is unwound; a swallowed failure would report that promise kept
+ * while the member's skills, commands, agents, hooks and MCP servers are still
+ * on disk owned by a record the undo had just deleted.
  */
 function buildMemberPhase(
   options: InstallCascadeOptions,
@@ -604,12 +613,24 @@ function buildMemberPhase(
         return;
       }
 
-      await seam.cascadeUnstagePlugin(
+      const outcome = await seam.cascadeUnstagePlugin(
         member.name,
         member.marketplace,
         options.locations,
         installed,
       );
+      if (!outcome.ok) {
+        // The primitive REPORTS rather than throws -- its whole body is a
+        // try/catch returning `{ok: false, dropped, cause}` -- and the ledger's
+        // only partial-rollback channel is a throw. Discarding this outcome
+        // reports a cascade that unwound cleanly while the member's artifacts
+        // are still on disk, so convert it. Subtracting what DID drop first
+        // keeps the record honest about what remains (NFR-3), and the record is
+        // deliberately NOT deleted: it is what still owns those artifacts.
+        applyPartialCascadeFold(installed, outcome.dropped);
+        throw outcome.cause ?? new Error(`Rollback of "${member.key}" did not complete.`);
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- `plugins` is a Record<string, ...> keyed by the member's own token-checked plugin name.
       delete marketplaceRecord.plugins[member.name];
     },
