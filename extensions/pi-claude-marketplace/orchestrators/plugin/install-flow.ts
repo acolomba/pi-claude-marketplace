@@ -8,8 +8,6 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
-import { parseDeclaredDependencies } from "../../domain/dependencies.ts";
-import { toClosureLookupResult } from "../../domain/dependency-closure.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
@@ -27,6 +25,7 @@ import { runPhases } from "../../transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin, crossScopeFlag } from "../marketplace/shared.ts";
 
+import { readDependencyDeclaration } from "./dependency-declaration-read.ts";
 import { formatClosureFailure, runInstallCascade } from "./install-cascade.ts";
 import { probeInstallClone } from "./install-clone-probe.ts";
 import { resolveInstallDeclaredEnabled } from "./install-declared-enabled.ts";
@@ -57,6 +56,7 @@ import type {
 } from "./install-outcome.ts";
 import type { InstallMsg } from "./install.messaging.ts";
 import type { ClosureLookupResult, ClosureSubject } from "../../domain/dependency-closure.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -254,22 +254,24 @@ function collectInstalledKeys(state: ExtensionState): ReadonlySet<string> {
 }
 
 /**
- * The cascade's catalog read: one plugin's declared dependencies, taken from
- * the marketplace entry that declares it.
+ * The cascade's catalog read: one plugin's declared dependencies, in the
+ * D-01-32 read order. The plugin's OWN manifest answers wherever it is readable
+ * without a network call, and the marketplace entry that declares the plugin is
+ * the fallback. `dependency-declaration-read.ts` owns that order and the
+ * filesystem contract it rests on; this function locates the entry for it.
  *
  * NFR-5: fs-and-cache only. `resolveInstallMarketplaceSource` answers the
- * CMP-2..4 source-scope question from state, and `loadMarketplaceManifest` is
- * the memoized PI-2 read of bytes already on disk.
+ * CMP-2..4 source-scope question from state, `loadMarketplaceManifest` is the
+ * memoized PI-2 read of bytes already on disk, and the declaration read reaches
+ * no materializing path at all.
  *
- * The read order is the marketplace ENTRY alone. A dependency declared only in
- * a plugin's own `.claude-plugin/plugin.json` is not visible to the cascade
- * until the plugin-manifest-first read order lands; that swap replaces this
- * function body and nothing else, because the closure takes its catalog read
- * as an injected parameter.
+ * D-03-05: the read is handed the TARGET scope's locations, because that is the
+ * scope every cascade member installs into and therefore the clone cache a
+ * git-source member's manifest would live in.
  */
 async function lookupCascadeDependencies(
   state: ExtensionState,
-  core: { readonly scope: Scope; readonly cwd: string },
+  core: { readonly scope: Scope; readonly cwd: string; readonly locations: ScopedLocations },
   subject: ClosureSubject,
 ): Promise<ClosureLookupResult> {
   const source = await resolveInstallMarketplaceSource({
@@ -288,7 +290,11 @@ async function lookupCascadeDependencies(
     return { kind: "absent" };
   }
 
-  return toClosureLookupResult(parseDeclaredDependencies(declared.entry.dependencies));
+  return readDependencyDeclaration({
+    marketplaceRoot: source.sourceRecord.marketplaceRoot,
+    entry: declared.entry,
+    locations: core.locations,
+  });
 }
 
 /**
@@ -826,7 +832,7 @@ async function installPluginWithTransaction(
         state,
         locations,
         rootKey,
-        lookup: (subject) => lookupCascadeDependencies(state, { scope, cwd }, subject),
+        lookup: (subject) => lookupCascadeDependencies(state, { scope, cwd, locations }, subject),
         ledgerOptionsFor: (member) =>
           buildInstallLedgerOptions(opts, {
             scope,

@@ -478,6 +478,7 @@ function buildSeededPluginManifest(
     pluginJsonVersion?: string | null;
     experimental?: object;
     pluginJsonDefaultEnabled?: boolean;
+    declareDependencies?: boolean;
   },
 ): Record<string, unknown> {
   return {
@@ -485,6 +486,15 @@ function buildSeededPluginManifest(
     ...(opts.pluginJsonVersion === undefined
       ? { version: "0.0.1" }
       : opts.pluginJsonVersion !== null && { version: opts.pluginJsonVersion }),
+    // D-01-32: the cascade reads the plugin's OWN manifest first and treats it
+    // as authoritative, so a fixture that declared the dependency on the entry
+    // alone would have this manifest suppress it. Both sides carry the same
+    // declaration, the shape a real plugin ships, which keeps these fixtures
+    // about the CASCADE rather than about the read order -- the read order has
+    // its own cases, where the two sides deliberately disagree.
+    ...(opts.declareDependencies === true && {
+      dependencies: [{ name: "some-other-plugin", version: "*" }],
+    }),
     // D-64-06: declaring experimental kinds drives `resolveStrict` to the
     // `partially-available` arm without a structural defect.
     ...(opts.experimental !== undefined && { experimental: opts.experimental }),
@@ -4634,6 +4644,59 @@ test("RESV-01 / D-03-06: a cascade dependency is declared in the parent's own fi
         '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "some-other-plugin@mp": {},\n    "hello@mp": {}\n  }\n}\n',
       );
       await assert.rejects(stat(locations.configLocalJsonPath), /ENOENT/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RESV-01 / D-01-32: a dependency declared only in the plugin's own manifest installs", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-ownmanifest-"));
+    try {
+      // arrange: the marketplace ENTRY declares nothing, and only the plugin's
+      // own manifest names the dependency. A lookup that read the entry alone
+      // would install `hello` by itself and this case would pass vacuously.
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot,
+        marketplaceName: "mp",
+        pluginName: "hello",
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      await writeFile(
+        path.join(marketplaceRoot, "plugins", "hello", ".claude-plugin", "plugin.json"),
+        JSON.stringify({
+          name: "hello",
+          version: "0.0.1",
+          dependencies: [{ name: "some-other-plugin", version: "*" }],
+        }),
+      );
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert: both plugins recorded, and both keys declared in the parent's
+      // own config file -- whole values, never one filtered row.
+      const after = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(Object.keys(after.marketplaces["mp"]?.plugins ?? {}).sort(), [
+        "hello",
+        "some-other-plugin",
+      ]);
+      assert.equal(
+        await readFile(locations.configJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "some-other-plugin@mp": {},\n    "hello@mp": {}\n  }\n}\n',
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
