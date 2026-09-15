@@ -1094,3 +1094,120 @@ test("a member outside the named intersection is refused", async (t) => {
     },
   );
 });
+
+// A union where two variants spell one discriminant value beside a third that
+// spells another. The key still tells the variants apart into groups, which is
+// what a filter over it selects. The filter starts at line 19, column 12, and
+// its own `status` is declared at line 19, column 31.
+const groupedSelectionCases = `export interface Started {
+  status: "started";
+  at: string;
+}
+
+export interface Paused {
+  status: "paused";
+  at: string;
+}
+
+export interface Resumed {
+  status: "paused";
+  by: string;
+}
+
+export type Message = Started | Paused | Resumed;
+
+export type Dispatch<K extends Message["status"]> = (
+  message: Extract<Message, { status: K }>,
+) => string;
+`;
+
+const groupedSelectionContract = {
+  id: `${casesPath}:19:31`,
+  owner: "Dispatch.message",
+  key: "status",
+  category: "type-selection",
+  purpose: "Selects the message group each dispatch arm receives.",
+  filter: `${casesPath}:19:12`,
+};
+
+test("a discriminant two variants share still tells the union apart", async (t) => {
+  // arrange
+  const report = await analyzeWith(
+    t,
+    groupedSelectionCases,
+    documentWith(groupedSelectionContract),
+  );
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "Dispatch.message", "status").status, "explicit-contract");
+  assert.deepStrictEqual(memberFor(report, "Dispatch.message", "status").reasons, [
+    "type-selection: Selects the message group each dispatch arm receives. " +
+      `(filter ${casesPath}:19:12 selects by status)`,
+  ]);
+});
+
+// The intersection at line 8, column 15 requires a slot the rest of it leaves
+// optional. Requiring it is the narrowing: the refined shape admits strictly
+// fewer values than one that could omit the slot entirely.
+const optionalRefinementCases = `export interface Outcome {
+  partition: "failed";
+  failureClass?: "manual-recovery";
+}
+
+export function isManual(
+  outcome: Outcome,
+): outcome is Outcome & { failureClass: "manual-recovery" } {
+  return outcome.partition === "failed";
+}
+
+export function stillOptional(
+  outcome: Outcome,
+): outcome is Outcome & { failureClass?: "manual-recovery" } {
+  return outcome.partition === "failed";
+}
+`;
+
+const optionalRefinementContract = {
+  id: `${casesPath}:8:27`,
+  owner: "isManual",
+  key: "failureClass",
+  category: "type-refinement",
+  purpose: "Names the outcome shape that always carries a recovery class.",
+  refines: `${casesPath}:8:15`,
+};
+
+test("requiring a slot the rest of the intersection leaves optional narrows it", async (t) => {
+  // arrange
+  const report = await analyzeWith(
+    t,
+    optionalRefinementCases,
+    documentWith(optionalRefinementContract),
+  );
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "isManual", "failureClass").status, "explicit-contract");
+  assert.deepStrictEqual(memberFor(report, "isManual", "failureClass").reasons, [
+    "type-refinement: Names the outcome shape that always carries a recovery class. " +
+      `(intersection ${casesPath}:8:15 narrows failureClass)`,
+  ]);
+});
+
+test("an intersection that leaves an optional slot optional narrows nothing", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      optionalRefinementCases,
+      documentWith({
+        ...optionalRefinementContract,
+        id: `${casesPath}:14:27`,
+        owner: "stillOptional",
+        refines: `${casesPath}:14:15`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:14:27 refines ${casesPath}:14:15 does not narrow failureClass`,
+    },
+  );
+});
