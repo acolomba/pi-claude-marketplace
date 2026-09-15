@@ -128,13 +128,13 @@ function applyToolResultPatch(event: ToolResultEvent, updatedToolOutput: unknown
     return;
   }
 
-  const patch = updatedToolOutput as { content?: unknown; isError?: unknown };
+  const patch = updatedToolOutput as Partial<Pick<ToolResultEvent, "content" | "isError">>;
   if (Array.isArray(patch.content)) {
-    (event as { content: unknown }).content = patch.content;
+    event.content = patch.content;
   }
 
   if (typeof patch.isError === "boolean") {
-    (event as { isError: boolean }).isError = patch.isError;
+    event.isError = patch.isError;
   }
 }
 

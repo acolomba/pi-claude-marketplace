@@ -47,7 +47,6 @@ const MAX_TIMEOUT_SECONDS = Math.floor(2_147_483_647 / MS_PER_SECOND) - SIGKILL_
  * shape by structural subtyping.
  */
 export interface ChildLike {
-  pid?: number | undefined;
   /** `null` while the child is alive; a number once it exits on its own. */
   exitCode?: number | null | undefined;
   /** `null` while the child is alive; the signal that terminated it. */
