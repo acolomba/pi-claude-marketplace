@@ -316,7 +316,7 @@ test("AUTH-09: domain/github-auth.ts reason: fields never interpolate a token", 
   assertNoCredentialInLiterals(GITHUB_AUTH_FILE, stripped, /reason:\s*(`(?:[^`\\]|\\.)*`)/g);
 });
 
-test("AUTH-09: platform/git.ts hookDebugLog calls never interpolate a credential field", async () => {
+test("AUTH-09: the git hookDebugLog calls never interpolate a credential field", async () => {
   // buildAuthCallbacks routes onAuth/onAuthFailure failure reasons through
   // hookDebugLog (see the CP-10 discussion above buildAuthCallbacks). That
   // call form is not `new Error(...)` or `notifyFn(...)`, so it falls
@@ -333,17 +333,34 @@ test("AUTH-09: platform/git.ts hookDebugLog calls never interpolate a credential
   // following each `hookDebugLog(` as one token and scans it in full, so a
   // leak appended after a nested function call's closing paren (e.g. after
   // `${errorMessage(err)}`) is caught too.
-  // buildAuthCallbacks moved to platform/git-auth-callbacks.ts, taking all three
-  // hookDebugLog calls with it. Both files are scanned: the new module is where
-  // the calls live now, and git.ts stays covered so a call returning there is
-  // caught rather than landing outside the gate.
+  // Both git modules are scanned as one subject: `git-auth-callbacks.ts` carries
+  // the calls, and `git.ts` is covered so a call added there is caught rather
+  // than landing outside the gate.
   const hookDebugLogWithToken =
     /hookDebugLog\s*\((?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
+  const hookDebugLogCall = /hookDebugLog\s*\(/g;
+  const SCANNED = [GIT_PLATFORM_FILE, GIT_AUTH_CALLBACKS_FILE];
 
-  for (const rel of [GIT_PLATFORM_FILE, GIT_AUTH_CALLBACKS_FILE]) {
+  const sources = new Map<string, string>();
+  let scannedCallSites = 0;
+  for (const rel of SCANNED) {
     const src = await readFile(path.join(REPO_ROOT, rel), "utf8");
     const stripped = stripComments(src);
+    sources.set(rel, stripped);
+    scannedCallSites += [...stripped.matchAll(hookDebugLogCall)].length;
+  }
 
+  // D-07-03: the subject is counted BEFORE either check runs, because both
+  // checks are satisfied by a file that holds no `hookDebugLog(` at all --
+  // which is how an AUTH-09 scan aimed at a module the calls no longer live in
+  // reports success over nothing. Either file may be empty of them on its own;
+  // the SET may not.
+  assert.ok(
+    scannedCallSites > 0,
+    `AUTH-09 / D-07-03: no hookDebugLog call site exists in ${SCANNED.join(" or ")}, so both checks below pass over nothing. Re-aim the gate at the module that now carries the calls.`,
+  );
+
+  for (const [rel, stripped] of sources) {
     assert.equal(
       hookDebugLogWithToken.test(stripped),
       false,
