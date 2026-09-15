@@ -1,0 +1,120 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-09-15T20:45:54.950Z",
+  "phase": "4",
+  "phase_name": "Install provenance",
+  "phase_dir": ".planning/phases/04-install-provenance",
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "step": "discuss",
+  "completed_tasks": [
+    {
+      "id": 1,
+      "name": "Phase 3 (Dependency resolution) executed, reviewed, fixed, verified and UAT-closed",
+      "status": "done",
+      "commit": "ae14ad68"
+    },
+    {
+      "id": 2,
+      "name": "Phase 4 discuss: 4 gray areas selected, 3 substantially settled",
+      "status": "in_progress",
+      "progress": "Provenance value shape, schema/default handling, and the desired-state-config model are all decided. Two questions remain open and CONTEXT.md is NOT yet written."
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 3,
+      "name": "Answer the 2 open discuss questions (scope of the config-write reversal; orphan sweeping)",
+      "status": "not_started"
+    },
+    {
+      "id": 4,
+      "name": "Write 04-CONTEXT.md and 04-DISCUSSION-LOG.md, commit",
+      "status": "not_started"
+    },
+    {
+      "id": 5,
+      "name": "Reword PROV-04 in REQUIREMENTS.md to match the silent-upgrade decision",
+      "status": "not_started"
+    },
+    { "id": 6, "name": "/gsd-plan-phase 4", "status": "not_started" },
+    { "id": 7, "name": "/gsd-execute-phase 4", "status": "not_started" },
+    {
+      "id": 8,
+      "name": "Phase 5 (Prune on uninstall) — discuss, plan, execute",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [
+    {
+      "description": "Two Phase 4 discuss questions are unanswered: (a) where the config-write reversal lands — all in Phase 4 in a safe order, reopen Phase 3, or defer to Phase 5; (b) whether reconcile keeps auto-uninstalling orphan records or reports them instead.",
+      "type": "human_action",
+      "workaround": "Recommendations were given and are recorded in .continue-here.md: (a) all in Phase 4, provenance -> reconcile guard -> remove config write; (b) keep sweeping orphans, exempting only provenance:\"dependency\" records."
+    }
+  ],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {
+      "action": "Answer the two open discuss questions above",
+      "context": "CONTEXT.md cannot be written without them; both change Phase 4's plan shape.",
+      "blocking": true
+    },
+    {
+      "action": "Provide a genuinely private repository on github.com or gitlab.com to close UAT 2's remaining sub-item",
+      "context": "A SUCCESSFUL credential challenge is still unexercised. findProviderForHost matches only github.com and gitlab.com (PROV-01), so no self-hosted fixture can reach the Device Flow path. The 401 arm WAS verified end to end. Recorded in 03-UAT.md Gaps.",
+      "blocking": false
+    },
+    {
+      "action": "Confirm whether alpha/beta/gamma were manually uninstalled from the UAT home",
+      "context": "tmp/pi-uat ends with zero plugins in both state.json and claude-plugins.json, but only zeta and omega were uninstalled in the pasted transcript. Most likely a deliberate teardown; if not, an unexplained removal would be a live reconcile bug.",
+      "blocking": false
+    },
+    {
+      "action": "Decide whether .planning/config.json should be committed",
+      "context": "It carries an agent-made change (git.branching_strategy: milestone -> none) alongside a deliberate uncommitted operator edit (model_profile_overrides.codex). Left uncommitted so the operator's edit is not bundled in. The setting reads from disk, so Phases 4-5 honor it either way.",
+      "blocking": false
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "The desired-state config (claude-plugins.json) holds ONLY explicitly-requested plugins. Cascade-installed dependencies must NOT be written to it.",
+      "rationale": "Operator decision, 2026-09-15. Phase 3's CR-01 fix writes every cascade dependency into the config so buildUninstallBucket does not sweep it. That conflates 'what the user asked for' with 'what was pulled in to satisfy it', and destroys the very distinction --prune needs. Dependencies are already derivable from the marketplace records.",
+      "phase": "4"
+    },
+    {
+      "decision": "Provenance stores the MODE ONLY: \"explicit\" | \"dependency\". No declaring-plugin list.",
+      "rationale": "A stored declarer list is a cache of another plugin's manifest and drifts whenever any plugin is installed, updated or uninstalled. --prune instead re-derives 'does anything still need this?' at prune time via the offline dependency-declaration-read, so it cannot go stale.",
+      "phase": "4"
+    },
+    {
+      "decision": "schemaVersion bumps 2 -> 3; absence of the provenance field defaults to \"explicit\"; the upgrade is SILENT.",
+      "rationale": "Operator decision. No released version (through v0.18.3) had a dependency cascade, so every pre-existing record genuinely IS explicit — the default is truthful, not a guess. Records Phase 3 wrote on development trees are mislabelled, which the ROADMAP already accepted ('lands on development trees only, and this milestone releases as a single version').",
+      "phase": "4"
+    },
+    {
+      "decision": "PROV-04 must be reworded in REQUIREMENTS.md.",
+      "rationale": "As written it demands a record be 'reported as stale rather than silently repaired', but the silent-upgrade decision means no report is emitted. Proposed replacement: 'an install record written before this milestone is upgraded to the current schema with a truthful default, and no record is misreported as a dependency.' The MIGR-01 guard-wording question (notify text + recovery command for 'stale state, absent config') goes back to MIGR-01 rather than being answered here.",
+      "phase": "4"
+    },
+    {
+      "decision": "Phase 3 stays closed and verified; the config write is treated as a bridge Phase 4 retires.",
+      "rationale": "RECOMMENDED, NOT YET CONFIRMED. Sequencing provenance -> reconcile guard -> remove config write means the CR-01 sweep is never reopened between steps, and CR-01's regression test stays honest throughout (it asserts the dependency survives a reload, which remains true via a different mechanism).",
+      "phase": "4"
+    }
+  ],
+  "uncommitted_files": [
+    " M .claude/settings.json",
+    " M .codex/config.toml",
+    " M .planning/config.json",
+    " M .planning/state.json",
+    "?? .claude/CLAUDE.md",
+    "?? .codegraph/",
+    "?? .mcp.json",
+    "?? AGENTS.md"
+  ],
+  "uncommitted_files_note": "Measured via git status --porcelain at pause time. All 8 are pre-existing operator-owned files EXCEPT .planning/config.json, which additionally carries the agent-made branching_strategy change. No phase work is uncommitted.",
+  "next_action": "Answer the two open discuss questions in .continue-here.md, then write .planning/phases/04-install-provenance/04-CONTEXT.md capturing the five decisions above.",
+  "context_notes": "Phase 4's discussion uncovered an architectural correction that is larger than the phase as originally scoped: the desired-state config should never have received cascade dependencies. Provenance therefore becomes load-bearing for RECONCILE correctness, not just for --prune — once the config write is removed, provenance is the only thing stopping buildUninstallBucket from sweeping dependencies. That ordering constraint is the single most important thing to preserve when resuming."
+}
