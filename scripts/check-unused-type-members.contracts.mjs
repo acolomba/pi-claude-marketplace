@@ -41,7 +41,13 @@ const categoryKeys = {
   "external-input": ["upstream", "necessity"],
   "nominal-brand": ["symbol"],
   "type-selection": ["filter"],
+  "type-refinement": ["refines"],
 };
+
+// A refinement is followed one slot at a time into the shape it narrows. A
+// chain longer than this is not something a maintainer reads as one narrowing,
+// and stopping early refuses a contract rather than accepting an unproven one.
+const deepestRefinement = 4;
 
 const projectPathOf = (projectRoot, fileName) =>
   path.relative(projectRoot, fileName).split(path.sep).join("/");
@@ -561,6 +567,19 @@ function isDeferred(type) {
 }
 
 /**
+ * The union a selection really chooses from. A type parameter stands for
+ * whatever satisfies its bound, so the bound is the set the filter selects
+ * within and the place the discriminant has to live. An unbounded parameter
+ * stands for everything and resolves to itself, which discriminates nothing.
+ */
+function selectionSourceOf(filterNode, context) {
+  const written = context.checker.getTypeFromTypeNode(filterNode.typeArguments[0]);
+  return written.isTypeParameter()
+    ? (context.checker.getBaseConstraintOfType(written) ?? written)
+    : written;
+}
+
+/**
  * Proves a member exists to select a variant rather than to be read. The member
  * has to sit in the filter position of the named selection, the source has to
  * discriminate on its key, and a selection the checker already resolved has to
@@ -581,7 +600,7 @@ function proveTypeSelection(entry, candidate, context) {
     fail(`${entry.id} is not a member of the filter at ${entry.filter}`);
   }
 
-  const source = context.checker.getTypeFromTypeNode(filterNode.typeArguments[0]);
+  const source = selectionSourceOf(filterNode, context);
 
   if (!source.isUnion() || discriminantTypes(source, candidate.key, context) === undefined) {
     fail(
@@ -690,11 +709,166 @@ function proveExternalInput(entry, candidate, context) {
   return `(upstream ${entry.upstream} requires it at ${entry.necessity})`;
 }
 
+/**
+ * The chain of keys leading from one operand of this intersection down to this
+ * declaration, and nothing when the declaration sits somewhere else entirely. A
+ * member of a literal nested inside an operand narrows the same slot one level
+ * further in, so its path is just longer.
+ */
+function refinementPathOf(node, intersection) {
+  const path = [];
+  let current = node;
+
+  while (
+    current !== undefined &&
+    ts.isPropertySignature(current) &&
+    path.length <= deepestRefinement
+  ) {
+    const key = literalNameOf(current);
+    const literal = current.parent;
+
+    if (key === undefined || literal === undefined || !ts.isTypeLiteralNode(literal)) {
+      return undefined;
+    }
+
+    path.unshift(key);
+
+    if (intersection.types.includes(literal)) {
+      return { path, operand: literal };
+    }
+
+    current = literal.parent;
+  }
+
+  return undefined;
+}
+
+/** The type one chain of keys leads to, or nothing when the chain breaks. */
+function typeAlongPath(type, path, context) {
+  let current = type;
+
+  for (const key of path) {
+    const property = context.checker.getPropertyOfType(current, key);
+    const declaration = property?.valueDeclaration ?? property?.declarations?.[0];
+
+    if (property === undefined || declaration === undefined) {
+      return undefined;
+    }
+
+    current = context.checker.getTypeOfSymbolAtLocation(property, declaration);
+  }
+
+  return current;
+}
+
+function constituentsOf(type) {
+  return type.isUnion() ? type.types : [type];
+}
+
+function narrowsShape(refined, wider, context, depth) {
+  let narrowed = false;
+
+  for (const property of context.checker.getPropertiesOfType(refined)) {
+    const inner = typeAlongPath(refined, [property.name], context);
+    const outer = typeAlongPath(wider, [property.name], context);
+
+    if (inner === undefined || outer === undefined) {
+      return false;
+    }
+
+    narrowed = narrows(inner, outer, context, depth - 1) || narrowed;
+  }
+
+  return narrowed;
+}
+
+/**
+ * Whether the refined type admits strictly less than the wider one already did.
+ *
+ * A shape narrows when every slot it spells is a slot the wider shape already
+ * has and at least one of them is itself narrower; a slot the wider shape does
+ * not have is an addition, not a narrowing. Anything else narrows only by
+ * leaving out possibilities the wider type allowed, which is fewer constituents
+ * drawn from the same set.
+ */
+function narrows(refined, wider, context, depth) {
+  if (depth > 0 && !refined.isUnion() && (refined.flags & ts.TypeFlags.Object) !== 0) {
+    return narrowsShape(refined, wider, context, depth);
+  }
+
+  const allowed = constituentsOf(wider);
+  const chosen = constituentsOf(refined);
+  return chosen.length < allowed.length && chosen.every((part) => allowed.includes(part));
+}
+
+function refinedTypeOf(node, context) {
+  return node.type === undefined ? undefined : context.checker.getTypeFromTypeNode(node.type);
+}
+
+/**
+ * The type the rest of the intersection already gives this slot, or nothing
+ * when no other operand declares it at all.
+ */
+function widerTypeFor(intersection, operand, path, context) {
+  for (const member of intersection.types) {
+    if (member === operand) {
+      continue;
+    }
+
+    const found = typeAlongPath(context.checker.getTypeFromTypeNode(member), path, context);
+
+    if (found !== undefined) {
+      return found;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Proves a member exists to narrow a slot rather than to be read. The member has
+ * to sit in an operand of the named intersection, the rest of the intersection
+ * has to already declare the slot it names, and what this operand writes there
+ * has to admit strictly less than what the rest allowed.
+ */
+function proveTypeRefinement(entry, candidate, context) {
+  const node = declarationOf(entry, candidate, context);
+  const site = parseSite(entry.refines, `${entry.id} refines`);
+  const intersection = resolveNode(site, `${entry.id} refines`, context);
+
+  if (!ts.isIntersectionTypeNode(intersection)) {
+    fail(`${entry.id} refines ${entry.refines} is not an intersection type`);
+  }
+
+  const found = refinementPathOf(node, intersection);
+
+  if (found === undefined) {
+    fail(`${entry.id} is not a member of the intersection at ${entry.refines}`);
+  }
+
+  const wider = widerTypeFor(intersection, found.operand, found.path, context);
+
+  if (wider === undefined) {
+    fail(
+      `${entry.id} refines ${entry.refines} adds ${candidate.key}, which the rest of the intersection does not declare`,
+    );
+  }
+
+  const refined = refinedTypeOf(node, context);
+
+  if (refined === undefined || !narrows(refined, wider, context, deepestRefinement)) {
+    fail(`${entry.id} refines ${entry.refines} does not narrow ${candidate.key}`);
+  }
+
+  return `(intersection ${entry.refines} narrows ${found.path.join(".")})`;
+}
+
 const provers = {
   "external-output": proveExternalOutput,
   "external-input": proveExternalInput,
   "nominal-brand": proveNominalBrand,
   "type-selection": proveTypeSelection,
+  "type-refinement": proveTypeRefinement,
 };
 
 function decisionFor(entry, context) {
