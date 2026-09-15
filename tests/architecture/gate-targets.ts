@@ -619,6 +619,16 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
     "HOOKS_VALIDATOR",
   ],
   "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts": ["HOOKS_CONFIG_SCHEMA"],
+  // RESV-03: the version-constraint algebra is reached from the tag probe,
+  // which no production entry point composes yet -- the install cascade wires
+  // it in. Until it does, a production run reads none of these three, so the
+  // census measures them as unowned. Drop this entry in the commit that makes
+  // the cascade call the probe.
+  "extensions/pi-claude-marketplace/domain/dependency-range.ts": [
+    "intersectDependencyRanges",
+    "recordedVersionSatisfies",
+    "renderConstraintRange",
+  ],
   "extensions/pi-claude-marketplace/domain/plugin-resolver.ts": ["resolveLoose"],
   "extensions/pi-claude-marketplace/domain/resolver-types.ts": ["ResolvedPluginSchema"],
   "extensions/pi-claude-marketplace/domain/unsupported-components.ts": [
