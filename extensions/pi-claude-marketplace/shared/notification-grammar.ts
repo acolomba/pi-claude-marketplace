@@ -69,8 +69,9 @@ export const ICON_DISABLED = "◍";
  * yet materialized locally. The dotted circle reads "declared but not
  * present". Distinct from `ICON_DISABLED`, which uses `◍` (U+25CD).
  *
- * Module-private: `renderRemoteRow` below is the only place this glyph reaches
- * a row, so that row's bytes are its public contract.
+ * Module-private: two renderers carry this glyph to a row -- `renderRemoteRow`
+ * below and `pluginInfoStatusGlyph`'s `remote` arm, which the `info` plugin row
+ * joins -- so those rows' bytes are its public contract.
  */
 const ICON_REMOTE = "◌";
 
@@ -95,8 +96,10 @@ export const ICON_PARTIALLY_INSTALLED = "◉";
  * (`ICON_UNINSTALLABLE`, reserved for unavailable / blocked / failed / manual-
  * recovery) and from `◉` (`ICON_PARTIALLY_INSTALLED`, the *installed*-degraded row).
  *
- * Module-private: `renderPartiallyAvailableRow` below is the only place this
- * glyph reaches a row, so that row's bytes are its public contract.
+ * Module-private: two renderers carry this glyph to a row --
+ * `renderPartiallyAvailableRow` below and `pluginInfoStatusGlyph`'s
+ * `partially-available` arm, which the `info` plugin row joins -- so those
+ * rows' bytes are its public contract.
  */
 const ICON_PARTIALLY_AVAILABLE = "⊖";
 

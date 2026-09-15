@@ -2,9 +2,17 @@
 //
 // Production composition owner for the plugin operations. Each flow module
 // keeps its semantic factory and its injected read or transaction contract;
-// this owner is the single place that binds those contracts to the concrete
-// Node implementations, so a command boundary asks for an operation rather than
-// assembling one.
+// this owner binds those contracts to the concrete Node implementations, so a
+// command boundary asks for an operation rather than assembling one.
+//
+// Reinstall is the exception, and the user-facing verb takes the other path.
+// `reinstall-flow.ts` binds `REAL_REINSTALL_TRANSACTION` a second time in its
+// module-private `createNodeReinstallPlugin`, which feeds the exported bulk
+// `createNodeReinstallPlugins` that `edge/register.ts` calls for
+// `/claude:plugin reinstall`. `createReinstallOperation` below binds the same
+// transaction for the single-plugin form `reconcile/backfill.ts` takes. The two
+// bodies are identical and nothing holds them in step, so a change made to one
+// binding reaches only that binding's callers.
 //
 // The two read commands are bound as values rather than behind a factory: they
 // take no routing or completion-cache owner from their caller, so there is

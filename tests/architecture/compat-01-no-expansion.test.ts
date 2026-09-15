@@ -23,8 +23,10 @@
  *   Glyphs (COMPAT-01) -- each of the seven glyphs equals its exact code point,
  *   written as an escape so the pin states the code point rather than relying on
  *   the reader to identify a character by eye. Five are exported and pinned
- *   directly; the two that are module-private are pinned through the rows that
- *   carry them. There is no COLLECTION of glyphs, so an EIGHTH glyph cannot be
+ *   directly; the two that are module-private are pinned through the three rows
+ *   that carry them -- their own row renderer each, plus the `info` plugin row,
+ *   which reaches both through `pluginInfoStatusGlyph`. There is no COLLECTION
+ *   of glyphs, so an EIGHTH glyph cannot be
  *   caught by comparing a tuple; the notification grammar owner's
  *   declaration count is the only way to catch one, and it is one of the two
  *   clauses here that scan source.
@@ -86,6 +88,7 @@ import {
   ICON_PARTIALLY_INSTALLED,
   ICON_UNINSTALLABLE,
   renderPartiallyAvailableRow,
+  renderPluginInfo,
   renderRemoteRow,
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
@@ -104,6 +107,7 @@ import type {
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   MarketplaceStatus,
+  PluginInfoMessage,
   PluginStatus,
   Reason,
   StatusToken,
@@ -137,8 +141,9 @@ const NOTIFICATION_TYPES_REL: (typeof SCOPE_FENCE_TARGETS)[number] =
 
 /**
  * The two glyphs whose constants are module-private, written as escapes for the
- * reason the code-point clause gives. Their public carriers are the two row
- * renderers, and the row clause below pins the exact bytes each emits.
+ * reason the code-point clause gives. Each has two public carriers -- its own
+ * row renderer, and the `info` plugin row via `pluginInfoStatusGlyph` -- and the
+ * row clause below pins the exact bytes all three emit.
  */
 const REMOTE_GLYPH = "\u25CC";
 const PARTIALLY_AVAILABLE_GLYPH = "\u2296";
@@ -418,9 +423,20 @@ test("COMPAT-01: every exported glyph constant holds its inherited code point", 
   assert.deepEqual(actual, expected, "COMPAT-01: every exported glyph keeps its named code point");
 });
 
+/** The unresolved `info` message one status renders, with no optional field set. */
+function infoMessageFor(status: "remote" | "partially-available"): PluginInfoMessage {
+  return {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: { status, name: "alpha", componentsResolved: false },
+  };
+}
+
 test("COMPAT-01: the two module-private glyphs reach the output on their own rows", () => {
   // arrange
-  // `◌` and `⊖` are carried by exactly one row renderer each, so the rendered
+  // `◌` and `⊖` are each carried by one dedicated row renderer, so the rendered
   // row IS the pin: the glyph is the row's first token, and the whole line is
   // stated so a glyph swap and a spacing change both fail here.
   const expected = [
@@ -448,6 +464,30 @@ test("COMPAT-01: the two module-private glyphs reach the output on their own row
     actual,
     expected,
     "COMPAT-01: the remote and partially-available rows keep their named code points and their spacing.",
+  );
+});
+
+test("COMPAT-01: the two module-private glyphs reach the info row through their second carrier", () => {
+  // arrange
+  // `pluginInfoStatusGlyph` carries both glyphs to the `info` plugin row, so
+  // the rows above are not the whole public contract. This pins that carrier in
+  // its own right: an edit that gives the info arm its own literal leaves the
+  // two row renderers green and fails here.
+  const expected = [
+    `  ${REMOTE_GLYPH} alpha (remote)`,
+    `  ${PARTIALLY_AVAILABLE_GLYPH} alpha (partially-available)`,
+  ];
+
+  // act
+  const actual = (["remote", "partially-available"] as const).map(
+    (status) => renderPluginInfo(infoMessageFor(status), BOTH_COMPANIONS_LOADED).split("\n")[1],
+  );
+
+  // assert
+  assert.deepEqual(
+    actual,
+    expected,
+    "COMPAT-01: the info plugin row keeps the named code points of the two module-private glyphs.",
   );
 });
 
