@@ -5,16 +5,16 @@ milestone_name: transitive-dependencies
 current_phase: 3
 current_phase_name: Dependency resolution
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-09-15T00:59:33.744Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-09-15T01:59:02.597Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 3 execution started
-state_head: a554572c694158a7ff8d3f9c268501123def6c99
+state_head: aa333379b735de8ea7b985d074c33e33f03404d4
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 13
-  completed_plans: 7
+  completed_plans: 8
   percent: 40
 ---
 
@@ -35,7 +35,7 @@ is archived under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 3 (Dependency resolution) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Plan 03-01 complete; wave 2 unblocked
 Plan 03-01 shipped the phase's tracer. `install foo@mp` now installs the
 plugins `foo` declares as dependencies: `domain/dependency-closure.ts` is a
@@ -250,6 +250,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 02 P01 | 58 min | 3 tasks | 5 files |
 | Phase 02 P02 | 28min | 2 tasks | 6 files |
 | Phase 03 P01 | 89min | 3 tasks | 8 files |
+| Phase 03 P02 | 41min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -471,6 +472,11 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: D-03-12: the cascade root is exempt from the closure walk's already-installed, marketplace-known and catalog-absent guards — All three are preconditions of the REQUESTED plugin, and the install ledger owns them: it applies the CMP-3 cross-scope marketplace fallback a pure walk over one snapshot cannot see, and it reports each miss against the right subject (the marketplace for an unadded one, the plugin row for a plugin its manifest does not declare). Enforcing them in the walk pre-empted both with a dependency-shaped verdict on a plugin that is nobody's dependency.
 - [Phase 03]: D-03-13: a cascade phase's undo gates on a context-set 'materialized' sentinel, not on runPhases' executed array alone — The executed array covers the REVERSE walk only. Per the phase ledger's TR-02 contract the FAILING phase runs its own undo first, so installing an already-recorded plugin reached its phase, threw from inside do, and then unstaged the pre-existing install its throw was reporting. Phase.undo's own contract prescribes the remedy: an undo cannot assume its do ran to completion and must gate on a context-set sentinel.
 - [Phase 03]: D-03-14: ClosureLookup takes an already-split subject, and the parse-result mapping lives in domain/ — Handing the lookup {key, name, marketplace} removes a key re-parse from every reader, and with it the unreachable split guard install-flow.ts would otherwise carry under its direct-coverage gate. toClosureLookupResult lives beside the walk so the parse-failure arm has one definition and a reader whose own source cannot produce a failure (loadMarketplaceManifest isolates an unparseable dependencies entry before returning) does not carry an arm its tests cannot reach.
+- [Phase 03]: D-03-15: the conjunct cap walks every input's projected branch count BEFORE any cross-product is allocated, so nothing is built even on the input that trips it; the first input needs no separate check because the running product after it IS its own branch count
+- [Phase 03]: D-03-16: the satisfiability filter tests semver.minVersion ONLY -- the upstream re-validation arm is structurally unreachable here (a conjunct is a concatenation of comparator sets validRange itself produced) and the direct-coverage gate admits no unreachable branch
+- [Phase 03]: D-03-17: the intersected range is rejoined with a bare || and NOT re-validated; validRange renders a union exactly that way, so the result is canonical by construction and carries no second unreachable null arm
+- [Phase 03]: D-03-18: all three dependency-range caps (4096 input chars, 1024 conjuncts, 200 rendered chars) are documented PROJECT-OWNED; research assumption A1 records the upstream conjunct value as inferred, so only the guard-before-the-work mechanism claims parity
+- [Phase 03]: D-03-19: semver ships as a declared runtime dependency because resolution needs a real evaluator, not because one is already present -- the hoisted copy is from the ESLint dev chain and the nested copy from the pi-coding-agent peer, so neither survives a consumer's production install
 
 ### Pending Todos
 
@@ -557,13 +563,13 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 03-01-PLAN.md
+**Stopped at:** Completed 03-02-PLAN.md
 
 **Resume file:** None
 
 **Read beside it:** `.planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/02-VERIFICATION.md`
 
-Last session: 2026-09-15T00:58:41.987Z
+Last session: 2026-09-15T01:58:49.468Z
 closed out plan 02-01 task 3, executed plan 02-02, ran the full code-review
 fix cycle, then Nyquist and security gates, then verification and transition)
 
