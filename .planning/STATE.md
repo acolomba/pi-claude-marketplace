@@ -4,17 +4,17 @@ milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
 status: executing
-stopped_at: "completed `06-01-PLAN.md`. Resume file: none."
-last_updated: "2026-09-15T09:20:00.000Z"
+stopped_at: "completed `06-02-PLAN.md`. Resume file: none."
+last_updated: "2026-09-15T12:02:43.968Z"
 last_activity: 2026-09-15
-last_activity_desc: Phase 06 Plan 01 complete
-state_head: df4b2978e82bfbcf4f95b9239f500904c21885e1
+last_activity_desc: Plan 06-02 complete (directed value transfers)
+state_head: b983b23df6ec21f70279d6d0915237da38bfd046
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 54
-  completed_plans: 39
-  percent: 72
+  completed_plans: 40
+  percent: 63
 milestone_name: test-backlog
 ---
 
@@ -32,32 +32,38 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 06 (Unused Type Member Gate) — EXECUTING
-Plan: 2 of 8
-Status: Executing Phase 06
-Last activity: 2026-09-15 — Phase 06 Plan 01 complete
+Plan: 3 of 8
+Status: Ready to execute
+Last activity: 2026-09-15 — Plan 06-02 complete (directed value transfers)
 
 Plan 06-01 landed the member gate's compiler tracer: `node
-scripts/check-unused-type-members.mjs` now compiles the project once,
-inventories production member declarations, and matches runtime observations
-back to those exact declarations through checker symbols. Exit 0 is clean,
-1 is unread or unsupported members, 2 is a setup or internal analysis failure,
-and a budget cutoff takes the third path so it can never read as clean.
+scripts/check-unused-type-members.mjs` compiles the project once, inventories
+production member declarations, and matches runtime observations back to those
+exact declarations through checker symbols. Classification is by syntax before
+symbol. Exit 0 is clean, 1 is unread or unsupported members, 2 is a setup or
+internal analysis failure, and a budget cutoff takes the third path so it can
+never read as clean.
 
-Classification is by syntax before symbol: writes and `delete` read nothing,
-compound and update expressions keep the read, destructuring reads the source
-member through renames, defaults and nesting, element access resolves literal
-and finite-union keys, and an unbounded key records a gap against that
-receiver's members only. `in` is presence, not a value read.
+Plan 06-02 added directed value transfers in
+`scripts/check-unused-type-members.flow.mjs`. Each recorded read is traced
+backwards through edges that exist only where a value actually moved: arguments
+to resolved parameters, initializers, assignments, object and array
+construction, returns, callbacks in both directions, and containers — arrays,
+tuples, promise fulfillment and Map/WeakMap values. Structural compatibility
+alone transfers nothing, edges are one-way, and a tuple neighbour or a map key
+receives no credit. A call whose target is invisible and a container operation
+with no directed semantics each raise a bounded gap rather than reading clean.
 
-First live run: 236 production files, 3,464 candidates, 2,739 runtime-observed,
-111 test-only, 614 unread, 0 unsupported, 27s. That count is interim — directed
-transfers (06-02), contracts (06-03) and whole-object operations (06-04) are not
-in the model yet, and 06-06 reconciles every remaining row. `lint:type-members`
-exists as a package alias but is deliberately NOT in `npm run check` until 06-08.
+Second live run: 3,464 candidates, 2,891 runtime-observed, 105 test-only, 392
+unread, 76 unsupported — 468 findings against 06-01's 614, with 146 members
+explained only by a transfer. 68.8s wall, 2.0 GB peak. Still interim: contracts
+(06-03) and whole-object operations (06-04) are not in the model, and 06-06
+reconciles every remaining row. `lint:type-members` exists as a package alias
+but is deliberately NOT in `npm run check` until 06-08.
 
-`npm run check` exit 0. Unit 6298/6298 (baseline 6265 plus 33 new), integration
-32/32. Production aggregate unit coverage stays at 100%: 1,834/1,834 functions,
-9,050/9,050 branches, zero modules below 100%. No production source changed.
+`npm test` 6332/6332 (06-01's 6298 plus 34 new). Typecheck, lint, format and
+all four fallow links green. No production source under `extensions/` changed in
+06-02, so the wave's aggregate production unit coverage snapshot still holds.
 
 Phase 05 closed: all 28 plans landed and the production
 dead-code census drained from 111 to 0 with zero net additions at every step.
