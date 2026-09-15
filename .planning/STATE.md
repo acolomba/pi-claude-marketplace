@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 05
 current_phase_name: Production Export Ownership
 status: executing
-last_updated: "2026-09-15T01:20:00Z"
+last_updated: "2026-09-15T02:30:00Z"
 last_activity: 2026-09-14
-last_activity_desc: Wave 8 plan 05-27 stop translator export ownership complete
-state_head: c26352b7
+last_activity_desc: Wave 9 plan 05-18 read-command composition ownership complete
+state_head: f712f031
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 54
-  completed_plans: 34
-  percent: 61
+  completed_plans: 35
+  percent: 63
 milestone_name: test-backlog
 ---
 
@@ -31,9 +31,18 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 05 (Production Export Ownership) — EXECUTING
-Plan: 24 of 28 — Wave 8 source writing complete (05-17, 05-27)
-Status: Executing Phase 05 Wave 8 — awaiting parent census reconciliation
-Last activity: 2026-09-15 — 05-27 gave the Stop and StopFailure payload modules
+Plan: 25 of 28 — Wave 9 source writing under way (05-18 complete)
+Status: Executing Phase 05 Wave 9 — awaiting parent census reconciliation
+Last activity: 2026-09-15 — 05-18 added `fetchPlugins` and `getPluginInfo` to the
+plugin composition owner, binding the fs-only status probes and the Node read-only
+filesystem capability, switched both command handlers and the cross-op convergence
+gate onto them, and retired the flow owners' duplicate compositions behind
+TS2578-discriminating missing-export proofs. Committed in `44925576`, `e2ad1efd`
+and `f712f031`. Two identities leave the census with zero additions; the live total
+moves 12 -> 10. Task order was reordered to 1 -> 3 -> 2 because the plan's stated
+order leaves the tree uncompilable between tasks 2 and 3.
+
+Earlier activity: 2026-09-15 — 05-27 gave the Stop and StopFailure payload modules
 their event-specific export names, `translateStop` and `translateStopFailure`,
 committed in `5283b2e6` and `c26352b7`. The `translate` duplicate-export group
 disappears entirely rather than shrinking, because a duplicate needs at least two
@@ -162,7 +171,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–4 are complete;
-Phase 5 has completed twenty-three of twenty-eight plans. Phase 6 and Phase 7 plans are
+Phase 5 has completed twenty-five of twenty-eight plans. Phase 6 and Phase 7 plans are
 approved; their production acceptance follows Phase 5 completion. Earlier milestone continuity is preserved in
 `inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 
@@ -176,21 +185,22 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 (`git add -u .planning/`), and it wrote `completed_phases: 1` / `percent: 11` for a
 9-of-9 milestone, which was corrected by hand.
 
-### Wave 5 complete — census reconciliation pending
+### Wave 9 in progress — census reconciliation pending
 
-Stopped at: completed `05-24-PLAN.md`. Resume file: none. All three Wave 5 plans
-(05-07, 05-12, 05-24) are committed and no source writer is active, so the tree is
-frozen for the reconciliation.
+Stopped at: completed `05-18-PLAN.md`. Resume file: none. One Wave 9 plan remains
+before the tree is frozen for the reconciliation.
 
-Full unit run on the finished tree: 6244 tests, 6242 pass, 2 fail. Both failures are
-the `tests/architecture/unowned-exports-census.test.ts` pin-equality gates, red by
+Full unit run after 05-18: 6266 tests, 6264 pass, 2 fail. Both failures are the
+`tests/architecture/unowned-exports-census.test.ts` pin-equality gates, red by
 design until the parent applies its single pin edit. Integration: 32/32, exit 0.
-Every direct owner touched in the wave measures hit == found.
+`npm run fallow` exit 0. Every direct owner touched in the plan measures
+hit == found.
 
-The parent's one pin edit covers thirteen changes to `tests/architecture/gate-targets.ts`
-(42 pinned -> 32 live): ten identity removals from 05-07 and 05-12, and three location
-removals from the single `duplicate_exports` `translate` entry. Zero additions. The
-exact identity strings are listed in `05-24-SUMMARY.md`.
+05-18's contribution to the parent's one pin edit is two identity removals from
+`tests/architecture/gate-targets.ts` — `orchestrators/plugin/fetch.ts`'s
+`createFetchPlugins` and `orchestrators/plugin/info.ts`'s `createGetPluginInfo`,
+each the only member of its key — and zero additions. The live production census
+moves 12 -> 10. The exact identity strings are listed in `05-18-SUMMARY.md`.
 
 ## Operator Next Steps
 
