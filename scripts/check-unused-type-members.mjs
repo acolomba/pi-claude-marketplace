@@ -1,7 +1,9 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { analyzeProject } from "./check-unused-type-members.analysis.mjs";
+import { createContractEvaluator } from "./check-unused-type-members.contracts.mjs";
 import { AnalysisSetupError } from "./check-unused-type-members.model.mjs";
 
 /**
@@ -15,6 +17,7 @@ import { AnalysisSetupError } from "./check-unused-type-members.model.mjs";
  */
 
 const defaultProjectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
+const contractsFileName = "check-unused-type-members.contracts.json";
 
 const helpText = `Usage: node scripts/check-unused-type-members.mjs [options]
 
@@ -28,6 +31,10 @@ const helpText = `Usage: node scripts/check-unused-type-members.mjs [options]
   --help             Print this text.
 
 Exit status: 0 no findings, 1 unread or unsupported members, 2 setup failure.
+
+Contracts: scripts/${contractsFileName} under the analysed root, when it exists,
+is the only source of accepted exceptions. An invalid entry is a setup failure,
+never a quiet allowance; with no such file no member is excused at all.
 
 Scope: this is a bounded may-observe analysis. It reports that some run-time
 syntax could read a declared member: property and optional-chain access, element
@@ -128,6 +135,16 @@ function reportFindings(findings) {
   process.stderr.write(`Unused type member gate failed with ${findings.length} finding(s).\n`);
 }
 
+/**
+ * The contract validator for the analysed root, or nothing when that root ships
+ * no contract file. Nothing is the safe absence: with no validator no member is
+ * excused, so a missing file can never widen what the gate accepts.
+ */
+function contractEvaluatorFor(root) {
+  const contractsPath = path.join(root, "scripts", contractsFileName);
+  return existsSync(contractsPath) ? createContractEvaluator({ contractsPath }) : undefined;
+}
+
 function main() {
   const options = parseOptions(process.argv.slice(2));
 
@@ -136,7 +153,10 @@ function main() {
     return;
   }
 
-  const report = analyzeProject(options);
+  const report = analyzeProject({
+    ...options,
+    contractEvaluator: contractEvaluatorFor(options.root),
+  });
 
   if (options.json) {
     process.stdout.write(`${JSON.stringify(report, undefined, 2)}\n`);
