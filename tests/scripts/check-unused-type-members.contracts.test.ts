@@ -1211,3 +1211,45 @@ test("an intersection that leaves an optional slot optional narrows nothing", as
     },
   );
 });
+
+// A selection read through an indexed access. Both nodes begin at line 13,
+// column 25, and the filter literal's own `status` is at column 44.
+const indexedSelectionCases = `export interface Started {
+  status: "started";
+  at: string;
+}
+
+export interface Stopped {
+  status: "stopped";
+  until: string;
+}
+
+export type Message = Started | Stopped;
+
+export type StartedAt = Extract<Message, { status: "started" }>["at"];
+`;
+
+const indexedSelectionContract = {
+  id: `${casesPath}:13:44`,
+  owner: "StartedAt",
+  key: "status",
+  category: "type-selection",
+  purpose: "Selects the started variant this alias reads a slot out of.",
+  filter: `${casesPath}:13:25`,
+};
+
+test("a selection a coordinate shares with the access around it is still found", async (t) => {
+  // arrange
+  const report = await analyzeWith(
+    t,
+    indexedSelectionCases,
+    documentWith(indexedSelectionContract),
+  );
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "StartedAt", "status").status, "explicit-contract");
+  assert.deepStrictEqual(memberFor(report, "StartedAt", "status").reasons, [
+    "type-selection: Selects the started variant this alias reads a slot out of. " +
+      `(filter ${casesPath}:13:25 selects by status)`,
+  ]);
+});
