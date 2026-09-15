@@ -1,7 +1,8 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { AnalysisSetupError, analyzeProject } from "./check-unused-type-members.analysis.mjs";
+import { analyzeProject } from "./check-unused-type-members.analysis.mjs";
+import { AnalysisSetupError } from "./check-unused-type-members.model.mjs";
 
 /**
  * Fails any TypeScript interface or object-type member that no runtime read ever
