@@ -79,6 +79,7 @@
     "format:check": "prettier --check \"**/*.{js,json,ts}\" \"scripts/**/*.mjs\"",
     "lint": "eslint extensions tests scripts eslint.config.js",
     "lint:fix": "eslint extensions tests scripts eslint.config.js --fix",
+    "lint:type-members": "node scripts/check-unused-type-members.mjs",
     "lint:workflows": "node scripts/check-workflow-install-scripts.mjs",
     "lint:workflows:negative": "node scripts/check-workflow-install-scripts.negative.mjs",
     "test": "node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,scripts,shared,transaction}/**/*.test.ts\" \"tests/index.test.ts\"",
