@@ -24,7 +24,7 @@ affects: [phase-06-unused-type-member-gate, phase-07-reliable-coverage-metrics, 
 
 actuals:
   tasks: 3
-  commits: 3
+  commits: 4
   plan_head_before: 2c4c6d72c8afc95a71b42f2a6e749006662b94b9
   # tokens: deliberately omitted. Actual telemetry is unavailable in this
   # runtime, and diff characters divided by four is not a token measurement.
@@ -175,7 +175,9 @@ status: complete
 2. **Task 2: Activate the shipping production mode with only proven local exceptions** — `fa81a02e` (feat)
 3. **Task 3: Require an empty complete report and all retained quality evidence** — `f2c0308d` (test)
 
-**Plan metadata:** see the final `docs:` commit.
+**Plan metadata:** `4609a514` (docs: complete plan)
+
+Measured commit count for this plan: `git rev-list --count 2c4c6d72..HEAD` = **4**.
 
 ## The atomicity requirement, measured
 
@@ -316,3 +318,11 @@ None — no external service configuration required.
 ---
 *Phase: 05-production-export-ownership*
 *Completed: 2026-09-15*
+
+## Self-Check: PASSED
+
+- All 11 files named in `key-files.modified` and the created SUMMARY exist on disk.
+- Both files named in `key-files.deleted` are absent from the working tree and recorded as deletions in `fc6a6d5a`.
+- All four commits resolve: `fc6a6d5a`, `fa81a02e`, `f2c0308d`, `4609a514`.
+- Commit count measured, not narrated: `git rev-list --count 2c4c6d72c8afc95a71b42f2a6e749006662b94b9..HEAD` = 4.
+- Plan-level verification re-run after the last source edit: `npm run check` exit 0, `npm run test:coverage:unit` exit 0, `npm run test:coverage:direct:all` exit 0, shipping `fallow dead-code --fail-on-issues` exit 0 with zero findings.
