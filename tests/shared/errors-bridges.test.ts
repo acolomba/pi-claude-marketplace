@@ -17,6 +17,16 @@ void ({
 // @ts-expect-error an ownership conflict requires its owner
 void ({ generatedName: "pi-claude-marketplace-acme-bot" } satisfies AgentOwnershipConflict);
 
+// Both staging errors take the ambient `ErrorOptions` bag, whose only member is
+// `cause`. A bag carrying anything else is a compile error at the construction
+// site, so a caller cannot smuggle a field the base constructor silently drops.
+void new BridgeStagingError("staging tmp failed", { cause: new Error("ENOSPC") });
+// @ts-expect-error the staging options bag admits `cause` and nothing else
+void new BridgeStagingError("staging tmp failed", { reason: "ENOSPC" });
+void new CommandNameError("a", "/commands/a", { cause: new Error("bad segment") });
+// @ts-expect-error the command-name options bag admits `cause` and nothing else
+void new CommandNameError("a", "/commands/a", { cause: new Error("bad segment"), reason: "x" });
+
 describe("AgentOwnershipConflictError", () => {
   test("exposes an empty ownership conflict collection exactly", () => {
     // arrange

@@ -62,7 +62,7 @@ export class McpServerCollisionError extends Error {
  * callers may use appendLeakToError to surface cleanup leaks.
  */
 export class BridgeStagingError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
+  constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "BridgeStagingError";
   }
@@ -82,7 +82,7 @@ export class CommandNameError extends Error {
   readonly sourceName: string;
   readonly commandsDir: string;
 
-  constructor(sourceName: string, commandsDir: string, options?: { cause?: unknown }) {
+  constructor(sourceName: string, commandsDir: string, options?: ErrorOptions) {
     super(`invalid command source "${sourceName}" in "${commandsDir}"`, options);
     this.name = "CommandNameError";
     this.sourceName = sourceName;
