@@ -60,11 +60,11 @@ import type { TestContext } from "node:test";
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 type PluginRecord = MarketplaceRecord["plugins"][string];
 
-// backfill.ts publishes the two isolated wrappers; the force-installed scan is
+// backfill.ts publishes the two isolated wrappers; the partially-installed scan is
 // the body of one of them and has no caller of its own. Restoring the export
 // makes the `satisfies` resolve and turns the directive below into an unused
 // one (TS2578).
-// @ts-expect-error backfill.ts does not expose the force-installed scan
+// @ts-expect-error backfill.ts does not expose the partially-installed scan
 void ({} satisfies { readonly retired?: typeof BackfillOrchestrator.scanForceInstalledBackfills });
 
 /** The stamp every seeded scope carries: older than the running version, so the gate opens. */
@@ -777,11 +777,11 @@ describe("runScopeIsolated", () => {
   });
 });
 
-// The force-installed scan reached through the wrapper that owns it. Its
+// The partially-installed scan reached through the wrapper that owns it. Its
 // SF-02 answer is not returned to a caller: the wrapper consumes it as the
 // version-gate decision, so a scan that reported no failure closes the gate to
 // the running version and a scan that reported one leaves it open.
-describe("applyBackfillForScopeIsolated: the force-installed scan", () => {
+describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
   test("BFILL-01: promotes a plugin whose supported set grew into a fully installed record", async (t) => {
     // arrange
     const { cwd, locations } = await createHermeticProjectScope(t, "full-promotion");
