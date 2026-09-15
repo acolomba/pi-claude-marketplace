@@ -366,6 +366,35 @@ test("RESV-06 / D-03-07 a failing member restores the whole two-scope footprint"
   assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
 });
 
+test("RESV-06 / D-03-07 three members whose LAST fails leave no trace of the first two", async (t) => {
+  // arrange: the requesting plugin is already recorded, so it throws only
+  // after BOTH of its dependencies have materialized.
+  const environment = await createHermeticEnvironment(t, "install-cascade-three-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo"], ["foo"]);
+  const locations = locationsFor("project", environment.cwd);
+  const before = await twoScopeFootprint(environment.cwd, state);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar" }, { name: "baz" }],
+      [`bar@${MARKETPLACE}`]: [],
+      [`baz@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "member-failed");
+  assert.strictEqual(cascade.key, `foo@${MARKETPLACE}`);
+  assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
+});
+
 test("D-03-07 a member installed BEFORE the run survives a later member's failure", async (t) => {
   // arrange: `bar` predates the run and `baz` is declared but absent from the
   // manifest, so its ledger throws while `bar` is only ever skipped.

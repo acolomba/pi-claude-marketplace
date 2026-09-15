@@ -409,6 +409,36 @@ test("RESV-02 keys match by exact string identity, so case is never folded", asy
   );
 });
 
+test("RESV-02 two Unicode forms of one name resolve as distinct members", async () => {
+  // arrange: the composed "e-acute" and the decomposed "e" + combining acute
+  // render identically and are NOT equal strings. Written as escapes so no
+  // editor or formatter can normalize the fixture out from under the case.
+  const composed = "caf\u00e9";
+  const decomposed = "cafe\u0301";
+  assert.notStrictEqual(composed, decomposed);
+  const { lookup } = catalog({
+    "root@mp": [{ name: composed }, { name: decomposed }],
+    [`${composed}@mp`]: [],
+    [`${decomposed}@mp`]: [],
+  });
+
+  // act
+  const resolved = await resolveDependencyClosure({
+    rootKey: "root@mp",
+    lookup,
+    installedKeys: new Set(),
+    knownMarketplaces: new Set(["mp"]),
+  });
+
+  // assert: the walk compares keys by exact string identity and normalizes
+  // nothing, so the memo does not collapse the pair.
+  assert.strictEqual(resolved.ok, true);
+  assert.deepStrictEqual(
+    resolved.closure.map((member) => member.key),
+    [`${composed}@mp`, `${decomposed}@mp`, "root@mp"],
+  );
+});
+
 test("RESV-01 a dependency no marketplace declares fails as not-found naming its parent", async () => {
   // arrange
   const { lookup } = catalog({ "root@mp": [{ name: "ghost" }] });

@@ -3042,6 +3042,63 @@ test("RESV-01 / RESV-06: a dependency no marketplace declares fails the install 
   });
 });
 
+test("RESV-06 / NFR-3: a failed cascade never reaches tx.save() and replays the same", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv06-nosave-"));
+    try {
+      // arrange: the requesting plugin is already recorded, so its own ledger
+      // throws AFTER its dependency has fully materialized.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+        preInstall: true,
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      // Files only. A rolled-back member leaves behind the EMPTY container and
+      // staging directories its bridges created; those are per-scope scaffolding
+      // the bridges create idempotently and reuse, not per-plugin artifacts, and
+      // nothing discovers or reconciles an empty one. What must not survive is a
+      // file or a record.
+      const artifacts = async (): Promise<readonly string[]> =>
+        (await retryTree(locations.scopeRoot)).filter((entry) => !entry.endsWith("/"));
+      const beforeArtifacts = await artifacts();
+      const { ctx, notifications, pi } = makeCtx();
+      const install = async (): Promise<Awaited<ReturnType<InstallOperation>>> =>
+        installPlugin({
+          ctx,
+          cwd,
+          marketplace: "mp",
+          notifications: { mode: "orchestrated" },
+          pi,
+          plugin: "hello",
+          scope: "project",
+        });
+
+      // act
+      const first = await install();
+      const second = await install();
+
+      // assert: the dependency materialized and was unwound, and the snapshot
+      // the guard held was discarded rather than persisted -- state.json is
+      // byte-identical, so no other process can observe half a cascade.
+      assertRetryFailure(first, 'Plugin "hello" is already installed in marketplace "mp".');
+      assertRetryFailure(second, 'Plugin "hello" is already installed in marketplace "mp".');
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+      assert.deepStrictEqual(await artifacts(), beforeArtifacts);
+      await assert.rejects(stat(locations.configJsonPath), /ENOENT/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ───────────────────────────────────────────────────────────────────────────
 // PI-14 -- PathContainmentError bypasses rollback-partial marker
 // ───────────────────────────────────────────────────────────────────────────
