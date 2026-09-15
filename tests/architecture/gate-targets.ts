@@ -568,15 +568,6 @@ export const FINDING_DISPOSITIONS_REL: (typeof EVIDENCE_RECORD_TARGETS)[number] 
  */
 export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> = {
   "extensions/pi-claude-marketplace/index.ts": ["default"],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts": ["createFetchPlugins"],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts": ["createGetPluginInfo"],
-  "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts": ["createApplyReconcile"],
-  "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts": [
-    "scanForceInstalledBackfills",
-  ],
-  "extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts": [
-    "PENDING_STATUSES",
-  ],
   "extensions/pi-claude-marketplace/platform/git-credential.ts": ["createCredentialOps"],
   "extensions/pi-claude-marketplace/platform/git.ts": [
     "buildAuthCallbacks",
@@ -598,26 +589,6 @@ export const PRODUCTION_FINDING_CENSUS = {
     {
       path: "extensions/pi-claude-marketplace/index.ts",
       export_name: "default",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts",
-      export_name: "createFetchPlugins",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
-      export_name: "createGetPluginInfo",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
-      export_name: "createApplyReconcile",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts",
-      export_name: "scanForceInstalledBackfills",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts",
-      export_name: "PENDING_STATUSES",
     },
     {
       path: "extensions/pi-claude-marketplace/platform/git-credential.ts",
