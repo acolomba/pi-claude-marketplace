@@ -5,16 +5,16 @@ milestone_name: transitive-dependencies
 current_phase: 3
 current_phase_name: Dependency resolution
 status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-09-14T23:27:33.214Z"
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-09-15T00:59:33.744Z"
 last_activity: 2026-09-14
-last_activity_desc: Phase 02 complete, transitioned to Phase 3
-state_head: 9a1fdcf9e5762340480a7c1b35089114422d1f00
+last_activity_desc: Phase 3 execution started
+state_head: a554572c694158a7ff8d3f9c268501123def6c99
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 13
-  completed_plans: 6
+  completed_plans: 7
   percent: 40
 ---
 
@@ -34,9 +34,29 @@ is archived under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 3 (Dependency resolution) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
+Phase: 3 (Dependency resolution) — EXECUTING
+Plan: 2 of 7
+Status: Plan 03-01 complete; wave 2 unblocked
+Plan 03-01 shipped the phase's tracer. `install foo@mp` now installs the
+plugins `foo` declares as dependencies: `domain/dependency-closure.ts` is a
+pure two-structure walk (a path stack that is the only cycle test, a separate
+visited memo that dedupes a diamond) whose post-order accumulator IS the
+install order, and `orchestrators/plugin/install-cascade.ts` is an outer
+`runPhases` ledger — one phase per closure member — driven inside
+`install-flow.ts`'s existing single `withLockedStateTransaction`. Every member
+is declared in the requesting plugin's own physical config file via the one
+batched write, so the reconcile uninstall bucket does not sweep a
+cascade-installed dependency on the next `resources_discover`. RESV-01, -02,
+-04, -05 and -06 are all exercised but stay Pending in REQUIREMENTS.md: every
+one of them is also declared by a later plan in this phase.
+One data-loss defect was found and fixed during the tracer: the ledger's
+failing phase runs its OWN undo first (TR-02), so an install of an
+already-recorded plugin would have unstaged the very install its throw was
+reporting. Each phase now records itself in a `materialized` sentinel and
+`undo` acts only on what it finds there. Version constraints (RESV-03), live
+tag resolution, per-member reporting and the plugin-manifest-first read order
+are the remaining plans; `ClosureMember.ranges` and the injected
+`ClosureLookup` are already shaped for them.
 Phase 2 is complete and verified. `uninstall --keep-data` preserves the data
 directory; omitting it deletes without a prompt at both the explicit command
 and the load-time reconcile path (D-02-04, reaffirmed after a code-review
@@ -55,7 +75,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-14 — Phase 02 complete (all gates), transitioned to Phase 3
+Last activity: 2026-09-14 — Phase 3 execution started
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 2 of 5 phases complete (40%).
@@ -229,6 +249,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 117 P11 | 2h 20m | 2 tasks | 16 files |
 | Phase 02 P01 | 58 min | 3 tasks | 5 files |
 | Phase 02 P02 | 28min | 2 tasks | 6 files |
+| Phase 03 P01 | 89min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -447,6 +468,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 02]: The uninstall handler owner's whole-footprint observation carries both scopes' data bytes, so rejection cases prove no silent deletion rather than only a surviving record.
 - [Phase 02 code review]: D-02-04 reaffirmed — reconcile stays on the promptless-delete default with no `keepData` opt-out despite a code-review critical finding (CR-01); the operator confirmed this is DATA-03 working as specified, not a gap. See `PROJECT.md` Key Decisions for the full rationale.
 - [Phase 02 code review]: WR-07 (route a symlink-containment refusal through the cleanup swallow-catch instead of letting it propagate) was applied then reverted (commit `eeeb80eb`) per operator decision — the original NFR-10 propagating behavior stands. DATA-01..03 are marked Complete in REQUIREMENTS.md via plan 02-02.
+- [Phase 03]: D-03-12: the cascade root is exempt from the closure walk's already-installed, marketplace-known and catalog-absent guards — All three are preconditions of the REQUESTED plugin, and the install ledger owns them: it applies the CMP-3 cross-scope marketplace fallback a pure walk over one snapshot cannot see, and it reports each miss against the right subject (the marketplace for an unadded one, the plugin row for a plugin its manifest does not declare). Enforcing them in the walk pre-empted both with a dependency-shaped verdict on a plugin that is nobody's dependency.
+- [Phase 03]: D-03-13: a cascade phase's undo gates on a context-set 'materialized' sentinel, not on runPhases' executed array alone — The executed array covers the REVERSE walk only. Per the phase ledger's TR-02 contract the FAILING phase runs its own undo first, so installing an already-recorded plugin reached its phase, threw from inside do, and then unstaged the pre-existing install its throw was reporting. Phase.undo's own contract prescribes the remedy: an undo cannot assume its do ran to completion and must gate on a context-set sentinel.
+- [Phase 03]: D-03-14: ClosureLookup takes an already-split subject, and the parse-result mapping lives in domain/ — Handing the lookup {key, name, marketplace} removes a key re-parse from every reader, and with it the unreachable split guard install-flow.ts would otherwise carry under its direct-coverage gate. toClosureLookupResult lives beside the walk so the parse-failure arm has one definition and a reader whose own source cannot produce a failure (loadMarketplaceManifest isolates an unparseable dependencies entry before returning) does not carry an arm its tests cannot reach.
 
 ### Pending Todos
 
@@ -533,13 +557,13 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 3 context gathered
+**Stopped at:** Completed 03-01-PLAN.md
 
-**Resume file:** .planning/phases/03-dependency-resolution/03-CONTEXT.md
+**Resume file:** None
 
 **Read beside it:** `.planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/02-VERIFICATION.md`
 
-Last session: 2026-09-14T22:34:12.953Z
+Last session: 2026-09-15T00:58:41.987Z
 closed out plan 02-01 task 3, executed plan 02-02, ran the full code-review
 fix cycle, then Nyquist and security gates, then verification and transition)
 

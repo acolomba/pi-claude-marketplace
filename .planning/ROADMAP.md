@@ -166,12 +166,12 @@ imports it directly. 204 pairs, corresponding-test gate at zero violations.
 4. A dependency cycle terminates and reports instead of installing forever, and a dependency that is already installed is left alone rather than reinstalled. (RESV-04, RESV-05)
 5. A dependency that cannot be installed tells the user which dependency failed and why, leaves no half-materialized plugin behind, and re-running the same command produces the same result. (RESV-06, NFR-3)
 
-**Plans**: 7 plans
+**Plans**: 1/7 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Tracer: the dependency cascade end to end on the unconstrained path, plus the closure walk's cycle, diamond, already-installed and unadded-marketplace edges and the all-or-nothing rollback footprint (wave 1)
+- [x] 03-01-PLAN.md — Tracer: the dependency cascade end to end on the unconstrained path, plus the closure walk's cycle, diamond, already-installed and unadded-marketplace edges and the all-or-nothing rollback footprint (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -262,7 +262,7 @@ plugin names — so plan these phases with the UI gate skipped.
 |-------|-----------|----------------|--------|-----------|
 | 1. Manifest read fidelity | v1.20 | 4/4 | Complete   | 2026-09-14 |
 | 2. Uninstall data disposition and the uninstall option seam | v1.20 | 2/2 | Complete    | 2026-09-14 |
-| 3. Dependency resolution | v1.20 | 0/— | Not started | — |
+| 3. Dependency resolution | v1.20 | 1/7 | In Progress|  |
 | 4. Install provenance | v1.20 | 0/— | Not started | — |
 | 5. Prune on uninstall | v1.20 | 0/— | Not started | — |
 
