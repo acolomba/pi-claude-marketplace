@@ -231,7 +231,9 @@ test("TC-1 offers the whole top-level vocabulary at an empty prefix, in declarat
     { label: "enable", value: "enable " },
     { label: "disable", value: "disable " },
     { label: "import", value: "import " },
+    { label: "browse", value: "browse " },
     { label: "marketplace", value: "marketplace " },
+    { label: "help", value: "help " },
   ]);
 });
 

@@ -49,8 +49,10 @@ import { makeMarketplaceListHandler } from "./handlers/marketplace/list.ts";
 import { makeRemoveHandler } from "./handlers/marketplace/remove.ts";
 import { makeMarketplaceUpdateHandler } from "./handlers/marketplace/update.ts";
 import { makeBootstrapHandler } from "./handlers/plugin/bootstrap.ts";
+import { makeBrowseHandler } from "./handlers/plugin/browse.ts";
 import { makeEnableDisableHandler } from "./handlers/plugin/enable-disable.ts";
 import { makeFetchHandler } from "./handlers/plugin/fetch.ts";
+import { makeHelpHandler } from "./handlers/plugin/help.ts";
 import { makeImportHandler } from "./handlers/plugin/import.ts";
 import { makePluginInfoHandler } from "./handlers/plugin/info.ts";
 import { makeInstallHandler } from "./handlers/plugin/install.ts";
@@ -88,18 +90,26 @@ export function registerClaudePluginCommand(
   updatePlugins: UpdatePluginsFn,
 ): void {
   const reinstallPlugins = createNodeReinstallPlugins(hooksRouting, deps.completionCache);
+  const install = makeInstallHandler(pi, hooksRouting, deps.completionCache);
+  const uninstall = makeUninstallHandler(pi, hooksRouting, deps.completionCache);
+  const pluginInfo = makePluginInfoHandler(pi);
+  const enable = makeEnableDisableHandler(pi, true, hooksRouting);
+  const disable = makeEnableDisableHandler(pi, false, hooksRouting);
+  const list = makeListHandler(pi);
+  const browse = makeBrowseHandler(pi, { list, install, uninstall, pluginInfo, enable, disable });
+
   const handlers: SubcommandHandlers = {
     bootstrap: makeBootstrapHandler(pi, deps),
-    install: makeInstallHandler(pi, hooksRouting, deps.completionCache),
-    uninstall: makeUninstallHandler(pi, hooksRouting, deps.completionCache),
+    install,
+    uninstall,
     update: makeUpdateHandler(pi, updatePlugins),
     fetch: makeFetchHandler(pi),
     reinstall: makeReinstallHandler(pi, reinstallPlugins),
-    list: makeListHandler(pi),
-    pluginInfo: makePluginInfoHandler(pi),
+    list,
+    pluginInfo,
     pending: makePendingHandler(pi),
-    enable: makeEnableDisableHandler(pi, true, hooksRouting),
-    disable: makeEnableDisableHandler(pi, false, hooksRouting),
+    enable,
+    disable,
     import: makeImportHandler(pi, deps, hooksRouting),
     marketplaceAdd: makeAddHandler(pi, deps),
     marketplaceRemove: makeRemoveHandler(pi, deps),
@@ -112,6 +122,8 @@ export function registerClaudePluginCommand(
     }),
     marketplaceAutoupdate: makeAutoupdateHandler(pi, true),
     marketplaceNoautoupdate: makeAutoupdateHandler(pi, false),
+    browse,
+    help: makeHelpHandler(),
   };
 
   pi.registerCommand("claude:plugin", {

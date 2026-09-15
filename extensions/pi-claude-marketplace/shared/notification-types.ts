@@ -399,6 +399,47 @@ export function isScopeBearingListRow(
   return SCOPE_BEARING_LIST_STATUS[row.status];
 }
 
+/**
+ * Resolves a plugin row's scope if scope-bearing, otherwise falls back to
+ * the marketplace scope.
+ */
+export function pluginScopeOrFallback(
+  p: PluginNotificationMessage,
+  marketplaceScope: Scope,
+): Scope {
+  return isScopeBearingListRow(p) ? (p.scope ?? marketplaceScope) : marketplaceScope;
+}
+
+/**
+ * Read `p.version` off a plugin notification row.
+ */
+export function pluginVersion(p: PluginNotificationMessage): string | undefined {
+  switch (p.status) {
+    case "installed":
+    case "reinstalled":
+    case "uninstalled":
+    case "disabled":
+    case "available":
+    case "remote":
+    case "unavailable":
+    case "partially-available":
+    case "upgradable":
+    case "partially-installed":
+    case "partially-upgradable":
+    case "failed":
+    case "skipped":
+      return p.version;
+    case "updated":
+      return p.to;
+    case "manual recovery":
+    case "will install":
+    case "will uninstall":
+    case "will enable":
+    case "will disable":
+      return undefined;
+  }
+}
+
 /** Fields shared by every marketplace notification row. */
 export interface MpCommon extends MessageBase {
   readonly name: string;
