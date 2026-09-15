@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v1.20
 milestone_name: transitive-dependencies
-current_phase: 3
-current_phase_name: Dependency resolution
-status: executing
-stopped_at: Completed 03-06-PLAN.md
-last_updated: "2026-09-15T12:54:49.933Z"
+current_phase: 4
+current_phase_name: Install provenance
+status: planning
+stopped_at: Phase 3 complete, ready to plan Phase 4
+last_updated: "2026-09-15T17:35:11.650Z"
 last_activity: 2026-09-15
-last_activity_desc: Phase 3 plan 03-06 complete — the cascade block a user reads
-state_head: bae2e5b73647300c5d2822f638ed95cff65dedd9
+last_activity_desc: Phase 3 complete, transitioned to Phase 4
+state_head: d76e1e0199cdac438ec27d1fe18967609afe68ee
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 13
   completed_plans: 13
-  percent: 40
+  percent: 60
 ---
 
 # Project State
@@ -34,9 +34,42 @@ is archived under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 3 (Dependency resolution) — EXECUTING
-Plan: 7 of 7 complete
-Status: All seven plans complete (03-01 through 03-07); phase verification next
+Phase: 4 — Install provenance
+Plan: Not started
+Status: Ready to plan
+
+**Phase 3 closed 2026-09-15**, verified 5/5 must-haves with both human
+verification items run against running systems. A code review found 16 issues
+(5 blocker, 8 warning, 3 info); all 13 blocker+warning findings were fixed
+across 13 atomic commits, each with a test observed failing against the
+unfixed code. The load-bearing defect was CR-01: the cascade never declared
+its dependencies on the ORCHESTRATED install path, so `buildUninstallBucket`
+would have swept every cascade-installed dependency on the next
+`resources_discover` — RESV-01 would have read as satisfied while being false.
+Confirmed fixed in a live Pi session: after `/reload`, both dependencies
+survived.
+
+Live UAT also settled what no fake transport could: an annotated tag peels to
+its commit, a constraint selects over an advertised newer tag, and a no-match
+fails WITHOUT falling back to repository head (D-03-09). See `03-UAT.md`.
+
+**Three items carried out of Phase 3.** A SUCCESSFUL credential challenge is
+unexercised — `findProviderForHost` matches only github.com and gitlab.com
+(PROV-01), so no self-hosted fixture can reach Device Flow; the 401 arm was
+verified. WR-05 asked to close or re-scope PDEP-01 / DFEN-V2-01, which still
+sit in `BACKLOG.md` and `REQUIREMENTS.md`. And zero of the 297 plugins in
+`anthropics/claude-plugins-official` declare dependencies, so the cascade
+ships with no real-world consumer today.
+
+**Before Phase 4 executes, branching needs settling.** `config.json` now
+carries `branching_strategy: milestone` with
+`milestone_branch_template: features/{milestone}`, resolving to
+`features/v1.20` — a branch that does not exist locally. `handle_branching`
+creates a missing milestone branch off `origin/main`, which would strand this
+milestone's work on `features/manifest`. Phase 3 was immune only because
+execute-phase reads config once at init, before that setting arrived via a
+merge of origin/main (commit `257f8827`).
+
 Plan 03-06 made the cascade legible. A dependency cascade now renders one row
 per closure member beside the requesting plugin's own row, and a cascade that
 failed names the DEPENDENCY as the row's subject with a closed-set reason and
@@ -196,10 +229,10 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-14 — Phase 3 execution started
+Last activity: 2026-09-15 — Phase 3 complete, transitioned to Phase 4
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
-Milestone progress is 2 of 5 phases complete (40%).
+Milestone progress is 3 of 5 phases complete (60%).
 See `01-VERIFICATION.md` for passing automated and real-plugin evidence.
 Phase 2 context records the user preference to follow existing output and help conventions.
 
@@ -223,7 +256,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 
 **Velocity:**
 
-- Total plans completed: 157
+- Total plans completed: 164
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -239,6 +272,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | 113. Orchestrator Support       |    35 | 7h 46m recorded | 16.6 min recorded |
 | 1 | 4 | - | - |
 | 02 | 2 | - | - |
+| 3 | 7 | - | - |
 
 **Recent Trend:** 35 Phase 113 plans completed with all direct owner, review, validation, verification, security, and clean-repository gates green.
 **Per-Plan Metrics:**
@@ -701,7 +735,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 03-06-PLAN.md
+**Stopped at:** Phase 3 complete, ready to plan Phase 4
 
 **Resume file:** None
 
