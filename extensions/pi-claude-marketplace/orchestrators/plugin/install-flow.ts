@@ -8,6 +8,10 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
+import { parseDeclaredDependencies } from "../../domain/dependencies.ts";
+import { toClosureLookupResult } from "../../domain/dependency-closure.ts";
+import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
+import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -23,10 +27,11 @@ import { runPhases } from "../../transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin, crossScopeFlag } from "../marketplace/shared.ts";
 
+import { formatClosureFailure, runInstallCascade } from "./install-cascade.ts";
 import { probeInstallClone } from "./install-clone-probe.ts";
 import { resolveInstallDeclaredEnabled } from "./install-declared-enabled.ts";
 import { composeInstallDisableCascade } from "./install-disable-cascade.ts";
-import { installedPluginOutcome, runInstallLedger } from "./install-outcome.ts";
+import { installedPluginOutcome } from "./install-outcome.ts";
 import {
   INSTALL_CONTEXT,
   classifyEntityShapeError,
@@ -35,11 +40,13 @@ import {
   formatOrchestratedCause,
 } from "./install.messaging.ts";
 import {
+  resolveInstallMarketplaceSource,
   selectDeclaringConfigWriteTarget,
   surfaceDiscoveryWarnings,
   writeAdoptingConfigEntries,
 } from "./shared.ts";
 
+import type { InstallCascadeResult } from "./install-cascade.ts";
 import type { InstallCloneCacheSeam } from "./install-clone-probe.ts";
 import type { InstallHooksRouting } from "./install-disable-cascade.ts";
 import type {
@@ -49,6 +56,8 @@ import type {
   InstallPluginNotifications,
 } from "./install-outcome.ts";
 import type { InstallMsg } from "./install.messaging.ts";
+import type { ClosureLookupResult, ClosureSubject } from "../../domain/dependency-closure.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
@@ -225,6 +234,91 @@ function buildInstallLedgerOptions(
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
   };
+}
+
+/**
+ * RESV-05: every `<plugin>@<marketplace>` key the target scope already records.
+ * A dependency in this set is skipped by the closure walk and therefore never
+ * becomes a cascade phase, so nothing can reinstall it and no rollback can
+ * reach it.
+ */
+function collectInstalledKeys(state: ExtensionState): ReadonlySet<string> {
+  const keys = new Set<string>();
+  for (const [marketplaceName, record] of Object.entries(state.marketplaces)) {
+    for (const pluginName of Object.keys(record.plugins)) {
+      keys.add(`${pluginName}@${marketplaceName}`);
+    }
+  }
+
+  return keys;
+}
+
+/**
+ * The cascade's catalog read: one plugin's declared dependencies, taken from
+ * the marketplace entry that declares it.
+ *
+ * NFR-5: fs-and-cache only. `resolveInstallMarketplaceSource` answers the
+ * CMP-2..4 source-scope question from state, and `loadMarketplaceManifest` is
+ * the memoized PI-2 read of bytes already on disk.
+ *
+ * The read order is the marketplace ENTRY alone. A dependency declared only in
+ * a plugin's own `.claude-plugin/plugin.json` is not visible to the cascade
+ * until the plugin-manifest-first read order lands; that swap replaces this
+ * function body and nothing else, because the closure takes its catalog read
+ * as an injected parameter.
+ */
+async function lookupCascadeDependencies(
+  state: ExtensionState,
+  core: { readonly scope: Scope; readonly cwd: string },
+  subject: ClosureSubject,
+): Promise<ClosureLookupResult> {
+  const source = await resolveInstallMarketplaceSource({
+    targetScope: core.scope,
+    cwd: core.cwd,
+    marketplace: subject.marketplace,
+    targetState: state,
+  });
+  if (source === undefined) {
+    return { kind: "absent" };
+  }
+
+  const manifest = await loadMarketplaceManifest(source.sourceRecord.manifestPath);
+  const declared = lookupDeclaredPlugin(manifest, subject.name);
+  if (declared.kind === "absent") {
+    return { kind: "absent" };
+  }
+
+  return toClosureLookupResult(parseDeclaredDependencies(declared.entry.dependencies));
+}
+
+/**
+ * Route the cascade's outcome onto install's existing three dispositions:
+ * the installed arm, the `marketplace-absent` sentinel (reported as
+ * `undefined`, so the caller returns from inside the lock WITHOUT `tx.save()`),
+ * or a throw the guard's own catch composes into a failed row.
+ *
+ * The cascade's rollback partials are appended to whatever the failing member's
+ * OWN bridge-level ledger already captured; both are real undo failures and
+ * neither may shadow the other.
+ */
+function unwrapCascade(
+  cascade: InstallCascadeResult,
+  capture: InstallFailureCapture,
+): Extract<InstallCascadeResult, { readonly kind: "installed" }> | undefined {
+  if (cascade.kind === "marketplace-absent") {
+    return undefined;
+  }
+
+  if (cascade.kind === "closure-failed") {
+    throw new Error(formatClosureFailure(cascade.failure));
+  }
+
+  if (cascade.kind === "member-failed") {
+    capture.rollbackPartials = [...capture.rollbackPartials, ...cascade.rollbackPartials];
+    throw cascade.error;
+  }
+
+  return cascade;
 }
 
 /**
@@ -653,6 +747,10 @@ async function installPluginWithTransaction(
   // the type stays definite.
   let configBasename = path.basename(locations.configJsonPath);
   const orchestrated = opts.notifications?.mode === "orchestrated";
+  // The requested plugin's key: the cascade's root, the write-target selection
+  // subject and the DFEN-05 precedence subject are all the same key by
+  // construction, so they read one binding rather than three literals.
+  const rootKey = `${plugin}@${marketplace}`;
 
   try {
     // D-02 outer guard around the guard-FREE ledger body (CR-01): the lock
@@ -685,7 +783,7 @@ async function installPluginWithTransaction(
       const selection = await selectDeclaringConfigWriteTarget({
         locations,
         local: opts.local,
-        key: `${plugin}@${marketplace}`,
+        key: rootKey,
       });
 
       const state = tx.state;
@@ -714,17 +812,41 @@ async function installPluginWithTransaction(
       const { targetConfigPath, targetIsLocal, current, sibling } = selection;
       configBasename = path.basename(targetConfigPath);
 
-      // The guard-free BODY, not the public `runInstallLedger`: this closure
-      // already holds the scope lock, and the post-guard path below reads
-      // context fields the outward summary withholds.
-      const result = await runInstallLedger(
+      // RESV-01: the cascade, not a single ledger call. It drives the
+      // guard-free `runInstallLedger` once per closure member under THIS
+      // closure's lock -- the lock-acquiring `installPlugin` entry point is
+      // never re-entered, which `proper-lockfile` (`retries: 0`) would
+      // self-deadlock on. A plugin that declares nothing is the N=1 case and
+      // reaches the same ledger with the same options.
+      //
+      // D-03-05: every member installs into the requesting plugin's OWN
+      // `locations` and `scope`; there is no per-member scope argument and no
+      // way for a dependency to land in the other scope.
+      const cascade = await runInstallCascade({
         state,
         locations,
-        buildInstallLedgerOptions(opts, { scope, cwd, marketplace, plugin }),
+        rootKey,
+        lookup: (subject) => lookupCascadeDependencies(state, { scope, cwd }, subject),
+        ledgerOptionsFor: (member) =>
+          buildInstallLedgerOptions(opts, {
+            scope,
+            cwd,
+            marketplace: member.marketplace,
+            plugin: member.name,
+          }),
+        installedKeys: collectInstalledKeys(state),
+        // D-03-08: the marketplaces the target scope already records. A
+        // dependency naming anything else fails the cascade; nothing here can
+        // add or clone a marketplace to satisfy one. The requested plugin's own
+        // marketplace is deliberately not seeded in: its precondition is the
+        // ledger's, which resolves the CMP-3 cross-scope fallback and reports
+        // the `marketplace-absent` arm below.
+        knownMarketplaces: new Set(Object.keys(state.marketplaces)),
         capture,
         transaction,
-      );
-      if (result.kind === "marketplace-absent") {
+      });
+      const installed = unwrapCascade(cascade, capture);
+      if (installed === undefined) {
         // WR-04: precondition miss -- read-only in effect, NO tx.save().
         marketplaceAbsent = true;
         return;
@@ -732,7 +854,7 @@ async function installPluginWithTransaction(
 
       // Success: lift the install context up so the post-guard path can
       // compose the user-visible notification without re-entering the closure.
-      installCtx = result.summary;
+      installCtx = installed.root;
 
       // DFEN-04 / DFEN-05: the install lands disabled only when all three hold
       // -- the caller opted in, the user has stated NO opinion in EITHER of the
@@ -748,12 +870,12 @@ async function installPluginWithTransaction(
         current,
         sibling,
         targetIsLocal,
-        key: `${plugin}@${marketplace}`,
+        key: rootKey,
       });
       disabledInstall.landed =
         opts.applyDefaultEnabled === true &&
         declaredEnabled === undefined &&
-        !result.summary.resolved.defaultEnabled;
+        !installed.root.resolved.defaultEnabled;
 
       if (disabledInstall.landed) {
         // D-102-01: the six-phase ledger already ran and the state phase wrote

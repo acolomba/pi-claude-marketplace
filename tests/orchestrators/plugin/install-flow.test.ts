@@ -510,7 +510,9 @@ function buildSeededMarketplaceEntry(
     source: opts.rawSourceOverride ?? `./plugins/${pluginName}`,
     ...(opts.agentDirectories !== undefined && { agents: [...opts.agentDirectories] }),
     ...(opts.pluginVersion !== undefined && { version: opts.pluginVersion }),
-    // PI-13: use a valid declaration to exercise the successful-install surface.
+    // RESV-01: a declaration the cascade can actually satisfy, so the case
+    // exercises the successful-install surface. The named plugin must be seeded
+    // as a sibling; an unresolvable declaration now fails the whole install.
     ...(opts.declareDependencies === true && {
       dependencies: [{ name: "some-other-plugin", version: "*" }],
     }),
@@ -2945,7 +2947,7 @@ test("CMD-01 / WARN-01: standalone install of a plugin with one unparseable comm
 // PI-13 -- dependencies declaration -> manual-install note
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-13: entry declares dependencies -> V2 dropped per D-19-01 (no PR-5 trailer)", async () => {
+test("RESV-01 / D-19-01: an entry declaring a dependency renders no PR-5 trailer", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi13-"));
     try {
@@ -2956,6 +2958,7 @@ test("PI-13: entry declares dependencies -> V2 dropped per D-19-01 (no PR-5 trai
         pluginName: "hello",
         skills: [{ sourceName: "tool" }],
         declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
       });
 
       const { ctx, pi, notifications } = makeCtx();
@@ -2988,6 +2991,51 @@ test("PI-13: entry declares dependencies -> V2 dropped per D-19-01 (no PR-5 trai
         false,
         "D-19-01: PR-5 phrase must not appear on the V2 success surface",
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RESV-01 / RESV-06: a dependency no marketplace declares fails the install whole", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-missing-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const beforeTree = await retryTree(locations.scopeRoot);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+
+      // assert
+      assertRetryFailure(
+        outcome,
+        'Dependency "some-other-plugin@mp" is not declared by its marketplace.',
+      );
+      // The closure fails before any member is materialized, so the scope root
+      // and state.json are byte-identical to their pre-command values.
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), beforeTree);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -7609,13 +7657,23 @@ test("install cleans up each bridge staging root inside its own phase and a repe
       // skills -> commands -> agents cleanup order the phase array fixes,
       // and any staging tree a bridge failed to reclaim would appear here as
       // a surviving inventory instead of `empty`.
+      //
+      // RESV-01: the census observes BOTH ledgers install schedules. The OUTER
+      // cascade ledger carries one phase per closure member, named by the
+      // member's `<plugin>@<marketplace>` key, and each of those phases runs
+      // the six-phase bridge ledger inside itself. The trailing
+      // `complete@mp` row is the SECOND install: its cascade phase runs and the
+      // bridge ledger inside it throws `already installed` before scheduling a
+      // phase of its own, which is why no bridge rows follow it.
       assert.deepStrictEqual(stagingLedger, [
+        "before:complete@mp skills=absent commands=absent agents=absent",
         "before:skills skills=absent commands=absent agents=absent",
         "before:commands skills=empty commands=absent agents=absent",
         "before:agents skills=empty commands=empty agents=absent",
         "before:hooks skills=empty commands=empty agents=empty",
         "before:mcp skills=empty commands=empty agents=empty",
         "before:state skills=empty commands=empty agents=empty",
+        "before:complete@mp skills=empty commands=empty agents=empty",
       ]);
       assert.deepStrictEqual(first, {
         declaresAgents: true,
@@ -7897,7 +7955,12 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
       let mcpError: Error | undefined;
       transactionControl.runPhases = async <C>(phases: readonly Phase<C>[], ctx: C) => {
         const result = await runPhases(phases, ctx);
-        if (result.ok && mcpFault) {
+        // RESV-01: install schedules TWO ledgers -- the outer cascade, one
+        // phase per closure member, and the six-phase bridge ledger inside each
+        // of those phases. The fault arms after the BRIDGE ledger commits, so
+        // the arming gate names that ledger by a phase it owns rather than
+        // firing on whichever `runPhases` call returns first.
+        if (result.ok && mcpFault && phases.some((phase) => phase.name === "mcp")) {
           activeSchedule.push("commit:mcp", "disable:mcp:armed");
           await chmod(locations.mcpJsonPath, 0o000);
           try {
