@@ -528,6 +528,45 @@ export const MISSING_TARGET_PROBES = [
 ] as const;
 
 /**
+ * The unused-type-member gate's own subjects.
+ *
+ * MEMBER-01: the gate's live sensitivity control plants an unread optional
+ * member on the REAL `EdgeDeps` declaration and clears it with a read from the
+ * REAL owner test. Both files are therefore targets in the sense this registry
+ * means: a rename leaves the control planting into nothing, and a plant into
+ * nothing is a control that inspects nothing.
+ *
+ * The runner and the suites beside it are targets for the same reason -- the
+ * claim-to-control ledger names a case inside each one, and a suite that moved
+ * would leave a stated capability with no discriminating control.
+ */
+export const UNUSED_TYPE_MEMBER_GATE_TARGETS = [
+  "extensions/pi-claude-marketplace/edge/types.ts",
+  "tests/edge/types.test.ts",
+  "scripts/check-unused-type-members.mjs",
+  "scripts/check-unused-type-members.negative.mjs",
+  "tests/scripts/check-unused-type-members.test.ts",
+  "tests/scripts/check-unused-type-members.model.test.ts",
+  "tests/scripts/check-unused-type-members.operations.test.ts",
+] as const;
+
+/** The declaration the live sensitivity control plants its offender into. */
+export const EDGE_DEPS_REL: (typeof UNUSED_TYPE_MEMBER_GATE_TARGETS)[number] =
+  "extensions/pi-claude-marketplace/edge/types.ts";
+
+/** The owner test whose `EdgeDeps` receiver supplies the benign read. */
+export const EDGE_DEPS_OWNER_TEST_REL: (typeof UNUSED_TYPE_MEMBER_GATE_TARGETS)[number] =
+  "tests/edge/types.test.ts";
+
+/** The gate's command-line entry point, which states the claims it supports. */
+export const TYPE_MEMBER_GATE_REL: (typeof UNUSED_TYPE_MEMBER_GATE_TARGETS)[number] =
+  "scripts/check-unused-type-members.mjs";
+
+/** The executable offender and benign controls around that entry point. */
+export const TYPE_MEMBER_NEGATIVE_REL: (typeof UNUSED_TYPE_MEMBER_GATE_TARGETS)[number] =
+  "scripts/check-unused-type-members.negative.mjs";
+
+/**
  * D-07-17: the records that carry a finding's disposition when the evidence for
  * it is a command run this cycle rather than a change to the tree.
  *
