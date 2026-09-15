@@ -1,7 +1,7 @@
 ---
 phase: 03-dependency-resolution
 verified: 2026-09-15T00:00:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 covered_files:
   - .planning/PROJECT.md
@@ -84,7 +84,7 @@ human_verification:
 **Phase Goal:** Installing a plugin installs what it declares it needs. This supersedes the PI-13 / PR-5 no-auto-resolution decision rather than working around it. The cascade maps onto the machinery that already exists -- `orchestrators/import/` cascade-installs an entire config with per-entry outcomes, and `orchestrators/plugin/bootstrap.ts` is an existing composer -- instead of a second cascade being introduced beside them.
 
 **Verified:** 2026-09-15
-**Status:** human_needed
+**Status:** passed
 **Re-verification:** No -- initial verification
 
 ## Context: a code review found 16 issues, all 13 blocker+warning findings were fixed
@@ -97,6 +97,32 @@ critical+warning findings were fixed across 13 commits (`03-REVIEW-FIX.md`),
 each with a red-then-green test. This verification does NOT take that report at
 its word -- every fix claim below was independently re-derived from the current
 source and re-run.
+
+## Human verification: run and closed 2026-09-15
+
+Both `human_verification` items were executed by the operator against running
+systems and are recorded in full in `03-UAT.md`.
+
+Test 1 (cascade legibility) passed against a local path-source fixture, over a
+closure of three with a diamond. The load-bearing reload clause was confirmed
+on the running system: after `/reload`, both cascade-installed dependencies
+survived rather than being swept by `buildUninstallBucket`.
+
+Test 2 (live git host) passed against a real smart-HTTPS remote served through
+`git-http-backend`. An annotated tag peeled to its commit (`9f610eb1`) and not
+to the tag object (`ee3dca2b`); `^1.0.0` selected 1.0.0 over an advertised
+2.0.0, so selection is constraint-driven rather than newest-wins; and a
+no-match failed WITHOUT falling back to repository head (D-03-09), verified
+three independent ways -- an absent state record, a clean disk, and the
+fixture server's own request log showing a refs-only exchange with no object
+fetch.
+
+One sub-item remains out of reach of any local fixture and is carried forward:
+a SUCCESSFUL credential challenge. `findProviderForHost` matches only
+github.com and gitlab.com (PROV-01), so a self-hosted remote cannot reach the
+Device Flow path by construction. The 401 arm WAS verified end to end,
+including the server-side single-challenge-with-no-retry signature that
+distinguishes "no credential was ever built" from "a credential was rejected".
 
 ## Goal Achievement
 
