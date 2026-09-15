@@ -479,6 +479,7 @@ function buildSeededPluginManifest(
     experimental?: object;
     pluginJsonDefaultEnabled?: boolean;
     declareDependencies?: boolean;
+    dependencyVersion?: string;
   },
 ): Record<string, unknown> {
   return {
@@ -493,7 +494,7 @@ function buildSeededPluginManifest(
     // about the CASCADE rather than about the read order -- the read order has
     // its own cases, where the two sides deliberately disagree.
     ...(opts.declareDependencies === true && {
-      dependencies: [{ name: "some-other-plugin", version: "*" }],
+      dependencies: [{ name: "some-other-plugin", version: opts.dependencyVersion ?? "*" }],
     }),
     // D-64-06: declaring experimental kinds drives `resolveStrict` to the
     // `partially-available` arm without a structural defect.
@@ -512,6 +513,7 @@ function buildSeededMarketplaceEntry(
     rawSourceOverride?: unknown;
     pluginVersion?: string;
     declareDependencies?: boolean;
+    dependencyVersion?: string;
     entryDefaultEnabled?: boolean;
   },
 ): Record<string, unknown> {
@@ -524,7 +526,7 @@ function buildSeededMarketplaceEntry(
     // exercises the successful-install surface. The named plugin must be seeded
     // as a sibling; an unresolvable declaration now fails the whole install.
     ...(opts.declareDependencies === true && {
-      dependencies: [{ name: "some-other-plugin", version: "*" }],
+      dependencies: [{ name: "some-other-plugin", version: opts.dependencyVersion ?? "*" }],
     }),
     ...(opts.entryDefaultEnabled !== undefined && { defaultEnabled: opts.entryDefaultEnabled }),
   };
@@ -620,6 +622,12 @@ async function seedPathMarketplaceWithPlugin(opts: {
   mcpServers?: Record<string, unknown>;
   /** PI-13: declares a valid dependency on another plugin. */
   declareDependencies?: boolean;
+  /**
+   * RESV-03: the version range that declaration carries. Defaults to the
+   * wildcard, which is no constraint at all and keeps every other fixture
+   * offline; a real range routes the cascade into constraint resolution.
+   */
+  dependencyVersion?: string;
   /** Pre-seed a state.json with this plugin already installed (PI-5/PI-15). */
   preInstall?: boolean;
   /** Seed an additional plugin in state that already owns one of the generated names (PI-6). */
@@ -3043,6 +3051,54 @@ test("RESV-01 / RESV-06: a dependency no marketplace declares fails the install 
       );
       // The closure fails before any member is materialized, so the scope root
       // and state.json are byte-identical to their pre-command values.
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), beforeTree);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RESV-03: a dependency whose constraint no release tag satisfies fails the install whole", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv03-constraint-"));
+    try {
+      // arrange: the dependency is declared, seeded and resolvable -- only its
+      // VERSION constraint is unsatisfiable. Its entry is a path source, so it
+      // carries no release tags at all and the constraint can select none.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        dependencyVersion: "^2.0.0",
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const beforeTree = await retryTree(locations.scopeRoot);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+
+      // assert: the constraint verdict is reached before any member becomes a
+      // ledger phase, so state.json and the scope root are byte-identical.
+      assertRetryFailure(
+        outcome,
+        'Dependency "some-other-plugin@mp" has no release tag satisfying ">=2.0.0 <3.0.0-0".',
+      );
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), beforeTree);
@@ -6249,6 +6305,13 @@ async function seedGitSourceMarketplace(opts: {
   fixtureRepoDir: string;
   subdirPath?: string;
   scope?: "user" | "project";
+  /**
+   * RESV-03: a path-sourced plugin seeded beside the git-sourced one, declaring
+   * it as a dependency at this version range. The cascade then has a root whose
+   * own install needs no clone and a DEPENDENCY whose source carries release
+   * tags, which is the only shape a re-pin can be observed in.
+   */
+  dependentPlugin?: { name: string; range: string };
 }): Promise<void> {
   const scope = opts.scope ?? "project";
   // The plugin tree the mock clone copies into staging. For git-subdir it lives
@@ -6268,11 +6331,36 @@ async function seedGitSourceMarketplace(opts: {
 
   await mkdir(path.join(opts.marketplaceRoot, ".claude-plugin"), { recursive: true });
   const manifestPath = path.join(opts.marketplaceRoot, ".claude-plugin", "marketplace.json");
+  const dependent = opts.dependentPlugin;
+  if (dependent !== undefined) {
+    const dependentRoot = path.join(opts.marketplaceRoot, "plugins", dependent.name);
+    await mkdir(path.join(dependentRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(dependentRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: dependent.name,
+        version: "0.0.1",
+        dependencies: [{ name: opts.pluginName, version: dependent.range }],
+      }),
+    );
+  }
+
   await writeFile(
     manifestPath,
     JSON.stringify({
       name: opts.marketplaceName,
-      plugins: [{ name: opts.pluginName, source: opts.source }],
+      plugins: [
+        { name: opts.pluginName, source: opts.source },
+        ...(dependent === undefined
+          ? []
+          : [
+              {
+                name: dependent.name,
+                source: `./plugins/${dependent.name}`,
+                dependencies: [{ name: opts.pluginName, version: dependent.range }],
+              },
+            ]),
+      ],
     }),
   );
 
@@ -6294,6 +6382,60 @@ async function seedGitSourceMarketplace(opts: {
   };
   await saveState(locations.extensionRoot, state);
 }
+
+test("RESV-03: a constrained dependency is materialized at the tag the probe selected", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv03-repin-"));
+    try {
+      // arrange: the dependency's entry names a source with NO sha of its own,
+      // so the only thing that can pin its checkout is the selected release tag.
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: { source: "url", url: "https://example.com/org/repo" },
+        fixtureRepoDir,
+        dependentPlugin: { name: "root", range: "^9.0.0" },
+      });
+      const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "root",
+        cloneCacheSeam: seamWith(gitOps),
+        tagProbe: () =>
+          Promise.resolve({
+            kind: "pinned",
+            tag: "gp--v9.9.9",
+            oid: GIT_SOURCE_SHA,
+            version: "9.9.9",
+          }),
+      });
+
+      // assert: the checkout addresses the tag's commit, and the dependency's
+      // recorded version is derived from it -- so the constraint SELECTED a
+      // version rather than merely vetoing one.
+      assert.equal(outcome.status, "installed");
+      assert.equal(gitState.checkoutCalls.length, 1, "one checkout, at the selected tag");
+      assert.equal(gitState.checkoutCalls[0]?.ref, GIT_SOURCE_SHA);
+      const after = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.equal(
+        after.marketplaces["mp"]?.plugins["gp"]?.version,
+        `sha-${GIT_SOURCE_SHA.slice(0, 12)}`,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 test("PURL-01/02/09: url-source install materializes a clone, records sha-<12hex> + resolvedSha", async () => {
   await withHermeticHome(async ({ installPlugin }) => {

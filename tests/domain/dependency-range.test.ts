@@ -5,6 +5,7 @@ import { minVersion, validRange } from "semver";
 
 import {
   intersectDependencyRanges,
+  isUnconstrainedRange,
   recordedVersionSatisfies,
   renderConstraintRange,
   type DependencyRangeFailureReason,
@@ -280,3 +281,37 @@ test("T-03-08 a range widened by intersection is bounded before it can reach a r
     },
   );
 });
+
+for (const { label, declared, expected } of [
+  { label: "an empty accumulator", declared: [] as readonly string[], expected: true },
+  { label: "the bare wildcard", declared: ["*"], expected: true },
+  { label: "an x-range", declared: ["x"], expected: true },
+  { label: "a floor every version clears", declared: [">=0.0.0"], expected: true },
+  {
+    label: "two separately declared wildcards, whose product spells two of them",
+    declared: ["*", "x"],
+    expected: true,
+  },
+  { label: "a caret range", declared: ["^1.0.0"], expected: false },
+  {
+    label: "a wildcard narrowed by a real range",
+    declared: ["*", "^1.0.0"],
+    expected: false,
+  },
+]) {
+  test(`RESV-03 ${label} is ${expected ? "" : "not "}an unconstrained range`, () => {
+    // arrange
+    const intersected = intersectDependencyRanges(declared);
+    assert.ok(intersected.ok);
+
+    // act
+    const unconstrained = isUnconstrainedRange(intersected.range);
+
+    // assert: the caller asks whether a candidate search is owed, so the answer
+    // rides the intersected range alongside the range itself.
+    assert.deepStrictEqual(
+      { range: intersected.range, unconstrained },
+      { range: intersected.range, unconstrained: expected },
+    );
+  });
+}

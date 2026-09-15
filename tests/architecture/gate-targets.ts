@@ -619,16 +619,6 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
     "HOOKS_VALIDATOR",
   ],
   "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts": ["HOOKS_CONFIG_SCHEMA"],
-  // RESV-03: the version-constraint algebra is reached from the tag probe,
-  // which no production entry point composes yet -- the install cascade wires
-  // it in. Until it does, a production run reads none of these three, so the
-  // census measures them as unowned. Drop this entry in the commit that makes
-  // the cascade call the probe.
-  "extensions/pi-claude-marketplace/domain/dependency-range.ts": [
-    "intersectDependencyRanges",
-    "recordedVersionSatisfies",
-    "renderConstraintRange",
-  ],
   "extensions/pi-claude-marketplace/domain/plugin-resolver.ts": ["resolveLoose"],
   "extensions/pi-claude-marketplace/domain/resolver-types.ts": ["ResolvedPluginSchema"],
   "extensions/pi-claude-marketplace/domain/unsupported-components.ts": [
@@ -659,6 +649,13 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
   ],
   "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts": ["createFetchPlugins"],
   "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts": ["createGetPluginInfo"],
+  // RESV-03: the constraint-resolution step, exported so it can be exercised
+  // as a unit and so a later surface can compose the resolution rather than
+  // re-derive it. `runInstallCascade` in the same module is its only production
+  // caller, which is what the census measures here.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts": [
+    "resolveMemberConstraints",
+  ],
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts": ["createInstallPlugin"],
   "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts": [
     "narrowResolverReasons",

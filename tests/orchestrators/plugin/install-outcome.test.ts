@@ -1029,6 +1029,49 @@ test("PURL-09 / D-77-01 / D-77-02: a git-source install takes its root and its v
   assert.equal(record?.resolvedSha, RESOLVED_SHA);
 });
 
+test("RESV-03: a source pin override materializes the pinned commit, not the entry's own ref", async (t) => {
+  // arrange: the entry names a ref-less source, so only the override can put a
+  // sha on what the probe is handed.
+  const environment = await createHermeticEnvironment(t, "install-outcome-pin-");
+  const seeded = await seedPlugin(environment.cwd, {
+    gitSource: { source: "url", url: "https://example.com/org/repo" },
+    components: { skills: ["alpha"] },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const probed: unknown[] = [];
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    sourcePinOverride: RESOLVED_SHA,
+    cloneProbe: async (options) => {
+      probed.push(options.source);
+      return Promise.resolve({
+        result: { kind: "materialized", pluginRoot: seeded.pluginRoot, resolvedSha: RESOLVED_SHA },
+        resolvedSha: RESOLVED_SHA,
+      });
+    },
+  });
+
+  // assert: the override rides the source's `sha`, which is what routes the
+  // probe down its already-pinned arm rather than adding a second one.
+  assert.deepStrictEqual(probed, [
+    {
+      kind: "url",
+      raw: "https://example.com/org/repo",
+      sha: RESOLVED_SHA,
+      url: "https://example.com/org/repo",
+    },
+  ]);
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.version, "sha-0123456789ab");
+});
+
 test("the callback reaches the real clone probe through the ledger's own cache, credential, and memo seams", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-git-seam-");

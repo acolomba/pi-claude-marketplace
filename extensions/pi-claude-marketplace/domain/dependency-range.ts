@@ -236,6 +236,20 @@ export function intersectDependencyRanges(ranges: readonly string[]): Dependency
 }
 
 /**
+ * Whether a range constrains nothing, so no candidate search is owed for it.
+ *
+ * The test is canonicalization, not string identity. `validRange` collapses
+ * every unconstrained spelling onto the same wildcard -- `*`, `x`, `>=0.0.0`,
+ * and a conjunction of them -- so an intersection of two separately declared
+ * wildcards reads as no constraint rather than as a range some repository then
+ * has to be searched for. It lives here because what a range MEANS is this
+ * module's question; a caller deriving it would be a second evaluator.
+ */
+export function isUnconstrainedRange(range: string): boolean {
+  return validRange(range) === WILDCARD;
+}
+
+/**
  * Whether the version RECORDED for an installed plugin satisfies a range.
  *
  * D-03-04: a recorded version with no real semver form -- this project's

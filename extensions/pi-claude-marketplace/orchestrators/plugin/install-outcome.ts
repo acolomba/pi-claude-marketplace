@@ -157,6 +157,17 @@ export interface InstallLedgerOptions {
   readonly mapModel?: boolean;
   readonly partial?: boolean;
   readonly pinVersionOverride?: string;
+  /**
+   * RESV-03: the commit a constrained dependency's release tag resolved to.
+   *
+   * When set, the git-source resolve callback materializes THIS object id
+   * instead of whatever ref the marketplace entry names, which is what makes a
+   * version constraint SELECT a version rather than merely veto one. Only the
+   * install cascade sets it, only for a member whose accumulated constraint was
+   * a real range, and only ever to an id read off that source's own release
+   * tags -- the entry still decides which repository is read.
+   */
+  readonly sourcePinOverride?: string;
   readonly allowExistingRecord?: boolean;
   readonly cloneCacheSeam?: InstallCloneCacheSeam;
   readonly cloneProbe?: typeof probeInstallClone;
@@ -442,7 +453,14 @@ async function preflightInstallResolve(
     marketplaceRoot: sourceMp.marketplaceRoot,
     resolveGitPluginRoot: async (gitSource) => {
       const clone = await (opts.cloneProbe ?? probeInstallClone)({
-        source: gitSource,
+        // RESV-03: a pinned dependency materializes the exact commit its
+        // release tag resolved to. Overriding `sha` is what routes the probe
+        // down its already-pinned arm, so no second materialization path
+        // exists for a constrained install.
+        source:
+          opts.sourcePinOverride === undefined
+            ? gitSource
+            : { ...gitSource, sha: opts.sourcePinOverride },
         locations,
         ...(opts.cloneCacheSeam !== undefined && { seam: opts.cloneCacheSeam }),
         auth: {

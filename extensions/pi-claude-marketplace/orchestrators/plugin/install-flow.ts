@@ -26,7 +26,11 @@ import { withLockedStateTransaction } from "../../transaction/with-state-guard.t
 import { cascadeUnstagePlugin, crossScopeFlag } from "../marketplace/shared.ts";
 
 import { readDependencyDeclaration } from "./dependency-declaration-read.ts";
-import { formatClosureFailure, runInstallCascade } from "./install-cascade.ts";
+import {
+  formatClosureFailure,
+  formatConstraintFailure,
+  runInstallCascade,
+} from "./install-cascade.ts";
 import { probeInstallClone } from "./install-clone-probe.ts";
 import { resolveInstallDeclaredEnabled } from "./install-declared-enabled.ts";
 import { composeInstallDisableCascade } from "./install-disable-cascade.ts";
@@ -45,7 +49,7 @@ import {
   writeAdoptingConfigEntries,
 } from "./shared.ts";
 
-import type { InstallCascadeResult } from "./install-cascade.ts";
+import type { CascadeTagProbe, InstallCascadeResult } from "./install-cascade.ts";
 import type { InstallCloneCacheSeam } from "./install-clone-probe.ts";
 import type { InstallHooksRouting } from "./install-disable-cascade.ts";
 import type {
@@ -175,6 +179,13 @@ export interface InstallPluginOptions {
    */
   readonly cloneCacheSeam?: InstallCloneCacheSeam;
   /**
+   * RESV-03 tag-resolution seam for the cascade's constrained members. Undefined
+   * = the real probe, which reads the dependency's own source repository over
+   * the network under D-03-03's NFR-5 amendment. Callers inject a collaborator
+   * so a constrained cascade resolves without one.
+   */
+  readonly tagProbe?: CascadeTagProbe;
+  /**
    * PROV-03 / D-79-05 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS at use.
    * The git-source clone probe passes it to `buildCloneAuth` so a provider
    * host authenticates host-keyed; callers can inject a CredentialOps collaborator.
@@ -213,7 +224,14 @@ const REAL_INSTALL_TRANSACTION: InstallTransaction = {
  */
 function buildInstallLedgerOptions(
   opts: InstallPluginOptions,
-  core: { scope: Scope; cwd: string; marketplace: string; plugin: string },
+  core: {
+    scope: Scope;
+    cwd: string;
+    marketplace: string;
+    plugin: string;
+    /** RESV-03: the commit a cascade member's version constraint selected. */
+    sourcePin?: string;
+  },
 ): InstallLedgerOptions {
   return {
     ctx: opts.ctx,
@@ -221,6 +239,7 @@ function buildInstallLedgerOptions(
     cwd: core.cwd,
     marketplace: core.marketplace,
     plugin: core.plugin,
+    ...(core.sourcePin !== undefined && { sourcePinOverride: core.sourcePin }),
     ...(opts.mapModel !== undefined && { mapModel: opts.mapModel }),
     ...(opts.partial !== undefined && { partial: opts.partial }),
     ...(opts.pinVersionOverride !== undefined && { pinVersionOverride: opts.pinVersionOverride }),
@@ -317,6 +336,14 @@ function unwrapCascade(
 
   if (cascade.kind === "closure-failed") {
     throw new Error(formatClosureFailure(cascade.failure));
+  }
+
+  // RESV-03: the constraint verdict is reached before any member becomes a
+  // ledger phase, so this arm carries nothing to roll back -- it throws for the
+  // same reason the closure arm does, into the same catch, which composes the
+  // failed row.
+  if (cascade.kind === "constraint-failed") {
+    throw new Error(formatConstraintFailure(cascade.failure));
   }
 
   if (cascade.kind === "member-failed") {
@@ -833,12 +860,17 @@ async function installPluginWithTransaction(
         locations,
         rootKey,
         lookup: (subject) => lookupCascadeDependencies(state, { scope, cwd, locations }, subject),
+        // RESV-03: a member whose constraint selected a release tag carries the
+        // commit that tag resolves to, and this builder is where it enters that
+        // member's install. An unconstrained member carries none and installs
+        // from the ref its marketplace entry names, exactly as before.
         ledgerOptionsFor: (member) =>
           buildInstallLedgerOptions(opts, {
             scope,
             cwd,
             marketplace: member.marketplace,
             plugin: member.name,
+            ...(member.pinnedOid !== undefined && { sourcePin: member.pinnedOid }),
           }),
         installedKeys: collectInstalledKeys(state),
         // D-03-08: the marketplaces the target scope already records. A
@@ -850,6 +882,7 @@ async function installPluginWithTransaction(
         knownMarketplaces: new Set(Object.keys(state.marketplaces)),
         capture,
         transaction,
+        ...(opts.tagProbe !== undefined && { tagProbe: opts.tagProbe }),
       });
       const installed = unwrapCascade(cascade, capture);
       if (installed === undefined) {

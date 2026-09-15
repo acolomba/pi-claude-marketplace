@@ -23,6 +23,20 @@
 // dependencies before dependents, the requested plugin last. Reordering the
 // array would mean changing that walk, and the walk's own cases would fail.
 //
+// Constraint resolution runs BETWEEN the closure walk and the phase array, and
+// that position is the contract (RESV-03). Every way a version constraint can
+// fail -- contradictory declarations, a combination too large to compute, an
+// unparseable range, no satisfying release tag, and a tag listing that could
+// not be read -- is decided before a single `Phase` exists. A constraint
+// failure therefore never reaches rollback, because there is nothing
+// materialized for rollback to unwind.
+//
+// The wildcard short-circuit is load-bearing for NFR-5, not an optimization. A
+// dependency whose accumulated ranges come to no constraint makes NO tag query
+// at all, so the overwhelmingly common declaration -- a name with no version --
+// keeps a warm install entirely offline. Only a member carrying a REAL range
+// reaches the network, which is the exact read D-03-03 amended NFR-5 for.
+//
 // D-03-07 rollback scope has two halves, and only one of them is structural.
 // A DEPENDENCY the closure skipped as already-installed never becomes a
 // `Phase`, so the reverse walk over `runPhases`'s own `executed` array cannot
@@ -36,11 +50,25 @@
 // its ledger returns, and `undo` acts only on what it finds there.
 
 import { resolveDependencyClosure } from "../../domain/dependency-closure.ts";
+import {
+  intersectDependencyRanges,
+  isUnconstrainedRange,
+  renderConstraintRange,
+} from "../../domain/dependency-range.ts";
+import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
+import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { parsePluginSource } from "../../domain/source.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
+import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
+import { probeDependencyTags } from "./dependency-tag-probe.ts";
 import { runInstallLedger } from "./install-outcome.ts";
 
+import type {
+  DependencyTagListingFailureReason,
+  DependencyTagProbeOptions,
+} from "./dependency-tag-probe.ts";
 import type {
   InstallFailureCapture,
   InstallLedgerOptions,
@@ -52,6 +80,8 @@ import type {
   ClosureMember,
   DependencyClosureResult,
 } from "../../domain/dependency-closure.ts";
+import type { DependencyRangeIntersection } from "../../domain/dependency-range.ts";
+import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
@@ -75,6 +105,107 @@ const REAL_INSTALL_CASCADE_SEAM: InstallCascadeLedgerSeam = Object.freeze({
 /** Same rationale as the seam above, for the ledger scheduler. */
 const DEFAULT_INSTALL_CASCADE_TRANSACTION: InstallLedgerTransaction = Object.freeze({ runPhases });
 
+/**
+ * The tag-resolving operation, injected so a cascade test never lists a real
+ * remote.
+ *
+ * The injection point is named for what it DOES. `install-cascade.ts` is not
+ * itself a `NETWORK_FREE_TARGETS` member, but both of its callers are and that
+ * gate matches bare identifiers, so nothing reachable from them may be spelled
+ * with one of the tokens it looks for.
+ */
+export type CascadeTagProbe = typeof probeDependencyTags;
+
+/** The per-URL tag listing memo one cascade run threads through every query. */
+export type CascadeTagMemo = NonNullable<DependencyTagProbeOptions["tagMemo"]>;
+
+/**
+ * Why a member's accumulated version constraint produced no install.
+ *
+ * `range` is the constraint as rendered for a user-visible row, already bounded
+ * by `renderConstraintRange`. Every arm carries the member key and that range
+ * and nothing else identifying: no arm carries a filesystem path, and the
+ * intersection's own `detail` is assembled from measurements and field
+ * positions rather than from any declared range's text.
+ *
+ * The two `range-conflict` arms are distinguished by `why`, because a
+ * contradiction BETWEEN declarations and a contradiction with what is already
+ * on disk are different facts about different subjects.
+ */
+export type CascadeConstraintFailure =
+  | {
+      readonly kind: "range-conflict";
+      readonly why: "contradictory-declarations";
+      readonly key: string;
+      readonly range: string;
+      readonly detail: string;
+    }
+  | {
+      readonly kind: "range-conflict";
+      readonly why: "installed-unsatisfied";
+      readonly key: string;
+      readonly range: string;
+      readonly recordedVersion: string;
+    }
+  | {
+      readonly kind: "range-too-complex";
+      readonly key: string;
+      readonly range: string;
+      readonly detail: string;
+    }
+  | {
+      readonly kind: "range-invalid";
+      readonly key: string;
+      readonly range: string;
+      readonly detail: string;
+    }
+  | { readonly kind: "no-matching-tag"; readonly key: string; readonly range: string }
+  | {
+      readonly kind: "tag-listing-failed";
+      readonly key: string;
+      readonly range: string;
+      readonly cause: Error;
+      readonly classification: DependencyTagListingFailureReason;
+    };
+
+/**
+ * A closure member whose accumulated constraint has been resolved.
+ *
+ * Both pin fields are present together and only for a member whose constraint
+ * was a real range that a release tag satisfied. An unconstrained member
+ * carries neither and installs from whatever ref its marketplace entry names,
+ * which is what every install did before a constraint could re-point one.
+ */
+export interface ResolvedCascadeMember extends ClosureMember {
+  /** The release tag the constraint selected. */
+  readonly pinnedRef?: string;
+  /** The object id that tag resolves to, which is what the install pins on. */
+  readonly pinnedOid?: string;
+}
+
+/** Every member's constraint resolved, or the first failure one produced. */
+export type MemberConstraintResolution =
+  | { readonly ok: true; readonly members: readonly ResolvedCascadeMember[] }
+  | { readonly ok: false; readonly failure: CascadeConstraintFailure };
+
+/** Inputs of one cascade run's constraint resolution. */
+export interface MemberConstraintOptions {
+  /** The caller's locked snapshot: the recorded versions and the catalog roots. */
+  readonly state: ExtensionState;
+  /** The members this run would install, in closure order. */
+  readonly closure: readonly ClosureMember[];
+  /**
+   * The caller's per-member ledger options.
+   *
+   * The probe's credential bundle is read from the SAME builder that threads
+   * those collaborators into every member's install, so a cascade cannot
+   * authenticate a tag query differently from the clone that follows it.
+   */
+  readonly ledgerOptionsFor: (member: ResolvedCascadeMember) => InstallLedgerOptions;
+  readonly tagProbe: CascadeTagProbe;
+  readonly tagMemo: CascadeTagMemo;
+}
+
 /** One member the cascade itself materialized, in install order. */
 export interface CascadeMemberOutcome {
   readonly key: string;
@@ -92,8 +223,13 @@ export interface InstallCascadeOptions {
   /** `<plugin>@<marketplace>` of the plugin the user asked for. */
   readonly rootKey: string;
   readonly lookup: ClosureLookup;
-  /** Per-member ledger options; the caller owns scope, cwd and the auth bundle. */
-  readonly ledgerOptionsFor: (member: ClosureMember) => InstallLedgerOptions;
+  /**
+   * Per-member ledger options; the caller owns scope, cwd and the auth bundle.
+   *
+   * The member handed over carries the pin its constraint selected, so the
+   * caller's builder is where a re-pinned tag enters that member's install.
+   */
+  readonly ledgerOptionsFor: (member: ResolvedCascadeMember) => InstallLedgerOptions;
   readonly installedKeys: ReadonlySet<string>;
   readonly knownMarketplaces: ReadonlySet<string>;
   /**
@@ -104,6 +240,8 @@ export interface InstallCascadeOptions {
   readonly capture?: InstallFailureCapture;
   readonly seam?: InstallCascadeLedgerSeam;
   readonly transaction?: InstallLedgerTransaction;
+  /** Tag resolution for a constrained member; defaults to the real probe. */
+  readonly tagProbe?: CascadeTagProbe;
 }
 
 /** The cascade's outcome. */
@@ -118,6 +256,7 @@ export type InstallCascadeResult =
       readonly kind: "closure-failed";
       readonly failure: Extract<DependencyClosureResult, { readonly ok: false }>;
     }
+  | { readonly kind: "constraint-failed"; readonly failure: CascadeConstraintFailure }
   | {
       readonly kind: "member-failed";
       readonly key: string;
@@ -160,6 +299,206 @@ export function formatClosureFailure(
 }
 
 /**
+ * Human-readable cause text for a constraint failure.
+ *
+ * Every interpolated value is a token-allowlisted key, a bounded rendered
+ * range, a recorded version, a closed-set transport classification, or the
+ * intersection's own measurement text -- so no manifest prose and no
+ * filesystem path reaches the string.
+ */
+export function formatConstraintFailure(failure: CascadeConstraintFailure): string {
+  if (failure.kind === "range-conflict") {
+    return failure.why === "installed-unsatisfied"
+      ? `Dependency "${failure.key}" is installed at version ${failure.recordedVersion}, which does not satisfy "${failure.range}".`
+      : `Dependency "${failure.key}" has contradictory version constraints "${failure.range}" (${failure.detail}).`;
+  }
+
+  if (failure.kind === "no-matching-tag") {
+    return `Dependency "${failure.key}" has no release tag satisfying "${failure.range}".`;
+  }
+
+  if (failure.kind === "tag-listing-failed") {
+    const cause = failure.classification ?? "tag listing failed";
+    return `Dependency "${failure.key}" could not be checked against "${failure.range}" (${cause}).`;
+  }
+
+  if (failure.kind === "range-invalid") {
+    return `Dependency "${failure.key}" declares an unparseable version constraint "${failure.range}" (${failure.detail}).`;
+  }
+
+  return `Dependency "${failure.key}" declares version constraints too complex to combine (${failure.detail}).`;
+}
+
+/**
+ * Map an intersection failure onto the cascade's own discriminant.
+ *
+ * The DECLARED ranges are what the row reports here, because an intersection
+ * that failed produced no combined range to report instead. Each of them
+ * already passed the declared-version allowlist, and the join is bounded
+ * exactly like any other rendered range.
+ */
+function toIntersectionFailure(
+  member: ClosureMember,
+  failed: Extract<DependencyRangeIntersection, { readonly ok: false }>,
+): CascadeConstraintFailure {
+  const key = member.key;
+  const range = renderConstraintRange(member.ranges.join(" "));
+  if (failed.reason === "disjoint") {
+    return {
+      kind: "range-conflict",
+      why: "contradictory-declarations",
+      key,
+      range,
+      detail: failed.detail,
+    };
+  }
+
+  return failed.reason === "too-complex"
+    ? { kind: "range-too-complex", key, range, detail: failed.detail }
+    : { kind: "range-invalid", key, range, detail: failed.detail };
+}
+
+/**
+ * The git-backed source a member's release tags would live on.
+ *
+ * The SOURCE comes from the member's own marketplace entry, never from the
+ * declaration that named it -- a dependency declaration carries a version, and
+ * a version may select among a source's tags but may never change which source
+ * is read.
+ *
+ * A member with no git-backed source has no release tags at all. It reports the
+ * same no-match its constrained siblings report rather than a second shape of
+ * failure, which is D-03-09's rule applied one step earlier: one no-match
+ * answer, no branch on how the source parsed, and no path to a repository head.
+ */
+async function resolveMemberTagSource(
+  state: ExtensionState,
+  member: ClosureMember,
+): Promise<GitBackedSource | undefined> {
+  const record = state.marketplaces[member.marketplace];
+  if (record === undefined) {
+    return undefined;
+  }
+
+  const manifest = await loadMarketplaceManifest(record.manifestPath);
+  const declared = lookupDeclaredPlugin(manifest, member.name);
+  if (declared.kind === "absent") {
+    return undefined;
+  }
+
+  const parsed = parsePluginSource(declared.entry.source);
+  return parsed.kind === "url" || parsed.kind === "git-subdir" || parsed.kind === "github"
+    ? parsed
+    : undefined;
+}
+
+/** One member resolved to a pin, or the failure its constraint produced. */
+type MemberConstraintOutcome =
+  | { readonly kind: "resolved"; readonly member: ResolvedCascadeMember }
+  | { readonly kind: "failed"; readonly failure: CascadeConstraintFailure };
+
+/**
+ * Query a constrained member's release tags and turn the answer into a pin.
+ *
+ * The auth bundle is lifted from the member's own ledger options rather than
+ * composed here, so the tag query and the clone that follows it authenticate
+ * against one host bundle and one per-host memo. No credential value is read
+ * or placed on any returned arm (AUTH-09).
+ */
+async function probeMemberPin(
+  options: MemberConstraintOptions,
+  member: ClosureMember,
+  range: string,
+): Promise<MemberConstraintOutcome> {
+  const source = await resolveMemberTagSource(options.state, member);
+  if (source === undefined) {
+    return {
+      kind: "failed",
+      failure: { kind: "no-matching-tag", key: member.key, range: renderConstraintRange(range) },
+    };
+  }
+
+  const ledger = options.ledgerOptionsFor(member);
+  const probed = await options.tagProbe({
+    pluginName: member.name,
+    source,
+    range,
+    tagMemo: options.tagMemo,
+    auth: {
+      ctx: ledger.ctx,
+      credentialOps: ledger.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
+      ...(ledger.deviceFlowHttp !== undefined && { deviceFlowHttp: ledger.deviceFlowHttp }),
+      ...(ledger.authMemo !== undefined && { authMemo: ledger.authMemo }),
+    },
+  });
+  if (probed.kind === "pinned") {
+    return {
+      kind: "resolved",
+      member: { ...member, pinnedRef: probed.tag, pinnedOid: probed.oid },
+    };
+  }
+
+  if (probed.kind === "no-matching-tag") {
+    return {
+      kind: "failed",
+      failure: { kind: "no-matching-tag", key: member.key, range: probed.range },
+    };
+  }
+
+  return {
+    kind: "failed",
+    failure: {
+      kind: "tag-listing-failed",
+      key: member.key,
+      range: renderConstraintRange(range),
+      cause: probed.cause,
+      classification: probed.classification,
+    },
+  };
+}
+
+/**
+ * Resolve one member this run would install.
+ *
+ * The wildcard arm returns the member untouched and makes NO query: an empty
+ * accumulator intersects to the wildcard, so a dependency declared with no
+ * version never reaches a remote.
+ */
+async function resolveOneMember(
+  options: MemberConstraintOptions,
+  member: ClosureMember,
+): Promise<MemberConstraintOutcome> {
+  const intersected = intersectDependencyRanges(member.ranges);
+  if (!intersected.ok) {
+    return { kind: "failed", failure: toIntersectionFailure(member, intersected) };
+  }
+
+  return isUnconstrainedRange(intersected.range)
+    ? { kind: "resolved", member }
+    : probeMemberPin(options, member, intersected.range);
+}
+
+/**
+ * Turn every member's accumulated ranges into a pin, or report the first
+ * constraint that cannot be satisfied.
+ */
+export async function resolveMemberConstraints(
+  options: MemberConstraintOptions,
+): Promise<MemberConstraintResolution> {
+  const members: ResolvedCascadeMember[] = [];
+  for (const member of options.closure) {
+    const outcome = await resolveOneMember(options, member);
+    if (outcome.kind === "failed") {
+      return { ok: false, failure: outcome.failure };
+    }
+
+    members.push(outcome.member);
+  }
+
+  return { ok: true, members };
+}
+
+/**
  * One member's phase.
  *
  * `undo` is gated on `run.materialized` so it can only reach an install THIS
@@ -172,7 +511,7 @@ function buildMemberPhase(
   options: InstallCascadeOptions,
   seam: InstallCascadeLedgerSeam,
   transaction: InstallLedgerTransaction,
-  member: ClosureMember,
+  member: ResolvedCascadeMember,
 ): Phase<CascadeRun> {
   return {
     name: member.key,
@@ -276,6 +615,21 @@ export async function runInstallCascade(
     return { kind: "closure-failed", failure: closure };
   }
 
+  // RESV-03 / RESV-05: decided here, between the walk and the phase array, so
+  // every constraint verdict lands while nothing is materialized. ONE memo is
+  // allocated per run and threaded through every member, so a graph whose
+  // dependencies share a repository lists that repository once.
+  const constraints = await resolveMemberConstraints({
+    state: options.state,
+    closure: closure.closure,
+    ledgerOptionsFor: options.ledgerOptionsFor,
+    tagProbe: options.tagProbe ?? probeDependencyTags,
+    tagMemo: new Map(),
+  });
+  if (!constraints.ok) {
+    return { kind: "constraint-failed", failure: constraints.failure };
+  }
+
   const seam = options.seam ?? REAL_INSTALL_CASCADE_SEAM;
   const transaction = options.transaction ?? DEFAULT_INSTALL_CASCADE_TRANSACTION;
   const run: CascadeRun = {
@@ -285,7 +639,7 @@ export async function runInstallCascade(
     members: [],
     materialized: new Set(),
   };
-  const phases: readonly Phase<CascadeRun>[] = closure.closure.map((member) =>
+  const phases: readonly Phase<CascadeRun>[] = constraints.members.map((member) =>
     buildMemberPhase(options, seam, transaction, member),
   );
 
