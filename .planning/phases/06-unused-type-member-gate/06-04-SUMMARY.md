@@ -47,6 +47,7 @@ key-files:
     - scripts/check-unused-type-members.analysis.mjs
     - scripts/check-unused-type-members.mjs
     - tests/scripts/check-unused-type-members.flow.test.ts
+    - tests/scripts/check-unused-type-members.test.ts
 
 key-decisions:
   - "A whole-object operation is resolved through its declaration -- a default-library interface for `JSON` and `ObjectConstructor`, an ambient `assert` module for the deep comparisons -- so a local function carrying the name reaches none of it"
@@ -290,8 +291,8 @@ replaces an example the analyzer now understands with one it still does not.
 - **Found during:** Task 3
 - **Issue:** D-06 requires the tool to document its supported scope and limitations honestly. The `--help` text listed only the single-member syntaxes, so a reader had no way to know that a deep comparison or a spread now credits a member, nor where the analysis refuses.
 - **Fix:** Extended the scope section of `scripts/check-unused-type-members.mjs` to name the whole-object operations, the wrapper rule, the production-lineage rule for comparisons, the operand-only provenance bound and the two refusals. `scripts/check-unused-type-members.mjs` was not in the plan's `files_modified`.
-- **Verification:** `node scripts/check-unused-type-members.mjs --help`
-- **Commit:** 70e2fa35
+- **Verification:** `node scripts/check-unused-type-members.mjs --help`, and `the help text states the bounded claim the gate makes and the claims it does not` in `tests/scripts/check-unused-type-members.test.ts`, which pins the block verbatim and was extended to cover the new claims
+- **Commit:** 70e2fa35, control extended in 78c21914
 
 ### 4. [Rule 1 - Correctness] An inherited control used an example this plan models
 
@@ -302,7 +303,16 @@ replaces an example the analyzer now understands with one it still does not.
 - **Verification:** `node --test tests/scripts/check-unused-type-members.flow.test.ts` -- 50/50 pass
 - **Commit:** d00c4584
 
-**Total deviations:** 4 auto-fixed (2 correctness, 1 blocker, 1 missing critical). **Impact:** The container work is modelled by its real semantics instead of as a bulk read, the walk finishes inside a bound that still has headroom, and the tool's own documentation states what it now credits and where it refuses.
+### 5. [Rule 1 - Correctness] The extended help text broke the control that pins it
+
+- **Found during:** The final spot check of all five suites, after the documentation change had already been committed
+- **Issue:** `tests/scripts/check-unused-type-members.test.ts` pins the whole scope block verbatim. The pre-commit hooks run lint, typecheck and fallow but not the Node suites, so extending the help text left that control failing until the suites were run again.
+- **Fix:** Extended the pinned block to the current text, so the control now states the whole-object paragraph and the two new limitations as well.
+- **Files modified:** `tests/scripts/check-unused-type-members.test.ts`
+- **Verification:** All five analyzer suites together -- 134/134 pass
+- **Commit:** 78c21914
+
+**Total deviations:** 5 auto-fixed (3 correctness, 1 blocker, 1 missing critical). **Impact:** The container work is modelled by its real semantics instead of as a bulk read, the walk finishes inside a bound that still has headroom, and the tool's own documentation states what it now credits and where it refuses.
 
 ## Reconciling Against the Landed Seams
 
