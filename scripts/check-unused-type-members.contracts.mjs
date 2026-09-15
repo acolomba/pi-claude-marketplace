@@ -585,19 +585,39 @@ function selectionSourceOf(filterNode, context) {
 }
 
 /**
+ * The two-argument selection a coordinate names. Several nodes can begin at one
+ * character -- an indexed access and the selection it reads a slot out of --
+ * and a site resolves to the outermost of them. The selection is whichever one
+ * of them is one, so the search descends while the start does not move.
+ */
+function selectionNodeAt(node) {
+  let current = node;
+
+  while (current !== undefined) {
+    if (ts.isTypeReferenceNode(current) && current.typeArguments?.length === 2) {
+      return current;
+    }
+
+    current = ts.forEachChild(current, (child) =>
+      child.getStart() === node.getStart() ? child : undefined,
+    );
+  }
+
+  return undefined;
+}
+
+/**
  * Proves a member exists to select a variant rather than to be read. The member
  * has to sit in the filter position of the named selection, the source has to
  * discriminate on its key, and a selection the checker already resolved has to
  * come back narrower than it started.
  */
 function proveTypeSelection(entry, candidate, context) {
-  const filterNode = resolveNode(
-    parseSite(entry.filter, `${entry.id} filter`),
-    `${entry.id} filter`,
-    context,
+  const filterNode = selectionNodeAt(
+    resolveNode(parseSite(entry.filter, `${entry.id} filter`), `${entry.id} filter`, context),
   );
 
-  if (!ts.isTypeReferenceNode(filterNode) || filterNode.typeArguments?.length !== 2) {
+  if (filterNode === undefined) {
     fail(`${entry.id} filter ${entry.filter} is not a two-argument type selection`);
   }
 
