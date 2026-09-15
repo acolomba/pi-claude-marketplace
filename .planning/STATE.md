@@ -4,17 +4,17 @@ milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
 status: executing
-stopped_at: Completed 06-07-PLAN.md
-last_updated: "2026-09-15T23:30:00.000Z"
+stopped_at: Completed 06-09-PLAN.md
+last_updated: "2026-09-16T02:05:00.000Z"
 last_activity: 2026-09-15
-last_activity_desc: Plan 06-07 complete (real EdgeDeps plant detected live, runner measured against six defective gates)
-state_head: 6c61b8448e8d3a2d33f7e4085bfa0bdc702e586f
+last_activity_desc: Plan 06-09 complete (bridges/hooks repaired, 138 -> 113 unread measured, zero findings gained)
+state_head: 3d334a1f
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 54
-  completed_plans: 45
-  percent: 65
+  total_plans: 60
+  completed_plans: 46
+  percent: 63
 milestone_name: test-backlog
 ---
 
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 06 (Unused Type Member Gate) — EXECUTING
-Plan: 8 of 8
-Status: Ready to execute
-Last activity: 2026-09-15 — Plan 06-07 complete (real EdgeDeps plant detected live, runner measured against six defective gates)
+Plan: 9 of 14
+Status: Executing the six bounded repair plans (06-09 -> 06-14 -> 06-10 -> 06-11 -> 06-13 -> 06-12)
+Last activity: 2026-09-15 — Plan 06-09 complete (bridges/hooks repaired, 138 -> 113 unread measured, zero findings gained)
 
 Plan 06-01 landed the member gate's compiler tracer: `node
 scripts/check-unused-type-members.mjs` compiles the project once, inventories
@@ -231,6 +231,39 @@ incomplete or invalid. `npm run check` is exit 0 at 6,473 unit and 32 integratio
 tests. `lint:type-members:negative` is a real package entry and, like
 `lint:type-members` and `lint:type-members:audit`, is deliberately NOT in
 `npm run check`; 06-08 activates all three after the six repair plans land.
+
+Plan 06-09 is the first of the six bounded repair plans and cleared the
+`bridges/hooks` owner group by source repair alone. `AsyncRewakeEntry` became an
+alias of `HooksRuntimeChildEntry` rather than a second declaration of the same
+fifteen members; the four mirrored hooks-registration option bags became one
+exported `RegisterHooksBridgeOptions`, which took the never-read `ctx` field with
+it along with the extension factory's `{} as unknown as ExtensionContext`
+placeholder and ~37 call sites; the `tool_result` patch now writes through the
+event's own slots behind a `Partial<Pick<ToolResultEvent, "content" | "isError">>`
+view instead of minting a single-member cast literal per write, with the CR-01
+whitelist guards unchanged; and `HydratedScope.state` and `ChildLike.pid` were
+removed.
+
+25 of the 26 rows cleared. The live population is a measured 138 -> 113 unread,
+0 unsupported, 81 contracts, at digest `c285cdee` over 605 hashed files, and the
+delta was taken as a `(path, owner, key)` set difference against a pre-edit
+baseline: 25 lost, **0 gained**. The candidate count moved 3,464 -> 3,434 and all
+30 declarations are accounted for. `--check` reports 113 problems that are ALL
+`unread`, with nothing stale, missing, duplicate, incomplete or invalid.
+`npm run check` is exit 0, the seven negative controls still pass, aggregate
+production unit coverage is 1,834/1,834 functions and 9,050/9,050 branches with
+zero modules below 100%, and the two direct pins matched exactly.
+
+The twenty-sixth row, `WriteHookConfigResult.written`, was deliberately left
+standing. Nine `assert.deepStrictEqual` sites read the whole result, so the
+inherited disposition's "no witness of any kind" is wrong about the tree; the
+`--json` report shows neither member credited through those nine sites while the
+sibling `RemoveHookConfigResult.removed` carries two `deep-comparison` witnesses
+from the same file. The difference is that `writeHookConfig` is the closure
+`createWriteHookConfig` returns, and `isProductionDerived`'s bounded backward
+search does not reach production through a factory-returned closure. That is an
+analyzer under-credit for its own bounded plan, not a source repair, and the row
+is recorded that way in `06-LIVE-TRIAGE.md`.
 
 Phase 05 closed: all 28 plans landed and the production
 dead-code census drained from 111 to 0 with zero net additions at every step.
@@ -627,6 +660,7 @@ target of 42 → 32 is already reached; 05-24 should leave the total at 32 while
 | Phase 06 P04 | 2h 20m | 3 tasks | 6 files |
 | Phase 06 P05 | 50 min | 2 tasks | 4 files |
 | Phase 06 P06 | 3h 10m | 2 tasks | 8 files |
+| Phase 06 P09 | 1h 11m | 3 tasks | 12 files |
 
 ## Decisions
 
@@ -644,3 +678,6 @@ target of 42 → 32 is already reached; 05-24 should leave the total at 32 while
 - [Phase 06]: A key exactly one arm of a union declares can only have come from that arm; two arms spelling one key stay unsettled and resolve to nothing
 - [Phase 06]: type-refinement is a fifth contract category, separate from type-selection, because narrowing a slot an intersection already declares is different evidence from selecting a variant
 - [Phase 06]: The live closure is honest rather than complete: 138 members really are unread, each recorded with its evidence and an owner repair plan, rather than excused by a widened proof
+- [Phase 06]: A published duplicate is repaired by aliasing it to the declaration its reads already resolve to, never by deleting the published name — structural compatibility is not a read (D-03), so the fifteen AsyncRewakeEntry rows leave the population without the runtime row's own count moving
+- [Phase 06]: `WriteHookConfigResult.written` stays unread on purpose: nine `assert.deepStrictEqual` sites read the whole result, so the row is an analyzer under-credit, not a dead member — `assertionSummary` demands production lineage and `isProductionDerived` does not reach production through a factory-returned closure, which the sibling `RemoveHookConfigResult.removed` proves by carrying two deep-comparison witnesses from the same file
+- [Phase 06]: A repair's delta is measured by a `(path, owner, key)` set difference against a pre-edit baseline, not by comparing totals — a flat total would hide a repair that pushed some other member into `unread`

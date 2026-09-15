@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 1
+open_count: 2
 waived_count: 13
 fixed_count: 18
-total_count: 32
-last_updated: 2026-09-15T18:22:05.279Z
+total_count: 33
+last_updated: 2026-09-15T22:02:05.511Z
 ---
 
 # Broken Windows Ledger
@@ -47,6 +47,7 @@ last_updated: 2026-09-15T18:22:05.279Z
 | 30 | 117 | unrun-verify | scripts/test-coverage-direct.mjs |  | WR-05 (review iteration 2): the two direct-coverage sweeps have no automated control. Both stop at the first accepted D-116-01a shortfall, so a red run does not distinguish a genuine new gap from a known one, and test:coverage:direct:negative runs in every CI job while the gate it controls runs nowhere. The reviewer's remedy (teach the script an accepted-shortfall list) is barred in terms by D-117-20: 'not by a ledger-keyed verdict (which would be D-116-01a's banned pragma wearing a different hat)'. Built and measured during the fix pass, then reverted unshipped: with the list the changed-pairs sweep runs 204 pairs at exit 0 (197 passed, 7 accepted shortfalls each named with its ledger entry), and both self-expiry refusals work (a listed module that becomes complete, and an entry naming a module no longer in the tree). All seven readings are identical on Node v22.22.2 and v26.8.1. Mitigated in documentation only: CONTRIBUTING.md now names the seven modules and their exact readings, so a contributor can tell an expected stop from a regression without opening a planning artifact. Needs an operator decision to close: either revisit D-117-20 or accept that the gate has no CI control. RESOLVED 2026-09-04 by operator decision: D-117-20 stands (no ledger-keyed gate verdict); SC-4's literal wording accepted as superseded via an overrides entry on 117-VERIFICATION.md. The reproducibility half was fixed outright by npm run test:coverage:direct:report (commit 1495488b), which regenerates all 204 rows from the gate's own enumeration and blocks nothing. | fixed |  | 2026-09-04T01:03:42.619Z |  |
 | 31 | 106 | deviation | tests/architecture/compat-01-no-expansion.test.ts |  | The workflows reason required the inherited compatibility lock to append the new closed-set member. | fixed |  | 2026-08-29T19:13:44.624Z | 2026-08-29T19:13:48.337Z |
 | 32 | 06 | deviation | scripts/check-unused-type-members.contracts.json |  | Live gate closes with 138 unread members, each recorded in 06-LIVE-TRIAGE.md with evidence and one of six bounded owner repair plans (06-09..06-14); 06-08 activation is blocked on them | open |  | 2026-09-15T18:22:05.279Z |  |
+| 33 | 06 | deviation | extensions/pi-claude-marketplace/bridges/hooks/stage.ts | 227 | WriteHookConfigResult.written left unread on purpose: nine deepStrictEqual sites read the whole result, so the row is an analyzer lineage under-credit through a factory-returned closure, not a dead member | open |  | 2026-09-15T22:02:05.511Z |  |
 
 ````json
 [
@@ -432,6 +433,19 @@ last_updated: 2026-09-15T18:22:05.279Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-15T18:22:05.279Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 33,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "extensions/pi-claude-marketplace/bridges/hooks/stage.ts",
+    "line": 227,
+    "description": "WriteHookConfigResult.written left unread on purpose: nine deepStrictEqual sites read the whole result, so the row is an analyzer lineage under-credit through a factory-returned closure, not a dead member",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-15T22:02:05.511Z",
     "resolved_at": null,
     "milestone": null
   }
