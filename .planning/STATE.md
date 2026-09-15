@@ -4,15 +4,15 @@ milestone: test-backlog
 current_phase: 05
 current_phase_name: Production Export Ownership
 status: executing
-last_updated: "2026-09-15T00:30:00Z"
+last_updated: "2026-09-15T01:20:00Z"
 last_activity: 2026-09-14
-last_activity_desc: Wave 8 plan 05-17 reinstall composition owner complete
-state_head: e7fe8c47
+last_activity_desc: Wave 8 plan 05-27 stop translator export ownership complete
+state_head: c26352b7
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 54
-  completed_plans: 33
+  completed_plans: 34
   percent: 61
 milestone_name: test-backlog
 ---
@@ -31,9 +31,16 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 05 (Production Export Ownership) — EXECUTING
-Plan: 23 of 28 — 05-17 complete; 05-27 is the other Wave 8 plan
-Status: Executing Phase 05 Wave 8
-Last activity: 2026-09-15 — 05-17 added `createReinstallOperation` to the plugin
+Plan: 24 of 28 — Wave 8 source writing complete (05-17, 05-27)
+Status: Executing Phase 05 Wave 8 — awaiting parent census reconciliation
+Last activity: 2026-09-15 — 05-27 gave the Stop and StopFailure payload modules
+their event-specific export names, `translateStop` and `translateStopFailure`,
+committed in `5283b2e6` and `c26352b7`. The `translate` duplicate-export group
+disappears entirely rather than shrinking, because a duplicate needs at least two
+locations and these were its last two members. No payload module publishes a bare
+`translate` any more. The live census total moves 13 -> 12 with zero additions.
+
+Earlier activity: 2026-09-15 — 05-17 added `createReinstallOperation` to the plugin
 composition owner, pointed the load-time backfill scan at it, migrated the two
 outside single-reinstall call sites, and made `createNodeReinstallPlugin`
 module-private behind a TS2578-discriminating missing-export proof. Committed in
