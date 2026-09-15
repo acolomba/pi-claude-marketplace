@@ -19,6 +19,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { runPhases } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
@@ -94,6 +95,7 @@ async function seedMarketplace(
   pluginNames: readonly string[],
   preinstalled: readonly string[] = [],
   gitSourced: readonly string[] = [],
+  recordedVersions: Readonly<Record<string, string>> = {},
 ): Promise<ExtensionState> {
   const marketplaceRoot = path.join(cwd, MARKETPLACE);
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
@@ -137,7 +139,9 @@ async function seedMarketplace(
           preinstalled.map((name) => [
             name,
             {
-              version: "0.0.1",
+              // RESV-05's conflict check reads the RECORDED version, so a case
+              // about an unsatisfied constraint has to be able to choose it.
+              version: recordedVersions[name] ?? "0.0.1",
               resolvedSource: path.join(marketplaceRoot, "plugins", name),
               compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
               resources: { skills: [], prompts: [], agents: [], hooks: [], mcpServers: [] },
@@ -1253,6 +1257,7 @@ test("RESV-03 the constraint step answers every member, pinning only the constra
   const resolution = await resolveMemberConstraints({
     state,
     closure: [member("bar", ["^1.0.0"]), member("foo", [])],
+    alreadyInstalled: [],
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
     tagProbe: tagProbeAnswering(
       { kind: "pinned", tag: "bar--v1.4.0", oid: PINNED_OID, version: "1.4.0" },
@@ -1275,4 +1280,198 @@ test("RESV-03 the constraint step answers every member, pinning only the constra
     ],
   );
   assert.strictEqual(seen.length, 1, "only the constrained member reaches a repository");
+});
+
+for (const { label, declared, recorded } of [
+  { label: "carries no constraint at all", declared: undefined, recorded: "0.0.1" },
+  {
+    label: "carries a constraint its recorded version satisfies",
+    declared: "^1.0.0",
+    recorded: "1.4.0",
+  },
+  {
+    label:
+      "carries a constraint a content-hash recorded version satisfies through the unguarded ladder",
+    declared: "^123456789.0.0",
+    recorded: "hash-123456789abc",
+  },
+]) {
+  test(`RESV-05 an already-installed dependency that ${label} is left exactly as it was`, async (t) => {
+    // arrange
+    const environment = await createHermeticEnvironment(t, "install-cascade-installed-ok-");
+    const state = await seedMarketplace(environment.cwd, ["bar", "foo"], ["bar"], ["bar"], {
+      bar: recorded,
+    });
+    const locations = locationsFor("project", environment.cwd);
+    const before = await twoScopeFootprint(environment.cwd, state);
+    const seen: DependencyTagProbeOptions[] = [];
+    const scheduled: string[] = [];
+    const transaction: InstallLedgerTransaction = {
+      runPhases: (phases, context) => {
+        scheduled.push(...phases.map((phase) => phase.name));
+        return runPhases(phases, context);
+      },
+    };
+
+    // act
+    const cascade = await runInstallCascade({
+      state,
+      locations,
+      rootKey: `foo@${MARKETPLACE}`,
+      lookup: catalog({
+        [`foo@${MARKETPLACE}`]: [
+          { name: "bar", ...(declared !== undefined && { version: declared }) },
+        ],
+      }),
+      ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+      installedKeys: new Set([`bar@${MARKETPLACE}`]),
+      knownMarketplaces: new Set([MARKETPLACE]),
+      seam: recordingLedgerSeam(environment.cwd, locations, []),
+      transaction,
+      tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, seen),
+    });
+
+    // assert
+    assert.strictEqual(cascade.kind, "installed");
+    assert.deepStrictEqual(
+      scheduled,
+      [`foo@${MARKETPLACE}`],
+      "the already-installed dependency never became a ledger phase",
+    );
+    assert.deepStrictEqual(seen, [], "what could be fetched is not the question being asked");
+    assert.deepStrictEqual(
+      await twoScopeFootprint(environment.cwd, state),
+      before,
+      "it is not reinstalled, not re-pinned and not re-declared",
+    );
+  });
+}
+
+for (const { label, declared, recorded, expectedRange } of [
+  {
+    label: "a plain recorded version below the constraint",
+    declared: "^2.0.0",
+    recorded: "1.4.0",
+    expectedRange: ">=2.0.0 <3.0.0-0",
+  },
+  {
+    label: "a content-hash recorded version whose coerced digits miss the constraint",
+    declared: "^1.0.0",
+    recorded: "hash-123456789abc",
+    expectedRange: ">=1.0.0 <2.0.0-0",
+  },
+  {
+    label: "a git-sha recorded version that normalizes to nothing",
+    declared: "^1.0.0",
+    recorded: "sha-0123456789ab",
+    expectedRange: ">=1.0.0 <2.0.0-0",
+  },
+]) {
+  test(`RESV-05 ${label} fails the cascade naming both the version and the constraint`, async (t) => {
+    // arrange: the expected outcomes are DERIVED from the unguarded
+    // valid-then-coerce ladder (D-03-04), not from a rejection of this
+    // project's own fallback version forms -- there is no such rejection.
+    const environment = await createHermeticEnvironment(t, "install-cascade-installed-bad-");
+    const state = await seedMarketplace(environment.cwd, ["bar", "foo"], ["bar"], ["bar"], {
+      bar: recorded,
+    });
+    const locations = locationsFor("project", environment.cwd);
+    const before = await twoScopeFootprint(environment.cwd, state);
+    const seen: DependencyTagProbeOptions[] = [];
+
+    // act
+    const cascade = await runInstallCascade({
+      state,
+      locations,
+      rootKey: `foo@${MARKETPLACE}`,
+      lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar", version: declared }] }),
+      ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+      installedKeys: new Set([`bar@${MARKETPLACE}`]),
+      knownMarketplaces: new Set([MARKETPLACE]),
+      tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, seen),
+    });
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "constraint-failed",
+      failure: {
+        kind: "range-conflict",
+        why: "installed-unsatisfied",
+        key: `bar@${MARKETPLACE}`,
+        range: expectedRange,
+        recordedVersion: recorded,
+      },
+    });
+    assert.deepStrictEqual(seen, [], "an already-installed member is never queried for tags");
+    assert.deepStrictEqual(
+      await twoScopeFootprint(environment.cwd, state),
+      before,
+      "the verdict precedes the phase array, so the whole footprint is unchanged",
+    );
+  });
+}
+
+test("RESV-05 an already-installed dependency the snapshot records no version for is left alone", async (t) => {
+  // arrange: the caller names a key as installed that its own snapshot does not
+  // record, so there is nothing on disk for a constraint to conflict with.
+  const environment = await createHermeticEnvironment(t, "install-cascade-installed-none-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^2.0.0" }] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, []),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+});
+
+test("RESV-05 an already-installed dependency's contradictory declarations fail before any query", async (t) => {
+  // arrange: a diamond onto an already-installed member, so its accumulator
+  // carries two ranges that cannot both hold.
+  const environment = await createHermeticEnvironment(t, "install-cascade-installed-conflict-");
+  const state = await seedMarketplace(
+    environment.cwd,
+    ["left", "right", "root", "shared"],
+    ["shared"],
+  );
+  const locations = locationsFor("project", environment.cwd);
+  const seen: DependencyTagProbeOptions[] = [];
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `root@${MARKETPLACE}`,
+    lookup: catalog({
+      [`root@${MARKETPLACE}`]: [{ name: "left" }, { name: "right" }],
+      [`left@${MARKETPLACE}`]: [{ name: "shared", version: "^1.0.0" }],
+      [`right@${MARKETPLACE}`]: [{ name: "shared", version: "^2.0.0" }],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`shared@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, seen),
+  });
+
+  // assert
+  assert.deepStrictEqual(cascade, {
+    kind: "constraint-failed",
+    failure: {
+      kind: "range-conflict",
+      why: "contradictory-declarations",
+      key: `shared@${MARKETPLACE}`,
+      range: "^1.0.0 ^2.0.0",
+      detail: "no version satisfies all 2 declared ranges",
+    },
+  });
+  assert.deepStrictEqual(seen, []);
 });

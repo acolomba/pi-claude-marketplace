@@ -24,18 +24,29 @@
 // array would mean changing that walk, and the walk's own cases would fail.
 //
 // Constraint resolution runs BETWEEN the closure walk and the phase array, and
-// that position is the contract (RESV-03). Every way a version constraint can
-// fail -- contradictory declarations, a combination too large to compute, an
-// unparseable range, no satisfying release tag, and a tag listing that could
-// not be read -- is decided before a single `Phase` exists. A constraint
-// failure therefore never reaches rollback, because there is nothing
-// materialized for rollback to unwind.
+// that position is the contract (RESV-03, RESV-05). Every way a version
+// constraint can fail -- contradictory declarations, a combination too large to
+// compute, an unparseable range, no satisfying release tag, a tag listing that
+// could not be read, and an already-installed copy at a version the constraint
+// rejects -- is decided before a single `Phase` exists. A constraint failure
+// therefore never reaches rollback, because there is nothing materialized for
+// rollback to unwind.
 //
 // The wildcard short-circuit is load-bearing for NFR-5, not an optimization. A
 // dependency whose accumulated ranges come to no constraint makes NO tag query
 // at all, so the overwhelmingly common declaration -- a name with no version --
 // keeps a warm install entirely offline. Only a member carrying a REAL range
 // reaches the network, which is the exact read D-03-03 amended NFR-5 for.
+//
+// D-03-04 is accepted here rather than guarded. An already-installed member's
+// RECORDED version goes through `recordedVersionSatisfies`' normalization
+// ladder with no special case for this project's `hash-<12hex>` and
+// `sha-<12hex>` forms, which have no upstream equivalent. The consequence is
+// plain: coercion can extract a misleading digit run from one of those strings
+// and produce a version that unpredictably satisfies or fails a range, and a
+// form that normalizes to nothing satisfies no range at all. The risk is taken
+// knowingly rather than papered over, because a guard the upstream mechanism
+// does not have would be a divergence of its own.
 //
 // D-03-07 rollback scope has two halves, and only one of them is structural.
 // A DEPENDENCY the closure skipped as already-installed never becomes a
@@ -53,6 +64,7 @@ import { resolveDependencyClosure } from "../../domain/dependency-closure.ts";
 import {
   intersectDependencyRanges,
   isUnconstrainedRange,
+  recordedVersionSatisfies,
   renderConstraintRange,
 } from "../../domain/dependency-range.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
@@ -194,6 +206,8 @@ export interface MemberConstraintOptions {
   readonly state: ExtensionState;
   /** The members this run would install, in closure order. */
   readonly closure: readonly ClosureMember[];
+  /** The members RESV-05 skipped, which are CHECKED and never installed. */
+  readonly alreadyInstalled: readonly ClosureMember[];
   /**
    * The caller's per-member ledger options.
    *
@@ -479,12 +493,61 @@ async function resolveOneMember(
 }
 
 /**
+ * RESV-05: an already-installed dependency is CHECKED and never touched.
+ *
+ * It is not in the closure, so it never becomes a `Phase`, and no code path
+ * below can reinstall it, re-pin it or re-declare it -- whether or not it
+ * satisfies the constraint. The only question is whether what is already on
+ * disk is acceptable, which is why no tag is ever queried for one: what COULD
+ * be fetched is not the question being asked.
+ *
+ * A member the snapshot records no version for is left alone. It is not
+ * installed in this state after all, so there is nothing for a constraint to
+ * conflict with.
+ */
+function checkInstalledMember(
+  state: ExtensionState,
+  member: ClosureMember,
+): CascadeConstraintFailure | undefined {
+  const intersected = intersectDependencyRanges(member.ranges);
+  if (!intersected.ok) {
+    return toIntersectionFailure(member, intersected);
+  }
+
+  const recorded = state.marketplaces[member.marketplace]?.plugins[member.name]?.version;
+  if (isUnconstrainedRange(intersected.range) || recorded === undefined) {
+    return undefined;
+  }
+
+  return recordedVersionSatisfies(recorded, intersected.range)
+    ? undefined
+    : {
+        kind: "range-conflict",
+        why: "installed-unsatisfied",
+        key: member.key,
+        range: renderConstraintRange(intersected.range),
+        recordedVersion: recorded,
+      };
+}
+
+/**
  * Turn every member's accumulated ranges into a pin, or report the first
  * constraint that cannot be satisfied.
+ *
+ * The already-installed members are checked FIRST because that check makes no
+ * query at all: a cascade that is going to fail on what is already on disk
+ * never reaches a remote for the members it would otherwise have installed.
  */
 export async function resolveMemberConstraints(
   options: MemberConstraintOptions,
 ): Promise<MemberConstraintResolution> {
+  for (const member of options.alreadyInstalled) {
+    const failure = checkInstalledMember(options.state, member);
+    if (failure !== undefined) {
+      return { ok: false, failure };
+    }
+  }
+
   const members: ResolvedCascadeMember[] = [];
   for (const member of options.closure) {
     const outcome = await resolveOneMember(options, member);
@@ -622,6 +685,7 @@ export async function runInstallCascade(
   const constraints = await resolveMemberConstraints({
     state: options.state,
     closure: closure.closure,
+    alreadyInstalled: closure.alreadyInstalled,
     ledgerOptionsFor: options.ledgerOptionsFor,
     tagProbe: options.tagProbe ?? probeDependencyTags,
     tagMemo: new Map(),
