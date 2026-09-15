@@ -268,6 +268,20 @@ export interface CascadeMemberOutcome {
    */
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
+  /**
+   * Where the member materialized, and the hooks config it declared relative to
+   * that root -- `undefined` when it declared none.
+   *
+   * Carried so the caller can hydrate a member's hooks into the routing table
+   * the way it already hydrates the requesting plugin's: a dependency whose
+   * ledger staged a `hooks.json` otherwise has the file on disk and no routing
+   * entry, leaving its hooks inert until the next `/reload`.
+   *
+   * Never rendered. The row composer reads a structural subset of this type
+   * that declares neither field, so no cascade row can interpolate the path.
+   */
+  readonly pluginRoot: string;
+  readonly hooksConfigPath: string | undefined;
 }
 
 /**
@@ -637,6 +651,8 @@ function buildMemberPhase(
         version: result.summary.version,
         declaresAgents: result.summary.stagedAgentNames.length > 0,
         declaresMcp: result.summary.stagedMcpServerNames.length > 0,
+        pluginRoot: result.summary.resolved.pluginRoot,
+        hooksConfigPath: result.summary.resolved.hooksConfigPath,
       });
       if (member.key === options.rootKey) {
         run.root = result.summary;

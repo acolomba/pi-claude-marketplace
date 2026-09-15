@@ -276,6 +276,72 @@ function buildInstallLedgerOptions(
 }
 
 /**
+ * Add every materialized member's hooks to the parsed-config cache and rebuild
+ * the routing table ONCE.
+ *
+ * Runs AFTER `tx.save()`, so a write-back throw or a `tx.save` throw aborts
+ * before the cache mutates. Mutating first leaves a phantom routing entry the
+ * next dispatch event fires against, with state.json carrying no record of the
+ * install, and only the next `/reload` clears the strand. Post-save the two
+ * agree, so `/reload`'s factory-time hydrate (D-59-03) rebuilds the cache from
+ * the same source of truth.
+ *
+ * WR-03: the rebuild keeps the routing table in lockstep with the cache, so a
+ * standalone install starts dispatching to the new hooks immediately rather
+ * than requiring `/reload` (NFR-2). It fires once for the whole cascade: the
+ * table is rebuilt from the cache wholesale, so per-member rebuilds would
+ * repeat identical work.
+ *
+ * WR-02: every mutation here is non-fatal. state.json already records the
+ * install as successful, so a throw must NOT surface as `(failed)`; a failure
+ * routes through `hookDebugLog` and the next hydrate closes the divergence.
+ * A member whose read fails does not stop the members after it.
+ *
+ * Members declaring no hooks are skipped, which is every member of the
+ * overwhelmingly common install -- so the no-hooks cascade does no work and
+ * rebuilds nothing.
+ */
+async function hydrateInstalledHooks(args: {
+  readonly hooksRouting: InstallHooksRouting;
+  readonly scope: Scope;
+  readonly cwd: string;
+  readonly members: readonly CascadeMemberOutcome[];
+}): Promise<void> {
+  const withHooks = args.members.flatMap((member) =>
+    member.hooksConfigPath === undefined
+      ? []
+      : [{ member, hooksJsonPath: path.join(member.pluginRoot, member.hooksConfigPath) }],
+  );
+  if (withHooks.length === 0) {
+    return;
+  }
+
+  for (const { member, hooksJsonPath } of withHooks) {
+    try {
+      await args.hooksRouting.readAndCachePluginHooks({
+        scope: args.scope,
+        marketplace: member.marketplace,
+        plugin: member.name,
+        resolvedSource: asAbsolutePluginRoot(member.pluginRoot),
+        hooksJsonPath,
+        cwd: args.cwd,
+        logPrefix: "install",
+      });
+    } catch (cacheErr) {
+      hookDebugLog(
+        `install: post-save cache/routing mutation failed for ${member.key}: ${errorMessage(cacheErr)}`,
+      );
+    }
+  }
+
+  try {
+    args.hooksRouting.rebuildRoutingTables();
+  } catch (rebuildErr) {
+    hookDebugLog(`install: post-save routing rebuild failed: ${errorMessage(rebuildErr)}`);
+  }
+}
+
+/**
  * The declarations an ORCHESTRATED install owes its own config entry.
  *
  * WR-09 forbids an orchestrated caller the full write-back -- reconcile derives
@@ -1295,35 +1361,29 @@ async function installPluginWithTransaction(
       // state.json, closing any divergence. Failures route through
       // `hookDebugLog`.
       //
-      // DFEN-04: SKIPPED entirely when the install landed disabled. The disable
-      // cascade above has just removed the on-disk hooks.json, so this block
-      // would either re-read a deleted file or -- worse -- register routing
-      // entries for a plugin the user's configuration says is disabled, giving
-      // live hook dispatch against disabled code that nothing short of the next
-      // hydrate would clear. The composed disable cascade already dropped the
-      // cache entry, which is the correct mutation on that path.
-      if (!disabledInstall.landed && installCtx.resolved.hooksConfigPath !== undefined) {
-        try {
-          await hooksRouting.readAndCachePluginHooks({
-            scope,
-            marketplace,
-            plugin,
-            resolvedSource: asAbsolutePluginRoot(installCtx.resolved.pluginRoot),
-            hooksJsonPath: path.join(
-              installCtx.resolved.pluginRoot,
-              installCtx.resolved.hooksConfigPath,
-            ),
-            cwd,
-            logPrefix: "install",
-          });
-
-          hooksRouting.rebuildRoutingTables();
-        } catch (cacheErr) {
-          hookDebugLog(
-            `install: post-save cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)}`,
-          );
-        }
-      }
+      // DFEN-04: the requesting plugin is SKIPPED when its install landed
+      // disabled. The disable cascade above has just removed its on-disk
+      // hooks.json, so hydrating it would either re-read a deleted file or --
+      // worse -- register routing entries for a plugin the user's configuration
+      // says is disabled, giving live hook dispatch against disabled code that
+      // nothing short of the next hydrate would clear. The composed disable
+      // cascade already dropped the cache entry, which is the correct mutation
+      // on that path. A DEPENDENCY is never install-disabled, so the skip is
+      // scoped to the one member that can be.
+      //
+      // RESV-01: every member the cascade materialized is hydrated, not the
+      // requesting plugin alone. A dependency whose ledger staged a hooks.json
+      // otherwise has the file on disk and no routing entry, so its hooks stay
+      // inert until the next `/reload` -- exactly the divergence this block
+      // exists to close, reopened for the members the user did not type.
+      await hydrateInstalledHooks({
+        hooksRouting,
+        scope,
+        cwd,
+        members: cascadeMembers.filter(
+          (member) => !(disabledInstall.landed && member.key === rootKey),
+        ),
+      });
     });
   } catch (err) {
     // RESV-06: a dependency is what failed, so the block names it. Routed here

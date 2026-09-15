@@ -542,7 +542,12 @@ async function seedSiblingPlugins(
   marketplaceRoot: string,
   opts: {
     pluginVersion?: string;
-    siblingPlugins?: readonly { name: string; entryDefaultEnabled?: boolean }[];
+    siblingPlugins?: readonly {
+      name: string;
+      entryDefaultEnabled?: boolean;
+      /** RESV-01: hooks on a DEPENDENCY, whose routing is the cascade's to hydrate. */
+      hooksJson?: object;
+    }[];
   },
 ): Promise<Record<string, unknown>[]> {
   const entries: Record<string, unknown>[] = [];
@@ -556,6 +561,12 @@ async function seedSiblingPlugins(
     const siblingSkillDir = path.join(siblingRoot, "skills", "tool");
     await mkdir(siblingSkillDir, { recursive: true });
     await writeFile(path.join(siblingSkillDir, "SKILL.md"), `---\nname: tool\n---\n\nBody.\n`);
+    if (sibling.hooksJson !== undefined) {
+      const siblingHooksDir = path.join(siblingRoot, "hooks");
+      await mkdir(siblingHooksDir, { recursive: true });
+      await writeFile(path.join(siblingHooksDir, "hooks.json"), JSON.stringify(sibling.hooksJson));
+    }
+
     entries.push({
       name: sibling.name,
       source: `./plugins/${sibling.name}`,
@@ -654,7 +665,12 @@ async function seedPathMarketplaceWithPlugin(opts: {
    * declaration and compare the resulting rows inside one run. Absent -> the
    * manifest carries `pluginName` alone, exactly as before.
    */
-  siblingPlugins?: readonly { name: string; entryDefaultEnabled?: boolean }[];
+  siblingPlugins?: readonly {
+    name: string;
+    entryDefaultEnabled?: boolean;
+    /** RESV-01: hooks on a DEPENDENCY, whose routing is the cascade's to hydrate. */
+    hooksJson?: object;
+  }[];
 }): Promise<SeededPlugin> {
   const { cwd, marketplaceRoot, marketplaceName, pluginName } = opts;
   const scope = opts.scope ?? "project";
@@ -5589,6 +5605,65 @@ test("UAT-05: base-targeted install with marketplace already in base leaves the 
 // would stay pinned to whatever the last reconcile produced and the new
 // plugin would not receive dispatch until `/reload` (NFR-2 violation).
 // ─────────────────────────────────────────────────────────────────────────────
+
+test("RESV-01 / WR-03: a cascade-installed dependency's hooks reach the routing table too", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-hooks-"));
+    try {
+      // arrange: the HOOKS are on the dependency, not on the plugin the user
+      // typed. The standalone-install contract is that hooks dispatch
+      // immediately; a member the cascade installed is owed the same, or its
+      // hooks sit on disk inert until the next `/reload`.
+      const ownerRuntime = createHooksRuntime();
+      const runtimeInstallPlugin = createNodeInstallPlugin(
+        createHooksRouting(ownerRuntime, { readHooksJson }),
+        createCompletionCache(),
+      );
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [
+          {
+            name: "some-other-plugin",
+            hooksJson: {
+              PreToolUse: [
+                { matcher: "", hooks: [{ type: "command", command: "echo dependency" }] },
+              ],
+            },
+          },
+        ],
+      });
+      assert.equal(ownerRuntime.getRoutingBucket("PreToolUse").length, 0);
+
+      // act
+      const { ctx, pi } = makeCtx();
+      const outcome = await runtimeInstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      const bucket = ownerRuntime.getRoutingBucket("PreToolUse");
+      assert.equal(bucket.length, 1, "the dependency's hooks are routable without a reload");
+      assert.equal(bucket[0]?.pluginId, "some-other-plugin");
+      assert.equal(bucket[0]?.scope, "project");
+      assert.equal(bucket[0]?.handlerDecl["command"], "echo dependency");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing table without /reload", async () => {
   await withHermeticHome(async () => {
