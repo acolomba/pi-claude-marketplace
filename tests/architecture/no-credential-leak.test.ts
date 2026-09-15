@@ -54,6 +54,7 @@ const [
   AUTH_HOST_FILE,
   MARKETPLACE_ADD_FILE,
   MARKETPLACE_UPDATE_FILE,
+  GIT_AUTH_CALLBACKS_FILE,
 ] = CREDENTIAL_LEAK_TARGETS;
 
 /**
@@ -71,6 +72,7 @@ const DECLARED_MODULE_ORDER: ReadonlyArray<string> = [
   "orchestrators/auth-host.ts",
   "orchestrators/marketplace/add.ts",
   "orchestrators/marketplace/update.ts",
+  "platform/git-auth-callbacks.ts",
 ];
 
 const STATE_WRITE_FILES: ReadonlyArray<string> = [
@@ -331,23 +333,25 @@ test("AUTH-09: platform/git.ts hookDebugLog calls never interpolate a credential
   // following each `hookDebugLog(` as one token and scans it in full, so a
   // leak appended after a nested function call's closing paren (e.g. after
   // `${errorMessage(err)}`) is caught too.
-  const absPath = path.join(REPO_ROOT, GIT_PLATFORM_FILE);
-  const src = await readFile(absPath, "utf8");
-  const stripped = stripComments(src);
-
+  // buildAuthCallbacks moved to platform/git-auth-callbacks.ts, taking all three
+  // hookDebugLog calls with it. Both files are scanned: the new module is where
+  // the calls live now, and git.ts stays covered so a call returning there is
+  // caught rather than landing outside the gate.
   const hookDebugLogWithToken =
     /hookDebugLog\s*\((?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
-  assert.equal(
-    hookDebugLogWithToken.test(stripped),
-    false,
-    "hookDebugLog in platform/git.ts interpolates a credential field (AUTH-09 violation)",
-  );
 
-  assertNoCredentialInLiterals(
-    GIT_PLATFORM_FILE,
-    stripped,
-    /hookDebugLog\s*\(\s*(`(?:[^`\\]|\\.)*`)/g,
-  );
+  for (const rel of [GIT_PLATFORM_FILE, GIT_AUTH_CALLBACKS_FILE]) {
+    const src = await readFile(path.join(REPO_ROOT, rel), "utf8");
+    const stripped = stripComments(src);
+
+    assert.equal(
+      hookDebugLogWithToken.test(stripped),
+      false,
+      `hookDebugLog in ${rel} interpolates a credential field (AUTH-09 violation)`,
+    );
+
+    assertNoCredentialInLiterals(rel, stripped, /hookDebugLog\s*\(\s*(`(?:[^`\\]|\\.)*`)/g);
+  }
 });
 
 test("PROV-05: every provider file is scanned for token interpolation in an Error or notifyFn message", async () => {

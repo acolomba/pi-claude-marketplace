@@ -409,6 +409,12 @@ export const CREDENTIAL_LEAK_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/auth-host.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
+  // AUTH-09: buildAuthCallbacks and its three hookDebugLog calls moved out of
+  // platform/git.ts into this module. The scan aimed at git.ts kept passing
+  // over a file with nothing left to catch, so the credential-adjacent logging
+  // was covered by nothing. Appended last so no existing positional binding in
+  // no-credential-leak.test.ts is re-aimed.
+  "extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts",
 ] as const;
 
 /**
@@ -568,12 +574,6 @@ export const FINDING_DISPOSITIONS_REL: (typeof EVIDENCE_RECORD_TARGETS)[number] 
  */
 export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> = {
   "extensions/pi-claude-marketplace/index.ts": ["default"],
-  "extensions/pi-claude-marketplace/platform/git-credential.ts": ["createCredentialOps"],
-  "extensions/pi-claude-marketplace/platform/git.ts": [
-    "buildAuthCallbacks",
-    "listBranches",
-    "listRemotes",
-  ],
 };
 
 /** Real fixture targets use existing repository paths so the registry still resolves. */
@@ -589,22 +589,6 @@ export const PRODUCTION_FINDING_CENSUS = {
     {
       path: "extensions/pi-claude-marketplace/index.ts",
       export_name: "default",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/platform/git-credential.ts",
-      export_name: "createCredentialOps",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/platform/git.ts",
-      export_name: "listBranches",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/platform/git.ts",
-      export_name: "listRemotes",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/platform/git.ts",
-      export_name: "buildAuthCallbacks",
     },
   ],
   unused_types: [],
