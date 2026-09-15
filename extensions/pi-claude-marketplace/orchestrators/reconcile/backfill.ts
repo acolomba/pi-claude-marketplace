@@ -205,7 +205,7 @@ function hasForceInstalledPlugin(state: ExtensionState): boolean {
  * wrapper's single generic `state.json (failed)` row and block every still-
  * unscanned sibling on every load.
  */
-export async function scanForceInstalledBackfills(
+async function scanForceInstalledBackfills(
   opts: ApplyReconcileOptions,
   scope: Scope,
   state: ExtensionState,

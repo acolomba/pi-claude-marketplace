@@ -67,14 +67,7 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * row (source-mismatch dangling reference) carries its `reasons` via the shared
  * `pluginRow` primitive.
  */
-export const PENDING_STATUSES = [
-  "will install",
-  "will uninstall",
-  "will enable",
-  "will disable",
-  "failed",
-] as const;
-type PendingStatus = (typeof PENDING_STATUSES)[number];
+type PendingStatus = "will install" | "will uninstall" | "will enable" | "will disable" | "failed";
 
 export type PendingMsg =
   | PluginWillInstallMessage
