@@ -9703,3 +9703,223 @@ test("retry proof: install: state commit race after staged work retries from unc
     }
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// RESV-06 -- the cascade block the user reads
+//
+// Each case compares the WHOLE emitted notification rather than grepping one
+// row out of it. A filtered assertion would pass over a member row that never
+// rendered, a second block, or a reload trailer that fired when nothing landed
+// -- which are exactly the failures this surface exists to prevent.
+// ───────────────────────────────────────────────────────────────────────────
+
+test("RESV-01 / RESV-06: a successful cascade renders one row per member", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv06-rows-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [project]",
+            "  ● hello v0.0.1 (installed)",
+            "  ● some-other-plugin@mp v0.0.1 (installed)",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RESV-05 / RESV-06: an already-installed dependency renders as left alone", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv06-skip-"));
+    try {
+      // arrange: install the dependency on its own first, so the cascade meets
+      // it as an existing record rather than as work to do.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi, notifications } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+      notifications.length = 0;
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [project]",
+            "  ● hello v0.0.1 (installed)",
+            "  ⊘ some-other-plugin@mp v0.0.1 (skipped) {already installed}",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RESV-06: a dependency its marketplace does not declare is what the block names", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv06-absent-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message: [
+            "Some plugin operations have failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello (failed) {dependency failed}",
+            "  ⊘ some-other-plugin@mp (failed) {not in manifest}",
+            '    cause: Dependency "some-other-plugin@mp" is not declared by its marketplace.',
+          ].join("\n"),
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RESV-03 / RESV-06: an unsatisfiable constraint names the dependency and the range", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv06-constraint-"));
+    try {
+      // arrange: the dependency resolves; only its VERSION constraint cannot be
+      // satisfied, and a path source carries no release tags to satisfy it with.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        dependencyVersion: "^2.0.0",
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message: [
+            "Some plugin operations have failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello (failed) {dependency failed}",
+            "  ⊘ some-other-plugin@mp (failed) {no matching version}",
+            '    cause: Dependency "some-other-plugin@mp" has no release tag satisfying ">=2.0.0 <3.0.0-0".',
+          ].join("\n"),
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RESV-06: a dependency whose own ledger throws is the block's subject", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv06-member-"));
+    try {
+      // arrange: a prior plugin already owns the name the DEPENDENCY's skill
+      // would generate, so the cross-plugin guard refuses the dependency's own
+      // ledger -- the requesting plugin never gets that far.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+        conflictingPriorPlugin: {
+          marketplace: "other-mp",
+          plugin: "world",
+          skillName: "some-other-plugin:tool",
+        },
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert: the failing DEPENDENCY is the subject and carries its ledger's
+      // own cause; the requesting plugin's row says why it is there.
+      assert.deepStrictEqual(notifications, [
+        {
+          severity: "error",
+          message: [
+            "Some plugin operations have failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello (failed) {dependency failed}",
+            "  ⊘ some-other-plugin@mp (failed)",
+            "    cause: Cross-plugin name conflict:",
+            '  - skill "some-other-plugin:tool" already owned by plugin "world"',
+          ].join("\n"),
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

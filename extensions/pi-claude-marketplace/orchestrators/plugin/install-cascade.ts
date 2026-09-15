@@ -227,6 +227,29 @@ export interface CascadeMemberOutcome {
   readonly marketplace: string;
   readonly requiredBy: string | undefined;
   readonly version: string;
+  /**
+   * What the member staged, as the two soft-dependency kinds the renderer
+   * probes for. Carried as booleans rather than as the staged name lists so a
+   * member row can fire the same `{requires pi-...}` marker and the same SEV-01
+   * severity an ordinary install row does, without this module reaching for the
+   * presentation vocabulary that decides how.
+   */
+  readonly declaresAgents: boolean;
+  readonly declaresMcp: boolean;
+}
+
+/**
+ * One dependency RESV-05 found already present and left exactly as it was.
+ *
+ * It never becomes a `Phase`, so it has no ledger summary to project. The two
+ * fields here are what a row needs to say so: the key naming it, and the
+ * version the snapshot records for it -- `undefined` when the snapshot records
+ * none, which is the same state the constraint check reads as nothing to
+ * conflict with.
+ */
+export interface CascadeSkippedMember {
+  readonly key: string;
+  readonly version: string | undefined;
 }
 
 /** Inputs of one cascade run. */
@@ -264,6 +287,14 @@ export type InstallCascadeResult =
       readonly kind: "installed";
       readonly root: InstallLedgerSummary;
       readonly members: readonly CascadeMemberOutcome[];
+      /**
+       * RESV-05's own outcome list. The closure skipped these, so they appear
+       * in neither `members` nor the phase array -- and without them the caller
+       * could not tell a dependency this run installed from one that was
+       * already here, which is exactly the distinction RESV-06 asks the output
+       * to make.
+       */
+      readonly alreadyInstalled: readonly CascadeSkippedMember[];
     }
   | { readonly kind: "marketplace-absent" }
   | {
@@ -286,61 +317,6 @@ interface CascadeRun {
   readonly members: CascadeMemberOutcome[];
   /** Keys THIS run materialized, and the only keys an `undo` may touch. */
   readonly materialized: Set<string>;
-}
-
-/**
- * Human-readable cause text for a closure failure.
- *
- * Every interpolated value is either a token-allowlisted key or a field path,
- * so no manifest text and no filesystem path reaches the string.
- */
-export function formatClosureFailure(
-  failure: Extract<DependencyClosureResult, { readonly ok: false }>,
-): string {
-  if (failure.reason === "cycle") {
-    return `Dependency cycle: ${failure.chain.join(" -> ")}.`;
-  }
-
-  if (failure.reason === "marketplace-not-added") {
-    return `Dependency "${failure.key}" requires marketplace "${failure.marketplace}", which is not added.`;
-  }
-
-  if (failure.reason === "not-found") {
-    return `Dependency "${failure.key}" is not declared by its marketplace.`;
-  }
-
-  return `Plugin "${failure.key}" declares an unusable dependency (${failure.detail}).`;
-}
-
-/**
- * Human-readable cause text for a constraint failure.
- *
- * Every interpolated value is a token-allowlisted key, a bounded rendered
- * range, a recorded version, a closed-set transport classification, or the
- * intersection's own measurement text -- so no manifest prose and no
- * filesystem path reaches the string.
- */
-export function formatConstraintFailure(failure: CascadeConstraintFailure): string {
-  if (failure.kind === "range-conflict") {
-    return failure.why === "installed-unsatisfied"
-      ? `Dependency "${failure.key}" is installed at version ${failure.recordedVersion}, which does not satisfy "${failure.range}".`
-      : `Dependency "${failure.key}" has contradictory version constraints "${failure.range}" (${failure.detail}).`;
-  }
-
-  if (failure.kind === "no-matching-tag") {
-    return `Dependency "${failure.key}" has no release tag satisfying "${failure.range}".`;
-  }
-
-  if (failure.kind === "tag-listing-failed") {
-    const cause = failure.classification ?? "tag listing failed";
-    return `Dependency "${failure.key}" could not be checked against "${failure.range}" (${cause}).`;
-  }
-
-  if (failure.kind === "range-invalid") {
-    return `Dependency "${failure.key}" declares an unparseable version constraint "${failure.range}" (${failure.detail}).`;
-  }
-
-  return `Dependency "${failure.key}" declares version constraints too complex to combine (${failure.detail}).`;
 }
 
 /**
@@ -493,6 +469,17 @@ async function resolveOneMember(
 }
 
 /**
+ * The version the locked snapshot records for a member, if it records one.
+ *
+ * Read in one place so the RESV-05 constraint check and the RESV-06 skipped-row
+ * projection cannot answer the same question differently -- a row reporting a
+ * version the check never saw would be the worst of both.
+ */
+function recordedVersionOf(state: ExtensionState, member: ClosureMember): string | undefined {
+  return state.marketplaces[member.marketplace]?.plugins[member.name]?.version;
+}
+
+/**
  * RESV-05: an already-installed dependency is CHECKED and never touched.
  *
  * It is not in the closure, so it never becomes a `Phase`, and no code path
@@ -514,7 +501,7 @@ function checkInstalledMember(
     return toIntersectionFailure(member, intersected);
   }
 
-  const recorded = state.marketplaces[member.marketplace]?.plugins[member.name]?.version;
+  const recorded = recordedVersionOf(state, member);
   if (isUnconstrainedRange(intersected.range) || recorded === undefined) {
     return undefined;
   }
@@ -599,6 +586,8 @@ function buildMemberPhase(
         marketplace: member.marketplace,
         requiredBy: member.requiredBy,
         version: result.summary.version,
+        declaresAgents: result.summary.stagedAgentNames.length > 0,
+        declaresMcp: result.summary.stagedMcpServerNames.length > 0,
       });
       if (member.key === options.rootKey) {
         run.root = result.summary;
@@ -632,6 +621,7 @@ function toCascadeResult(
   options: InstallCascadeOptions,
   result: RunPhasesResult,
   run: CascadeRun,
+  alreadyInstalled: readonly CascadeSkippedMember[],
 ): InstallCascadeResult {
   if (result.ok) {
     const root = run.root;
@@ -642,7 +632,7 @@ function toCascadeResult(
       throw new Error("Install cascade reported success without materializing the root plugin.");
     }
 
-    return { kind: "installed", root, members: run.members };
+    return { kind: "installed", root, members: run.members, alreadyInstalled };
   }
 
   if (run.marketplaceAbsent) {
@@ -706,6 +696,13 @@ export async function runInstallCascade(
   const phases: readonly Phase<CascadeRun>[] = constraints.members.map((member) =>
     buildMemberPhase(options, seam, transaction, member),
   );
+  // RESV-05 / RESV-06: projected from the walk's own skip list, not from the
+  // ledger -- these members never reach a phase, so the run has nothing to
+  // record about them. They are carried out of the cascade so the block can
+  // report them as left alone rather than omitting them entirely.
+  const alreadyInstalled: readonly CascadeSkippedMember[] = closure.alreadyInstalled.map(
+    (member) => ({ key: member.key, version: recordedVersionOf(options.state, member) }),
+  );
 
-  return toCascadeResult(options, await transaction.runPhases(phases, run), run);
+  return toCascadeResult(options, await transaction.runPhases(phases, run), run, alreadyInstalled);
 }

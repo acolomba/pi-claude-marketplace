@@ -7,8 +7,6 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { probeDependencyTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts";
 import {
-  formatClosureFailure,
-  formatConstraintFailure,
   resolveMemberConstraints,
   runInstallCascade,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts";
@@ -29,7 +27,6 @@ import type {
   ClosureLookup,
   ClosureLookupResult,
   ClosureMember,
-  DependencyClosureResult,
 } from "../../../extensions/pi-claude-marketplace/domain/dependency-closure.ts";
 import type { DeviceFlowHttp } from "../../../extensions/pi-claude-marketplace/domain/github-auth.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
@@ -311,52 +308,6 @@ test("RESV-01 a cascade records the dependency and the requesting plugin, depend
   );
   assert.strictEqual(cascade.root.plugin, "foo");
 });
-
-for (const { label, failure, expected } of [
-  {
-    label: "a cycle",
-    failure: { ok: false, reason: "cycle", chain: ["a@mp", "b@mp", "a@mp"] },
-    expected: "Dependency cycle: a@mp -> b@mp -> a@mp.",
-  },
-  {
-    label: "an unadded marketplace",
-    failure: {
-      ok: false,
-      reason: "marketplace-not-added",
-      key: "helper@other",
-      marketplace: "other",
-      requiredBy: "root@mp",
-    },
-    expected: 'Dependency "helper@other" requires marketplace "other", which is not added.',
-  },
-  {
-    label: "a dependency no marketplace declares",
-    failure: { ok: false, reason: "not-found", key: "ghost@mp", requiredBy: "root@mp" },
-    expected: 'Dependency "ghost@mp" is not declared by its marketplace.',
-  },
-  {
-    label: "an unusable declaration",
-    failure: {
-      ok: false,
-      reason: "unusable-declaration",
-      key: "root@mp",
-      detail: "dependencies.0: Invalid input",
-    },
-    expected: 'Plugin "root@mp" declares an unusable dependency (dependencies.0: Invalid input).',
-  },
-] satisfies readonly {
-  label: string;
-  failure: Extract<DependencyClosureResult, { readonly ok: false }>;
-  expected: string;
-}[]) {
-  test(`RESV-06 the cause text for ${label} names only allowlisted tokens`, () => {
-    // act
-    const cause = formatClosureFailure(failure);
-
-    // assert
-    assert.strictEqual(cause, expected);
-  });
-}
 
 test("RESV-06 a closure failure materializes nothing and returns the failure verbatim", async (t) => {
   // arrange
@@ -1151,94 +1102,6 @@ test("D-03-10 a constraint declared outside this install's graph never reaches a
   );
 });
 
-for (const { label, failure, expected } of [
-  {
-    label: "contradictory declarations",
-    failure: {
-      kind: "range-conflict",
-      why: "contradictory-declarations",
-      key: "bar@mp",
-      range: "^1.0.0 ^2.0.0",
-      detail: "no version satisfies all 2 declared ranges",
-    },
-    expected:
-      'Dependency "bar@mp" has contradictory version constraints "^1.0.0 ^2.0.0" (no version satisfies all 2 declared ranges).',
-  },
-  {
-    label: "an already-installed copy the constraint rejects",
-    failure: {
-      kind: "range-conflict",
-      why: "installed-unsatisfied",
-      key: "bar@mp",
-      range: "^2.0.0",
-      recordedVersion: "1.4.0",
-    },
-    expected: 'Dependency "bar@mp" is installed at version 1.4.0, which does not satisfy "^2.0.0".',
-  },
-  {
-    label: "no satisfying release tag",
-    failure: { kind: "no-matching-tag", key: "bar@mp", range: "^3.0.0" },
-    expected: 'Dependency "bar@mp" has no release tag satisfying "^3.0.0".',
-  },
-  {
-    label: "a classified listing failure",
-    failure: {
-      kind: "tag-listing-failed",
-      key: "bar@mp",
-      range: "^1.0.0",
-      cause: new Error("boom"),
-      classification: "authentication required",
-    },
-    expected:
-      'Dependency "bar@mp" could not be checked against "^1.0.0" (authentication required).',
-  },
-  {
-    label: "an unclassifiable listing failure",
-    failure: {
-      kind: "tag-listing-failed",
-      key: "bar@mp",
-      range: "^1.0.0",
-      cause: new Error("boom"),
-      classification: undefined,
-    },
-    expected: 'Dependency "bar@mp" could not be checked against "^1.0.0" (tag listing failed).',
-  },
-  {
-    label: "an unparseable range",
-    failure: {
-      kind: "range-invalid",
-      key: "bar@mp",
-      range: "nope",
-      detail: "input 1 of 1 is not a valid version range",
-    },
-    expected:
-      'Dependency "bar@mp" declares an unparseable version constraint "nope" (input 1 of 1 is not a valid version range).',
-  },
-  {
-    label: "a combination past the caps",
-    failure: {
-      kind: "range-too-complex",
-      key: "bar@mp",
-      range: "1.0.0||1.0.1",
-      detail: "total input 5400 characters exceeds the 4096 character cap",
-    },
-    expected:
-      'Dependency "bar@mp" declares version constraints too complex to combine (total input 5400 characters exceeds the 4096 character cap).',
-  },
-] satisfies readonly {
-  label: string;
-  failure: CascadeConstraintFailure;
-  expected: string;
-}[]) {
-  test(`T-03-22 the cause text for ${label} names only allowlisted tokens`, () => {
-    // act
-    const cause = formatConstraintFailure(failure);
-
-    // assert
-    assert.strictEqual(cause, expected);
-  });
-}
-
 test("RESV-03 the constraint step answers every member, pinning only the constrained one", async (t) => {
   // arrange: the step driven directly, so its own contract -- one answer per
   // member, in closure order -- is observed without the ledger in the way.
@@ -1339,6 +1202,11 @@ for (const { label, declared, recorded } of [
       "the already-installed dependency never became a ledger phase",
     );
     assert.deepStrictEqual(seen, [], "what could be fetched is not the question being asked");
+    assert.deepStrictEqual(
+      cascade.alreadyInstalled,
+      [{ key: `bar@${MARKETPLACE}`, version: recorded }],
+      "RESV-06: a member that was left alone is reported, not omitted",
+    );
     assert.deepStrictEqual(
       await twoScopeFootprint(environment.cwd, state),
       before,

@@ -650,7 +650,12 @@ test("records a plugin declaring itself off by default as disabled, because the 
   // arrange
   const workspace = await createHermeticWorkspace(t, "default-enabled");
   await seedBothScopes(workspace);
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  // RESV-06: 4 probes, the same count every other standalone install states. The
+  // install block composes its rows through the cascade composer whatever the
+  // requesting plugin's own row turned out to be, so the composition probe fires
+  // once per emission regardless of which arm produced the row -- the renderer's
+  // own probe is the second.
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
     value: workspace.cwd,
     reads: 1,
   });

@@ -27,10 +27,12 @@ import { cascadeUnstagePlugin, crossScopeFlag } from "../marketplace/shared.ts";
 
 import { readDependencyDeclaration } from "./dependency-declaration-read.ts";
 import {
-  formatClosureFailure,
-  formatConstraintFailure,
-  runInstallCascade,
-} from "./install-cascade.ts";
+  CASCADE_CONTEXT,
+  cascadeFailureCause,
+  composeCascadeFailureMessage,
+  composeCascadeMemberRows,
+} from "./install-cascade.messaging.ts";
+import { runInstallCascade } from "./install-cascade.ts";
 import { probeInstallClone } from "./install-clone-probe.ts";
 import { resolveInstallDeclaredEnabled } from "./install-declared-enabled.ts";
 import { composeInstallDisableCascade } from "./install-disable-cascade.ts";
@@ -49,7 +51,13 @@ import {
   writeAdoptingConfigEntries,
 } from "./shared.ts";
 
-import type { CascadeTagProbe, InstallCascadeResult } from "./install-cascade.ts";
+import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
+import type {
+  CascadeMemberOutcome,
+  CascadeSkippedMember,
+  CascadeTagProbe,
+  InstallCascadeResult,
+} from "./install-cascade.ts";
 import type { InstallCloneCacheSeam } from "./install-clone-probe.ts";
 import type { InstallHooksRouting } from "./install-disable-cascade.ts";
 import type {
@@ -62,7 +70,7 @@ import type { InstallMsg } from "./install.messaging.ts";
 import type { ClosureLookupResult, ClosureSubject } from "../../domain/dependency-closure.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
@@ -317,10 +325,28 @@ async function lookupCascadeDependencies(
 }
 
 /**
+ * Where `unwrapCascade` leaves the structured failure for the catch site.
+ *
+ * The catch needs the DISCRIMINANT, not a rendered string, because RESV-06's
+ * row names the failing dependency and the reason it failed -- neither of which
+ * survives a `throw new Error(text)`. The sink carries it across the lock
+ * closure boundary the same way `marketplaceAbsent` and `configInvalid` already
+ * carry their own verdicts.
+ */
+interface CascadeFailureSink {
+  subject?: CascadeFailureSubject;
+}
+
+/**
  * Route the cascade's outcome onto install's existing three dispositions:
  * the installed arm, the `marketplace-absent` sentinel (reported as
  * `undefined`, so the caller returns from inside the lock WITHOUT `tx.save()`),
- * or a throw the guard's own catch composes into a failed row.
+ * or a throw the guard's own catch composes into failed rows.
+ *
+ * A `member-failed` whose key is the ROOT records no subject: nothing but the
+ * requested plugin failed, so it is a single-plugin install failure and belongs
+ * on the existing single-row path, which classifies entity-shape errors and
+ * git-auth challenges the cascade block has no arm for.
  *
  * The cascade's rollback partials are appended to whatever the failing member's
  * OWN bridge-level ledger already captured; both are real undo failures and
@@ -329,25 +355,38 @@ async function lookupCascadeDependencies(
 function unwrapCascade(
   cascade: InstallCascadeResult,
   capture: InstallFailureCapture,
+  rootKey: string,
+  sink: CascadeFailureSink,
 ): Extract<InstallCascadeResult, { readonly kind: "installed" }> | undefined {
   if (cascade.kind === "marketplace-absent") {
     return undefined;
   }
 
   if (cascade.kind === "closure-failed") {
-    throw new Error(formatClosureFailure(cascade.failure));
+    sink.subject = { kind: "closure", failure: cascade.failure };
+    throw cascadeFailureCause(sink.subject, rootKey);
   }
 
   // RESV-03: the constraint verdict is reached before any member becomes a
   // ledger phase, so this arm carries nothing to roll back -- it throws for the
   // same reason the closure arm does, into the same catch, which composes the
-  // failed row.
+  // failed rows.
   if (cascade.kind === "constraint-failed") {
-    throw new Error(formatConstraintFailure(cascade.failure));
+    sink.subject = { kind: "constraint", failure: cascade.failure };
+    throw cascadeFailureCause(sink.subject, rootKey);
   }
 
   if (cascade.kind === "member-failed") {
     capture.rollbackPartials = [...capture.rollbackPartials, ...cascade.rollbackPartials];
+    if (cascade.key !== rootKey) {
+      sink.subject = {
+        kind: "member",
+        key: cascade.key,
+        error: cascade.error,
+        rollbackPartials: capture.rollbackPartials,
+      };
+    }
+
     throw cascade.error;
   }
 
@@ -500,7 +539,7 @@ function droppedKindRowReasons(installCtx: InstallLedgerSummary): readonly Conte
   return narrowUnsupportedKinds(installCtx.resolved.unsupported);
 }
 
-function composeInstalledRow(installCtx: InstallLedgerSummary, pi: ToolInventory): InstallMsg {
+function composeInstalledRow(installCtx: InstallLedgerSummary, probe: SoftDepStatus): InstallMsg {
   const { plugin } = installCtx;
   const declaresAgents = installCtx.stagedAgentNames.length > 0;
   const declaresMcp = installCtx.stagedMcpServerNames.length > 0;
@@ -532,7 +571,7 @@ function composeInstalledRow(installCtx: InstallLedgerSummary, pi: ToolInventory
   const severity =
     installCtx.frontmatterDegradations.length > 0
       ? "warning"
-      : companionSeverity({ declaresAgents, declaresMcp }, softDepStatus(pi));
+      : companionSeverity({ declaresAgents, declaresMcp }, probe);
 
   // IN-02 / IN-04: `version` passes straight through. Row-level `scope` is
   // OMITTED -- it always equals the marketplace block's scope here, and
@@ -671,6 +710,54 @@ function handleInstallThrow(args: {
 }
 
 /**
+ * RESV-06 failure routing for a throw a DEPENDENCY caused.
+ *
+ * Distinct from `handleInstallThrow` in exactly one respect: the block it emits
+ * names the failing dependency as its subject and carries the requesting
+ * plugin's own row beside it, instead of reporting the requested plugin alone
+ * for something it did not do. The outcome contract is unchanged -- the typed
+ * Error stays the dispatch surface and `cause` stays the formatted text -- so an
+ * orchestrated caller sees exactly what it saw before.
+ */
+function handleCascadeThrow(args: {
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly rootKey: string;
+  readonly subject: CascadeFailureSubject;
+  readonly orchestrated: boolean;
+}): InstallPluginOutcome {
+  const { ctx, pi, marketplace, scope, plugin, rootKey, subject, orchestrated } = args;
+  // Derived from the SUBJECT rather than from the caught value. The subject is
+  // recorded only at a throw site that throws exactly this Error, so the two
+  // agree by construction -- and reading it here means the outcome's typed
+  // `error` needs no `unknown` widening a cascade arm can never produce.
+  const error = cascadeFailureCause(subject, rootKey);
+  const cause = formatOrchestratedCause(error);
+  if (orchestrated) {
+    return { status: "failed", error, cause };
+  }
+
+  notifyWithContext(
+    ctx,
+    pi,
+    CASCADE_CONTEXT,
+    [
+      {
+        name: marketplace,
+        scope,
+        plugins: composeCascadeFailureMessage({ scope, rootKey, rootName: plugin, subject }),
+      },
+    ],
+    undefined,
+    "single",
+  );
+  return { status: "failed", error, cause };
+}
+
+/**
  * PI-1..15 entrypoint. The function never re-throws -- failures surface
  * via a single `notify()` call carrying a `PluginFailedMessage`
  * (Pattern S-1 single chokepoint, IL-2 lint gate). Standalone-mode emits
@@ -730,6 +817,14 @@ async function installPluginWithTransaction(
   // version at throw time (undefined when the throw pre-dated
   // `deriveInstallVersion`).
   const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  // RESV-06: the cascade's own outcome, lifted out of the lock closure so the
+  // post-guard composition can render one row per closure member without
+  // re-entering it. Both lists start empty, which is the shape a plugin that
+  // declares nothing produces -- so the single-plugin block stays byte-frozen
+  // through the same composer.
+  const cascadeFailure: CascadeFailureSink = {};
+  let cascadeMembers: readonly CascadeMemberOutcome[] = [];
+  let cascadeSkipped: readonly CascadeSkippedMember[] = [];
   // ATTR-01 / ATTR-08 / M1: marketplace-existence is a PRECONDITION, not a
   // plugin-row property. When the CMP-2..4 source resolution misses (the
   // marketplace is absent in the target scope AND the CMP-3 user fallback
@@ -884,7 +979,7 @@ async function installPluginWithTransaction(
         transaction,
         ...(opts.tagProbe !== undefined && { tagProbe: opts.tagProbe }),
       });
-      const installed = unwrapCascade(cascade, capture);
+      const installed = unwrapCascade(cascade, capture, rootKey, cascadeFailure);
       if (installed === undefined) {
         // WR-04: precondition miss -- read-only in effect, NO tx.save().
         marketplaceAbsent = true;
@@ -894,6 +989,8 @@ async function installPluginWithTransaction(
       // Success: lift the install context up so the post-guard path can
       // compose the user-visible notification without re-entering the closure.
       installCtx = installed.root;
+      cascadeMembers = installed.members;
+      cascadeSkipped = installed.alreadyInstalled;
 
       // DFEN-04 / DFEN-05: the install lands disabled only when all three hold
       // -- the caller opted in, the user has stated NO opinion in EITHER of the
@@ -1118,6 +1215,23 @@ async function installPluginWithTransaction(
       }
     });
   } catch (err) {
+    // RESV-06: a dependency is what failed, so the block names it. Routed here
+    // rather than through the single-row path below, which would report the
+    // plugin the user typed for something one of its dependencies did.
+    const subject = cascadeFailure.subject;
+    if (subject !== undefined) {
+      return handleCascadeThrow({
+        ctx,
+        pi,
+        marketplace,
+        scope,
+        plugin,
+        rootKey,
+        subject,
+        orchestrated,
+      });
+    }
+
     // Pattern S-1 single chokepoint for user-visible errors: one
     // notify(ctx, pi, ...) call carrying a per-variant
     // PluginFailedMessage / PluginUnavailableMessage. Severity derives to
@@ -1237,6 +1351,11 @@ async function installPluginWithTransaction(
   );
 
   if (!orchestrated) {
+    // RH-3 / RH-4: ONE companion probe for the whole block. The row composers
+    // and the SEV-01 severity verdicts all read this snapshot, so every row in
+    // one block describes the same host -- and the probe count the boundary
+    // fakes assert stays what a single install always made.
+    const softDepProbe = softDepStatus(pi);
     // Success: one notify(ctx, pi, ...) call with a PluginInstalledMessage.
     // The renderer probes companion-loaded state via softDepStatus(pi) and
     // emits the per-row soft-dep markers automatically. The "/reload to pick
@@ -1251,16 +1370,23 @@ async function installPluginWithTransaction(
     // Exactly ONE notification per install (IL-2), whichever row the install
     // produced -- the DFEN-04 disabled row when the cascade unstaged
     // everything, the success row otherwise.
+    //
+    // RESV-01 / RESV-05 / RESV-06: the requesting plugin's row goes through the
+    // cascade composer together with one row per closure member. A plugin that
+    // declared nothing hands the composer two empty lists, so its block is the
+    // single row it always was, byte for byte.
     notifyWithContext(
       ctx,
       pi,
-      INSTALL_CONTEXT,
+      CASCADE_CONTEXT,
       [
         {
           name: marketplace,
           scope,
-          plugins: [
-            disabledInstall.landed
+          plugins: composeCascadeMemberRows({
+            scope,
+            rootKey,
+            rootRow: disabledInstall.landed
               ? disableCascade.composeDisabledRow({
                   plugin: installCtx.plugin,
                   version: installCtx.version,
@@ -1270,8 +1396,11 @@ async function installPluginWithTransaction(
                   },
                   frontmatterDegradations: installCtx.frontmatterDegradations,
                 })
-              : composeInstalledRow(installCtx, pi),
-          ],
+              : composeInstalledRow(installCtx, softDepProbe),
+            installed: cascadeMembers,
+            alreadyInstalled: cascadeSkipped,
+            probe: softDepProbe,
+          }),
         },
       ],
       undefined,
