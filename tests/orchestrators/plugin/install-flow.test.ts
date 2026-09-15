@@ -3467,6 +3467,103 @@ test("CMP-3 / PI-16: project-target install falls back to user-scope marketplace
   });
 });
 
+test("RESV-01 / WR-09: an orchestrated install declares its cascade dependencies, so the next reload keeps them", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-orchestrated-"));
+    try {
+      // arrange: the reconcile shape. The user declares the parent only --
+      // `hello@mp` -- and the cascade installs `some-other-plugin@mp` with it.
+      // `runInstallCascade` runs on EVERY install, orchestrated or not, so the
+      // record is written either way; only the DECLARATION rode the standalone
+      // arm.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+
+      const { loadConfig, saveConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      await saveConfig(
+        locations.configJsonPath,
+        {
+          schemaVersion: 1,
+          marketplaces: { mp: { source: "./mp-src" } },
+          plugins: { "hello@mp": { enabled: true } },
+        },
+        locations.scopeRoot,
+      );
+
+      const { loadMergedScopeConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+      const { planReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
+      const { applyReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+      const reconcilePass = async (): Promise<void> => {
+        const pass = makeCtx();
+        await applyReconcile({
+          ctx: pass.ctx,
+          pi: pass.pi,
+          cwd,
+          scope: "project",
+          completionCache: createCompletionCache(),
+          hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        });
+        assert.deepEqual(
+          pass.notifications.filter((n) => n.severity === "error"),
+          [],
+        );
+      };
+
+      // act
+      await reconcilePass();
+
+      // assert: both records exist, and the dependency is DECLARED. A recorded
+      // key no config file declares is exactly what `buildUninstallBucket`
+      // sweeps.
+      const installed = await loadState(locations.extensionRoot);
+      assert.deepEqual(Object.keys(installed.marketplaces["mp"]?.plugins ?? {}).sort(), [
+        "hello",
+        "some-other-plugin",
+      ]);
+      const declared = await loadConfig(locations.configJsonPath);
+      assert.equal(declared.status, "valid");
+      if (declared.status === "valid") {
+        assert.deepEqual(declared.config.plugins?.["some-other-plugin@mp"], {});
+        assert.deepEqual(
+          declared.config.plugins?.["hello@mp"],
+          { enabled: true },
+          "the user's own entry is untouched",
+        );
+      }
+
+      // act: the next `resources_discover`.
+      const { merged } = await loadMergedScopeConfig(locations);
+      const planned = planReconcile(merged, installed, "project");
+
+      // assert: nothing is planned for removal. Without the declaration the
+      // planner tears the dependency down while its parent stays installed and
+      // broken.
+      assert.deepEqual(planned.pluginsToUninstall, []);
+      await reconcilePass();
+      const converged = await loadState(locations.extensionRoot);
+      assert.deepEqual(
+        Object.keys(converged.marketplaces["mp"]?.plugins ?? {}).sort(),
+        ["hello", "some-other-plugin"],
+        "the dependency survives the reload that follows the install",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("CMP-3 / D-03-08: a project install off a user-scope marketplace resolves a same-marketplace dependency", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-cmp3-dep-"));

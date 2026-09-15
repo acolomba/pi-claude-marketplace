@@ -11,7 +11,10 @@ import path from "node:path";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
-import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
+import {
+  writeBatchedConfigEntries,
+  writePluginConfigEntry,
+} from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -270,6 +273,86 @@ function buildInstallLedgerOptions(
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
   };
+}
+
+/**
+ * The declarations an ORCHESTRATED install owes its own config entry.
+ *
+ * WR-09 forbids an orchestrated caller the full write-back -- reconcile derives
+ * desired state FROM the merged config, so rewriting it would clobber a
+ * per-machine override. It does NOT forbid declaring the keys this install
+ * itself created, and two of them must be declared or the very next
+ * `resources_discover` undoes the install:
+ *
+ *   RESV-01's reload clause. `runInstallCascade` runs on EVERY install, so an
+ *   orchestrated one records its dependencies exactly as a standalone one does.
+ *   A recorded key that no config file declares is what `buildUninstallBucket`
+ *   sweeps, so an undeclared dependency is uninstalled on the next reload while
+ *   its parent stays installed and broken.
+ *
+ *   DFEN-04 / D-102-04's disabled stamp. Without it the record lands disabled
+ *   while the entry the reconcile planner reads says nothing about enablement;
+ *   the next reload reads absent-as-enabled (D-04), finds the record disabled,
+ *   and plans an enable, re-enabling a plugin whose author declared it off.
+ *
+ * Both ride ONE batched patch and therefore one atomic save, addressing
+ * `targetConfigPath` -- which for reconcile is the file the parent's own
+ * declaration lives in (see `InstallPluginOptions.local`), so D-03-06 holds
+ * without a per-member target. Each patch is spread over the existing entry, so
+ * no forward-compat key (D-09) and no sibling entry is disturbed. A dependency's
+ * patch is `{}`: the entry shape carries no install-time field, and D-04 keeps
+ * the "enabled" default at consume time.
+ *
+ * The disabled stamp's condition is the landed-disabled verdict and nothing
+ * else. That verdict already required the caller's opt-in (so `import` never
+ * reaches here, D-102-03) and an ABSENT `enabled` key (so a value the user
+ * wrote is never rewritten, D-102-04); re-testing either would be a second,
+ * drift-prone copy of the same gate.
+ *
+ * Nothing to declare writes nothing at all, which is the shape a plugin with no
+ * dependencies installed enabled produces -- RECON-05 byte stability.
+ *
+ * The stamp ALONE goes through `writePluginConfigEntry`, SPLIT-02 / D-102-09's
+ * sole sanctioned single-entry writer. It is not interchangeable with the
+ * batched one here: the batched writer always emits a `marketplaces` key, so
+ * routing the stamp through it would add `"marketplaces": {}` to a file that
+ * declares none. The batched writer earns its place only when several keys must
+ * land in ONE atomic save, which is the cascade case.
+ */
+async function writeOrchestratedDeclarations(args: {
+  readonly current: Parameters<typeof writeBatchedConfigEntries>[0];
+  readonly targetConfigPath: string;
+  readonly scopeRoot: string;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly rootKey: string;
+  readonly dependencyKeys: readonly string[];
+  readonly landedDisabled: boolean;
+}): Promise<void> {
+  if (args.dependencyKeys.length === 0) {
+    if (args.landedDisabled) {
+      await writePluginConfigEntry(
+        args.current,
+        args.targetConfigPath,
+        args.scopeRoot,
+        args.plugin,
+        args.marketplace,
+        { enabled: false },
+      );
+    }
+
+    return;
+  }
+
+  await writeBatchedConfigEntries(args.current, args.targetConfigPath, args.scopeRoot, {
+    plugins: {
+      ...Object.fromEntries(args.dependencyKeys.map((key) => [key, {}])),
+      // The requesting plugin's key can appear in both records, and its own
+      // patch wins because it is spread LAST -- the same precedence the
+      // standalone arm's `pluginPatch` has over `dependencyPluginPatches`.
+      ...(args.landedDisabled && { [args.rootKey]: { enabled: false } }),
+    },
+  });
 }
 
 /**
@@ -1157,39 +1240,19 @@ async function installPluginWithTransaction(
             installed.members.map((member) => [member.key, {}]),
           ),
         });
-      } else if (disabledInstall.landed) {
-        // DFEN-04 / D-102-04: the orchestrated-mode stamp. An orchestrated
-        // caller skips the batched write-back above (WR-09), so without this
-        // the record lands disabled while the entry the reconcile planner reads
-        // still says nothing about enablement -- the next reload reads
-        // absent-as-enabled (D-04), finds the record disabled, and plans an
-        // enable, re-enabling a plugin whose author declared it off.
-        //
-        // The condition is the landed-disabled verdict and nothing else. That
-        // verdict already required the caller's opt-in (so `import` never
-        // reaches here, D-102-03) and an ABSENT `enabled` key (so a value the
-        // user wrote is never rewritten, D-102-04). Re-testing either here
-        // would be a second, drift-prone copy of the same gate.
-        //
-        // SPLIT-02 / D-102-09: the sole sanctioned single-entry writer, whose
-        // patch is spread over the existing entry -- so the one field carried
-        // here disturbs no forward-compat key (D-09) and no sibling entry. It
-        // writes `targetConfigPath`, which for reconcile is the file the
-        // declaration lives in (see `InstallPluginOptions.local`).
-        //
-        // WR-09 is NOT widened. The guard above keeps its exact condition, and
-        // this arm writes ONE field of ONE entry instead of the full write-back
-        // an orchestrated caller must never run. It is an `else` arm rather
-        // than a second `if` on the same condition purely to stay under the
-        // closure's cognitive-complexity budget; the two are equivalent.
-        await writePluginConfigEntry(
+      } else {
+        await writeOrchestratedDeclarations({
           current,
           targetConfigPath,
-          locations.scopeRoot,
+          scopeRoot: locations.scopeRoot,
           plugin,
           marketplace,
-          { enabled: false },
-        );
+          rootKey,
+          dependencyKeys: installed.members
+            .map((member) => member.key)
+            .filter((key) => key !== rootKey),
+          landedDisabled: disabledInstall.landed,
+        });
       }
 
       // WR-04: the SOLE mutating arm saves explicitly. Ordering preserved
