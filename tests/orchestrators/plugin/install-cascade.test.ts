@@ -1084,6 +1084,49 @@ for (const { label, pluginNames, gitSourced, knownMarketplaces, dependencyMarket
   });
 }
 
+test("CMP-3 a constrained member whose marketplace the snapshot does not record resolves through the caller's lookup", async (t) => {
+  // arrange: the snapshot carries the marketplace under its own name, and the
+  // member names a SECOND name the snapshot does not record -- the shape a
+  // project-scope install off a user-scope marketplace produces. The caller's
+  // lookup is the CMP-3-aware resolution, so the pin probe must reach the
+  // record through it rather than through the snapshot map.
+  const environment = await createHermeticEnvironment(t, "install-cascade-cmp3-source-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"], [], ["bar"]);
+  const locations = locationsFor("project", environment.cwd);
+  const seen: DependencyTagProbeOptions[] = [];
+  const record = state.marketplaces[MARKETPLACE];
+  assert.ok(record !== undefined, "the fixture records the marketplace it seeds");
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", marketplace: "elsewhere", version: "^1.0.0" }],
+      "bar@elsewhere": [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE, "elsewhere"]),
+    seam: recordingLedgerSeam(environment.cwd, locations, []),
+    marketplaceRecordFor: (marketplace) =>
+      Promise.resolve(marketplace === "elsewhere" ? record : state.marketplaces[marketplace]),
+    tagProbe: tagProbeAnswering(
+      { kind: "pinned", tag: "bar--v1.4.0", oid: PINNED_OID, version: "1.4.0" },
+      seen,
+    ),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(
+    seen.map((query) => ({ pluginName: query.pluginName, source: query.source.kind })),
+    [{ pluginName: "bar", source: "url" }],
+    "the query addresses the source the resolved record's manifest names",
+  );
+});
+
 test("AUTH-09 the tag query rides the credential collaborators the member's install uses", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-cascade-auth-");

@@ -3467,6 +3467,53 @@ test("CMP-3 / PI-16: project-target install falls back to user-scope marketplace
   });
 });
 
+test("CMP-3 / D-03-08: a project install off a user-scope marketplace resolves a same-marketplace dependency", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-cmp3-dep-"));
+    try {
+      // arrange: `marketplace add` ran at its default user scope, and the
+      // install targets project. The dependency is a SIBLING in that same
+      // marketplace, so the walk's own catalog read resolves it through the
+      // CMP-3 fallback -- the guard must admit the marketplaces this install
+      // can READ, not the raw project-scope key set.
+      const projectLocations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "user-mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        scope: "user",
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+
+      const { ctx, pi, notifications } = makeCtx();
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert: the user HAS added the marketplace and installing `hello`
+      // alone works, so refusing the sibling would be a resolution bug wearing
+      // the D-03-08 trust refusal's message.
+      assert.equal(outcome.status, "installed");
+      assert.doesNotMatch(notifications[0]?.message ?? "", /marketplace/i);
+      const projectAfter = await loadState(projectLocations.extensionRoot);
+      assert.deepEqual(
+        Object.keys(projectAfter.marketplaces["mp"]?.plugins ?? {}).sort(),
+        ["hello", "some-other-plugin"],
+        "the dependency lands in the requesting plugin's own scope",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("CMP-4 / PI-16: user-target install cannot source a project-only marketplace", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-cmp4-"));

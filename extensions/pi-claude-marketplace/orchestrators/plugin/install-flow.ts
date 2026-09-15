@@ -45,6 +45,7 @@ import {
   formatOrchestratedCause,
 } from "./install.messaging.ts";
 import {
+  collectInstallReachableMarketplaces,
   resolveInstallMarketplaceSource,
   selectDeclaringConfigWriteTarget,
   surfaceDiscoveryWarnings,
@@ -963,6 +964,21 @@ async function installPluginWithTransaction(
         locations,
         rootKey,
         lookup: (subject) => lookupCascadeDependencies(state, { scope, cwd, locations }, subject),
+        // RESV-03 / CMP-3: the pin probe reads a member's source out of the
+        // marketplace record, and it must reach that record the same way the
+        // walk's own catalog read does. Reading the target snapshot directly
+        // would answer "no source" for a marketplace the CMP-3 fallback
+        // resolves, turning a resolvable constrained dependency into a
+        // `no-matching-tag` it never earned.
+        marketplaceRecordFor: async (marketplace) =>
+          (
+            await resolveInstallMarketplaceSource({
+              targetScope: scope,
+              cwd,
+              marketplace,
+              targetState: state,
+            })
+          )?.sourceRecord,
         // RESV-03: a member whose constraint selected a release tag carries the
         // commit that tag resolves to AND the semver that tag names, and this
         // builder is where both enter that member's install. An unconstrained
@@ -985,13 +1001,28 @@ async function installPluginWithTransaction(
             ...(member.pinnedVersion !== undefined && { pinVersion: member.pinnedVersion }),
           }),
         installedKeys: collectInstalledKeys(state),
-        // D-03-08: the marketplaces the target scope already records. A
-        // dependency naming anything else fails the cascade; nothing here can
-        // add or clone a marketplace to satisfy one. The requested plugin's own
-        // marketplace is deliberately not seeded in: its precondition is the
-        // ledger's, which resolves the CMP-3 cross-scope fallback and reports
-        // the `marketplace-absent` arm below.
-        knownMarketplaces: new Set(Object.keys(state.marketplaces)),
+        // D-03-08: the marketplaces this install can READ. A dependency naming
+        // anything else fails the cascade; nothing here can add or clone a
+        // marketplace to satisfy one.
+        //
+        // It is the CMP-3-aware set and NOT the raw target-scope key set,
+        // because the walk's own catalog read resolves through the same
+        // project -> user fallback. Seeding the guard from the narrower set
+        // would put two notions of "reachable" in one walk, and the guard runs
+        // FIRST -- so the stricter one would win and refuse a dependency the
+        // lookup one step later resolves, under the one cascade message that
+        // carries a trust rule. Every name in this set is one the user added
+        // themselves, so that trust rule is unchanged.
+        //
+        // The requested plugin's own marketplace needs no special seeding: it
+        // is in this set whenever the ledger could resolve it, and the ledger
+        // still owns reporting the double-miss through the `marketplace-absent`
+        // arm below.
+        knownMarketplaces: await collectInstallReachableMarketplaces({
+          targetScope: scope,
+          cwd,
+          targetState: state,
+        }),
         capture,
         transaction,
         ...(opts.tagProbe !== undefined && { tagProbe: opts.tagProbe }),

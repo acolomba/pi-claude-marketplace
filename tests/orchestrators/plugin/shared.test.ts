@@ -11,6 +11,7 @@ import {
   applyPartialCascadeFold,
   assertNoCrossPluginConflicts,
   cloneMarketplaceRecordForTargetScope,
+  collectInstallReachableMarketplaces,
   absentTargetReasons,
   emitMarketplaceNotAdded,
   emitMarketplaceNotAddedSignal,
@@ -698,6 +699,57 @@ describe("resolveInstallMarketplaceSource", () => {
 
       // assert
       assert.equal(source, undefined);
+    });
+  });
+});
+
+describe("collectInstallReachableMarketplaces", () => {
+  test("D-03-08 a project-target install reaches both scopes' marketplaces", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      await saveScopedState(cwd, "user", { "user-only": {}, shared: {} });
+      const targetState: ExtensionState = {
+        schemaVersion: 1,
+        marketplaces: {
+          "project-only": makeMarketplaceRecord("project-only", "project", {}),
+          shared: makeMarketplaceRecord("shared", "project", {}),
+        },
+      };
+
+      // act
+      const reachable = await collectInstallReachableMarketplaces({
+        targetScope: "project",
+        cwd,
+        targetState,
+      });
+
+      // assert: the union, deduplicated -- this is the set the CMP-3-aware
+      // per-marketplace resolver can answer for, so it is the set the
+      // dependency guard may admit.
+      assert.deepStrictEqual([...reachable].sort(), ["project-only", "shared", "user-only"]);
+    });
+  });
+
+  test("CMP-4 a user-target install reaches its own scope only", async () => {
+    // arrange: the project scope records a marketplace the user scope does
+    // not. CMP-3 is a project -> user fallback and has no reverse arm, so a
+    // user-target install must not see it.
+    await withTempScopes(async ({ cwd }) => {
+      await saveScopedState(cwd, "project", { "project-only": {} });
+      const targetState: ExtensionState = {
+        schemaVersion: 1,
+        marketplaces: { "user-only": makeMarketplaceRecord("user-only", "user", {}) },
+      };
+
+      // act
+      const reachable = await collectInstallReachableMarketplaces({
+        targetScope: "user",
+        cwd,
+        targetState,
+      });
+
+      // assert
+      assert.deepStrictEqual([...reachable], ["user-only"]);
     });
   });
 });

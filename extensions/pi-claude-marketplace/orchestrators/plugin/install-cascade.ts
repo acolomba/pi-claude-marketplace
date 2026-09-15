@@ -132,6 +132,23 @@ export type CascadeTagProbe = typeof probeDependencyTags;
 /** The per-URL tag listing memo one cascade run threads through every query. */
 export type CascadeTagMemo = NonNullable<DependencyTagProbeOptions["tagMemo"]>;
 
+/** The snapshot record one marketplace's catalog and clone root are read from. */
+type CascadeMarketplaceRecord = ExtensionState["marketplaces"][string];
+
+/**
+ * Resolves the marketplace record a member's source is read from.
+ *
+ * Injected because the caller, not this module, knows how a marketplace name
+ * resolves for the install in progress: a project-scope install reaches a
+ * user-scope marketplace through the CMP-3 fallback, and that fallback is
+ * exactly the set D-03-08's guard now admits. Reading the snapshot here instead
+ * would answer "no source" for those marketplaces and move the refusal from the
+ * guard to a `no-matching-tag` the member never earned.
+ */
+export type CascadeMarketplaceLookup = (
+  marketplace: string,
+) => Promise<CascadeMarketplaceRecord | undefined>;
+
 /**
  * Why a member's accumulated version constraint produced no install.
  *
@@ -227,6 +244,12 @@ export interface MemberConstraintOptions {
   readonly ledgerOptionsFor: (member: ResolvedCascadeMember) => InstallLedgerOptions;
   readonly tagProbe: CascadeTagProbe;
   readonly tagMemo: CascadeTagMemo;
+  /**
+   * How a member's marketplace name resolves to the record its source is read
+   * from. Defaults to the snapshot's own map, which is the whole answer only
+   * when every reachable marketplace is already recorded in the target scope.
+   */
+  readonly marketplaceRecordFor?: CascadeMarketplaceLookup;
 }
 
 /** One member the cascade itself materialized, in install order. */
@@ -288,6 +311,12 @@ export interface InstallCascadeOptions {
   readonly transaction?: InstallLedgerTransaction;
   /** Tag resolution for a constrained member; defaults to the real probe. */
   readonly tagProbe?: CascadeTagProbe;
+  /**
+   * How a member's marketplace name resolves to the record its source is read
+   * from. The caller passes the SAME resolution its `lookup` uses, so the walk
+   * and the pin probe cannot disagree about which source backs a member.
+   */
+  readonly marketplaceRecordFor?: CascadeMarketplaceLookup;
 }
 
 /** The cascade's outcome. */
@@ -371,10 +400,13 @@ function toIntersectionFailure(
  * answer, no branch on how the source parsed, and no path to a repository head.
  */
 async function resolveMemberTagSource(
-  state: ExtensionState,
+  options: MemberConstraintOptions,
   member: ClosureMember,
 ): Promise<GitBackedSource | undefined> {
-  const record = state.marketplaces[member.marketplace];
+  const lookup =
+    options.marketplaceRecordFor ??
+    ((marketplace: string) => Promise.resolve(options.state.marketplaces[marketplace]));
+  const record = await lookup(member.marketplace);
   if (record === undefined) {
     return undefined;
   }
@@ -409,7 +441,7 @@ async function probeMemberPin(
   member: ClosureMember,
   range: string,
 ): Promise<MemberConstraintOutcome> {
-  const source = await resolveMemberTagSource(options.state, member);
+  const source = await resolveMemberTagSource(options, member);
   if (source === undefined) {
     return {
       kind: "failed",
@@ -708,6 +740,9 @@ export async function runInstallCascade(
     ledgerOptionsFor: options.ledgerOptionsFor,
     tagProbe: options.tagProbe ?? probeDependencyTags,
     tagMemo: new Map(),
+    ...(options.marketplaceRecordFor !== undefined && {
+      marketplaceRecordFor: options.marketplaceRecordFor,
+    }),
   });
   if (!constraints.ok) {
     return { kind: "constraint-failed", failure: constraints.failure };

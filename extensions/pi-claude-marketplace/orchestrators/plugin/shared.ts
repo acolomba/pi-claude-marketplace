@@ -431,6 +431,43 @@ export async function resolveInstallMarketplaceSource(opts: {
 }
 
 /**
+ * D-03-08: every marketplace name one install can READ, which is the
+ * CMP-3-aware set `resolveInstallMarketplaceSource` answers from -- the target
+ * scope's own records plus, for a project-scope install, the user scope's.
+ *
+ * The dependency cascade gates a child edge on this set. Gating on the raw
+ * target-scope key set instead puts two different notions of "reachable" in one
+ * walk: the guard runs BEFORE the walk's own catalog read, so the stricter one
+ * wins and a dependency is refused for naming a marketplace the lookup one step
+ * later would have resolved. That refusal is the one cascade message with a
+ * trust rule behind it, so it reads to the user as a security decision when it
+ * is a resolution bug.
+ *
+ * The trust rule itself is untouched: every name in this set is one the user
+ * added themselves. Nothing here adds or clones a marketplace.
+ *
+ * NFR-5: filesystem only. The user-scope read is `loadState`, the same read the
+ * per-marketplace resolver already performs on its own fallback arm.
+ */
+export async function collectInstallReachableMarketplaces(opts: {
+  readonly targetScope: Scope;
+  readonly cwd: string;
+  readonly targetState: ExtensionState;
+}): Promise<ReadonlySet<string>> {
+  const names = new Set(Object.keys(opts.targetState.marketplaces));
+  if (opts.targetScope === "user") {
+    return names;
+  }
+
+  const userState = await loadState(locationsFor("user", opts.cwd).extensionRoot);
+  for (const name of Object.keys(userState.marketplaces)) {
+    names.add(name);
+  }
+
+  return names;
+}
+
+/**
  * Materialize the target-scope marketplace container needed by the current
  * state shape when CMP-3 falls back to a user-scope marketplace. The copied
  * record preserves source/manifest paths but starts with no target-scope
