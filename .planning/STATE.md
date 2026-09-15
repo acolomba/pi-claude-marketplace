@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
 status: executing
-stopped_at: "completed `06-02-PLAN.md`. Resume file: none."
-last_updated: "2026-09-15T12:04:21.964Z"
+stopped_at: "completed `06-03-PLAN.md`. Resume file: none."
+last_updated: "2026-09-15T14:03:51.543Z"
 last_activity: 2026-09-15
-last_activity_desc: Plan 06-02 complete (directed value transfers)
-state_head: 15878286cc0cb853b67ed80da5a9912880ae4ccc
+last_activity_desc: Plan 06-03 complete (validated external and type-system contracts)
+state_head: fc1b769f67963701b628b7e4b6d40a0a43832049
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 54
-  completed_plans: 40
+  completed_plans: 41
   percent: 63
 milestone_name: test-backlog
 ---
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 06 (Unused Type Member Gate) — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 Status: Ready to execute
-Last activity: 2026-09-15 — Plan 06-02 complete (directed value transfers)
+Last activity: 2026-09-15 — Plan 06-03 complete (validated external and type-system contracts)
 
 Plan 06-01 landed the member gate's compiler tracer: `node
 scripts/check-unused-type-members.mjs` compiles the project once, inventories
@@ -54,16 +54,35 @@ alone transfers nothing, edges are one-way, and a tuple neighbour or a map key
 receives no credit. A call whose target is invisible and a container operation
 with no directed semantics each raise a bounded gap rather than reading clean.
 
-Second live run: 3,464 candidates, 2,891 runtime-observed, 105 test-only, 392
-unread, 76 unsupported — 468 findings against 06-01's 614, with 146 members
-explained only by a transfer. 68.8s wall, 2.0 GB peak. Still interim: contracts
-(06-03) and whole-object operations (06-04) are not in the model, and 06-06
-reconciles every remaining row. `lint:type-members` exists as a package alias
-but is deliberately NOT in `npm run check` until 06-08.
+Plan 06-03 added the contract engine in
+`scripts/check-unused-type-members.contracts.mjs`, supplied to the analysis
+through 06-01's `contractEvaluator` seam by the real command-line tool. An
+exemption has to be earned: the entry names one exact declaration, settled
+against the inventory's declaration map rather than its coordinate string, and
+brings the evidence its category demands. An external output must be built at
+the named origin and arrive at a return the compiler checks against an installed
+declaration, directly or along 06-02's transfers. An external input needs a
+required upstream slot and a callback the compiler really checks; an optional
+slot or an asserted cast proves nothing. A nominal brand needs a key symbol no
+other module can spell plus a type no ordinary value satisfies. A type selection
+covers the filter literal's own member and needs a source that discriminates on
+that key. Stale, contradictory, duplicate, wildcard, unknown-key, wrong-version
+and read-redundant entries are refused as exit-2 setup failures, which keeps "we
+cannot answer" apart from "this member is unread".
 
-`npm test` 6332/6332 (06-01's 6298 plus 34 new). Typecheck, lint, format and
-all four fallow links green. No production source under `extensions/` changed in
-06-02, so the wave's aggregate production unit coverage snapshot still holds.
+`scripts/check-unused-type-members.contracts.json` ships with no entries by
+design; live ones are 06-06's after the tree is reconciled.
+
+Live run unchanged at 3,464 candidates, 2,891 runtime-observed, 105 test-only, 0
+explicit-contract, 392 unread, 76 unsupported. Still interim: whole-object
+operations (06-04) are not in the model, and 06-06 reconciles every remaining
+row. `lint:type-members` exists as a package alias but is deliberately NOT in
+`npm run check` until 06-08.
+
+`npm test` 6366/6366 (06-02's 6332 plus 34 new). `npm run check` exit 0.
+Typecheck, lint, format and all four fallow links green. No production source
+under `extensions/` changed in 06-02 or 06-03, so the wave's aggregate
+production unit coverage snapshot still holds.
 
 Phase 05 closed: all 28 plans landed and the production
 dead-code census drained from 111 to 0 with zero net additions at every step.
@@ -159,6 +178,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
+**Last session:** 2026-09-15T14:03:39.715Z
+**Resume file:** None
+
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–5 are complete.
 Phase 6 has completed one of eight plans; Phase 7 plans are approved and follow it.
 Earlier milestone continuity is preserved in
@@ -176,7 +198,7 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 
 ### Phase 6 Plan 1 complete
 
-Stopped at: completed `06-01-PLAN.md`. Resume file: none. Next is 06-02
+Stopped at: Completed 06-03-PLAN.md
 (directed value transfers) and 06-03 (validated contracts), which the plan
 graph runs together in Wave 2 over disjoint files.
 
@@ -453,3 +475,10 @@ target of 42 → 32 is already reached; 05-24 should leave the total at 32 while
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 06 P02 | 1h 50m | 3 tasks | 4 files |
+| Phase 06 P03 | 2h 0m | 2 tasks | 5 files |
+
+## Decisions
+
+- [Phase 06]: An invalid contract is an exit-2 setup failure, not an exit-1 finding, which keeps "the gate cannot answer" apart from "this member is unread" — The research fail-closed list names invalid contracts alongside a malformed tsconfig; treating a stale contract as a finding would let it be triaged away instead of fixed
+- [Phase 06]: A type-selection contract covers the filter literal own member, not the union discriminants it selects on — Measuring the inventory showed Extract<Msg, { status: K }> contributes its own status member that no runtime syntax can read, while the variants status members are ordinary discriminants real code switches on
+- [Phase 06]: Contract identity is settled through the inventory declaration map, never through the coordinate string alone — A coordinate only locates syntax; requiring the node found there to be the one byDeclaration recorded is what stops a drifted entry from being proved against the wrong member

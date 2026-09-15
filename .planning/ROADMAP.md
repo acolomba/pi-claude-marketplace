@@ -82,7 +82,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 **Success Criteria:**
 1. An unread optional EdgeDeps member fails an automated static-analysis gate.
 2. Read, write-only, structural, external-contract, type-only, alias, and computed-access controls establish scope and limitations.
-**Plans:** 06-01 through 06-08 approved after independent plan review; live triage waits for Phase 5 completion. 06-01 landed the runnable gate: compiler inventory, syntax-first read classification and a three-way exit contract. 06-02 landed directed value transfers, so a read is credited back to the member that supplied it through arguments, returns, callbacks and containers; the live population moved from 614 findings to 468. Next is 06-03 validated contracts, then Wave 3 (06-04 whole-object operations).
+**Plans:** 06-01 through 06-08 approved after independent plan review; live triage waits for Phase 5 completion. 06-01 landed the runnable gate: compiler inventory, syntax-first read classification and a three-way exit contract. 06-02 landed directed value transfers, so a read is credited back to the member that supplied it through arguments, returns, callbacks and containers; the live population moved from 614 findings to 468. 06-03 landed the contract engine: four evidence categories, identity settled through the inventory's declaration map, and every stale, broad or redundant entry refused as a setup failure; the repository contract file ships empty until the live reconciliation. Next is Wave 3 (06-04 whole-object operations).
 
 ### Phase 7: Reliable Coverage Metrics
 
@@ -113,6 +113,6 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 | 3. Reachable Agent Collision Contract | 4/4 | Complete | 2026-09-14 |
 | 4. Strict Command Arguments | 3/3 | Complete | 2026-09-14 |
 | 5. Production Export Ownership | 28/28 | Complete | 2026-09-15 |
-| 6. Unused Type Member Gate | 2/8 | In Progress | - |
+| 6. Unused Type Member Gate | 3/8 | In Progress | - |
 | 7. Reliable Coverage Metrics | 0/8 | Plans approved | - |
 | 8. Final Verification and Reconciliation | 0/TBD | Not started | - |
