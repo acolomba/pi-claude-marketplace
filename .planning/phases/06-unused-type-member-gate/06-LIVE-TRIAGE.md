@@ -13,10 +13,10 @@ candidates, of which 138 are still unresolved and
 
 | Measurement | Value |
 | --- | --- |
-| Recorded | 2026-09-15T18:15:30.839Z |
-| Revision | 77629eb2226aa6d4b53a27bd0e81403d52691c24 |
-| Source digest | `ba06bb955289500db27dedff78d8a0656b6824e627192c5f50d5548a2065d255` |
-| Source files hashed | 603 |
+| Recorded | 2026-09-15T19:39:07.084Z |
+| Revision | 3f2150d2a14d60a49bf6c6cd800f32c28a0c1a79 |
+| Source digest | `671cb0ae7c5dd554fa49774eb78f5c7bc4dec012e1a988ba3feddc36fd9392c3` |
+| Source files hashed | 605 |
 | Production files analysed | 236 |
 | Candidates | 3464 |
 | Runtime-observed | 3009 |
@@ -24,8 +24,8 @@ candidates, of which 138 are still unresolved and
 | Explicit-contract | 81 |
 | Unread | 138 |
 | Unsupported analysis | 0 |
-| Transfer steps | 3001672 |
-| Transfer walk milliseconds | 49031 |
+| Transfer steps | 3005679 |
+| Transfer walk milliseconds | 51707 |
 
 ## Population by owner
 
@@ -674,12 +674,12 @@ and writing the evidence into its `note`.
 ```json
 {
   "schemaVersion": 1,
-  "generated": "2026-09-15T18:15:30.839Z",
-  "revision": "77629eb2226aa6d4b53a27bd0e81403d52691c24",
+  "generated": "2026-09-15T19:39:07.084Z",
+  "revision": "3f2150d2a14d60a49bf6c6cd800f32c28a0c1a79",
   "fingerprint": {
     "algorithm": "sha256",
-    "files": 603,
-    "digest": "ba06bb955289500db27dedff78d8a0656b6824e627192c5f50d5548a2065d255"
+    "files": 605,
+    "digest": "671cb0ae7c5dd554fa49774eb78f5c7bc4dec012e1a988ba3feddc36fd9392c3"
   },
   "counts": {
     "productionFiles": 236,
@@ -691,11 +691,11 @@ and writing the evidence into its `note`.
     "unsupportedAnalysis": 0
   },
   "work": {
-    "transferSteps": 3001672,
-    "transferEdges": 216490,
-    "transferReads": 82772,
-    "operationReads": 985894,
-    "transferMs": 49031
+    "transferSteps": 3005679,
+    "transferEdges": 217278,
+    "transferReads": 82981,
+    "operationReads": 986023,
+    "transferMs": 51707
   },
   "owners": [
     {
