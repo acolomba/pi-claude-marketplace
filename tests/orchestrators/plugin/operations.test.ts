@@ -4,19 +4,22 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import { mock, verify } from "strong-mock";
+import { mock, verify, when } from "strong-mock";
 
 import {
   createHooksRouting,
   createHooksRuntime,
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   createEnableOperation,
   createInstallOperation,
   createReinstallOperation,
   createUninstallOperation,
+  fetchPlugins,
+  getPluginInfo,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -33,6 +36,8 @@ import type { ReinstallHooksRouting } from "../../../extensions/pi-claude-market
 import type { UninstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
+  ExtensionAPI,
+  ExtensionContext,
   NotificationContext,
   ToolInventory,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -42,6 +47,53 @@ import type { TestContext } from "node:test";
 interface NotifyRecord {
   readonly message: string;
   readonly severity?: string;
+}
+
+type NotificationSeverity = Parameters<ExtensionContext["ui"]["notify"]>[1];
+type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
+  readonly notify: (message: string, severity?: NotificationSeverity) => void;
+};
+
+interface FetchBoundary {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly notifications: NotifyRecord[];
+  readonly verifyBoundary: () => void;
+}
+
+/**
+ * The fetch command's notification boundary. fetch is handed the whole
+ * `ExtensionContext` / `ExtensionAPI` rather than the two narrow read contracts
+ * `makeCtx` builds, so the members it may reach are stated as expectations and
+ * verified after the call: one cascade emission and the single soft-dependency
+ * probe, which reads the tool list twice.
+ */
+function makeFetchBoundary(): FetchBoundary {
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "fetch context" });
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "fetch extension API" });
+  const ui = mock<NotificationUi>({ exactParams: true, name: "fetch UI" });
+  const notifications: NotifyRecord[] = [];
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .once();
+  when(() => pi.getAllTools())
+    .thenReturn([])
+    .twice();
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .once();
+  return {
+    ctx,
+    pi,
+    notifications,
+    verifyBoundary: () => {
+      verify(ctx);
+      verify(pi);
+      verify(ui);
+    },
+  };
 }
 
 function makeCtx(): {
@@ -61,6 +113,33 @@ function makeCtx(): {
 }
 
 /**
+ * The project-scope state that records one path-source marketplace and no
+ * installed plugin. Shared by the seeders below so the record they write is one
+ * literal rather than one per fixture.
+ */
+function marketplaceOnlyState(opts: {
+  readonly cwd: string;
+  readonly marketplace: string;
+  readonly manifestPath: string;
+  readonly marketplaceRoot: string;
+}): ExtensionState {
+  return {
+    schemaVersion: 2,
+    marketplaces: {
+      [opts.marketplace]: {
+        name: opts.marketplace,
+        scope: "project",
+        source: pathSource("./mp-src"),
+        addedFromCwd: opts.cwd,
+        manifestPath: opts.manifestPath,
+        marketplaceRoot: opts.marketplaceRoot,
+        plugins: {},
+      },
+    },
+  };
+}
+
+/**
  * Seed a path-source marketplace whose single plugin declares `hooks/hooks.json`,
  * plus the state record that makes it resolvable. Deliberately minimal: this
  * owner asserts the composed operation's real effects, not fixture variety.
@@ -70,6 +149,8 @@ async function seedHooksDeclaringPlugin(opts: {
   readonly marketplace: string;
   readonly plugin: string;
   readonly hooksJson: object;
+  /** Optional `commands/<name>.md` declaration, for cases that need one. */
+  readonly commandName?: string;
 }): Promise<void> {
   const { cwd, marketplace, plugin } = opts;
   const marketplaceRoot = path.join(cwd, "mp-src");
@@ -82,6 +163,13 @@ async function seedHooksDeclaringPlugin(opts: {
     JSON.stringify({ name: plugin, version: "0.0.1" }),
   );
   await writeFile(path.join(pluginRoot, "hooks", "hooks.json"), JSON.stringify(opts.hooksJson));
+  if (opts.commandName !== undefined) {
+    await mkdir(path.join(pluginRoot, "commands"));
+    await writeFile(
+      path.join(pluginRoot, "commands", `${opts.commandName}.md`),
+      `Run ${opts.commandName}.\n`,
+    );
+  }
 
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
   await writeFile(
@@ -94,21 +182,55 @@ async function seedHooksDeclaringPlugin(opts: {
 
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
-  const state: ExtensionState = {
-    schemaVersion: 2,
-    marketplaces: {
-      [marketplace]: {
-        name: marketplace,
-        scope: "project",
-        source: pathSource("./mp-src"),
-        addedFromCwd: cwd,
-        manifestPath,
-        marketplaceRoot,
-        plugins: {},
-      },
-    },
-  };
-  await saveState(locations.extensionRoot, state);
+  await saveState(
+    locations.extensionRoot,
+    marketplaceOnlyState({ cwd, marketplace, manifestPath, marketplaceRoot }),
+  );
+}
+
+/**
+ * Seed a marketplace whose single plugin entry is a PINNED url source, with the
+ * per-sha clone already materialized under the scope's clone cache.
+ *
+ * That combination is the one fetch shape that reaches the bound status
+ * capability and then returns without any git materialize: `fetchOne` runs the
+ * fs-only presence probe first and short-circuits a pinned source it finds
+ * warm. A composition holding anything other than the real
+ * `makePresenceProbe` would miss the warm clone and fall through to the clone
+ * seam, which this case supplies no override for.
+ */
+async function seedWarmPinnedPlugin(opts: {
+  readonly cwd: string;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly cloneUrl: string;
+  readonly sha: string;
+}): Promise<void> {
+  const { cwd, marketplace, plugin, cloneUrl, sha } = opts;
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: marketplace,
+      plugins: [{ name: plugin, source: { source: "url", url: cloneUrl, sha } }],
+    }),
+  );
+
+  const locations = locationsFor("project", cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(
+    locations.extensionRoot,
+    marketplaceOnlyState({ cwd, marketplace, manifestPath, marketplaceRoot }),
+  );
+
+  const cloneDir = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, sha));
+  await mkdir(path.join(cloneDir, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(cloneDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: plugin, version: "2.0.0" }),
+  );
 }
 
 test("constructs the install operation without using its owners or starting asynchronous work", (t) => {
@@ -325,6 +447,7 @@ test("constructs the reinstall operation without using its owners or starting as
 async function installHooksDeclaringPlugin(
   t: TestContext,
   prefix: string,
+  commandName?: string,
 ): Promise<{
   readonly cwd: string;
   readonly runtime: ReturnType<typeof createHooksRuntime>;
@@ -341,6 +464,7 @@ async function installHooksDeclaringPlugin(
     hooksJson: {
       PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hello" }] }],
     },
+    ...(commandName !== undefined && { commandName }),
   });
   const { ctx, pi } = makeCtx();
   await createInstallOperation(
@@ -535,4 +659,74 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
   assert.equal(bucket.length, 1);
   assert.equal(bucket[0]?.pluginId, "p1");
   assert.equal(bucket[0]?.handlerDecl["command"], "echo goodbye");
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FTCH-01 / D-81-02: the composed fetch command runs against the real
+// `git-source-probe` status capability this module binds. A pinned url source
+// whose clone is already warm is answered entirely by that fs-only probe: the
+// row is the no-op `(skipped) {up-to-date}`, nothing is written, and no clone
+// seam override is supplied -- so a composition that failed to see the warm
+// clone would fall through to the real git backend rather than pass quietly.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("fetchPlugins answers a warm pinned source from the bound status capability", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "fetch-operation-");
+  const cloneUrl = "https://example.com/warm-pinned";
+  const sha = "bdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbdbd";
+  await seedWarmPinnedPlugin({ cwd, marketplace: "mp", plugin: "p1", cloneUrl, sha });
+  const locations = locationsFor("project", cwd);
+  const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+  const boundary = makeFetchBoundary();
+
+  // act
+  await fetchPlugins({
+    ctx: boundary.ctx,
+    pi: boundary.pi,
+    scope: "project",
+    cwd,
+    target: { kind: "plugin", marketplace: "mp", plugin: "p1" },
+  });
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [
+    { message: "● mp [project]\n  ⊘ p1 (skipped) {up-to-date}" },
+  ]);
+
+  // Derive-not-persist: fetch's only write is the clone seam's, and the warm
+  // no-op never reaches it, so the recorded state is byte-unchanged.
+  assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+  boundary.verifyBoundary();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INFO-02 / D-100-01: the composed info command runs against the real
+// read-only filesystem capability this module binds. BOTH members are
+// exercised by one installed plugin that declares a command and a hooks
+// config: the hook summary comes from `readTextFile` over `hooks.json`, and
+// the command inventory from `listDirectory` over the plugin's `commands/`
+// directory, which is why the fixture declares one.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("getPluginInfo reports the installed plugin through the bound reader capability", async (t) => {
+  // arrange
+  const { cwd } = await installHooksDeclaringPlugin(t, "info-operation-", "c1");
+  const { ctx, pi, notifications } = makeCtx();
+
+  // act
+  await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p1", scope: "project", cwd });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message: [
+        "● mp [project] <no autoupdate>",
+        "  ● p1 v0.0.1 (installed)",
+        "    commands: c1",
+        "    hooks:",
+        "      PreToolUse()",
+      ].join("\n"),
+    },
+  ]);
 });

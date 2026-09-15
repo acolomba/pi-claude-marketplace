@@ -1,16 +1,26 @@
 // orchestrators/plugin/operations.ts
 //
 // Production composition owner for the plugin operations. Each flow module
-// keeps its semantic factory and its injected transaction contract; this owner
-// is the single place that binds those contracts to the concrete Node
-// implementations, so a command boundary asks for an operation rather than
+// keeps its semantic factory and its injected read or transaction contract;
+// this owner is the single place that binds those contracts to the concrete
+// Node implementations, so a command boundary asks for an operation rather than
 // assembling one.
+//
+// The two read commands are bound as values rather than behind a factory: they
+// take no routing or completion-cache owner from their caller, so there is
+// nothing left for a caller to supply once the filesystem and status
+// capabilities are bound here.
+
+import { readdir, readFile } from "node:fs/promises";
 
 import { runPhases } from "../../transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
 import { createSetPluginEnabled } from "./enable-disable.ts";
+import { createFetchPlugins } from "./fetch.ts";
+import { makePresenceProbe, probeManifestEntry } from "./git-source-probe.ts";
+import { createGetPluginInfo } from "./info.ts";
 import { createInstallPlugin } from "./install-flow.ts";
 import { runInstallLedger } from "./install-outcome.ts";
 import { createReinstallPlugin } from "./reinstall-flow.ts";
@@ -23,6 +33,8 @@ import type {
   EnableDisableTransaction,
   SetPluginEnabledOperation,
 } from "./enable-disable.ts";
+import type { FetchStatus } from "./fetch.ts";
+import type { PluginInfoReader } from "./info.ts";
 import type { InstallHooksRouting } from "./install-disable-cascade.ts";
 import type { InstallTransaction } from "./install-flow.ts";
 import type { ReinstallHooksRouting, ReinstallPluginFn } from "./reinstall-flow.ts";
@@ -114,3 +126,30 @@ export function createReinstallOperation(
 ): ReinstallPluginFn {
   return createReinstallPlugin(REAL_REINSTALL_TRANSACTION, hooksRouting, completionCache);
 }
+
+// The one concrete binding of fetch's status capability. Both members are the
+// fs-only probes `git-source-probe.ts` owns, which is what keeps this
+// composition inside the network-free gate: fetch reaches git only through the
+// clone-cache seam it defaults internally, never through anything named here
+// (NFR-5).
+const NODE_FETCH_STATUS: FetchStatus = { makePresenceProbe, probeManifestEntry };
+
+/**
+ * Fetches plugins through the Node-backed status capability. Reaching the value
+ * runs no work of its own -- only invoking it does.
+ */
+export const fetchPlugins = createFetchPlugins(NODE_FETCH_STATUS);
+
+// The one concrete binding of info's read-only filesystem capability. Text
+// reads are UTF-8 and directory listings carry Node directory entries, because
+// info classifies component files by their entry kind.
+const NODE_PLUGIN_INFO_READER: PluginInfoReader = {
+  readTextFile: (filePath) => readFile(filePath, "utf8"),
+  listDirectory: (directoryPath) => readdir(directoryPath, { withFileTypes: true }),
+};
+
+/**
+ * Reads plugin information through the Node-backed reader capability. Reaching
+ * the value runs no work of its own -- only invoking it does.
+ */
+export const getPluginInfo = createGetPluginInfo(NODE_PLUGIN_INFO_READER);
