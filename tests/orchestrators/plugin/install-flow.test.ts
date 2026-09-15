@@ -5606,6 +5606,53 @@ test("UAT-05: base-targeted install with marketplace already in base leaves the 
 // plugin would not receive dispatch until `/reload` (NFR-2 violation).
 // ─────────────────────────────────────────────────────────────────────────────
 
+test("RESV-01: the caller's version pin reaches the named plugin and no dependency", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-pin-scope-"));
+    try {
+      // arrange: a pin the caller states for the plugin it named.
+      // `pinVersionOverride` takes absolute precedence in
+      // `deriveInstallVersion`, so a cascade that copied it onto every member
+      // would stamp the requesting plugin's version string on each dependency
+      // -- a version no dependency's own source ever carried.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+
+      // act
+      const { ctx, pi } = makeCtx();
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        pinVersionOverride: "7.7.7",
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.version, "7.7.7");
+      assert.equal(
+        after.marketplaces["mp"]?.plugins["some-other-plugin"]?.version,
+        "0.0.1",
+        "the dependency keeps the version its own source declares",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("RESV-01 / WR-03: a cascade-installed dependency's hooks reach the routing table too", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-hooks-"));

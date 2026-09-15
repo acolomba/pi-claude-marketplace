@@ -115,6 +115,11 @@ export interface InstallPluginOptions {
    * AG-7 opt-in flag. Default false: generated agents omit `model:` and
    * Pi picks its own default. The edge handler sets this to `true` only
    * when the user supplies `--map-model` on `/claude:plugin install`.
+   *
+   * RESV-01: applies CASCADE-WIDE. It states how the user wants generated
+   * agents written, and a cascade that wrote the requesting plugin's agents
+   * one way and its dependencies' another would produce one install under two
+   * policies.
    */
   readonly mapModel?: boolean;
   /**
@@ -123,6 +128,12 @@ export interface InstallPluginOptions {
    * `partially-available` arm so its supported components materialize (the unsupported
    * ones are skipped naturally; FORCE-01). The edge handler sets this when the
    * user supplies `--partial`. Both gates still reject `unavailable` (FORCE-05).
+   *
+   * RESV-01: applies CASCADE-WIDE, deliberately. The flag states which
+   * resolver gate the user accepts for this command, and a dependency that
+   * failed the strict gate would fail the whole install (D-03-07) -- so
+   * applying it to the requesting plugin alone would leave `--partial` unable
+   * to do the one thing the user asked it for.
    */
   readonly partial?: boolean;
   /**
@@ -137,6 +148,11 @@ export interface InstallPluginOptions {
    * When undefined, the PI-7 / PUP-3 / SNM-34 3-tier precedence applies
    * (plugin.json > entry.version > hash). All other callers leave this
    * undefined.
+   *
+   * RESV-01: reaches the plugin this call NAMES and no other cascade member.
+   * It takes absolute precedence in `deriveInstallVersion`, so copying it onto
+   * every member would record each dependency under the requesting plugin's
+   * version string.
    */
   readonly pinVersionOverride?: string;
   /**
@@ -228,11 +244,29 @@ const REAL_INSTALL_TRANSACTION: InstallTransaction = {
 };
 
 /**
- * Assemble the `InstallLedgerOptions` from the entrypoint options, spreading
- * each optional field only when defined (exactOptionalPropertyTypes). Extracted
- * from `installPlugin`'s guard closure so the conditional-spread ladder does not
- * inflate that closure's cognitive complexity. `ctx` is always threaded so the
- * git-source clone probe can wire the auth notify seam (PROV-03).
+ * Assemble the `InstallLedgerOptions` for ONE cascade member from the
+ * entrypoint options, spreading each optional field only when defined
+ * (exactOptionalPropertyTypes). Extracted from `installPlugin`'s guard closure
+ * so the conditional-spread ladder does not inflate that closure's cognitive
+ * complexity. `ctx` is always threaded so the git-source clone probe can wire
+ * the auth notify seam (PROV-03).
+ *
+ * The entrypoint options divide in two, and the split is the contract.
+ *
+ * Cascade-wide, deliberately: `mapModel`, `partial`, `cloneCacheSeam` and the
+ * three auth collaborators. `--map-model` states how the user wants generated
+ * agents written and `--partial` states which resolver gate the user accepts,
+ * and a cascade that applied either to the plugin the user typed but not to
+ * the plugins installed with it would produce one install under two policies.
+ * The auth trio must be shared or a member would authenticate differently from
+ * the tag query that selected its pin (AUTH-09).
+ *
+ * Per-member, necessarily: `sourcePin` and `pinVersion`. Both are facts about
+ * ONE member -- the commit its constraint selected and the semver the selected
+ * tag carries -- so both arrive on `core` and neither is read off `opts`.
+ * `pinVersionOverride` in particular takes absolute precedence in
+ * `deriveInstallVersion`, so copying the caller's own onto every member would
+ * record every dependency under the requesting plugin's version string.
  */
 function buildInstallLedgerOptions(
   opts: InstallPluginOptions,
@@ -244,10 +278,10 @@ function buildInstallLedgerOptions(
     /** RESV-03: the commit a cascade member's version constraint selected. */
     sourcePin?: string;
     /**
-     * RESV-03 / RESV-05: the semver the selected tag carries, recorded as this
-     * member's version. It takes precedence over the caller's own pin because
-     * it is a fact about THIS member, and over the git-source `sha-<12hex>`
-     * branch because that form is what RESV-05 cannot read back.
+     * The version to record for THIS member: the semver its selected tag
+     * carries (RESV-03 / RESV-05), or the caller's `pinVersionOverride` when
+     * the member IS the plugin the caller named. It overrides the git-source
+     * `sha-<12hex>` branch, which is the form RESV-05 cannot read back.
      */
     pinVersion?: string;
   },
@@ -261,7 +295,6 @@ function buildInstallLedgerOptions(
     ...(core.sourcePin !== undefined && { sourcePinOverride: core.sourcePin }),
     ...(opts.mapModel !== undefined && { mapModel: opts.mapModel }),
     ...(opts.partial !== undefined && { partial: opts.partial }),
-    ...(opts.pinVersionOverride !== undefined && { pinVersionOverride: opts.pinVersionOverride }),
     ...(core.pinVersion !== undefined && { pinVersionOverride: core.pinVersion }),
     ...(opts.cloneCacheSeam !== undefined && { cloneCacheSeam: opts.cloneCacheSeam }),
     cloneProbe: probeInstallClone,
@@ -1140,15 +1173,23 @@ async function installPluginWithTransaction(
         // the range, and a sha form either satisfies nothing or coerces to an
         // arbitrary digit run (D-03-04) -- so without the semver a repeat of
         // the same command fails the constraint it had just satisfied.
-        ledgerOptionsFor: (member) =>
-          buildInstallLedgerOptions(opts, {
+        //
+        // The caller's own `pinVersionOverride` reaches the plugin the caller
+        // NAMED and no other member. It takes absolute precedence in
+        // `deriveInstallVersion`, so copying it onto every member would record
+        // each dependency under the requesting plugin's version string.
+        ledgerOptionsFor: (member) => {
+          const pinVersion =
+            member.pinnedVersion ?? (member.key === rootKey ? opts.pinVersionOverride : undefined);
+          return buildInstallLedgerOptions(opts, {
             scope,
             cwd,
             marketplace: member.marketplace,
             plugin: member.name,
             ...(member.pinnedOid !== undefined && { sourcePin: member.pinnedOid }),
-            ...(member.pinnedVersion !== undefined && { pinVersion: member.pinnedVersion }),
-          }),
+            ...(pinVersion !== undefined && { pinVersion }),
+          });
+        },
         installedKeys: collectInstalledKeys(state),
         // D-03-08: the marketplaces this install can READ. A dependency naming
         // anything else fails the cascade; nothing here can add or clone a
