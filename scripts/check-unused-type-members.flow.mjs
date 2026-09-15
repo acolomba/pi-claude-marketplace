@@ -3,6 +3,7 @@ import path from "node:path";
 import ts from "typescript";
 
 import { resolveCandidates } from "./check-unused-type-members.model.mjs";
+import { createOperationModel, readsOfOperand } from "./check-unused-type-members.operations.mjs";
 
 /**
  * Directed value transfers for the unused-type-member gate.
@@ -1283,6 +1284,104 @@ function creditRead(read, state) {
   }
 }
 
+/**
+ * Records the whole-object operations a run of calls carries out, and returns
+ * the read sites they leave behind for the transfer walk to trace.
+ *
+ * The operand's own declared place is credited here, exactly as the model
+ * credits the place a property access was written on. Everywhere the value came
+ * from is credited by the walk, so a record built by a caller keeps its own
+ * declaration even when the wrapper it passed through declares `unknown`.
+ */
+function collectOperationReads(syntax, state) {
+  const reads = [];
+
+  for (const call of syntax.calls) {
+    if (state.exhausted !== undefined) {
+      return reads;
+    }
+
+    const summary = state.operations.summaryOfCall(call);
+
+    for (const operand of summary?.operands ?? []) {
+      addOperationOperand(summary, operand, state, reads);
+    }
+  }
+
+  return reads;
+}
+
+function originOf(node, state) {
+  return projectPathOf(state, node.getSourceFile()).startsWith(analysedRoots[0])
+    ? "production"
+    : "test";
+}
+
+function pushOperationWitness(state, candidate, site, origin, syntax) {
+  const witness = { ...site, kind: "value-read", origin, syntax };
+  const existing = state.witnesses.get(candidate.id);
+
+  if (existing === undefined) {
+    state.witnesses.set(candidate.id, [witness]);
+    return;
+  }
+
+  existing.push(witness);
+}
+
+/**
+ * Reports an operation whose read keys this analysis cannot name. The members
+ * at stake are the operand's own, so those are the candidates left unresolved
+ * rather than credited.
+ */
+function reportOperationGap(operand, reason, state) {
+  const type = state.checker.getTypeAtLocation(operand.node);
+
+  for (const property of state.checker.getPropertiesOfType(type)) {
+    recordGap(state, property, reason);
+  }
+}
+
+function addOperationOperand(summary, operand, state, reads) {
+  if (summary.gap !== undefined) {
+    reportOperationGap(operand, summary.gap, state);
+    return;
+  }
+
+  const found = readsOfOperand(summary, operand, state.checker, elementSegment);
+
+  if (found.gap !== undefined) {
+    reportOperationGap(operand, found.gap, state);
+    return;
+  }
+
+  const site = siteOf(operand.node, state);
+  const origin = originOf(operand.node, state);
+
+  for (const place of found.reads) {
+    if (!spend(state, site.path)) {
+      return;
+    }
+
+    const direct = candidatesAt(operand.node, place.path, place.key, state);
+
+    for (const candidate of direct) {
+      pushOperationWitness(state, candidate, site, origin, summary.syntax);
+    }
+
+    state.counters.operationReads += 1;
+    reads.push({
+      source: operand.node,
+      path: place.path,
+      key: place.key,
+      kind: "value-read",
+      origin,
+      site,
+      direct,
+    });
+  }
+}
+
 function createState({ checker, projectRoot, byDeclaration, budget }) {
   return {
     checker,
@@ -1306,8 +1405,9 @@ function createState({ checker, projectRoot, byDeclaration, budget }) {
     witnesses: new Map(),
     unsupported: new Map(),
     credited: new Set(),
-    counters: { steps: 0, edges: 0, reads: 0, elapsedMs: 0 },
+    counters: { steps: 0, edges: 0, reads: 0, operationReads: 0, elapsedMs: 0 },
     exhausted: undefined,
+    operations: undefined,
   };
 }
 
@@ -1328,9 +1428,16 @@ export function collectFlowObservations({
 }) {
   const started = Date.now();
   const state = createState({ checker, projectRoot, byDeclaration, budget });
-  indexTransfers(collectSyntax(program, state), state);
+  state.operations = createOperationModel({
+    checker,
+    program,
+    resolveTarget: (call) => signatureTargetOf(call, state),
+    calleeSymbolOf: (call) => calleeSymbolOf(call, state),
+  });
+  const syntax = collectSyntax(program, state);
+  indexTransfers(syntax, state);
 
-  for (const read of reads ?? []) {
+  for (const read of [...(reads ?? []), ...collectOperationReads(syntax, state)]) {
     if (state.exhausted !== undefined) {
       break;
     }
