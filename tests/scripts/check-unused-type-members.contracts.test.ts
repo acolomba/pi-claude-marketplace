@@ -857,3 +857,240 @@ test("an input contract a genuine read has made redundant is refused", async (t)
     message: `Invalid contract: ${casesPath}:5:3 is already read at ${casesPath}:16:16; remove the contract`,
   });
 });
+
+// A selection whose source is a type parameter. The union it can stand for is
+// its constraint, so that is where the discriminant lives. The filter literal's
+// own `status` is declared at line 14, column 27, and the selection that holds
+// it starts at line 14, column 12.
+const boundSelectionCases = `export interface Started {
+  status: "started";
+  at: string;
+}
+
+export interface Stopped {
+  status: "stopped";
+  until: string;
+}
+
+export type Message = Started | Stopped;
+
+export type Dispatch<Msg extends Message, K extends Msg["status"]> = (
+  message: Extract<Msg, { status: K }>,
+) => string;
+
+export interface Flat {
+  label: string;
+}
+
+export type Loose<Row extends Flat, K extends Row["label"]> = (
+  row: Extract<Row, { label: K }>,
+) => string;
+`;
+
+const boundSelectionContract = {
+  id: `${casesPath}:14:27`,
+  owner: "Dispatch.message",
+  key: "status",
+  category: "type-selection",
+  purpose: "Selects the message variant each dispatch arm receives.",
+  filter: `${casesPath}:14:12`,
+};
+
+test("a selection over a bounded type parameter keeps its type-system role", async (t) => {
+  // arrange
+  const report = await analyzeWith(t, boundSelectionCases, documentWith(boundSelectionContract));
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "Dispatch.message", "status").status, "explicit-contract");
+  assert.deepStrictEqual(memberFor(report, "Dispatch.message", "status").reasons, [
+    "type-selection: Selects the message variant each dispatch arm receives. " +
+      `(filter ${casesPath}:14:12 selects by status)`,
+  ]);
+});
+
+test("a bounded selection leaves the variants' own discriminants alone", async (t) => {
+  // arrange
+  const report = await analyzeWith(t, boundSelectionCases, documentWith(boundSelectionContract));
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "Started", "status").status, "unread");
+  assert.strictEqual(memberFor(report, "Stopped", "status").status, "unread");
+});
+
+test("a type parameter bounded by a shape that discriminates nothing is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      boundSelectionCases,
+      documentWith({
+        ...boundSelectionContract,
+        id: `${casesPath}:22:23`,
+        owner: "Loose.row",
+        key: "label",
+        filter: `${casesPath}:22:8`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:22:23 filter ${casesPath}:22:8 selects over a type that does not discriminate on label`,
+    },
+  );
+});
+
+// An intersection that narrows a slot the rest of the intersection already
+// declares. Line 7 holds the intersection at column 9, its `notifications`
+// refinement at column 21, and the nested `mode` refinement at column 38.
+// Nothing reads either: they exist so the compiler admits only one mode.
+const refinementCases = `export interface Options {
+  notifications: { mode: "standalone" | "orchestrated" };
+  name: string;
+}
+
+export function orchestrate(
+  opts: Options & { notifications: { mode: "orchestrated" } },
+): string {
+  return opts.name;
+}
+
+export function add(
+  opts: Options & { extra: string },
+): string {
+  return opts.name;
+}
+
+export function same(
+  opts: Options & { name: string },
+): string {
+  return opts.notifications.mode;
+}
+`;
+
+const refinementContract = {
+  id: `${casesPath}:7:21`,
+  owner: "orchestrate.opts",
+  key: "notifications",
+  category: "type-refinement",
+  purpose: "Admits only the orchestrated mode at this entry point.",
+  refines: `${casesPath}:7:9`,
+};
+
+const nestedRefinementContract = {
+  id: `${casesPath}:7:38`,
+  owner: "orchestrate.opts.notifications",
+  key: "mode",
+  category: "type-refinement",
+  purpose: "Names the one mode this entry point admits.",
+  refines: `${casesPath}:7:9`,
+};
+
+test("an intersection that narrows an existing slot keeps its type-system role", async (t) => {
+  // arrange
+  const report = await analyzeWith(t, refinementCases, documentWith(refinementContract));
+
+  // act & assert
+  assert.strictEqual(
+    memberFor(report, "orchestrate.opts", "notifications").status,
+    "explicit-contract",
+  );
+  assert.deepStrictEqual(memberFor(report, "orchestrate.opts", "notifications").reasons, [
+    "type-refinement: Admits only the orchestrated mode at this entry point. " +
+      `(intersection ${casesPath}:7:9 narrows notifications)`,
+  ]);
+});
+
+test("a refinement nested inside a refined slot is proved through its own path", async (t) => {
+  // arrange
+  const report = await analyzeWith(t, refinementCases, documentWith(nestedRefinementContract));
+
+  // act & assert
+  assert.strictEqual(
+    memberFor(report, "orchestrate.opts.notifications", "mode").status,
+    "explicit-contract",
+  );
+  assert.deepStrictEqual(memberFor(report, "orchestrate.opts.notifications", "mode").reasons, [
+    "type-refinement: Names the one mode this entry point admits. " +
+      `(intersection ${casesPath}:7:9 narrows notifications.mode)`,
+  ]);
+});
+
+test("a refinement covers neither the slot it narrows nor its unrefined sibling", async (t) => {
+  // arrange
+  const report = await analyzeWith(t, refinementCases, documentWith(refinementContract));
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "Options", "notifications").status, "runtime-observed");
+  assert.strictEqual(memberFor(report, "orchestrate.opts.notifications", "mode").status, "unread");
+});
+
+test("an intersection that adds a slot of its own is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      refinementCases,
+      documentWith({
+        ...refinementContract,
+        id: `${casesPath}:13:21`,
+        owner: "add.opts",
+        key: "extra",
+        refines: `${casesPath}:13:9`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:13:21 refines ${casesPath}:13:9 adds extra, which the rest of the intersection does not declare`,
+    },
+  );
+});
+
+test("an intersection that restates a slot unchanged narrows nothing", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      refinementCases,
+      documentWith({
+        ...refinementContract,
+        id: `${casesPath}:19:21`,
+        owner: "same.opts",
+        key: "name",
+        refines: `${casesPath}:19:9`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:19:21 refines ${casesPath}:19:9 does not narrow name`,
+    },
+  );
+});
+
+test("a refines site that names no intersection is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      refinementCases,
+      documentWith({ ...refinementContract, refines: `${casesPath}:1:1` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:7:21 refines ${casesPath}:1:1 is not an intersection type`,
+    },
+  );
+});
+
+test("a member outside the named intersection is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      refinementCases,
+      documentWith({ ...refinementContract, refines: `${casesPath}:13:9` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:7:21 is not a member of the intersection at ${casesPath}:13:9`,
+    },
+  );
+});
