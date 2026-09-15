@@ -24,7 +24,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
+import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";

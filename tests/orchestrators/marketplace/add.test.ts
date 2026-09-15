@@ -21,7 +21,7 @@ import { addMarketplace as addMarketplaceWithCache } from "../../../extensions/p
 import { loadConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
+import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   MarketplaceDuplicateNameError,

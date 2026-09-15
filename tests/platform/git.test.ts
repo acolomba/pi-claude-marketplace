@@ -7,14 +7,11 @@ import * as git from "isomorphic-git";
 import http from "isomorphic-git/http/node";
 
 import {
-  buildAuthCallbacks,
   checkout,
   clone,
   currentBranch,
   fetch,
   forceUpdateRef,
-  listBranches,
-  listRemotes,
   resolveRef,
   resolveRemoteRef,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -25,12 +22,32 @@ import { createGitTestDirectory, createGitTestRepository } from "./git-test-repo
 
 import type { GitOpsContractParticipant } from "./git-ops-contract.ts";
 import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type * as GitPlatform from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import type {
-  AuthAttemptResult,
   GitCredentials,
   OnAuthRequiredFn,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { GitHttpRequest, GitHttpResponse } from "isomorphic-git/http/node";
+
+// The authentication-callback protocol lives in platform/git-auth-callbacks.ts;
+// git.ts imports the factory rather than publishing it. Restoring the export
+// makes the `satisfies` resolve and turns the directive below into an unused
+// one (TS2578).
+// @ts-expect-error platform/git.ts does not expose the auth-callback factory
+void ({} satisfies { readonly retired?: typeof GitPlatform.buildAuthCallbacks });
+
+// The branch and remote enumeration wrappers had no production caller: no
+// module outside this file ever imported either, and neither appears in the
+// GitOps surface the orchestrators inject. Restoring either export makes the
+// `satisfies` resolve and turns its directive into an unused one (TS2578).
+// @ts-expect-error platform/git.ts does not expose a branch-listing wrapper
+void ({} satisfies { readonly retired?: typeof GitPlatform.listBranches });
+// @ts-expect-error platform/git.ts does not expose a remote-listing wrapper
+void ({} satisfies { readonly retired?: typeof GitPlatform.listRemotes });
+// @ts-expect-error platform/git.ts does not expose branch-listing options
+void ({} satisfies { readonly retired?: GitPlatform.ListBranchesOptions });
+// @ts-expect-error platform/git.ts does not expose remote-listing options
+void ({} satisfies { readonly retired?: GitPlatform.ListRemotesOptions });
 
 const HOST = "git.example.invalid";
 const REMOTE_URL = `https://${HOST}/owner/repo.git`;
@@ -396,260 +413,6 @@ function expectedDiscoveryRequest(
   };
 }
 
-function captureDebugLog(t: TestContext): string[] {
-  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
-  const logged: string[] = [];
-  t.after(() => {
-    if (previousDebug === undefined) {
-      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
-    } else {
-      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
-    }
-  });
-  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
-  t.mock.method(console, "error", (...args: unknown[]) => {
-    logged.push(args.map(String).join(" "));
-  });
-  return logged;
-}
-
-describe("buildAuthCallbacks", () => {
-  test("returns a stored credential without requesting interactive auth", async () => {
-    // arrange
-    const credentials = createCredentialOpsFake({
-      boundary: "memory",
-      credentials: [[HOST, { username: "stored", password: "secret" }]],
-    });
-    const onAuthRequired: OnAuthRequiredFn = () => {
-      throw new Error("interactive auth is forbidden on a credential hit");
-    };
-
-    const callbacks = buildAuthCallbacks({
-      credentialOps: credentials.credentialOps,
-      host: HOST,
-      onAuthRequired,
-    });
-
-    // act
-    const credential = await callbacks.onAuth(REMOTE_URL);
-
-    // assert
-    assert.deepStrictEqual(credential, { username: "stored", password: "secret" });
-    assert.deepStrictEqual(credentials.calls, {
-      fill: [{ host: HOST }],
-      approve: [],
-      reject: [],
-    });
-  });
-
-  test("returns the interactive credential after a credential miss", async () => {
-    // arrange
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
-    const onAuthRequired: OnAuthRequiredFn = async () => {
-      await Promise.resolve();
-      return {
-        ok: true,
-        cred: { username: "x-access-token", password: "token" },
-        authAttempted: true,
-      } satisfies AuthAttemptResult;
-    };
-
-    const callbacks = buildAuthCallbacks({
-      credentialOps: credentials.credentialOps,
-      host: HOST,
-      onAuthRequired,
-    });
-
-    // act
-    const credential = await callbacks.onAuth(REMOTE_URL);
-
-    // assert
-    assert.deepStrictEqual(credential, { username: "x-access-token", password: "token" });
-    assert.deepStrictEqual(credentials.calls, {
-      fill: [{ host: HOST }],
-      approve: [],
-      reject: [],
-    });
-  });
-
-  for (const reason of [
-    "User cancelled authorization. Run the command again to retry.",
-    "Device code expired before authorization. Run the command again to restart.",
-    "Device Flow failed: invalid_client -- The client_id is invalid.",
-  ]) {
-    test(`cancels and logs the interactive-auth failure '${reason}'`, async (t) => {
-      // arrange
-      const logged = captureDebugLog(t);
-      const credentials = createCredentialOpsFake({ boundary: "memory" });
-      const onAuthRequired: OnAuthRequiredFn = async () => {
-        await Promise.resolve();
-        return { ok: false, reason, authAttempted: true } satisfies AuthAttemptResult;
-      };
-
-      const callbacks = buildAuthCallbacks({
-        credentialOps: credentials.credentialOps,
-        host: HOST,
-        onAuthRequired,
-      });
-
-      // act
-      const credential = await callbacks.onAuth(REMOTE_URL);
-
-      // assert
-      assert.deepStrictEqual(credential, { cancel: true });
-      assert.deepStrictEqual(credentials.calls, {
-        fill: [{ host: HOST }],
-        approve: [],
-        reject: [],
-      });
-      assert.deepStrictEqual(logged, [`[auth] onAuth: Device Flow failed for ${HOST}: ${reason}`]);
-    });
-  }
-
-  test("cancels when credential lookup throws", async (t) => {
-    // arrange
-    const logged = captureDebugLog(t);
-    const credentials = createCredentialOpsFake({
-      boundary: "memory",
-      fillError: new Error("credential lookup failed"),
-    });
-    const onAuthRequired: OnAuthRequiredFn = () => {
-      throw new Error("interactive auth is forbidden after a credential error");
-    };
-
-    const callbacks = buildAuthCallbacks({
-      credentialOps: credentials.credentialOps,
-      host: HOST,
-      onAuthRequired,
-    });
-
-    // act
-    const credential = await callbacks.onAuth(REMOTE_URL);
-
-    // assert
-    assert.deepStrictEqual(credential, { cancel: true });
-    assert.deepStrictEqual(credentials.calls, {
-      fill: [{ host: HOST }],
-      approve: [],
-      reject: [],
-    });
-    assert.deepStrictEqual(logged, [`[auth] onAuth threw for ${HOST}: credential lookup failed`]);
-  });
-
-  test("cancels and logs when interactive auth throws", async (t) => {
-    // arrange
-    const logged = captureDebugLog(t);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
-    const onAuthRequired: OnAuthRequiredFn = async () => {
-      await Promise.resolve();
-      throw new Error("network down");
-    };
-
-    const callbacks = buildAuthCallbacks({
-      credentialOps: credentials.credentialOps,
-      host: HOST,
-      onAuthRequired,
-    });
-
-    // act
-    const credential = await callbacks.onAuth(REMOTE_URL);
-
-    // assert
-    assert.deepStrictEqual(credential, { cancel: true });
-    assert.deepStrictEqual(credentials.calls, {
-      fill: [{ host: HOST }],
-      approve: [],
-      reject: [],
-    });
-    assert.deepStrictEqual(logged, [`[auth] onAuth threw for ${HOST}: network down`]);
-  });
-
-  test("rejects an interactive credential and cancels the operation", async () => {
-    // arrange
-    const credential = { username: "x-access-token", password: "token" };
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
-    const callbacks = buildAuthCallbacks({
-      credentialOps: credentials.credentialOps,
-      host: HOST,
-      onAuthRequired: async () => {
-        await Promise.resolve();
-        return { ok: true, cred: credential, authAttempted: true };
-      },
-    });
-    await callbacks.onAuth(REMOTE_URL);
-
-    // act
-    const cancellation = await callbacks.onAuthFailure(REMOTE_URL, credential);
-
-    // assert
-    assert.deepStrictEqual(cancellation, { cancel: true });
-    assert.deepStrictEqual(credentials.calls, {
-      fill: [{ host: HOST }],
-      approve: [],
-      reject: [{ host: HOST, credential }],
-    });
-  });
-
-  test("rejects a stale credential and cancels without prior auth", async () => {
-    // arrange
-    const credential = { username: "stale", password: "expired" };
-    const credentials = createCredentialOpsFake({
-      boundary: "memory",
-      credentials: [[HOST, credential]],
-    });
-    const callbacks = buildAuthCallbacks({
-      credentialOps: credentials.credentialOps,
-      host: HOST,
-      onAuthRequired: () => {
-        throw new Error("interactive auth is forbidden from onAuthFailure");
-      },
-    });
-
-    // act
-    const cancellation = await callbacks.onAuthFailure(REMOTE_URL, credential);
-
-    // assert
-    assert.deepStrictEqual(cancellation, { cancel: true });
-    assert.deepStrictEqual(credentials.calls, {
-      fill: [],
-      approve: [],
-      reject: [{ host: HOST, credential }],
-    });
-    assert.strictEqual(credentials.storedCredential(HOST), null);
-  });
-
-  test("cancels and logs when stale-credential rejection throws", async (t) => {
-    // arrange
-    const logged = captureDebugLog(t);
-    const credential = { username: "stale", password: "expired" };
-    const credentials = createCredentialOpsFake({
-      boundary: "memory",
-      rejectError: new Error("credential rejection failed"),
-    });
-    const callbacks = buildAuthCallbacks({
-      credentialOps: credentials.credentialOps,
-      host: HOST,
-      onAuthRequired: () => {
-        throw new Error("interactive auth is forbidden from onAuthFailure");
-      },
-    });
-
-    // act
-    const cancellation = await callbacks.onAuthFailure(REMOTE_URL, credential);
-
-    // assert
-    assert.deepStrictEqual(cancellation, { cancel: true });
-    assert.deepStrictEqual(credentials.calls, {
-      fill: [],
-      approve: [],
-      reject: [{ host: HOST, credential }],
-    });
-    assert.deepStrictEqual(logged, [
-      `[auth] onAuthFailure: reject() threw for ${HOST}: credential rejection failed`,
-    ]);
-  });
-});
-
 describe("local Git operations", () => {
   test("reports the current branch after the initial commit", async (t) => {
     // arrange
@@ -671,81 +434,6 @@ describe("local Git operations", () => {
 
     // assert
     assert.strictEqual(oid, repository.initialOid);
-  });
-
-  test("lists local branches in deterministic order", async (t) => {
-    // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.writeRef({
-      fs,
-      dir: repository.dir,
-      ref: "refs/heads/feature",
-      value: repository.initialOid,
-      force: true,
-    });
-
-    // act
-    const branches = await listBranches({ dir: repository.dir });
-
-    // assert
-    assert.deepStrictEqual(branches, ["feature", "main"]);
-  });
-
-  test("lists branches for an explicit remote", async (t) => {
-    // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.writeRef({
-      fs,
-      dir: repository.dir,
-      ref: "refs/remotes/origin/main",
-      value: repository.initialOid,
-      force: true,
-    });
-
-    // act
-    const branches = await listBranches({ dir: repository.dir, remote: "origin" });
-
-    // assert
-    assert.deepStrictEqual(branches, ["main"]);
-  });
-
-  test("lists configured remotes as complete values", async (t) => {
-    // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.addRemote({
-      fs,
-      dir: repository.dir,
-      remote: "origin",
-      url: REMOTE_URL,
-    });
-
-    // act
-    const remotes = await listRemotes({ dir: repository.dir });
-
-    // assert
-    assert.deepStrictEqual(remotes, [{ remote: "origin", url: REMOTE_URL }]);
-  });
-
-  test("lists remotes from an explicit git directory", async (t) => {
-    // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.addRemote({
-      fs,
-      dir: repository.dir,
-      remote: "upstream",
-      url: "https://git.example.invalid/upstream/repo.git",
-    });
-
-    // act
-    const remotes = await listRemotes({
-      dir: "/poisoned-working-tree",
-      gitdir: repository.gitdir,
-    });
-
-    // assert
-    assert.deepStrictEqual(remotes, [
-      { remote: "upstream", url: "https://git.example.invalid/upstream/repo.git" },
-    ]);
   });
 
   test("force-updates the requested local ref", async (t) => {

@@ -9,12 +9,12 @@ import {
   buildCloneAuth,
   hostFromCloneUrl,
 } from "../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
-import { buildAuthCallbacks } from "../../extensions/pi-claude-marketplace/platform/git.ts";
+import { buildAuthCallbacks } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
-import type { AuthAttemptResult } from "../../extensions/pi-claude-marketplace/platform/git.ts";
+import type { AuthAttemptResult } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 describe("hostFromCloneUrl", () => {

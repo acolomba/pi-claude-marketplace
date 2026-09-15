@@ -39,7 +39,7 @@ import type {
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
+import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,

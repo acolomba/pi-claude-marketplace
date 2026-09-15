@@ -18,11 +18,12 @@
  *
  * Gate discipline: this module lives in the orchestrator tier but MUST NOT
  * name `gitOps` / `DEFAULT_GIT_OPS` or import `platform/git.ts` as a VALUE --
- * only `import type` from platform/git.ts is permitted -- so consumers
- * (install-outcome.ts) that import it stay clean under the no-orchestrator-network
- * gate. It imports the provider registry (domain), the Device Flow engine
- * (domain), the raw notify seam (shared), and credential/auth types, and
- * re-exports the `DEFAULT_CREDENTIAL_OPS` value (platform/git-credential.ts).
+ * only `import type` from platform/git.ts and its auth-callback sibling is
+ * permitted -- so consumers (install-outcome.ts) that import it stay clean
+ * under the no-orchestrator-network gate. It imports the provider registry
+ * (domain), the Device Flow engine (domain), the raw notify seam (shared), the
+ * auth-callback seam types (platform/git-auth-callbacks.ts), and the credential
+ * surface (platform/git-credential.ts).
  *
  * AUTH-09: no credential field is ever interpolated into an Error/notify here;
  * enforced by tests/architecture/no-credential-leak.test.ts (PROV-05).
@@ -33,8 +34,8 @@ import { initiateDeviceFlow } from "../domain/github-auth.ts";
 import { makeRawNotifyFn } from "../shared/notification-dispatch.ts";
 
 import type { DeviceFlowHttp } from "../domain/github-auth.ts";
+import type { AuthAttemptResult, OnAuthRequiredFn } from "../platform/git-auth-callbacks.ts";
 import type { CredentialOps } from "../platform/git-credential.ts";
-import type { AuthAttemptResult, OnAuthRequiredFn } from "../platform/git.ts";
 import type { NotificationContext } from "../platform/pi-api.ts";
 import type { GitAuthBundle } from "./marketplace/shared.ts";
 
