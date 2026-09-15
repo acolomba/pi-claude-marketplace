@@ -51,7 +51,7 @@ retired by this milestone rather than worked around.
 - [ ] **RESV-03**: A dependency whose version constraint no available plugin
   satisfies fails the install with a reason naming the constraint.
 - [ ] **RESV-04**: A dependency cycle terminates instead of installing forever.
-- [ ] **RESV-05**: A dependency that is already installed is not reinstalled.
+- [x] **RESV-05**: A dependency that is already installed is not reinstalled.
 - [ ] **RESV-06**: When a dependency cannot be installed, the user learns which
   dependency failed and why, and the install does not leave a half-materialized
   plugin behind.
@@ -140,7 +140,7 @@ this milestone.
 | RESV-02 | Phase 3 | Complete |
 | RESV-03 | Phase 3 | Pending |
 | RESV-04 | Phase 3 | Pending |
-| RESV-05 | Phase 3 | Pending |
+| RESV-05 | Phase 3 | Complete |
 | RESV-06 | Phase 3 | Pending |
 | PROV-01 | Phase 4 | Pending |
 | PROV-02 | Phase 4 | Pending |

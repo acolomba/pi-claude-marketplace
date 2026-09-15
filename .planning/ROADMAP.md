@@ -166,7 +166,7 @@ imports it directly. 204 pairs, corresponding-test gate at zero violations.
 4. A dependency cycle terminates and reports instead of installing forever, and a dependency that is already installed is left alone rather than reinstalled. (RESV-04, RESV-05)
 5. A dependency that cannot be installed tells the user which dependency failed and why, leaves no half-materialized plugin behind, and re-running the same command produces the same result. (RESV-06, NFR-3)
 
-**Plans**: 5/7 plans executed
+**Plans**: 6/7 plans executed
 
 Plans:
 **Wave 1**
@@ -185,7 +185,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 03-05-PLAN.md — Constraint resolution wired into the cascade, including the already-installed conflict check (wave 4)
+- [x] 03-05-PLAN.md — Constraint resolution wired into the cascade, including the already-installed conflict check (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -262,7 +262,7 @@ plugin names — so plan these phases with the UI gate skipped.
 |-------|-----------|----------------|--------|-----------|
 | 1. Manifest read fidelity | v1.20 | 4/4 | Complete   | 2026-09-14 |
 | 2. Uninstall data disposition and the uninstall option seam | v1.20 | 2/2 | Complete    | 2026-09-14 |
-| 3. Dependency resolution | v1.20 | 5/7 | In Progress|  |
+| 3. Dependency resolution | v1.20 | 6/7 | In Progress|  |
 | 4. Install provenance | v1.20 | 0/— | Not started | — |
 | 5. Prune on uninstall | v1.20 | 0/— | Not started | — |
 

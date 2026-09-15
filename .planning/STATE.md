@@ -5,17 +5,17 @@ milestone_name: transitive-dependencies
 current_phase: 3
 current_phase_name: Dependency resolution
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-09-15T10:27:54.506Z"
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-09-15T11:40:00.000Z"
 last_activity: 2026-09-15
-last_activity_desc: Phase 3 plan 03-04 complete — live tag resolution
-state_head: 1481bdf9754510cde9ae863e50f7418a3674561b
+last_activity_desc: Phase 3 plan 03-05 complete — constraint resolution in the cascade
+state_head: 97dde264
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 13
-  completed_plans: 11
-  percent: 40
+  completed_plans: 12
+  percent: 46
 ---
 
 # Project State
@@ -35,8 +35,39 @@ is archived under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 3 (Dependency resolution) — EXECUTING
-Plan: 5 of 7 complete
-Status: Plans 03-01, 03-02, 03-03, 03-04 and 03-07 complete; 03-05 next
+Plan: 6 of 7 complete
+Status: Plans 03-01, 03-02, 03-03, 03-04, 03-05 and 03-07 complete; 03-06 next
+Plan 03-05 is where RESV-03 actually fires. `resolveMemberConstraints` in
+`install-cascade.ts` sits between the closure walk and the ledger phase
+array, and that position is the whole rollback story: every constraint
+verdict is reached before a single `Phase` exists, so no failure arm has
+anything to unwind. A member's accumulated ranges are intersected; a real
+range selects a release tag through the injected probe and re-pins that
+member's install to the tag's commit, carried by the caller's own ledger
+options builder into the new `InstallLedgerOptions.sourcePinOverride`, which
+routes the EXISTING clone probe down its already-pinned arm. The wildcard
+short-circuit keeps the common case offline, and `isUnconstrainedRange`
+tests canonicalization rather than string identity — `["*", "x"]` intersects
+to `"* *"`, so a string comparison would have turned two authors both
+writing "any version" into a network query and, for a source with no release
+tags, into a failed install.
+RESV-05 is now a check and never a touch: an already-installed dependency is
+checked against the constraint before anything else (that check makes no
+query, so a cascade that will fail on disk state never reaches a remote), is
+left exactly as it was when it satisfies, and fails the whole install naming
+both the recorded version and the constraint when it does not. D-03-04 is
+upheld unguarded — the two fallback version forms diverge under coercion
+(`hash-123456789abc` becomes `123456789.0.0`, `sha-0123456789ab` becomes
+nothing at all), which is the unpredictability the decision accepted.
+Six constraint discriminants are stable for the messaging plan, all carrying
+the member key and a bounded range and no filesystem path. The inherited
+census debt is paid: `domain/dependency-range.ts`'s entry is gone and
+`install-cascade.ts#resolveMemberConstraints` took its place, justified
+inline. The plan's two-file list had to grow: `install-flow.ts` and
+`install-outcome.ts` carry the four lines that make the re-pin reach a real
+checkout, without which the probe's answer would have stopped at the ledger
+options boundary. RESV-05 is Complete; RESV-03 stays Pending because 03-06
+also declares it. Decision IDs through D-03-29 are allocated.
 Plan 03-04 gave the phase live tag resolution, the one genuinely new
 capability RESV-03 introduces. `platform/git.ts::listRemoteTags` reads a
 remote's tag advertisement through the single `isomorphic-git` chokepoint
@@ -61,9 +92,9 @@ it.
 One gate drift was found and closed: `tests/architecture/gate-targets.ts`'s
 `UNOWNED_EXPORT_CENSUS` had not been amended for `listRemoteTags`, so
 `npm run check` had been red since this plan's own task-1 commit. The census
-now records `domain/dependency-range.ts`'s three exports with the removal
-condition named inline — the commit in which the cascade composes the probe
-MUST drop that entry or the gate fails in the opposite direction.
+recorded `domain/dependency-range.ts`'s three exports with the removal
+condition named inline; plan 03-05 dropped that entry when it composed the
+probe.
 Plan 03-07 closed the phase's stated dependency on the manifest-read work.
 `orchestrators/plugin/dependency-declaration-read.ts` answers what one plugin
 declares in the D-01-32 order — the plugin's own manifest wherever it is
