@@ -6306,12 +6306,16 @@ async function seedGitSourceMarketplace(opts: {
   subdirPath?: string;
   scope?: "user" | "project";
   /**
-   * RESV-03: a path-sourced plugin seeded beside the git-sourced one, declaring
-   * it as a dependency at this version range. The cascade then has a root whose
-   * own install needs no clone and a DEPENDENCY whose source carries release
-   * tags, which is the only shape a re-pin can be observed in.
+   * RESV-03: path-sourced plugins seeded beside the git-sourced one, each
+   * declaring it as a dependency at its own version range. The cascade then has
+   * a root whose own install needs no clone and a DEPENDENCY whose source
+   * carries release tags, which is the only shape a re-pin can be observed in.
+   *
+   * More than one is what lets a SECOND install read back the version the
+   * first one's pin recorded (RESV-05): re-running the first root instead
+   * would stop at the PI-5 already-installed guard before any constraint check.
    */
-  dependentPlugin?: { name: string; range: string };
+  dependentPlugins?: readonly { name: string; range: string }[];
 }): Promise<void> {
   const scope = opts.scope ?? "project";
   // The plugin tree the mock clone copies into staging. For git-subdir it lives
@@ -6331,8 +6335,8 @@ async function seedGitSourceMarketplace(opts: {
 
   await mkdir(path.join(opts.marketplaceRoot, ".claude-plugin"), { recursive: true });
   const manifestPath = path.join(opts.marketplaceRoot, ".claude-plugin", "marketplace.json");
-  const dependent = opts.dependentPlugin;
-  if (dependent !== undefined) {
+  const dependents = opts.dependentPlugins ?? [];
+  for (const dependent of dependents) {
     const dependentRoot = path.join(opts.marketplaceRoot, "plugins", dependent.name);
     await mkdir(path.join(dependentRoot, ".claude-plugin"), { recursive: true });
     await writeFile(
@@ -6351,15 +6355,11 @@ async function seedGitSourceMarketplace(opts: {
       name: opts.marketplaceName,
       plugins: [
         { name: opts.pluginName, source: opts.source },
-        ...(dependent === undefined
-          ? []
-          : [
-              {
-                name: dependent.name,
-                source: `./plugins/${dependent.name}`,
-                dependencies: [{ name: opts.pluginName, version: dependent.range }],
-              },
-            ]),
+        ...dependents.map((dependent) => ({
+          name: dependent.name,
+          source: `./plugins/${dependent.name}`,
+          dependencies: [{ name: opts.pluginName, version: dependent.range }],
+        })),
       ],
     }),
   );
@@ -6383,12 +6383,15 @@ async function seedGitSourceMarketplace(opts: {
   await saveState(locations.extensionRoot, state);
 }
 
-test("RESV-03: a constrained dependency is materialized at the tag the probe selected", async () => {
+test("RESV-03/RESV-05: a tag-pinned dependency records the tag's own version, and a later constraint reads it back", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-resv03-repin-"));
     try {
       // arrange: the dependency's entry names a source with NO sha of its own,
       // so the only thing that can pin its checkout is the selected release tag.
+      // Two dependents declare the SAME range, which is what lets the second
+      // install read back what the first one's pin recorded -- re-running the
+      // first root would stop at the PI-5 already-installed guard instead.
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
       await seedGitSourceMarketplace({
         cwd,
@@ -6397,7 +6400,10 @@ test("RESV-03: a constrained dependency is materialized at the tag the probe sel
         pluginName: "gp",
         source: { source: "url", url: "https://example.com/org/repo" },
         fixtureRepoDir,
-        dependentPlugin: { name: "root", range: "^9.0.0" },
+        dependentPlugins: [
+          { name: "root", range: "^9.0.0" },
+          { name: "second", range: "^9.0.0" },
+        ],
       });
       const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, pi } = makeCtx();
@@ -6420,16 +6426,44 @@ test("RESV-03: a constrained dependency is materialized at the tag the probe sel
           }),
       });
 
-      // assert: the checkout addresses the tag's commit, and the dependency's
-      // recorded version is derived from it -- so the constraint SELECTED a
-      // version rather than merely vetoing one.
+      // assert: the checkout addresses the tag's commit, and the recorded
+      // version is the SEMVER that tag carries -- the value the constraint
+      // machinery reads back. The git-source `sha-<12hex>` form would coerce to
+      // an arbitrary digit run instead (this fixture's coerces to 1.0.0), so
+      // recording it would make the dependency fail the very range it just
+      // satisfied.
       assert.equal(outcome.status, "installed");
       assert.equal(gitState.checkoutCalls.length, 1, "one checkout, at the selected tag");
       assert.equal(gitState.checkoutCalls[0]?.ref, GIT_SOURCE_SHA);
       const after = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["gp"]?.version, "9.9.9");
+
+      // act: a second plugin constraining the same dependency at the same range.
+      // RESV-05 checks the RECORDED version and makes no tag query at all, so
+      // an unresolvable recorded form has nothing to fall back on.
+      const second = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "second",
+        cloneCacheSeam: seamWith(gitOps),
+        tagProbe: () => {
+          throw new Error("an already-installed dependency must not reach a remote");
+        },
+      });
+
+      // assert
       assert.equal(
-        after.marketplaces["mp"]?.plugins["gp"]?.version,
-        `sha-${GIT_SOURCE_SHA.slice(0, 12)}`,
+        second.status,
+        "installed",
+        "the recorded version satisfies the second declaration's range",
+      );
+      assert.equal(
+        gitState.checkoutCalls.length,
+        1,
+        "the already-installed dependency is left exactly as it was",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });

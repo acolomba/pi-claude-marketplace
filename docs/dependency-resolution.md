@@ -85,6 +85,8 @@ If the effective constraint is anything else, this extension reads the tag list 
 
 The tag must be named `<plugin-name>--v<version>`, for example `formatter--v1.2.0`.
 
+A dependency pinned this way records the version the tag names, for example `1.2.0`. It does not record a git object name, which is what a plugin installed from a git source usually records. The recorded version is what a later install checks a new constraint against, so a git object name there would fail the constraint the pin had just satisfied.
+
 This name comes from Anthropic's own plugin-release tooling. Git does not define it, and most repositories outside Anthropic do not use it. Such a repository reports no matching tag. Today that is the expected answer for most third-party sources. It is not a defect in the repository or in this extension.
 
 ## What happens to a dependency you already installed

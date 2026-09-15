@@ -227,6 +227,7 @@ function ledgerOptionsFor(cwd: string): (member: ResolvedCascadeMember) => Insta
     plugin: member.name,
     removalOps: createRemovalOps(),
     ...(member.pinnedOid !== undefined && { sourcePinOverride: member.pinnedOid }),
+    ...(member.pinnedVersion !== undefined && { pinVersionOverride: member.pinnedVersion }),
   });
 }
 
@@ -891,12 +892,16 @@ test("RESV-03 a satisfiable range pins the member and the pin reaches its ledger
     "the query addresses the source the marketplace entry names",
   );
   assert.deepStrictEqual(
-    materialized.map((options) => [options.plugin, options.sourcePinOverride]),
+    materialized.map((options) => [
+      options.plugin,
+      options.sourcePinOverride,
+      options.pinVersionOverride,
+    ]),
     [
-      ["bar", PINNED_OID],
-      ["foo", undefined],
+      ["bar", PINNED_OID, "1.4.0"],
+      ["foo", undefined, undefined],
     ],
-    "the constrained member installs the selected commit; the unconstrained root does not",
+    "the constrained member installs the selected commit and records the tag's own version",
   );
 });
 
@@ -1204,12 +1209,12 @@ test("RESV-03 the constraint step answers every member, pinning only the constra
   assert.deepStrictEqual(
     resolution.members.map((resolved) => ({
       key: resolved.key,
-      pinnedRef: resolved.pinnedRef,
       pinnedOid: resolved.pinnedOid,
+      pinnedVersion: resolved.pinnedVersion,
     })),
     [
-      { key: `bar@${MARKETPLACE}`, pinnedRef: "bar--v1.4.0", pinnedOid: PINNED_OID },
-      { key: `foo@${MARKETPLACE}`, pinnedRef: undefined, pinnedOid: undefined },
+      { key: `bar@${MARKETPLACE}`, pinnedOid: PINNED_OID, pinnedVersion: "1.4.0" },
+      { key: `foo@${MARKETPLACE}`, pinnedOid: undefined, pinnedVersion: undefined },
     ],
   );
   assert.strictEqual(seen.length, 1, "only the constrained member reaches a repository");

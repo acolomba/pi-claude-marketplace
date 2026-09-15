@@ -186,14 +186,22 @@ export type CascadeConstraintFailure =
  *
  * Both pin fields are present together and only for a member whose constraint
  * was a real range that a release tag satisfied. An unconstrained member
- * carries neither and installs from whatever ref its marketplace entry names,
- * which is what every install did before a constraint could re-point one.
+ * carries neither and installs from whatever ref its marketplace entry names.
  */
 export interface ResolvedCascadeMember extends ClosureMember {
-  /** The release tag the constraint selected. */
-  readonly pinnedRef?: string;
-  /** The object id that tag resolves to, which is what the install pins on. */
+  /** The object id the selected tag resolves to, which the install pins on. */
   readonly pinnedOid?: string;
+  /**
+   * The semver the selected tag carries, recorded as the member's version.
+   *
+   * RESV-05 reads a recorded version back against the constraint on the next
+   * install. A git-materialized install otherwise records `sha-<12hex>`, which
+   * `recordedVersionSatisfies`' normalization ladder either rejects outright or
+   * coerces into an arbitrary digit run (D-03-04) -- so the run that pinned the
+   * tag would fail its own constraint the second time it ran. The tag's own
+   * version is the value that makes the pin readable back.
+   */
+  readonly pinnedVersion?: string;
 }
 
 /** Every member's constraint resolved, or the first failure one produced. */
@@ -425,7 +433,7 @@ async function probeMemberPin(
   if (probed.kind === "pinned") {
     return {
       kind: "resolved",
-      member: { ...member, pinnedRef: probed.tag, pinnedOid: probed.oid },
+      member: { ...member, pinnedOid: probed.oid, pinnedVersion: probed.version },
     };
   }
 

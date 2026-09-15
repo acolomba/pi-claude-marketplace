@@ -239,6 +239,13 @@ function buildInstallLedgerOptions(
     plugin: string;
     /** RESV-03: the commit a cascade member's version constraint selected. */
     sourcePin?: string;
+    /**
+     * RESV-03 / RESV-05: the semver the selected tag carries, recorded as this
+     * member's version. It takes precedence over the caller's own pin because
+     * it is a fact about THIS member, and over the git-source `sha-<12hex>`
+     * branch because that form is what RESV-05 cannot read back.
+     */
+    pinVersion?: string;
   },
 ): InstallLedgerOptions {
   return {
@@ -251,6 +258,7 @@ function buildInstallLedgerOptions(
     ...(opts.mapModel !== undefined && { mapModel: opts.mapModel }),
     ...(opts.partial !== undefined && { partial: opts.partial }),
     ...(opts.pinVersionOverride !== undefined && { pinVersionOverride: opts.pinVersionOverride }),
+    ...(core.pinVersion !== undefined && { pinVersionOverride: core.pinVersion }),
     ...(opts.cloneCacheSeam !== undefined && { cloneCacheSeam: opts.cloneCacheSeam }),
     cloneProbe: probeInstallClone,
     // D-08-12: the install path's composition root. The ledger options carry the
@@ -956,9 +964,17 @@ async function installPluginWithTransaction(
         rootKey,
         lookup: (subject) => lookupCascadeDependencies(state, { scope, cwd, locations }, subject),
         // RESV-03: a member whose constraint selected a release tag carries the
-        // commit that tag resolves to, and this builder is where it enters that
-        // member's install. An unconstrained member carries none and installs
-        // from the ref its marketplace entry names, exactly as before.
+        // commit that tag resolves to AND the semver that tag names, and this
+        // builder is where both enter that member's install. An unconstrained
+        // member carries neither and installs from the ref its marketplace
+        // entry names.
+        //
+        // RESV-05: recording the tag's semver rather than the git-source
+        // `sha-<12hex>` is what makes the pin readable back. The next install
+        // that constrains this dependency checks the RECORDED version against
+        // the range, and a sha form either satisfies nothing or coerces to an
+        // arbitrary digit run (D-03-04) -- so without the semver a repeat of
+        // the same command fails the constraint it had just satisfied.
         ledgerOptionsFor: (member) =>
           buildInstallLedgerOptions(opts, {
             scope,
@@ -966,6 +982,7 @@ async function installPluginWithTransaction(
             marketplace: member.marketplace,
             plugin: member.name,
             ...(member.pinnedOid !== undefined && { sourcePin: member.pinnedOid }),
+            ...(member.pinnedVersion !== undefined && { pinVersion: member.pinnedVersion }),
           }),
         installedKeys: collectInstalledKeys(state),
         // D-03-08: the marketplaces the target scope already records. A
