@@ -419,6 +419,15 @@ None. The tree was green on entry as stated, and every failure observed during e
 
 Aggregate production unit coverage was deliberately not measured here; 05-VALIDATION assigns it to the parent on the stable wave snapshot.
 
+## Self-Check: PASSED
+
+Both created production/test files and the summary exist on disk
+(`[ -f ]`), and all three commits resolve in `git log --oneline --all`:
+`e5464690`, `8ae97016` and `ea64ee8b`. The measured commit count over
+`a1624b5a..HEAD` at summary-write time was 2 production commits, which is
+the `commits:` value recorded in the frontmatter; this metadata commit is
+the third and is not counted there.
+
 ---
 
 _Phase: 05-production-export-ownership_
