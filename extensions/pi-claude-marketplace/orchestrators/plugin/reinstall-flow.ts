@@ -212,8 +212,13 @@ export function createReinstallPlugin(
     );
 }
 
-/** Binds one production reinstall to the real transaction and supplied routing owner. */
-export function createNodeReinstallPlugin(
+/**
+ * Binds one production reinstall to the real transaction and supplied routing
+ * owner. Module-private: `createNodeReinstallPlugins` below is its only
+ * consumer, and a caller outside this module composes the same operation
+ * through `orchestrators/plugin/operations.ts` (D-03).
+ */
+function createNodeReinstallPlugin(
   hooksRouting: ReinstallHooksRouting,
   completionCache: CompletionCache,
 ): ReinstallPluginFn {
