@@ -220,7 +220,7 @@ the module. `05-21-SUMMARY.md` records the per-gate verdicts.
 ## Active Session — test-backlog
 
 - Authorized: all ten handoff items; Phase numbering restarts at 1.
-- Preserve local quick task 260914-dz1 and configuration/setup edits.
+- Preserve local configuration/setup edits.
 - Marketplace decision: add/document --local on info/list/update; keep merged reads and use local only for config writes.
 - Agent collision decision: preserve full source names like Claude; keep both agents and migrate owned generated names on reinstall/update.
 - Phase 1: complete, independently reviewed and verified 5/5.
