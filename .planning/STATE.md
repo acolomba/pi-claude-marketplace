@@ -4,17 +4,17 @@ milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
 status: executing
-stopped_at: Completed 06-06-PLAN.md
-last_updated: "2026-09-15T18:21:06.974Z"
+stopped_at: Completed 06-07-PLAN.md
+last_updated: "2026-09-15T23:30:00.000Z"
 last_activity: 2026-09-15
-last_activity_desc: Plan 06-06 complete (live reconciliation, 81 validated contracts, 261 unread down to 138)
+last_activity_desc: Plan 06-07 complete (real EdgeDeps plant detected live, runner measured against six defective gates)
 state_head: 6c61b8448e8d3a2d33f7e4085bfa0bdc702e586f
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 54
-  completed_plans: 44
-  percent: 63
+  completed_plans: 45
+  percent: 65
 milestone_name: test-backlog
 ---
 
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 06 (Unused Type Member Gate) — EXECUTING
-Plan: 7 of 8
+Plan: 8 of 8
 Status: Ready to execute
-Last activity: 2026-09-15 — Plan 06-06 complete (live reconciliation, 81 validated contracts, 261 unread down to 138)
+Last activity: 2026-09-15 — Plan 06-07 complete (real EdgeDeps plant detected live, runner measured against six defective gates)
 
 Plan 06-01 landed the member gate's compiler tracer: `node
 scripts/check-unused-type-members.mjs` compiles the project once, inventories
@@ -183,6 +183,54 @@ exit 0. No production source under `extensions/` was touched by this plan.
 Typecheck, lint, format, all four fallow links and both corresponding-test gates
 are green. No production source under `extensions/` changed in 06-02, 06-03 or
 06-04, so the wave's aggregate production unit coverage snapshot still holds.
+
+Plan 06-07 proved the gate on the declaration the project ships.
+`scripts/check-unused-type-members.negative.mjs` plants an unread optional
+member into the REAL `EdgeDeps` interface through a compiler read overlay,
+taking the insertion point from the interface's own last member and counting the
+expected identity out of the overlay text rather than reading it back from the
+analyzer. The real command-line tool then reports
+`extensions/pi-claude-marketplace/edge/types.ts:31:3` by exact declaration
+record, over and above the honest 138-row baseline; an optional-chain read from
+the owner test turns the same declaration `test-only-observed` with one witness
+at the probe's exact site; removing the overlay reproduces the baseline report;
+and a same-spelling member on an unrelated type, read from production, leaves the
+offender a finding while coming back `runtime-observed` itself. Two further
+controls require a run the gate cannot complete -- an unparsable input and a
+refused option -- to exit 2 with no report and a reason naming what it could not
+read, which is what keeps exit 1 meaning a member verdict. Seven of seven
+controls pass in 6 m 49 s at 2.11 GiB over five whole-program analyses.
+
+The baseline the plan assumed does not exist: 06-06 closed at 138 unread, so
+every control measures a delta against that recorded baseline instead of against
+a clean run. `baseline` checks the gate's exit status against its own finding
+count rather than against a literal 1, so the controls keep working unchanged
+once the repair plans drain the population to zero.
+
+The runner is itself measured. `--gate` points the controls at any executable,
+and 21 suite controls drive stand-in gates that answer by invocation index: an
+always-clean gate, one that always reports the same findings, one that describes
+a different member at the planted coordinates, an unparsable report, an
+executable that cannot be launched, a refusal where a finding belongs, a finding
+where a refusal belongs, a refusal naming nothing, an unexplained diagnostic, and
+one that clears the offender on an unrelated read. Each is rejected by name, and
+the always-clean case is rejected on report content rather than on an exit
+status. `tests/architecture/unused-type-member-gate.test.ts` adds the four guards
+the executable controls cannot see from inside: the planted key must stay absent
+from the real declaration, the benign probe's receiver type must stay importable
+in the owner test, every gate script must stay reachable from a `package.json`
+entry, and every capability the printed help claims must stay bound to a named
+landed control.
+
+The live population is unchanged -- 3,464 candidates, 138 unread, 0 unsupported,
+81 contracts -- and `git diff 06ec0723..HEAD -- extensions/` is empty. The two new
+suites are analysed input, so the triage digest moved from `ba06bb95` to
+`671cb0ae` over 605 hashed files; `--inventory` re-recorded it and `--check`
+reconciles again at exactly 138 `unread` with nothing stale, missing, duplicate,
+incomplete or invalid. `npm run check` is exit 0 at 6,473 unit and 32 integration
+tests. `lint:type-members:negative` is a real package entry and, like
+`lint:type-members` and `lint:type-members:audit`, is deliberately NOT in
+`npm run check`; 06-08 activates all three after the six repair plans land.
 
 Phase 05 closed: all 28 plans landed and the production
 dead-code census drained from 111 to 0 with zero net additions at every step.

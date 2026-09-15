@@ -94,7 +94,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 1. An unread optional EdgeDeps member fails an automated static-analysis gate.
 2. Read, write-only, structural, external-contract, type-only, alias, and computed-access controls establish scope and limitations.
 
-**Plans:** 06-01 through 06-08 approved after independent plan review; live triage waits for Phase 5 completion. 06-01 landed the runnable gate: compiler inventory, syntax-first read classification and a three-way exit contract. 06-02 landed directed value transfers, so a read is credited back to the member that supplied it through arguments, returns, callbacks and containers; the live population moved from 614 findings to 468. 06-03 landed the contract engine: four evidence categories, identity settled through the inventory's declaration map, and every stale, broad or redundant entry refused as a setup failure; the repository contract file ships empty until the live reconciliation. 06-04 landed whole-object operations: serialization, copies, enumeration and deep comparison, each settled by the declaration the checker resolved and each with its real eligible-key semantics, plus the container members 06-02 left open. Unsupported analysis is now zero and the live population moved from 468 findings to 261. Next is 06-05.
+**Plans:** 06-01 through 06-08 approved after independent plan review; live triage waits for Phase 5 completion. 06-01 landed the runnable gate: compiler inventory, syntax-first read classification and a three-way exit contract. 06-02 landed directed value transfers, so a read is credited back to the member that supplied it through arguments, returns, callbacks and containers; the live population moved from 614 findings to 468. 06-03 landed the contract engine: four evidence categories, identity settled through the inventory's declaration map, and every stale, broad or redundant entry refused as a setup failure; the repository contract file ships empty until the live reconciliation. 06-04 landed whole-object operations: serialization, copies, enumeration and deep comparison, each settled by the declaration the checker resolved and each with its real eligible-key semantics, plus the container members 06-02 left open. Unsupported analysis is now zero and the live population moved from 468 findings to 261. 06-05 landed the closure audit and recorded the live population; 06-06 reconciled it, taking 261 unread to an honest 138 through two directed-flow corrections and 81 validated contracts, each remaining row carrying a recorded disposition and a named owner repair plan. 06-07 landed the live sensitivity proof: an unread optional member planted into the REAL `EdgeDeps` declaration through a compiler read overlay is reported by exact declaration identity above that baseline, a real receiver read clears it, an unrelated same-spelling read does not, a run the gate cannot complete stays exit 2 with no report, and the runner itself is shown to reject an always-passing gate and five other defective ones. Next is 06-08, which is blocked until the six repair plans drain the 138.
 
 - [x] 06-01-PLAN.md
 - [x] 06-02-PLAN.md
@@ -102,7 +102,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 - [x] 06-04-PLAN.md
 - [x] 06-05-PLAN.md
 - [x] 06-06-PLAN.md
-- [ ] 06-07-PLAN.md
+- [x] 06-07-PLAN.md
 - [ ] 06-08-PLAN.md
 
 ### Phase 7: Reliable Coverage Metrics
