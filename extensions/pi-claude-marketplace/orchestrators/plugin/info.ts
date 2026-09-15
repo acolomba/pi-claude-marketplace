@@ -24,7 +24,6 @@
 // that warm `pluginRoot`. Reading the warm clone is fs-only -- never a
 // fetch -- so NFR-5 holds.
 
-import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -240,7 +239,7 @@ function isGitSource(src: ParsedSource): src is GitBackedSource {
  * the ROW builder. Both row callers -- `buildInstalledRow` and
  * `buildNotInstalledRow` (WR-02) -- wrap their `buildNonInstallableRowFields`
  * call in an outer try/catch, so the error surfaces via `narrowProbeError`'s
- * generic-Error arm (`unreadable`) rather than escaping `getPluginInfo`.
+ * generic-Error arm (`unreadable`) rather than escaping `getPluginInfoWithReader`.
  * The programmer-bug `throw new Error(...)` on the non-path source kind
  * likewise propagates to and is classified by those same outer catches.
  */
@@ -1467,9 +1466,9 @@ function buildNonPathInstalledRow(
 
 /**
  * FTCH-06 / D-81-05: the per-command auth + seam context for the `info --fetch`
- * hook. Built once in `getPluginInfo` when `opts.fetch === true`, threaded down
- * to the git-source row builders. `locations` are supplied per-block by the
- * caller. Mirrors the install clone-probe's auth bundle wiring; info reaches the
+ * hook. Built once in `getPluginInfoWithReader` when `opts.fetch === true`,
+ * threaded down to the git-source row builders. `locations` are supplied
+ * per-block by the caller. Mirrors the install clone-probe's auth bundle wiring; info reaches the
  * git surface ONLY through the `clone-cache.ts` seam + `auth-host.ts`
  * re-exports (no-orchestrator-network gate, NFR-5).
  */
@@ -1766,7 +1765,7 @@ async function buildInstalledRow(opts: {
  * escapes the marketplace root -- BEFORE the inner try that wraps
  * `composeResolvedComponents` only. Mirror `buildInstalledRow`'s outer catch so
  * the unreadable case renders an `(unavailable)` row via `narrowProbeError`
- * instead of throwing uncaught out of `getPluginInfo`.
+ * instead of throwing uncaught out of `getPluginInfoWithReader`.
  */
 async function buildNotInstalledPathRow(
   reader: PluginInfoReader,
@@ -2471,11 +2470,3 @@ export function createGetPluginInfo(
 ): (opts: GetPluginInfoOptions) => Promise<void> {
   return (opts) => getPluginInfoWithReader(reader, opts);
 }
-
-const NODE_PLUGIN_INFO_READER: PluginInfoReader = {
-  readTextFile: (filePath) => readFile(filePath, "utf8"),
-  listDirectory: (directoryPath) => readdir(directoryPath, { withFileTypes: true }),
-};
-
-/** Reads plugin information through the Node-backed reader capability. */
-export const getPluginInfo = createGetPluginInfo(NODE_PLUGIN_INFO_READER);

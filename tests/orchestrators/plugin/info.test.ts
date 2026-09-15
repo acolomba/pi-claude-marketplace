@@ -28,6 +28,7 @@
 //       line LAST
 
 import assert from "node:assert/strict";
+import { createHook } from "node:async_hooks";
 import * as fs from "node:fs";
 import { mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -48,7 +49,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
   createGetPluginInfo,
-  getPluginInfo,
   type InfoCloneCacheSeam,
   type PluginInfoReader,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
@@ -66,9 +66,57 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type * as InfoOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 type FaultableFsPromiseMethod = "readFile" | "readdir";
+
+// info.ts publishes the factory and its injected reader contract; the single
+// production composition of them lives in orchestrators/plugin/operations.ts.
+// Re-adding a composed value here would give the command two production
+// bindings. Restoring the export makes the `satisfies` resolve and turns the
+// directive below into an unused one (TS2578).
+// @ts-expect-error info.ts does not expose a composed getPluginInfo value
+void ({} satisfies { readonly retired?: typeof InfoOrchestrator.getPluginInfo });
+
+/**
+ * The Node-backed read capability, stated once so the fault-injecting reader
+ * below delegates to it rather than restating the two real reads. It is the
+ * same pair the production composition binds.
+ */
+const NODE_READER: PluginInfoReader = {
+  readTextFile: (filePath) => readFile(filePath, "utf8"),
+  listDirectory: (directoryPath) => readdir(directoryPath, { withFileTypes: true }),
+};
+
+/**
+ * The composition every case below drives: this module's own factory bound to
+ * the real read capability, stated at one site so each case reads as the
+ * command rather than as its assembly.
+ */
+const getPluginInfo = createGetPluginInfo(NODE_READER);
+
+test("constructs the info command without using its reader capability or starting asynchronous work", (t) => {
+  // arrange
+  const reader = mock<PluginInfoReader>({ exactParams: true, name: "plugin info reader" });
+  const startedResourceTypes: string[] = [];
+  const resources = createHook({
+    init: (_asyncId, type) => {
+      startedResourceTypes.push(type);
+    },
+  });
+  t.after(() => resources.disable());
+
+  // act
+  resources.enable();
+  const infoWithReader = createGetPluginInfo(reader);
+  resources.disable();
+
+  // assert
+  assert.strictEqual(typeof infoWithReader, "function");
+  assert.deepStrictEqual(startedResourceTypes, []);
+  verify(reader);
+});
 
 test("exposes a required plugin info reader factory", async () => {
   const infoModule: Record<string, unknown> =
@@ -91,7 +139,7 @@ async function withFsPromiseFault<T>(
         throw error;
       }
 
-      return readFile(filePath, "utf8");
+      return NODE_READER.readTextFile(filePath);
     },
     async listDirectory(directoryPath) {
       if (method === "readdir" && directoryPath === targetPath) {
@@ -99,7 +147,7 @@ async function withFsPromiseFault<T>(
         throw error;
       }
 
-      return readdir(directoryPath, { withFileTypes: true });
+      return NODE_READER.listDirectory(directoryPath);
     },
   };
 
