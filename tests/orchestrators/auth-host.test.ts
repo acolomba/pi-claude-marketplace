@@ -4,18 +4,42 @@ import { describe, test } from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import {
+  DEFAULT_CREDENTIAL_OPS,
   NO_PROVIDER_CAUSE,
   buildAuthForHost,
   buildCloneAuth,
   hostFromCloneUrl,
 } from "../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { buildAuthCallbacks } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
+import { createCredentialOps } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
 import type { AuthAttemptResult } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
+import type { CredentialSpawn } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
 import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+describe("DEFAULT_CREDENTIAL_OPS", () => {
+  test("composes the platform credential protocol without launching a process", () => {
+    // arrange
+    const launches: Array<readonly [string, readonly string[]]> = [];
+    const recordingLauncher: CredentialSpawn = (command, args) => {
+      launches.push([command, args]);
+      throw new Error("composing the default credential ops must not launch a process");
+    };
+
+    const composed = createCredentialOps({ spawn: recordingLauncher, timeoutMs: 5_000 });
+
+    // act
+    const productionOps = DEFAULT_CREDENTIAL_OPS;
+
+    // assert
+    assert.deepStrictEqual(Object.keys(productionOps), Object.keys(composed));
+    assert.deepStrictEqual(Object.keys(productionOps), ["fill", "approve", "reject"]);
+    assert.deepStrictEqual(launches, []);
+  });
+});
 
 describe("hostFromCloneUrl", () => {
   test("canonicalizes a GitHub source without parsing its clone URL", () => {
