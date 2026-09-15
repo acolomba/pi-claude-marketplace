@@ -7,7 +7,7 @@
 // carve-out, and the `{not in manifest}` carve-out. This shim validates
 // the positional/scope shape and delegates.
 
-import { getPluginInfo } from "../../../orchestrators/plugin/info.ts";
+import { getPluginInfo } from "../../../orchestrators/plugin/operations.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
 import { parseFlagNames } from "../../flag-catalog.ts";
