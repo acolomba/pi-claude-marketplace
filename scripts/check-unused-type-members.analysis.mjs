@@ -52,10 +52,12 @@ const productionRoot = "extensions/pi-claude-marketplace";
 const defaultNodeBudget = 20_000_000;
 
 // The transfer walk indexes every transfer site once, then answers one memoised
-// question per read site. Measured against this repository: 1,458,064 steps for
-// 67,167 reads, so the default leaves the tree room to grow several times over
-// while still bounding a runaway walk.
-const defaultTransferBudget = 4_000_000;
+// question per read site, and charges the same meter for every place a
+// whole-object operation reads. Measured against this repository: 2,889,809
+// steps for 82,164 traced reads and 939,556 operation reads, so the default
+// leaves the tree room to grow several times over while still bounding a
+// runaway walk.
+const defaultTransferBudget = 12_000_000;
 
 /**
  * Folds one candidate-keyed map of entries into another, preserving the order

@@ -53,6 +53,21 @@ const defaultLibraryOwners = new Set(["JSON", "ObjectConstructor"]);
 // so it moves nothing and excuses nothing.
 const enumeratingMembers = new Set(["values", "entries"]);
 
+// The ambient modules Node's assertion library is declared in. A comparison is
+// settled through the declaration inside one of these, so a local function of
+// the same name is a different declaration and summarises nothing.
+const assertionModules = new Set(["assert", "node:assert", "assert/strict", "node:assert/strict"]);
+
+// Comparisons that walk both operands recursively. The identity members --
+// `strictEqual` and its neighbours -- are deliberately absent: comparing two
+// references reads no member of either.
+const deepComparisons = new Set([
+  "deepStrictEqual",
+  "notDeepStrictEqual",
+  "deepEqual",
+  "notDeepEqual",
+]);
+
 /**
  * The interface a symbol is declared on inside the compiler's own default
  * library. `JSON.stringify` is the member of `interface JSON` in `lib.es5.d.ts`;
@@ -69,6 +84,23 @@ function defaultLibraryOwnerOf(symbol, program) {
 
     if (program.isSourceFileDefaultLibrary(declaration.getSourceFile())) {
       return parent.name.text;
+    }
+  }
+
+  return undefined;
+}
+
+/** The ambient module a symbol is declared inside, if it is declared in one. */
+function ambientModuleOf(symbol) {
+  for (const declaration of symbol?.declarations ?? []) {
+    let current = declaration.parent;
+
+    while (current !== undefined) {
+      if (ts.isModuleDeclaration(current) && ts.isStringLiteral(current.name)) {
+        return current.name.text;
+      }
+
+      current = current.parent;
     }
   }
 
@@ -307,6 +339,34 @@ function objectConstructorSummary(call, name) {
   return { ...copySummary([args[0]]), syntax: "object-enumeration" };
 }
 
+/**
+ * A deep comparison reads both operands, but only one of them says anything
+ * about production: the side whose value came out of production code. An
+ * expected literal a test wrote is read just as thoroughly and proves nothing,
+ * so the summary demands production lineage and the caller establishes it.
+ */
+function assertionSummary(call, symbol) {
+  const ambient = ambientModuleOf(symbol);
+
+  if (ambient === undefined || !assertionModules.has(ambient)) {
+    return undefined;
+  }
+
+  if (!deepComparisons.has(symbol.getName())) {
+    return undefined;
+  }
+
+  return {
+    syntax: "deep-comparison",
+    recursive: true,
+    skipMethods: false,
+    allow: undefined,
+    gap: undefined,
+    lineage: "production",
+    operands: operandsOf((call.arguments ?? []).slice(0, 2)),
+  };
+}
+
 function defaultLibrarySummary(call, symbol, program) {
   const owner = defaultLibraryOwnerOf(symbol, program);
 
@@ -430,7 +490,8 @@ export function createOperationModel({ checker, program, resolveTarget, calleeSy
       return undefined;
     }
 
-    const builtIn = defaultLibrarySummary(call, calleeSymbolOf(call), program);
+    const symbol = calleeSymbolOf(call);
+    const builtIn = defaultLibrarySummary(call, symbol, program) ?? assertionSummary(call, symbol);
 
     if (builtIn !== undefined) {
       return builtIn;

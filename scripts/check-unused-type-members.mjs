@@ -41,10 +41,22 @@ syntax could read a declared member: property and optional-chain access, element
 access under a literal or finite literal-union key, binding and assignment
 destructuring, compound and update expressions, and exact \`in\` presence tests.
 
+Whole-object operations read a shape all at once and are settled by the
+declaration the checker resolved, never by the callee's spelling: JSON
+serialization, object spread and rest, Object.assign, Object.values and
+Object.entries, and Node's deep comparisons. A local function earns the same
+summary only by passing one of its own parameters into one of those. A
+comparison credits only the operand whose value came out of production code, so
+a fixture a test wrote for itself proves nothing.
+
 It does not claim the reading branch ever executes, that the value influences
 behaviour, or that an asserting test is a useful one. Coverage, dead-code
 analysis and test review remain necessary. Declarations, type-only references
-and key enumeration are not reads.
+and key enumeration are not reads. A whole-object operation credits the members
+it reaches on the operand's own declaration and traces the places that supplied
+them only for the operand itself; own-property eligibility is refused where an
+accessor or a class instance makes it unprovable, and a run-time replacer or a
+toJSON member leaves the serialized keys unresolved.
 `;
 
 const valueOptionNames = new Set(["--root", "--overlay", "--budget"]);

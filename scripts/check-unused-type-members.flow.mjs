@@ -49,6 +49,11 @@ const indexPrefix = "\u0000index:";
 // which produces a finding to investigate and never a member wrongly accepted.
 const deepestTrail = 4;
 
+// How far back a deep comparison's operand is followed while asking whether its
+// value could have come out of production code. The question is a yes or no, so
+// a bound that stops early answers no, which credits nothing.
+const deepestLineageSearch = 64;
+
 const refinementKinds = new Set([
   ts.SyntaxKind.ParenthesizedExpression,
   ts.SyntaxKind.AsExpression,
@@ -1445,9 +1450,56 @@ function collectOperationReads(syntax, state) {
 }
 
 function originOf(node, state) {
-  return projectPathOf(state, node.getSourceFile()).startsWith(analysedRoots[0])
-    ? "production"
-    : "test";
+  return isProductionNode(node, state) ? "production" : "test";
+}
+
+function isProductionNode(node, state) {
+  return projectPathOf(state, node.getSourceFile()).startsWith(analysedRoots[0]);
+}
+
+/**
+ * Whether a value could have come out of production code.
+ *
+ * A deep comparison reads both of its operands, so both are runtime reads; only
+ * one of them says anything about production. A fixture a test constructed for
+ * itself expands to places the test owns and reaches no production body, so it
+ * earns nothing no matter how carefully it is typed. The search is the same
+ * backward expansion the walk uses, and it is bounded: reaching nothing is
+ * under-crediting, which leaves a finding to investigate.
+ */
+function isProductionDerived(node, state) {
+  const known = state.lineage.get(node);
+
+  if (known !== undefined) {
+    return known;
+  }
+
+  const seen = new Set([tokenOf(node, [], state)]);
+  const queue = [{ node, trail: [], transferred: false }];
+  let found = false;
+
+  for (const step of queue) {
+    if (queue.length > deepestLineageSearch || !spend(state, "lineage")) {
+      break;
+    }
+
+    if (step.transferred && isProductionNode(step.node, state)) {
+      found = true;
+      break;
+    }
+
+    for (const next of expandStep(step, state)) {
+      const token = tokenOf(next.node, next.trail, state);
+
+      if (!seen.has(token)) {
+        seen.add(token);
+        queue.push(next);
+      }
+    }
+  }
+
+  state.lineage.set(node, found);
+  return found;
 }
 
 function pushOperationWitness(state, candidate, site, origin, syntax) {
@@ -1488,6 +1540,16 @@ function addOperationOperand(summary, operand, state, reads) {
     return;
   }
 
+  // Lineage is the most expensive question here, and an operand with no keys to
+  // read cannot be answered by it either way, so it is never asked.
+  if (found.reads.length === 0) {
+    return;
+  }
+
+  if (summary.lineage === "production" && !isProductionDerived(operand.node, state)) {
+    return;
+  }
+
   const site = siteOf(operand.node, state);
   const origin = originOf(operand.node, state);
 
@@ -1503,15 +1565,24 @@ function addOperationOperand(summary, operand, state, reads) {
     }
 
     state.counters.operationReads += 1;
-    reads.push({
-      source: operand.node,
-      path: place.path,
-      key: place.key,
-      kind: "value-read",
-      origin,
-      site,
-      direct,
-    });
+
+    // Provenance is traced from the operand itself. A member the operation
+    // reached below the operand is credited on the declaration written there,
+    // and the places that supplied it are left untraced: a nested path multiplies
+    // the distinct questions the walk has to answer, and measured against this
+    // repository tracing them costs more than a tenfold budget. Stopping here
+    // under-credits, which leaves a finding to investigate.
+    if (place.path.length === 0) {
+      reads.push({
+        source: operand.node,
+        path: place.path,
+        key: place.key,
+        kind: "value-read",
+        origin,
+        site,
+        direct,
+      });
+    }
   }
 }
 
@@ -1534,6 +1605,7 @@ function createState({ checker, projectRoot, byDeclaration, budget }) {
     returns: new Map(),
     resolved: new Map(),
     expansions: new Map(),
+    lineage: new Map(),
     transfers: [],
     witnesses: new Map(),
     unsupported: new Map(),

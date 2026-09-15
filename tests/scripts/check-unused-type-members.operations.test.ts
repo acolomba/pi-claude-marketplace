@@ -88,6 +88,7 @@ const fixtureTsconfig = `${JSON.stringify(
       module: "NodeNext",
       moduleResolution: "NodeNext",
       noEmit: true,
+      allowImportingTsExtensions: true,
       strict: true,
       target: "ES2022",
       types: [],
@@ -99,6 +100,25 @@ const fixtureTsconfig = `${JSON.stringify(
 )}\n`;
 
 const casesPath = "extensions/pi-claude-marketplace/cases.ts";
+const specPath = "tests/cases.test.ts";
+
+/**
+ * The fixtures compile with `types: []`, so `node:assert/strict` is declared
+ * here rather than resolved from the installed Node types. That keeps the cases
+ * hermetic, and it is also the point: a deep comparison is settled through the
+ * ambient module its declaration sits in, so a declaration written here is
+ * recognised exactly as the installed one is, and a local function carrying the
+ * same name is not.
+ */
+const assertDeclaration = `declare module "node:assert/strict" {
+  interface Assert {
+    deepStrictEqual(actual: unknown, expected: unknown): void;
+    strictEqual(actual: unknown, expected: unknown): void;
+  }
+  const assert: Assert;
+  export default assert;
+}
+`;
 async function createRoot(
   t: TestContext,
   files: Readonly<Record<string, string>>,
@@ -124,6 +144,20 @@ async function createRoot(
 /** Analyses one production source file, which is what most of these cases need. */
 async function analyze(t: TestContext, production: string): Promise<GateReport> {
   const root = await createRoot(t, { [casesPath]: production });
+  return analysis.analyzeProject({ root });
+}
+
+/** Analyses one production file alongside one test file that observes it. */
+async function analyzeWithSpec(
+  t: TestContext,
+  production: string,
+  spec: string,
+): Promise<GateReport> {
+  const root = await createRoot(t, {
+    [casesPath]: production,
+    [specPath]: spec,
+    "tests/node-assert.d.ts": assertDeclaration,
+  });
   return analysis.analyzeProject({ root });
 }
 
@@ -846,4 +880,171 @@ export function fold(rows: Folded[], join: (total: string, row: Folded) => strin
   assert.deepStrictEqual(shapesFor(report, "Folded", "value"), []);
   assert.deepStrictEqual(reasonsFor(report, "Folded", "value"), ["unmodeled-container-operation"]);
   assert.strictEqual(statusFor(report, "Folded", "value"), "unsupported-analysis");
+});
+
+// ---------------------------------------------------------------------------
+// Deep comparisons: what a test's assertion proves about production output.
+// ---------------------------------------------------------------------------
+
+const comparedCases = `export interface Metadata {
+  readonly note: string;
+}
+
+export interface Outcome {
+  readonly kind: string;
+  readonly metadata: Metadata;
+}
+
+export interface Expected {
+  readonly kind: string;
+}
+
+export interface Compared {
+  readonly value: string;
+}
+
+export function produce(kind: string): Outcome {
+  return { kind, metadata: { note: kind } };
+}
+
+export function compared(): Compared {
+  return { value: "written" };
+}
+`;
+
+const comparedSpec = `import assert from "node:assert/strict";
+
+import { compared, produce } from "../extensions/pi-claude-marketplace/cases.ts";
+
+import type { Expected } from "../extensions/pi-claude-marketplace/cases.ts";
+
+const expected: Expected = { kind: "installed" };
+
+assert.deepStrictEqual(produce("installed"), expected);
+assert.strictEqual(compared(), compared());
+`;
+
+test("a deep comparison of a production result observes it as a test-only read", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(t, comparedCases, comparedSpec);
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Outcome", "kind"), ["value-read/deep-comparison/test"]);
+  assert.deepStrictEqual(shapesFor(report, "Outcome", "metadata"), [
+    "value-read/deep-comparison/test",
+  ]);
+  assert.strictEqual(statusFor(report, "Outcome", "kind"), "test-only-observed");
+});
+
+test("a deep comparison descends into the nested record the result carries", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(t, comparedCases, comparedSpec);
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Metadata", "note"), [
+    "value-read/deep-comparison/test",
+  ]);
+  assert.strictEqual(statusFor(report, "Metadata", "note"), "test-only-observed");
+});
+
+test("a typed expected literal written in a test proves no production consumption", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(t, comparedCases, comparedSpec);
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Expected", "kind"), []);
+  assert.strictEqual(statusFor(report, "Expected", "kind"), "unread");
+});
+
+test("an identity comparison reads no member of either side", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(t, comparedCases, comparedSpec);
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Compared", "value"), []);
+  assert.strictEqual(statusFor(report, "Compared", "value"), "unread");
+});
+
+test("a local function carrying the deep-comparison name is not one", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(
+    t,
+    `export interface Shadowed {
+  readonly value: string;
+}
+
+export function produce(): Shadowed {
+  return { value: "written" };
+}
+`,
+    `import { produce } from "../extensions/pi-claude-marketplace/cases.ts";
+
+function deepStrictEqual(actual: unknown, expected: unknown): void {
+  void actual;
+  void expected;
+}
+
+deepStrictEqual(produce(), { value: "written" });
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Shadowed", "value"), []);
+  assert.strictEqual(statusFor(report, "Shadowed", "value"), "unread");
+});
+
+test("a test helper wrapping the real deep comparison keeps its summary", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(
+    t,
+    `export interface Wrapped {
+  readonly value: string;
+}
+
+export function produce(): Wrapped {
+  return { value: "written" };
+}
+`,
+    `import assert from "node:assert/strict";
+
+import { produce } from "../extensions/pi-claude-marketplace/cases.ts";
+
+function assertMatches(actual: unknown, expected: unknown): void {
+  assert.deepStrictEqual(actual, expected);
+}
+
+assertMatches(produce(), { value: "written" });
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Wrapped", "value"), [
+    "value-read/deep-comparison/test",
+  ]);
+  assert.strictEqual(statusFor(report, "Wrapped", "value"), "test-only-observed");
+});
+
+test("a symbol-keyed member is not serialized alongside the spelled ones", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export const BRAND: unique symbol = Symbol("brand");
+
+export interface Branded {
+  readonly [BRAND]: string;
+  readonly plain: string;
+}
+
+export function write(branded: Branded): string {
+  return JSON.stringify(branded);
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Branded", "plain"), [
+    "value-read/json-serialization/production",
+  ]);
+  assert.deepStrictEqual(shapesFor(report, "Branded", "BRAND"), []);
+  assert.strictEqual(statusFor(report, "Branded", "BRAND"), "unread");
 });
