@@ -4,15 +4,15 @@ milestone: test-backlog
 current_phase: 05
 current_phase_name: Production Export Ownership
 status: executing
-last_updated: "2026-09-15T02:45:00Z"
+last_updated: "2026-09-15T03:45:00Z"
 last_activity: 2026-09-15
-last_activity_desc: Wave 9 complete; 05-20 reconcile composition and backfill ownership
-state_head: 258e0515
+last_activity_desc: Wave 10 complete; 05-21 git auth callback and credential ownership
+state_head: 8ae97016
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 54
-  completed_plans: 36
+  completed_plans: 37
   percent: 63
 milestone_name: test-backlog
 ---
@@ -31,9 +31,22 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 05 (Production Export Ownership) — EXECUTING
-Plan: 26 of 28 — Wave 9 source writing complete (05-18 and 05-20 landed)
-Status: Executing Phase 05 — Wave 9 frozen, awaiting parent census reconciliation
-Last activity: 2026-09-15 — 05-20 moved the reconcile apply composition into the
+Plan: 27 of 28 — Wave 10 source writing complete (05-21 landed)
+Status: Executing Phase 05 — Wave 10 frozen, awaiting parent census reconciliation
+Last activity: 2026-09-15 — 05-21 moved the complete git authentication-callback
+protocol into `platform/git-auth-callbacks.ts`, retired the branch and remote
+listing wrappers with caller evidence, and composed `DEFAULT_CREDENTIAL_OPS` in
+`orchestrators/auth-host.ts` from `createCredentialOps`, the published Node
+launcher and an explicit 5000 ms timeout. Committed in `e5464690` and
+`8ae97016`. Four identities leave the census with zero additions; the live
+total moves 7 -> 3, and the three survivors are exactly 05-28's. Tasks 1 and 2
+were merged into one commit because the declaration move and every importer
+repoint must land together under the typecheck-gated hook chain. The new
+module is NOT named by `CREDENTIAL_LEAK_TARGETS`, which now aims its
+`hookDebugLog` scan at a `platform/git.ts` holding no such call — the parent
+owns that registry edit; see `05-21-SUMMARY.md`.
+
+Earlier activity: 2026-09-15 — 05-20 moved the reconcile apply composition into the
 extension entry point, which now builds `createApplyReconcile({ loadState })`
 once per extension load and drives it from `resources_discover`, and made the
 partially-installed backfill scan and the pending status set module-private
@@ -182,7 +195,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–4 are complete;
-Phase 5 has completed twenty-five of twenty-eight plans. Phase 6 and Phase 7 plans are
+Phase 5 has completed twenty-seven of twenty-eight plans. Phase 6 and Phase 7 plans are
 approved; their production acceptance follows Phase 5 completion. Earlier milestone continuity is preserved in
 `inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 
@@ -196,35 +209,37 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 (`git add -u .planning/`), and it wrote `completed_phases: 1` / `percent: 11` for a
 9-of-9 milestone, which was corrected by hand.
 
-### Wave 9 source complete — census reconciliation pending
+### Wave 10 source complete — census reconciliation pending
 
-Stopped at: completed `05-20-PLAN.md`. Resume file: none. Both Wave 9 plans have
-landed, so the tree is frozen for the parent reconciliation.
+Stopped at: completed `05-21-PLAN.md`. Resume file: none. The only Wave 10 plan
+has landed, so the tree is frozen for the parent reconciliation.
 
-Full unit run after 05-20: 6267 tests, 6265 pass, 2 fail. Both failures are the
+Full unit run after 05-21: 6266 tests, 6264 pass, 2 fail. Both failures are the
 `tests/architecture/unowned-exports-census.test.ts` pin-equality gates, red by
 design until the parent applies its single pin edit. Integration: 32/32, exit 0.
-`npm run fallow` exit 0. Every direct owner touched in either plan measures
-hit == found.
+`npm run fallow` exit 0. Every direct owner touched measures hit == found. The
+net -1 test count is four retired branch/remote wrapper cases minus three new
+launcher, construction-purity and composition cases.
 
-The wave's combined contribution to the parent's one pin edit is five identity
-removals from `tests/architecture/gate-targets.ts` and zero additions, taking
-the live production census 12 -> 7:
+The wave's contribution to the parent's one pin edit is four identity removals
+from `tests/architecture/gate-targets.ts` and zero additions, taking the live
+production census 7 -> 3:
 
-- 05-18: `orchestrators/plugin/fetch.ts`'s `createFetchPlugins` and
-  `orchestrators/plugin/info.ts`'s `createGetPluginInfo`.
-- 05-20: `orchestrators/reconcile/apply.ts`'s `createApplyReconcile`,
-  `orchestrators/reconcile/backfill.ts`'s `scanForceInstalledBackfills` and
-  `orchestrators/reconcile/reconcile.messaging.ts`'s `PENDING_STATUSES`.
+- `platform/git-credential.ts`'s `createCredentialOps`.
+- `platform/git.ts`'s `buildAuthCallbacks`, `listBranches` and `listRemotes`.
 
-Each is the only member of its key, so all five keys go. The exact identity
-strings are listed in `05-18-SUMMARY.md` and `05-20-SUMMARY.md`.
+Both keys lose every member, so both keys go. The exact identity strings are
+listed in `05-21-SUMMARY.md`.
 
-The seven survivors are the four Wave 10 (05-21) `platform/` identities and the
-three Wave 11 (05-28) ones: `index.ts|default`, `RingBuffer.read` and
-`scripts/check-phase-06-hub-ledger.mjs`. 05-20 measured `index.ts|default`
-before and after its own work and it did not move, which is the expected
-outcome for a manifest-loaded default export.
+The three survivors are exactly Wave 11's (05-28): `index.ts|default`,
+`RingBuffer.read` and `scripts/check-phase-06-hub-ledger.mjs`. None of the
+three moved under 05-21.
+
+**Registry work the parent still owns.** `platform/git-auth-callbacks.ts` is a
+new credential-handling module that no AUTH-09 scan names. Adding it to
+`CREDENTIAL_LEAK_TARGETS` also requires extending the positional destructuring
+and `DECLARED_MODULE_ORDER` in `no-credential-leak.test.ts`, plus a scan for
+the module. `05-21-SUMMARY.md` records the per-gate verdicts.
 
 ## Operator Next Steps
 

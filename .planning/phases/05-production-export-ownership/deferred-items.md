@@ -101,3 +101,27 @@ the owner file so a later bounded plan can pick it up; none is a gate failure.
   correctly without the constant. Neither file is in 05-23's owner set.
   **Suggested fix:** drop the constant name and keep the glyph and token, in
   whichever later plan next owns those files.
+
+- The new git authentication-callback module is not named by the AUTH-09
+  credential-leak gate
+  status: open
+  **What:** `tests/architecture/no-credential-leak.test.ts` scans a NAMED list
+  of credential-handling modules (`CREDENTIAL_LEAK_TARGETS` in
+  `tests/architecture/gate-targets.ts`). One of its tests aims a `hookDebugLog`
+  interpolation scan at `platform/git.ts`. Plan 05-21 moved the three
+  `hookDebugLog` calls, and the whole callback protocol, into the new
+  `extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts`, which no
+  scan names. `platform/git.ts` now contains zero `hookDebugLog` calls, so that
+  test passes over a file with nothing left to catch.
+  **Why it is deferred:** `gate-targets.ts` is the parent-owned shared census
+  pin and every task in plan 05-21 forbids editing it. The new module is clean
+  today -- its three `hookDebugLog` arguments name only `opts.host`,
+  `result.reason` and `errorMessage(err)` -- so nothing is currently
+  unguarded; only the future regression is.
+  **Suggested fix:** add
+  `extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts` to
+  `CREDENTIAL_LEAK_TARGETS` during a wave reconciliation. That registry is
+  destructured BY POSITION in `no-credential-leak.test.ts`, so the same edit
+  must extend that file's destructuring and its `DECLARED_MODULE_ORDER`, and
+  point the `hookDebugLog` scan at the new module (keeping or retiring the
+  `platform/git.ts` aim as a deliberate choice).

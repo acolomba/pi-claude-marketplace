@@ -112,7 +112,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 | 2. Sonar Rules for Tests | 1/1 | Complete | 2026-09-14 |
 | 3. Reachable Agent Collision Contract | 4/4 | Complete | 2026-09-14 |
 | 4. Strict Command Arguments | 3/3 | Complete | 2026-09-14 |
-| 5. Production Export Ownership | 26/28 | Executing wave 9 | - |
+| 5. Production Export Ownership | 27/28 | Executing wave 10 | - |
 | 6. Unused Type Member Gate | 0/8 | Plans approved | - |
 | 7. Reliable Coverage Metrics | 0/8 | Plans approved | - |
 | 8. Final Verification and Reconciliation | 0/TBD | Not started | - |
