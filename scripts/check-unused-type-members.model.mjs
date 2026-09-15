@@ -394,8 +394,11 @@ export function collectCandidates({ program, checker, projectRoot }) {
  * The inventoried declarations one symbol stands for, resolved through the
  * checker's merged and root symbols so an alias, a declaration merge and an
  * instantiated property all land on the declarations that were inventoried.
+ *
+ * Exported because the transfer walk resolves the same identities from the
+ * other end of an edge: member identity has exactly one definition here.
  */
-function resolveCandidates(checker, byDeclaration, symbol) {
+export function resolveCandidates(checker, byDeclaration, symbol) {
   const merged = checker.getMergedSymbol(symbol);
   const resolved = [];
 
@@ -585,6 +588,84 @@ function observeAll(context, candidates, node, kind, syntax) {
   }
 }
 
+/**
+ * The declaration a binding pattern destructures, and the property path from it
+ * down to the element being bound. The transfer walk resolves what actually
+ * reaches that declaration; the path records what the pattern selected on the
+ * way, so a nested binding names the member it really reached.
+ */
+function bindingSourceOf(element) {
+  const selected = [];
+  let pattern = element.parent;
+
+  while (ts.isBindingElement(pattern.parent)) {
+    const outer = pattern.parent;
+    const key = ts.isObjectBindingPattern(outer.parent)
+      ? identifierTextOf(outer.propertyName ?? outer.name)
+      : undefined;
+
+    if (key === undefined) {
+      return undefined;
+    }
+
+    selected.unshift(key);
+    pattern = outer.parent;
+  }
+
+  const owner = pattern.parent;
+  const supported = ts.isVariableDeclaration(owner) || ts.isParameter(owner);
+  return supported ? { source: owner, path: selected } : undefined;
+}
+
+/** The same question for an assignment pattern, whose source is an expression. */
+function assignmentSourceOf(literal) {
+  const selected = [];
+  let current = literal;
+
+  while (ts.isPropertyAssignment(current.parent)) {
+    const assignment = current.parent;
+    const key = ts.isObjectLiteralExpression(assignment.parent)
+      ? identifierTextOf(assignment.name)
+      : undefined;
+
+    if (key === undefined) {
+      return undefined;
+    }
+
+    selected.unshift(key);
+    current = assignment.parent;
+  }
+
+  const parent = current.parent;
+  const targeted = ts.isBinaryExpression(parent) && parent.left === current;
+  return targeted ? { source: parent.right, path: selected } : undefined;
+}
+
+/**
+ * Records where a read happened and which place supplied the value it read.
+ *
+ * The transfer walk starts from these. A read of `key` at `path` below `source`
+ * is exactly the question a directed edge into `source` can answer: whatever
+ * flowed in could be what supplied that member. `direct` is what this read
+ * already proved on its own, so the walk never restates it.
+ */
+function recordRead(context, origin, key, node, kind, direct) {
+  if (origin === undefined) {
+    return;
+  }
+
+  const { line, column } = positionOf(node);
+  context.reads.push({
+    source: origin.source,
+    path: origin.path,
+    key,
+    kind,
+    origin: context.origin,
+    site: { path: context.projectPath, line, column },
+    direct,
+  });
+}
+
 function observePropertyAccess(node, context) {
   const syntax = readSyntaxOf(node, "property-access");
 
@@ -594,6 +675,14 @@ function observePropertyAccess(node, context) {
 
   const candidates = candidatesForName(context, node.name);
   observeAll(context, candidates, node.name, "value-read", syntax);
+  recordRead(
+    context,
+    { source: node.expression, path: [] },
+    node.name.text,
+    node.name,
+    "value-read",
+    candidates,
+  );
 }
 
 /**
@@ -655,6 +744,14 @@ function observeElementAccess(node, context) {
   for (const key of keys) {
     const candidates = candidatesForKey(context, node.expression, key);
     observeAll(context, candidates, node.argumentExpression, "value-read", syntax);
+    recordRead(
+      context,
+      { source: node.expression, path: [] },
+      key,
+      node.argumentExpression,
+      "value-read",
+      candidates,
+    );
   }
 }
 
@@ -679,6 +776,7 @@ function observeBindingElement(node, context) {
 
   const candidates = candidatesForKey(context, node.parent, key);
   observeAll(context, candidates, keyNode, "value-read", "binding-destructuring");
+  recordRead(context, bindingSourceOf(node), key, keyNode, "value-read", candidates);
 }
 
 function observeAssignmentPattern(node, context) {
@@ -697,6 +795,7 @@ function observeAssignmentPattern(node, context) {
     const symbol = context.checker.getPropertySymbolOfDestructuringAssignment(nameNode);
     addCandidatesOfSymbol(context, symbol, found);
     observeAll(context, found, nameNode, "value-read", "assignment-destructuring");
+    recordRead(context, assignmentSourceOf(node), nameNode.text, nameNode, "value-read", found);
   }
 }
 
@@ -711,6 +810,14 @@ function observeInOperator(node, context) {
 
   const candidates = candidatesForKey(context, node.right, node.left.text);
   observeAll(context, candidates, node.left, "presence", "presence-test");
+  recordRead(
+    context,
+    { source: node.right, path: [] },
+    node.left.text,
+    node.left,
+    "presence",
+    candidates,
+  );
 }
 
 function observeNode(node, context) {
@@ -799,14 +906,15 @@ function walkSourceFile(sourceFile, context) {
  * property access is a read in one position and a destination in another.
  *
  * Returns witnesses keyed by candidate id -- each carrying its own source site
- * and production or test origin -- analysis gaps keyed the same way, and the
- * budget exhaustion that stopped the walk, if one did. Later stages read exactly
- * these three, so a gap is always attributable and a cut-off walk is always
- * distinguishable from a finished one.
+ * and production or test origin -- analysis gaps keyed the same way, the read
+ * sites the transfer walk starts from, and the budget exhaustion that stopped
+ * the walk, if one did. Later stages read exactly these, so a gap is always
+ * attributable and a cut-off walk is always distinguishable from a finished one.
  */
 export function collectObservations({ program, checker, projectRoot, byDeclaration, budget }) {
   const witnesses = new Map();
   const unsupported = new Map();
+  const reads = [];
   const symbolCache = new Map();
   const remaining = { remaining: budget };
 
@@ -823,6 +931,7 @@ export function collectObservations({ program, checker, projectRoot, byDeclarati
       byDeclaration,
       witnesses,
       unsupported,
+      reads,
       projectPath,
       origin,
       symbolCache,
@@ -830,11 +939,11 @@ export function collectObservations({ program, checker, projectRoot, byDeclarati
     });
 
     if (!finished) {
-      return { witnesses, unsupported, exhausted: { path: projectPath, budget } };
+      return { witnesses, unsupported, reads, exhausted: { path: projectPath, budget } };
     }
   }
 
-  return { witnesses, unsupported, exhausted: undefined };
+  return { witnesses, unsupported, reads, exhausted: undefined };
 }
 
 export function productionFileCount({ program, projectRoot }) {
