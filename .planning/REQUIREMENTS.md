@@ -45,7 +45,7 @@ retired by this milestone rather than worked around.
 
 - [ ] **RESV-01**: Installing a plugin also installs the plugins it declares as
   dependencies.
-- [ ] **RESV-02**: A dependency that names a marketplace resolves from that
+- [x] **RESV-02**: A dependency that names a marketplace resolves from that
   marketplace; one that names none resolves from the depending plugin's
   marketplace.
 - [ ] **RESV-03**: A dependency whose version constraint no available plugin
@@ -137,7 +137,7 @@ this milestone.
 | DEPS-01 | Phase 1 | Complete |
 | DEPS-02 | Phase 1 | Complete |
 | RESV-01 | Phase 3 | Pending |
-| RESV-02 | Phase 3 | Pending |
+| RESV-02 | Phase 3 | Complete |
 | RESV-03 | Phase 3 | Pending |
 | RESV-04 | Phase 3 | Pending |
 | RESV-05 | Phase 3 | Pending |

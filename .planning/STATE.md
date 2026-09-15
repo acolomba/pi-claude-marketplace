@@ -5,16 +5,16 @@ milestone_name: transitive-dependencies
 current_phase: 3
 current_phase_name: Dependency resolution
 status: executing
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-09-15T02:12:26.668Z"
+stopped_at: Completed 03-07-PLAN.md
+last_updated: "2026-09-15T03:02:17.874Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 3 execution started
-state_head: 0c41e1e7c20bb1d78544d4eab754a021d7dd6807
+state_head: a499e811476ad0a499c651df3d4debc2fed17667
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 13
-  completed_plans: 9
+  completed_plans: 10
   percent: 40
 ---
 
@@ -35,8 +35,27 @@ is archived under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 3 (Dependency resolution) — EXECUTING
-Plan: 4 of 7
-Status: Plans 03-01, 03-02 and 03-03 complete; 03-04 next
+Plan: 5 of 7
+Status: Plans 03-01, 03-02, 03-03 and 03-07 complete; 03-04 next
+Plan 03-07 closed the phase's stated dependency on the manifest-read work.
+`orchestrators/plugin/dependency-declaration-read.ts` answers what one plugin
+declares in the D-01-32 order — the plugin's own manifest wherever it is
+readable offline, the marketplace entry otherwise — and `install-flow.ts`'s
+cascade lookup is now a call into it. A plugin whose real metadata lives in
+its own bare manifest therefore has its dependencies installed, which the
+entry-only read could not see. The read is offline by construction rather
+than by convention: its injected seam exposes a stat, a text read and the
+fs-only clone presence probe, so there is no materializing operation in the
+module to reach from any flag, and a git-source dependency with no
+materialized clone falls back to its entry instead of fetching. A
+present-but-unusable manifest falls back to the entry and is never read as a
+plugin that declares nothing. The `manifest-read-agreement` gate gained a
+fourth reader so the cascade read and `info`'s render cannot drift. One
+latent defect surfaced: three cascade fixtures declared the dependency on
+the marketplace entry alone, so the seeded plugin's own manifest suppressed
+it and the cases went vacuous — the seed now writes both sides in agreement
+(D-03-25). RESV-02 is Complete; RESV-01 stays Pending because a later plan
+in this phase also declares it.
 Plan 03-03 landed the phase's two documentation obligations before the
 network leaf that depends on them. The NFR-5 network policy now names the
 constrained-dependency tag query as a declared exception, in byte-identical
@@ -270,6 +289,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 03 P01 | 89min | 3 tasks | 8 files |
 | Phase 03 P02 | 41min | 2 tasks | 4 files |
 | Phase 03 P03 | 4min | 2 tasks | 6 files |
+| Phase 03 P07 | 43min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -498,6 +518,10 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: D-03-19: semver ships as a declared runtime dependency because resolution needs a real evaluator, not because one is already present -- the hoisted copy is from the ESLint dev chain and the nested copy from the pi-coding-agent peer, so neither survives a consumer's production install
 - [Phase 03]: D-03-20: the NFR-5 amendment names the constrained-dependency tag query in both files that carry the network policy, and the two bullets are now byte-identical — D-03-03 requires a visible constraint amendment rather than a fact a reader later discovers from a failing architecture test. PROJECT.md's em dash is normalized to the double hyphen CLAUDE.md already carried, because the fix-unicode-dashes pre-commit hook excludes .planning/ and would otherwise keep the two apart on every future edit.
 - [Phase 03]: D-03-21: docs/dependency-resolution.md is RESV-03's written grammar and the nine-cause failure list the later reason tokens must agree with — RESV-03's success criterion states the grammar in writing rather than leaving it implicit. The document also carries the two user-facing trust statements the syntax cannot imply: the plugin-release tag convention is not a git standard, so most third-party sources report no matching tag today, and nothing is added or cloned to satisfy a dependency, so a plugin cannot introduce a new source of code by declaring one.
+- [Phase 03]: D-03-22: the dependency declaration read takes the marketplace entry and parses its `source` itself rather than taking a pre-parsed source beside it — two inputs describing the same thing can disagree, one cannot, and it keeps parsePluginSource out of install-flow.ts
+- [Phase 03]: D-03-23: the declaration read requires an entry and carries no no-entry arm — without an entry there is no source, so no plugin root and no manifest, and install-flow already returns absent for a plugin its marketplace does not declare; the arm would have been unreachable from production, which the direct-coverage gate does not admit
+- [Phase 03]: D-03-24: the declaration read's options omit the plugin key's name and marketplace because nothing in the read consumes them — the entry already answers which plugin this is
+- [Phase 03]: D-03-25: a seeded declareDependencies declaration now lands on BOTH the marketplace entry and the plugin's own manifest — under D-01-32 an entry-only fixture has its own manifest suppress the declaration, which silently turned three cascade cases vacuous, one of them still passing while proving nothing
 
 ### Pending Todos
 
@@ -584,13 +608,13 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 03-03-PLAN.md
+**Stopped at:** Completed 03-07-PLAN.md
 
 **Resume file:** None
 
 **Read beside it:** `.planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/02-VERIFICATION.md`
 
-Last session: 2026-09-15T02:12:03.519Z
+Last session: 2026-09-15T03:01:08.603Z
 closed out plan 02-01 task 3, executed plan 02-02, ran the full code-review
 fix cycle, then Nyquist and security gates, then verification and transition)
 

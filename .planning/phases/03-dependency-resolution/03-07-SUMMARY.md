@@ -40,10 +40,10 @@ key-files:
     - extensions/pi-claude-marketplace/domain/manifest-path.ts
 
 key-decisions:
-  - "D-03-18: the read takes the marketplace ENTRY and parses `entry.source` itself, rather than taking a pre-parsed source beside the entry. Two inputs describing the same thing can disagree; one cannot."
-  - "D-03-19: `entry` is required, so the module carries no no-entry arm. Without an entry there is no source, therefore no plugin root, therefore nothing the arm could decide — and install-flow already returns `absent` for a plugin its marketplace does not declare. The arm would have been unreachable from production, which the direct-coverage gate does not admit."
-  - "D-03-20: the options bag omits the plugin key's name and marketplace. Nothing in the read consumes them; the entry already answers which plugin this is."
-  - "D-03-21: `declareDependencies: true` in the install-flow seed now writes the same declaration on BOTH the marketplace entry and the plugin's own manifest. Under D-01-32 an entry-only fixture has its own manifest suppress the declaration, which silently turned three cascade cases vacuous."
+  - "D-03-22: the read takes the marketplace ENTRY and parses `entry.source` itself, rather than taking a pre-parsed source beside the entry. Two inputs describing the same thing can disagree; one cannot."
+  - "D-03-23: `entry` is required, so the module carries no no-entry arm. Without an entry there is no source, therefore no plugin root, therefore nothing the arm could decide — and install-flow already returns `absent` for a plugin its marketplace does not declare. The arm would have been unreachable from production, which the direct-coverage gate does not admit."
+  - "D-03-24: the options bag omits the plugin key's name and marketplace. Nothing in the read consumes them; the entry already answers which plugin this is."
+  - "D-03-25: `declareDependencies: true` in the install-flow seed now writes the same declaration on BOTH the marketplace entry and the plugin's own manifest. Under D-01-32 an entry-only fixture has its own manifest suppress the declaration, which silently turned three cascade cases vacuous."
 
 patterns-established:
   - "Seam-as-boundary-proof: the injected reader exposes only fs-only operations, so 'this read cannot fetch' is a property of the type rather than a comment"
@@ -167,10 +167,10 @@ status: complete
 
 ## Decisions Made
 
-- **D-03-18 — the read parses the entry's source itself.** The plan's option bag carried a pre-parsed source beside the entry. Two inputs describing the same thing can disagree, and the module already needs the entry; it now derives the source from `entry.source` and there is no desync to guard against. It also keeps `parsePluginSource` out of `install-flow.ts`.
-- **D-03-19 — `entry` is required, so there is no no-entry arm.** The plan described an absent arm for "no entry and no readable manifest". Without an entry there is no source, so there is no plugin root and no manifest either; the arm would have been unreachable from production while still needing coverage. `install-flow.ts` already returns `absent` for a marketplace it cannot resolve and for a plugin the manifest does not declare, so the behavior is unchanged and lives where a real caller can reach it.
-- **D-03-20 — the options bag omits the subject's name and marketplace.** Nothing in the read consumes them.
-- **D-03-21 — a seeded declaration now lands on both sides.** See the deviation below.
+- **D-03-22 — the read parses the entry's source itself.** The plan's option bag carried a pre-parsed source beside the entry. Two inputs describing the same thing can disagree, and the module already needs the entry; it now derives the source from `entry.source` and there is no desync to guard against. It also keeps `parsePluginSource` out of `install-flow.ts`.
+- **D-03-23 — `entry` is required, so there is no no-entry arm.** The plan described an absent arm for "no entry and no readable manifest". Without an entry there is no source, so there is no plugin root and no manifest either; the arm would have been unreachable from production while still needing coverage. `install-flow.ts` already returns `absent` for a marketplace it cannot resolve and for a plugin the manifest does not declare, so the behavior is unchanged and lives where a real caller can reach it.
+- **D-03-24 — the options bag omits the subject's name and marketplace.** Nothing in the read consumes them.
+- **D-03-25 — a seeded declaration now lands on both sides.** See the deviation below.
 - The reader seam carries the presence probe as a member (`makePresenceProbe: typeof makePresenceProbe`) rather than importing it directly. That is what lets a test drive the `materialized`, non-materialized and probe-throw arms without a real clone, and it puts every clone-facing operation the module can reach in one visible list.
 
 ## Deviations from Plan
@@ -197,7 +197,7 @@ status: complete
 
 ### Scoped changes to the plan's stated interface
 
-Three small departures from the plan's literal option shape, each recorded above as D-03-18, D-03-19 and D-03-20. None changes observable behavior; each removes an input or an arm that no caller can supply or reach.
+Three small departures from the plan's literal option shape, each recorded above as D-03-22, D-03-23 and D-03-24. None changes observable behavior; each removes an input or an arm that no caller can supply or reach.
 
 ---
 
