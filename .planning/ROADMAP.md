@@ -103,6 +103,12 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 - [x] 06-05-PLAN.md
 - [x] 06-06-PLAN.md
 - [x] 06-07-PLAN.md
+- [ ] 06-09-PLAN.md
+- [ ] 06-14-PLAN.md
+- [ ] 06-10-PLAN.md
+- [ ] 06-11-PLAN.md
+- [ ] 06-13-PLAN.md
+- [ ] 06-12-PLAN.md
 - [ ] 06-08-PLAN.md
 
 ### Phase 7: Reliable Coverage Metrics
