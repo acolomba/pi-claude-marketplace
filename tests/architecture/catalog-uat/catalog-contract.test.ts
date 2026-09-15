@@ -37,8 +37,12 @@ const EXPECTED_MODULE_COUNT = 20;
 const EXPECTED_SECTION_COUNT = 20;
 // WR-06 / DATA-01: +1 state for uninstall's `success-keep-data` row, the
 // preserving disposition's `{data kept}` brace (191 -> 192).
-const EXPECTED_STATE_COUNT = 192;
-const EXPECTED_UTF8_BYTES = 24_145;
+// RESV-01..06: +12 states for the dependency cascade -- its success block, the
+// six constraint arms, the four closure arms, and a member whose own ledger
+// threw. Every one of them is a row the cascade renders and nothing else does
+// (192 -> 204).
+const EXPECTED_STATE_COUNT = 204;
+const EXPECTED_UTF8_BYTES = 27_100;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -327,7 +331,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 192 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 204 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

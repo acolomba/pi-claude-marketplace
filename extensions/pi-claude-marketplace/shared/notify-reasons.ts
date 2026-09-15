@@ -252,6 +252,19 @@ type CommandPrivateReason =
   // structural markers below it, this pair IS a `ContentReason`.
   | "marketplace in user scope"
   | "marketplace in project scope"
+  // RESV-02..06: the dependency-cascade vocabulary, owned by
+  // `orchestrators/plugin/install-cascade.messaging.ts`. Every one of them
+  // describes the install cascade's relationship to ONE closure member, so they
+  // are named here for the proof rather than promoted to a shared topic group.
+  // All seven are `ContentReason`s -- each rides the row of the dependency (or,
+  // for `dependency failed`, the requesting plugin) it is a fact about.
+  | "no matching version"
+  | "version conflict"
+  | "constraint too complex"
+  | "invalid version constraint"
+  | "dependency marketplace not added"
+  | "dependency cycle"
+  | "dependency failed"
   | "plugins remain"
   | "stale clone"
   | "duplicate name"

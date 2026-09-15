@@ -190,6 +190,24 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
     // DATA-01 / WR-06: uninstall's data-disposition marker, appended at the
     // tail with its catalog row, its renderer arm and its fixture.
     "data kept",
+    // RESV-03: no release tag of the dependency's source falls inside the
+    // effective constraint.
+    "no matching version",
+    // RESV-03 / RESV-05: the effective constraint cannot be satisfied, either by
+    // the declarations against each other or by the copy already on disk.
+    "version conflict",
+    // RESV-03: the declared constraints pass one of the two combination caps.
+    "constraint too complex",
+    // RESV-03: a declared constraint is not a readable version range.
+    "invalid version constraint",
+    // RESV-02 / D-03-08: the dependency's marketplace is not added in the target
+    // scope. A CONTENT reason -- its subject is the dependency row, not the
+    // standalone marketplace row the three structural markers above belong to.
+    "dependency marketplace not added",
+    // RESV-04: the dependency graph closes on itself.
+    "dependency cycle",
+    // RESV-06: the requesting plugin's own row, when a dependency is what failed.
+    "dependency failed",
   ];
 
   // act

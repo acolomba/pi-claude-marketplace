@@ -56,6 +56,41 @@ export const REASONS = [
   // branch, which keeps the default row byte-frozen (D-02-01) while making the
   // two branches distinguishable.
   "data kept",
+  // RESV-03: the dependency's source advertises no release tag inside the
+  // effective constraint. The outcome the operator can act on, kept separate
+  // from the transport failures (`network unreachable` / `authentication
+  // required`), which say the listing could not be READ rather than that it
+  // held nothing usable.
+  "no matching version",
+  // RESV-03 / RESV-05: the effective constraint cannot be satisfied. One token
+  // over two rows -- declarations that contradict each other, and a copy
+  // already on disk that falls outside them. The already-installed row joins
+  // `already installed` in the same brace and carries its recorded version, so
+  // the two subjects stay distinguishable without a second token.
+  "version conflict",
+  // RESV-03: the declared constraints pass one of the two combination size
+  // caps. The input is well formed and it is the COMBINATION that is refused,
+  // so `invalid version constraint` would misattribute it.
+  "constraint too complex",
+  // RESV-03: a declared constraint is not a version range the evaluator can
+  // read. Distinct from `unparseable`, whose subject is a whole document rather
+  // than one field of one declaration.
+  "invalid version constraint",
+  // RESV-02 / D-03-08: the dependency names a marketplace the target scope has
+  // not added. A CONTENT reason, on the `marketplace in user scope` precedent:
+  // its subject is the dependency row it rides, which is why the three
+  // structural `marketplace not added*` markers -- whose subject is a
+  // standalone marketplace row -- cannot carry it.
+  "dependency marketplace not added",
+  // RESV-04: the dependency graph closes on itself. Every inherited token names
+  // a property of ONE plugin; a cycle is a property of the path between
+  // several, which the row's cause line spells out in walk order.
+  "dependency cycle",
+  // RESV-06: stamped on the requesting plugin's own row when what failed was
+  // one of its dependencies. Without it that row -- the one the user's command
+  // produced -- reads as an unexplained failure beside the dependency row that
+  // carries the real cause.
+  "dependency failed",
 ] as const;
 
 /** Literal union derived from the closed reason vocabulary. */

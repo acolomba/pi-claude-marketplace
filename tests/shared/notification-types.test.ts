@@ -62,6 +62,13 @@ const EXPECTED_REASONS = [
   "marketplace in project scope",
   "workflows",
   "data kept",
+  "no matching version",
+  "version conflict",
+  "constraint too complex",
+  "invalid version constraint",
+  "dependency marketplace not added",
+  "dependency cycle",
+  "dependency failed",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

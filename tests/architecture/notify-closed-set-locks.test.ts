@@ -26,7 +26,7 @@ import {
   STATUS_TOKENS,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
-test("OUT-08: REASONS is the closed 45-entry reason set", () => {
+test("OUT-08: REASONS is the closed 52-entry reason set", () => {
   // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
   // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
   // MCPR-03 / D-02: +1 for the malformed mcp failure-class member (34 -> 35).
@@ -51,7 +51,13 @@ test("OUT-08: REASONS is the closed 45-entry reason set", () => {
   // DATA-01 / WR-06: +1 for `data kept`, uninstall's data-disposition marker --
   // the token that separates the preserving branch from the destructive default
   // the two used to render byte-identically (44 -> 45).
-  assert.equal(REASONS.length, 45);
+  // RESV-02..06: +7 for the dependency-cascade vocabulary -- `no matching
+  // version`, `version conflict`, `constraint too complex`, `invalid version
+  // constraint`, `dependency marketplace not added`, `dependency cycle` and
+  // `dependency failed`. They are what let one cascade row name WHICH
+  // dependency failed and WHY, instead of the requesting plugin alone
+  // (45 -> 52).
+  assert.equal(REASONS.length, 52);
 });
 
 test("SNM-02: STATUS_TOKENS is the closed 24-entry token set", () => {

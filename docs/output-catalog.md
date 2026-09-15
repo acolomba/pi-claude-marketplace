@@ -60,7 +60,7 @@ This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ct
 
 ### Reasons rendering
 
-Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 45-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only member is uninstall's data-disposition marker, `{data kept}`.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 52-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only block is the dependency-cascade vocabulary -- `{no matching version}`, `{version conflict}`, `{constraint too complex}`, `{invalid version constraint}`, `{dependency marketplace not added}`, `{dependency cycle}` and `{dependency failed}` -- which sits after uninstall's data-disposition marker `{data kept}`.
 
 Structural `unavailable` rows derive reasons from resolver notes through `narrowResolverNotes`. Partial rows derive typed unsupported kinds through `narrowUnsupportedKinds`. The typed `workflows` kind uses the second path.
 
@@ -775,6 +775,201 @@ The pre-flight cross-plugin guard refuses an install when a generated skill, com
 The reservation is deliberate. It is what lets `/claude:plugin enable` re-take the plugin's own names later, and what stops an `uninstall` of the disabled plugin from removing an artifact that a second plugin installed under the same name in the meantime.
 
 The refusal is otherwise unexplainable from disk, because the name occupies no file. Thus the conflict line names the owner as disabled: `skill "a-foo" already owned by disabled plugin "alpha"`. An enabled owner keeps the shorter form: `skill "g-foo" already owned by plugin "gamma"`. The remedy is `/claude:plugin uninstall <owner>@<marketplace>`, which removes the record and releases the names. The row form is unchanged -- this text rides the `cause:` trailer of the `failure-runtime-with-cause` state above. Severity `error`; no reload-hint (nothing landed).
+
+### Dependency cascade -- row-per-member conventions (RESV-01 / RESV-06)
+
+A plugin that declares `dependencies` installs as a CASCADE: the requesting plugin plus every member of its dependency closure, all-or-nothing (D-03-07). The block keeps the always-marketplace-header form -- one header for the marketplace the user named, every row indented two spaces beneath it -- and adds three conventions of its own.
+
+**Subjects.** A dependency renders by its full `<plugin>@<marketplace>` key, because it may resolve from a marketplace other than the header's. The requesting plugin renders by its bare name, because the header already names its marketplace. A row therefore always states which marketplace its subject came from, without repeating the header for the common case.
+
+**Order.** Rows sort by the project's canonical name-then-scope comparator, so the requesting plugin takes its alphabetical place among the members rather than leading or trailing them. Every member of one cascade lands in the requesting plugin's own scope (D-03-05), so the scope half of the comparator never separates them and no row carries a `[scope]` bracket.
+
+**Cardinality.** The cascade emits `single`, not `plural`: the user named ONE plugin, and the members are that install's transitive consequence rather than a bulk operation. So no trailing tally line appears, and a plugin that declares nothing renders exactly as it always did.
+
+**Failure attribution.** One failing dependency fails the whole install, and the row that carries the reason is the DEPENDENCY's, never only the requesting plugin's. The requesting plugin still gets its own row, stamped `{dependency failed}`, so the command the user typed is visibly accounted for. Both rows stamp `error`, so the summary line counts two operations. No cascade row interpolates a filesystem path: every rendered value is a token-allowlisted key, a bounded rendered constraint, a recorded version, or a closed-set reason.
+
+### Dependency cascade -- success (RESV-01 / RESV-05)
+
+<!-- catalog-state: dependency-cascade-success -->
+
+```text
+● official [user]
+  ● formatter@tools v2.1.0 (installed)
+  ● helper v1.0.0 (installed)
+  ⊘ linter@tools v3.0.0 (skipped) {already installed}
+
+/reload to pick up changes
+```
+
+`helper` declares `formatter@tools` and `linter@tools`. `formatter` was materialized by this command and renders the ordinary `(installed)` row; `linter` was already present in the target scope, so RESV-05 CHECKED it against the effective constraint and left it exactly as it was -- reported as the benign `(skipped) {already installed}` and never reinstalled. That token pair is what makes "installed by this command" and "already here" readable apart. Severity `info`: the benign skip is in the idempotent closed set, so the cascade does not compute warning. The reload-hint fires on the `installed` rows.
+
+### Dependency cascade -- no release tag satisfies the constraint (RESV-03)
+
+<!-- catalog-state: dependency-no-matching-version -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {no matching version}
+    cause: Dependency "formatter@tools" has no release tag satisfying "^2.0.0".
+  ⊘ helper (failed) {dependency failed}
+```
+
+The effective constraint is valid and the tag listing was read; nothing in it falls inside the constraint. `{no matching version}` is deliberately distinct from the transport tokens below: it says the listing held nothing usable, not that it could not be read. A source that does not follow Anthropic's `<plugin-name>--v<semver>` release-tag convention reports this, which today is the expected answer for most third-party sources (see `docs/dependency-resolution.md`). The constraint rides the `cause:` trailer bounded by the same renderer every constraint row uses. No reload-hint -- nothing landed, and the cascade rolled back whatever it had already materialized.
+
+### Dependency cascade -- contradictory declarations (RESV-03)
+
+<!-- catalog-state: dependency-version-conflict -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {version conflict}
+    cause: Dependency "formatter@tools" has contradictory version constraints "^1.0.0 ^2.0.0" (inputs 1 and 2 do not overlap).
+  ⊘ helper (failed) {dependency failed}
+```
+
+Two plugins in one graph declared version sets for `formatter` that do not overlap, so the intersection is empty and no version can satisfy both. The cause names the JOINED DECLARED ranges rather than a combined one, because an intersection that failed produced no combined range to report. The parenthesised detail is the evaluator's own measurement (which inputs, by position), never a declaration's prose.
+
+### Dependency cascade -- an installed copy the constraint rejects (RESV-05)
+
+<!-- catalog-state: dependency-installed-version-conflict -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}
+    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy "^2.0.0".
+  ⊘ helper (failed) {dependency failed}
+```
+
+The SAME `version conflict` token as the row above, over a different subject: the copy already on disk. The pair `{already installed, version conflict}` and the recorded version on the row are what separate the two, which is why the cascade mints one token rather than two -- the fact is identical and only the subject moves. RESV-05 is a check, never a touch: nothing reinstalls, re-pins or re-declares the existing copy, and no tag is queried for one.
+
+### Dependency cascade -- constraints too complex to combine (RESV-03)
+
+<!-- catalog-state: dependency-constraint-too-complex -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {constraint too complex}
+    cause: Dependency "formatter@tools" declares version constraints too complex to combine (total input 5400 characters exceeds the 4096 character cap).
+  ⊘ helper (failed) {dependency failed}
+```
+
+The declarations pass one of the two combination size caps (4096 declared characters, 1024 alternative ranges). The input is well formed -- it is the COMBINATION that is refused -- so the truthful token is this one and not `{invalid version constraint}`. The cost is measured BEFORE the work, so a very large input fails fast rather than running for a long time. The cause carries which cap tripped and by how much.
+
+### Dependency cascade -- an unreadable version range (RESV-03)
+
+<!-- catalog-state: dependency-invalid-version-constraint -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {invalid version constraint}
+    cause: Dependency "formatter@tools" declares an unparseable version constraint "nope" (input 1 of 1 is not a valid version range).
+  ⊘ helper (failed) {dependency failed}
+```
+
+A declared constraint is not a range the evaluator can read. Distinct from the inherited `{unparseable}`, whose subject is a whole document: here exactly one field of one declaration is at fault, and the row says so. The rendered range is bounded by the shared constraint renderer, so a very long declaration cannot flood the block.
+
+### Dependency cascade -- the tag listing could not be read (RESV-03)
+
+<!-- catalog-state: dependency-tag-listing-failed -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {authentication required}
+    cause: Dependency "formatter@tools" could not be checked against "^2.0.0" (authentication required).
+  ⊘ helper (failed) {dependency failed}
+```
+
+The constraint was never evaluated, because listing the source's tags failed. The probe's classification is ALREADY a member of the inherited vocabulary, so the row carries `{authentication required}` -- or `{network unreachable}` on the other arm -- and the cascade mints nothing. Truthful attribution: a 401/403 is an auth failure and must not read as unreachable, exactly as on the marketplace-clone surface. An unclassifiable transport failure falls back to `{unreadable}`.
+
+### Dependency cascade -- the dependency's marketplace is not added (RESV-02 / D-03-08)
+
+<!-- catalog-state: dependency-marketplace-not-added -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {dependency marketplace not added}
+    cause: Dependency "formatter@tools" requires marketplace "tools", which is not added. Run marketplace add <source> to add it.
+  ⊘ helper (failed) {dependency failed}
+```
+
+The one dependency failure with a trust rule behind it. Nothing here adds or clones a marketplace to satisfy a dependency, so a plugin cannot introduce a new source of code by declaring one against it (D-03-08). The row names the marketplace through the dependency KEY that is its subject -- a closed-set token cannot interpolate a name -- and the cause points at the command that would add it, naming `<source>` rather than the marketplace name because `marketplace add` takes a source.
+
+`{dependency marketplace not added}` is a CONTENT reason and therefore a different token from the three structural `marketplace not added*` markers. Those three carry a standalone marketplace row as their subject and are excluded from `ContentReason` for that reason; this one rides the DEPENDENCY's row, on the `{marketplace in user scope}` precedent -- it explains why THIS dependency could not be resolved and makes no claim about a marketplace the user named.
+
+One deliberate divergence from upstream (D-03-08): upstream warns and installs the requesting plugin degraded. Under this project's all-or-nothing rollback an unknown-marketplace dependency is one more failure among the others and triggers the same whole-cascade unwind.
+
+### Dependency cascade -- the dependency is not in its marketplace (RESV-01)
+
+<!-- catalog-state: dependency-not-in-manifest -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {not in manifest}
+    cause: Dependency "formatter@tools" is not declared by its marketplace.
+  ⊘ helper (failed) {dependency failed}
+```
+
+The marketplace IS added and its manifest declares no entry under that name. The inherited `{not in manifest}` states exactly this, so the cascade reuses it -- the ATTR-08 split holds here as everywhere else: an absent CONTAINER is a marketplace-subject fact, an absent ENTRY in a present manifest is a plugin-row fact.
+
+### Dependency cascade -- a cycle in the graph (RESV-04)
+
+<!-- catalog-state: dependency-cycle -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {dependency cycle}
+    cause: Dependency cycle: helper@official -> formatter@tools -> linter@tools -> formatter@tools.
+  ⊘ helper (failed) {dependency failed}
+```
+
+The subject is the key the walk met a second time on its own ancestor chain, and the cause renders the whole chain in walk order with that key shown where it recurs -- a cycle is a property of the PATH, so a row alone cannot state it. A legal diamond (two siblings depending on the same third plugin) is deduped by the walk's visited memo and never reaches this row (D-03-11).
+
+### Dependency cascade -- an unusable `dependencies` declaration (RESV-01)
+
+<!-- catalog-state: dependency-unusable-declaration -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ helper (failed) {invalid manifest}
+    cause: Plugin "helper@official" declares an unusable dependency (dependencies.0: Invalid input).
+```
+
+One element breaking a character rule refuses the WHOLE `dependencies` array -- a constraint that disappears quietly is worse than a declaration that is refused, because the install would then pin a version nobody asked for. The subject is the plugin whose declaration is at fault, which here is the requesting plugin itself, so there is no second row to add and the summary counts one operation. The cause carries the validator's field path, never the manifest's text.
+
+### Dependency cascade -- a dependency whose own install threw (RESV-06 / D-03-07)
+
+<!-- catalog-state: dependency-install-failed -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed)
+    cause: failed to stage skill a-fmt: EACCES
+  ⊘ helper (failed) {dependency failed}
+```
+
+The dependency resolved cleanly and its own six-phase ledger then failed. There is no cascade reason to add -- the ledger's error IS the fact -- so the row carries an empty reasons array and the renderer suppresses the brace. The requesting plugin's row still says why it is there. Everything this command had already materialized is unwound; a dependency installed BEFORE the command ran is not touched (D-03-07). Re-running the same command after fixing the cause starts from the same state as the first attempt.
 
 ______________________________________________________________________
 
