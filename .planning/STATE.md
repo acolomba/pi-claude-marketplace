@@ -5,10 +5,10 @@ milestone_name: transitive-dependencies
 current_phase: 4
 current_phase_name: Install provenance
 status: planning
-stopped_at: Phase 3 complete, ready to plan Phase 4
-last_updated: "2026-09-15T17:35:11.650Z"
+stopped_at: Phase 4 discuss closed, CONTEXT.md written, ready to plan Phase 4
+last_updated: "2026-09-15T21:30:00.000Z"
 last_activity: 2026-09-15
-last_activity_desc: Phase 3 complete, transitioned to Phase 4
+last_activity_desc: Phase 4 discuss closed - both open questions answered, CONTEXT.md written
 state_head: d76e1e0199cdac438ec27d1fe18967609afe68ee
 progress:
   total_phases: 5
@@ -36,7 +36,31 @@ is archived under `.planning/milestones/v1.19-*`.
 
 Phase: 4 — Install provenance
 Plan: Not started
-Status: Ready to plan
+Status: Discuss closed, ready to plan
+
+**Phase 4's discussion closed 2026-09-15** with six decisions in
+`04-CONTEXT.md` (D-04-01..06) and the alternatives preserved in
+`04-DISCUSSION-LOG.md`. The phase turned out to be larger than "add a field."
+Phase 3's CR-01 fix writes every cascade-installed dependency into
+`claude-plugins.json` — the desired-state config — which conflates what the
+user asked for with what was pulled in to satisfy it, and destroys the very
+distinction `--prune` needs in Phase 5. The operator ruled it wrong from a
+single observation no test could have raised. Phase 4 therefore both
+introduces provenance and retires that write, **in a fixed order that is part
+of the contract**: provenance field → `buildUninstallBucket` skips
+`provenance: "dependency"` → remove the config write. Removing it any earlier
+re-opens CR-01, a blocker-severity data-loss defect. Phase 3 stays closed and
+verified; its artifacts describe the config write as correct and are
+superseded on that point only.
+
+Also settled: provenance is mode-only (`"explicit" | "dependency"`, no
+declarer list — `--prune` re-derives instead); schemaVersion bumps 2 → 3 with
+the field required and back-filled `"explicit"` silently via the `enabled` /
+ENBL-02 precedent in `migrate.ts`; reconcile keeps sweeping genuine orphans
+with exactly one new exemption; and PROV-04 is reworded, which drops this
+phase's borrow from MIGR-01 entirely. REQUIREMENTS.md and ROADMAP.md were
+updated to match — two ROADMAP Phase 4 notes are now marked SUPERSEDED, and a
+fifth success criterion was added for the config-write reversal.
 
 **Phase 3 closed 2026-09-15**, verified 5/5 must-haves with both human
 verification items run against running systems. A code review found 16 issues
@@ -61,14 +85,19 @@ sit in `BACKLOG.md` and `REQUIREMENTS.md`. And zero of the 297 plugins in
 `anthropics/claude-plugins-official` declare dependencies, so the cascade
 ships with no real-world consumer today.
 
-**Before Phase 4 executes, branching needs settling.** `config.json` now
-carries `branching_strategy: milestone` with
+**Branching is settled, but the fix is uncommitted.** `config.json` carried
+`branching_strategy: milestone` with
 `milestone_branch_template: features/{milestone}`, resolving to
 `features/v1.20` — a branch that does not exist locally. `handle_branching`
-creates a missing milestone branch off `origin/main`, which would strand this
-milestone's work on `features/manifest`. Phase 3 was immune only because
-execute-phase reads config once at init, before that setting arrived via a
-merge of origin/main (commit `257f8827`).
+creates a missing milestone branch off `origin/main`, which would have
+stranded this milestone's work on `features/manifest`. Phase 3 was immune only
+because execute-phase reads config once at init, before that setting arrived
+via a merge of origin/main (commit `257f8827`). It is now
+`branching_strategy: none` — an agent-made edit deliberately left UNCOMMITTED,
+because the same file also carries the operator's own
+`model_profile_overrides.codex` edit that should not be bundled in. The
+setting reads from disk, so Phases 4-5 honor it either way; do not revert the
+file.
 
 Plan 03-06 made the cascade legible. A dependency cascade now renders one row
 per closure member beside the requesting plugin's own row, and a cascade that
@@ -735,21 +764,29 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 3 complete, ready to plan Phase 4
+**Stopped at:** Phase 4 discuss closed, CONTEXT.md written, ready to plan
 
-**Resume file:** None
+**Resume file:** None — the mid-discussion `.continue-here.md` and
+`HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
+content was folded into `04-CONTEXT.md`: the supersession warning and the
+ordering constraint into `<decisions>`, and the operational anti-patterns
+(forcing the isolation sentinel per dispatch, `phase.complete`'s false
+"file not on disk" warnings, the verifier `covered_digest` hazard) into a
+carried-notes block under `<specifics>`.
 
-**Read beside it:** `.planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/02-VERIFICATION.md`
+**Read beside it:** `.planning/phases/04-install-provenance/04-CONTEXT.md`
 
-Last session: 2026-09-15T12:54:06.767Z
-closed out plan 02-01 task 3, executed plan 02-02, ran the full code-review
-fix cycle, then Nyquist and security gates, then verification and transition)
+Last session: 2026-09-15
+resumed a paused Phase 4 discussion, answered its two open questions (the
+config-write reversal lands entirely in Phase 4 in a fixed order; reconcile
+keeps sweeping genuine orphans with one exemption), wrote `04-CONTEXT.md` and
+`04-DISCUSSION-LOG.md`, reworded PROV-04, and reconciled the ROADMAP's Phase 4
+criteria and notes against the decisions.
 
-**Next:** Discuss Phase 3 (Dependency resolution — RESV-01..06) via
-`/gsd-discuss-phase 3`. No CONTEXT.md exists yet for Phase 3. Two of the four
-pending todos under Accumulated Context are bound to this discussion
-(version-constraint grammar RESV-03, and where a dependency-installed plugin
-stands relative to `claude-plugins.json`).
+**Next:** Plan Phase 4 via `/gsd-plan-phase 4`. CONTEXT.md exists. The one
+thing a planner must not get wrong is D-04-04's three-step order — step 3
+(remove the config write) must never land in an earlier wave than step 2
+(reconcile respects provenance).
 Milestone v1.19 already closed.
 
 ### Historical v1.19 completion record
@@ -827,10 +864,24 @@ The workstream archive removed the old routing blocker.
 
 ## Operator Next Steps
 
-- Discuss Phase 3 (Dependency resolution, RESV-01..06) via `/gsd-discuss-phase 3`
-  — no CONTEXT.md exists yet. Two pending todos are bound to this discussion:
-  the version-constraint grammar (RESV-03) and where a dependency-installed
-  plugin stands relative to `claude-plugins.json`.
+- Plan Phase 4 (Install provenance, PROV-01..04) via `/gsd-plan-phase 4`.
+  `04-CONTEXT.md` exists and carries six decisions plus a fixed three-step
+  ordering contract the plan must honor.
+- Decide whether `.planning/config.json` should be committed. It carries an
+  agent-made `git.branching_strategy: milestone → none` alongside the
+  operator's own `model_profile_overrides.codex` edit, and was left
+  uncommitted so the operator's edit is not bundled in.
+- Optional, non-blocking: provide a genuinely private repository on github.com
+  or gitlab.com to close UAT 2's last sub-item — a SUCCESSFUL credential
+  challenge is still unexercised. The 401 arm was verified end to end.
+- Optional, non-blocking: confirm whether alpha/beta/gamma were manually
+  uninstalled from the UAT home. `tmp/pi-uat` ends with zero plugins in both
+  `state.json` and `claude-plugins.json`, but only zeta and omega were
+  uninstalled in the transcript. Most likely a deliberate teardown; if not, an
+  unexplained removal would be a live reconcile bug.
+- The UAT git server was still running at resume (`node tmp/uat-git/server.mjs`,
+  `https://localhost:8443`). It is only needed to re-run UAT 2, and its TLS
+  certs expire 2026-09-17.
 - Phase 1 and Phase 2 verification both passed. Phase 2's full gate set (code
   review, Nyquist, security, regression, goal verification) is closed.
 - Plan v1.20 phases with the UI gate skipped. No phase in this milestone is a

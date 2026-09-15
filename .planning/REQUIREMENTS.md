@@ -66,8 +66,9 @@ New scope. The record `--prune` reads.
   even when a later install declares it as a dependency.
 - [ ] **PROV-03**: A plugin first installed as a dependency becomes
   directly-installed when the user installs it by name.
-- [ ] **PROV-04**: An install record written before this milestone is reported
-  as stale rather than silently repaired.
+- [ ] **PROV-04**: An install record written before this milestone is upgraded
+  to the current schema with a truthful default, and no record is misreported
+  as a dependency.
 
 ### Prune on uninstall (PRUNE)
 
@@ -107,11 +108,12 @@ Acknowledged, not in this milestone.
 
 - **MIGR-01**: Replace field-level backward-compat migration with a staleness
   gate -- delete `persistence/migrate.ts`, replace `migrate-config.ts` with a
-  loud-failure guard. Tracked in `.planning/BACKLOG.md`. **PROV-04 depends on
-  the guard half of this item**: the notify wording and recovery command for
-  "stale state, absent config" is MIGR-01's own unresolved design question, and
-  PROV-04 needs an answer to it. Answer only that much here; leave the
-  `migrate.ts` deletion to MIGR-01.
+  loud-failure guard. Tracked in `.planning/BACKLOG.md`. **PROV-04 no longer
+  depends on this item** (D-04-06, 2026-09-15): the reworded PROV-04 upgrades a
+  legacy record silently with a truthful default, so it emits no stale-state
+  report and needs no recovery-command wording. The notify wording and recovery
+  command for "stale state, absent config" returns to MIGR-01 intact, alongside
+  the `migrate.ts` deletion.
 
 ## Out of Scope
 
