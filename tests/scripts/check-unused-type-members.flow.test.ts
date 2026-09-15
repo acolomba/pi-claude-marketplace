@@ -54,16 +54,28 @@ interface MemberRecord {
   readonly reasons: readonly string[];
 }
 
+interface GateWork {
+  readonly transferSteps: number;
+  readonly transferEdges: number;
+  readonly transferReads: number;
+  readonly transferMs: number;
+}
+
 interface GateReport {
   readonly schemaVersion: number;
   readonly status: string;
   readonly members: readonly MemberRecord[];
   readonly findings: readonly MemberRecord[];
   readonly diagnostics: readonly string[];
+  readonly work: GateWork;
 }
 
 interface AnalysisModule {
-  analyzeProject(options: { readonly root: string; readonly budget?: number }): GateReport;
+  analyzeProject(options: {
+    readonly root: string;
+    readonly budget?: number;
+    readonly flowBudget?: number;
+  }): GateReport;
 }
 
 const analysis = (await import(analysisModuleUrl)) as unknown as AnalysisModule;
@@ -674,4 +686,281 @@ export function hand(handed: Handed, sink: any): void {
   assert.strictEqual(statusFor(report, "Handed", "maybeUsed"), "unsupported-analysis");
   assert.deepStrictEqual(reasonsFor(report, "Untouched", "alone"), []);
   assert.strictEqual(statusFor(report, "Untouched", "alone"), "unread");
+});
+
+test("an array element keeps the origin it was built from", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export function pick(held: Held): string {
+  const items: readonly Slot[] = [held];
+  return read(items[0]);
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+});
+
+test("a tuple credits the position it was read at and not its neighbour", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export interface Second {
+  readonly kept: string;
+  readonly unrelated?: string;
+}
+
+export function readFirst(pair: readonly [Slot, Slot]): string {
+  return pair[0].kept;
+}
+
+export function build(held: Held, second: Second): string {
+  return readFirst([held, second]);
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+  assert.deepStrictEqual(shapesFor(report, "Second", "kept"), []);
+  assert.strictEqual(statusFor(report, "Second", "kept"), "unread");
+});
+
+test("iterating an array keeps the element origin", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export function each(slots: readonly Slot[]): string {
+  let total = "";
+
+  for (const slot of slots) {
+    total += slot.kept;
+  }
+
+  return total;
+}
+
+export function feed(held: Held): string {
+  return each([held]);
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+});
+
+test("an array callback receives the element the caller supplied", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export function labels(slots: readonly Slot[]): readonly string[] {
+  return slots.map((slot) => slot.kept);
+}
+
+export function feed(held: Held): readonly string[] {
+  return labels([held]);
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+});
+
+test("an awaited promise keeps the fulfilled origin", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export async function later(held: Held): Promise<Slot> {
+  return held;
+}
+
+export async function consume(held: Held): Promise<string> {
+  const slot = await later(held);
+  return slot.kept;
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+});
+
+test("then receives the fulfilled value the caller resolved", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export function chain(promised: Promise<Slot>): Promise<string> {
+  return promised.then((slot) => slot.kept);
+}
+
+export function start(held: Held): Promise<string> {
+  return chain(Promise.resolve(held));
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+});
+
+test("a map value transfers to what get returns, and its key is not a value read", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export interface Keyed {
+  readonly id: string;
+  readonly unusedKeyField?: string;
+}
+
+export function store(held: Held, key: Keyed): string {
+  const byKey = new Map<Keyed, Slot>();
+  byKey.set(key, held);
+  const found = byKey.get(key);
+  return found === undefined ? "" : found.kept;
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+  assert.deepStrictEqual(shapesFor(report, "Keyed", "id"), []);
+  assert.deepStrictEqual(shapesFor(report, "Keyed", "unusedKeyField"), []);
+  assert.strictEqual(statusFor(report, "Keyed", "unusedKeyField"), "unread");
+});
+
+test("a weak map carries a nested replacement record to the field that is read", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Backup {
+  readonly name: string;
+  readonly from: string;
+  readonly to: string;
+}
+
+export interface Internals {
+  readonly backups: readonly Backup[];
+}
+
+export interface Replacement {
+  readonly kind: string;
+}
+
+const internals = new WeakMap<Replacement, Internals>();
+
+export function remember(replacement: Replacement, backups: readonly Backup[]): void {
+  internals.set(replacement, { backups });
+}
+
+export function begin(replacement: Replacement, backup: Backup): void {
+  remember(replacement, [backup]);
+}
+
+export function restore(replacement: Replacement): readonly string[] {
+  const held = internals.get(replacement);
+  return held === undefined ? [] : held.backups.map((entry) => entry.from);
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Backup", "from"), [
+    "value-read/property-access/production",
+  ]);
+  assert.deepStrictEqual(shapesFor(report, "Backup", "name"), []);
+  assert.deepStrictEqual(shapesFor(report, "Backup", "to"), []);
+  assert.deepStrictEqual(shapesFor(report, "Internals", "backups"), [
+    "value-read/property-access/production",
+  ]);
+  assert.deepStrictEqual(shapesFor(report, "Replacement", "kind"), []);
+  assert.strictEqual(statusFor(report, "Replacement", "kind"), "unread");
+});
+
+test("a cycle between two bodies terminates with an exact witness", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `${carrier}
+export function ping(held: Held, depth: number): Slot {
+  return depth > 0 ? pong(held, depth - 1) : held;
+}
+
+export function pong(held: Held, depth: number): Slot {
+  return ping(held, depth - 1);
+}
+
+export function enter(held: Held): string {
+  return read(ping(held, 2));
+}
+`,
+  );
+
+  // act & assert
+  assertCarried(report);
+});
+
+test("an unmodeled container operation is reported, not assumed clean", async (t) => {
+  // arrange
+  const report = await analyze(
+    t,
+    `export interface Sorted {
+  readonly maybe?: string;
+}
+
+export interface Filtered {
+  readonly alsoMaybe?: string;
+}
+
+export function shuffle(items: Sorted[]): Sorted[] {
+  return items.sort();
+}
+
+export function keep(items: readonly Filtered[]): readonly Filtered[] {
+  return items.filter((item) => item !== undefined);
+}
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(reasonsFor(report, "Sorted", "maybe"), ["unmodeled-container-operation"]);
+  assert.strictEqual(statusFor(report, "Sorted", "maybe"), "unsupported-analysis");
+  assert.deepStrictEqual(reasonsFor(report, "Filtered", "alsoMaybe"), []);
+  assert.strictEqual(statusFor(report, "Filtered", "alsoMaybe"), "unread");
+});
+
+test("a deliberately low transfer budget fails instead of reporting a clean tree", async (t) => {
+  // arrange
+  const root = await createRoot(t, { [casesPath]: tracerCases });
+
+  // act & assert
+  assert.throws(() => analysis.analyzeProject({ root, flowBudget: 5 }), {
+    name: "AnalysisSetupError",
+    message: /^Transfer budget of 5 steps exhausted while tracing /,
+  });
+});
+
+test("the report states the work the transfer walk actually did", async (t) => {
+  // arrange
+  const report = await analyze(t, tracerCases);
+
+  // act & assert
+  assert.strictEqual(report.work.transferReads > 0, true);
+  assert.strictEqual(report.work.transferEdges > 0, true);
+  assert.strictEqual(report.work.transferSteps > report.work.transferReads, true);
+  assert.strictEqual(Number.isFinite(report.work.transferMs), true);
+  // A fixture this small can only need a few thousand steps. A walk that
+  // enumerated assignable pairs instead of following edges would need orders of
+  // magnitude more, so this ceiling is the shape assertion, not a stopwatch.
+  assert.strictEqual(report.work.transferSteps < 5000, true);
 });

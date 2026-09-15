@@ -33,6 +33,9 @@ import {
  *   is part of the context handed to the contract evaluator.
  * - A witness proved through a transfer carries `via`, the site of the source
  *   expression that carried the value into the consumer that read it.
+ * - `work` states what the transfer walk did: the steps it spent, the edges it
+ *   indexed, the reads it traced and how long it took. It is a measurement of
+ *   this run, not a threshold anything is compared against.
  *
  * `runtime-observed`, `test-only-observed` and `explicit-contract` pass;
  * `unread` and `unsupported-analysis` fail. A setup or internal analysis failure
@@ -254,6 +257,12 @@ export function analyzeProject({ root, overlay, contractEvaluator, budget, flowB
     status: findings.length === 0 ? "clean" : "findings",
     root: projectRoot,
     counts: { productionFiles, candidates: candidates.length, ...countByStatus(members) },
+    work: {
+      transferSteps: flow.counters.steps,
+      transferEdges: flow.counters.edges,
+      transferReads: flow.counters.reads,
+      transferMs: flow.counters.elapsedMs,
+    },
     members,
     findings,
     diagnostics,

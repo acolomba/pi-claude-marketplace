@@ -10,9 +10,10 @@ import { resolveCandidates } from "./check-unused-type-members.model.mjs";
  * A consumer's read is credited back to a source member only where a value
  * actually moved: an argument reaching a resolved parameter, an initializer or
  * an assignment reaching a binding, a property of an object built here, a value
- * a body returned, a callback receiving what its caller supplied. Structural
- * compatibility is never a transfer, and every edge is one-way, so reading a
- * destination never vouches for a source that nothing was sent to.
+ * a body returned, a callback receiving what its caller supplied, an element
+ * placed in a container. Structural compatibility is never a transfer, and every
+ * edge is one-way, so reading a destination never vouches for a source that
+ * nothing was sent to.
  *
  * The walk is demand-driven and backward. Each read the model recorded asks one
  * question -- "which places could have supplied this value?" -- and the answer
@@ -20,19 +21,27 @@ import { resolveCandidates } from "./check-unused-type-members.model.mjs";
  * sites rather than the product of every assignable pair of types.
  *
  * An edge carries the path the value was placed at, and following it backwards
- * consumes exactly that path. An argument placed at the element position of a
- * rest parameter answers a read of an element and nothing else, which is what
- * keeps a transfer from spreading sideways into unrelated slots.
+ * consumes exactly that path. A value placed at the second slot of a tuple
+ * answers a read of that slot and nothing else, and a map value answers a read
+ * through `get` while its key answers nothing at all.
  */
 
 const analysedRoots = ["extensions/pi-claude-marketplace/", "tests/"];
 
-// Written with a NUL so it can never collide with a key any source spells out.
+// Synthetic path segments for positions a property name cannot spell. Each is
+// written with a NUL so it can never collide with a key a source spells out.
 const elementSegment = "\u0000element";
+const awaitSegment = "\u0000await";
+const mapValueSegment = "\u0000map-value";
+const indexPrefix = "\u0000index:";
 
 // A path this deep is a wrapper chain no reader follows by hand, and letting it
 // grow is how a cycle turns into an unbounded family of distinct questions.
-const deepestTrail = 8;
+// Measured against this repository: raising the bound to six costs a fifth again
+// in work and finds one more witness, so the reach that is left on the table is
+// a documented limit rather than an unknown one. Stopping early under-credits,
+// which produces a finding to investigate and never a member wrongly accepted.
+const deepestTrail = 4;
 
 const refinementKinds = new Set([
   ts.SyntaxKind.ParenthesizedExpression,
@@ -48,8 +57,67 @@ const joiningOperators = new Set([
   ts.SyntaxKind.AmpersandAmpersandToken,
 ]);
 
+const mapNames = new Set(["Map", "WeakMap", "ReadonlyMap"]);
+
+// Array methods whose result is built by a callback, whose result keeps the
+// receiver's shape, and whose result is one element of the receiver.
+const mappingMethods = new Set(["map", "flatMap"]);
+const shapeKeepingMethods = new Set(["filter", "slice", "concat"]);
+const pickingMethods = new Set(["find", "findLast", "at", "pop", "shift"]);
+const arrayCallbackMethods = new Set([
+  "map",
+  "flatMap",
+  "filter",
+  "find",
+  "findLast",
+  "forEach",
+  "some",
+  "every",
+]);
+
+const arrayModeled = new Set([
+  ...mappingMethods,
+  ...shapeKeepingMethods,
+  ...pickingMethods,
+  ...arrayCallbackMethods,
+]);
+const promiseModeled = new Set(["then", "catch", "finally"]);
+const mapModeled = new Set(["get", "set", "values", "forEach"]);
+
+/**
+ * Container members that move no member provenance at all: they answer a
+ * question about the container rather than handing a value on. `join` and
+ * `toString` do consume element values, but as serialisation rather than as a
+ * transfer, so they belong to the operation summaries and not to this walk.
+ */
+const neutralMembers = new Set([
+  "length",
+  "size",
+  "has",
+  "delete",
+  "clear",
+  "includes",
+  "indexOf",
+  "lastIndexOf",
+  "join",
+  "toString",
+  "keys",
+]);
+
 function isAnalysedPath(projectPath) {
   return analysedRoots.some((root) => projectPath.startsWith(root));
+}
+
+function indexSegment(position) {
+  return `${indexPrefix}${position}`;
+}
+
+function indexPositionOf(segment) {
+  return segment.startsWith(indexPrefix) ? Number(segment.slice(indexPrefix.length)) : undefined;
+}
+
+function isPositional(segment) {
+  return segment === elementSegment || indexPositionOf(segment) !== undefined;
 }
 
 function projectPathOf(state, sourceFile) {
@@ -190,15 +258,33 @@ function symbolOfName(nameNode, state) {
   return ts.isIdentifier(nameNode) ? state.checker.getSymbolAtLocation(nameNode) : undefined;
 }
 
+/** The expression a `for ... of` binding draws its elements from. */
+function iteratedExpressionOf(declaration) {
+  const statement = declaration.parent?.parent;
+  return statement !== undefined && ts.isForOfStatement(statement)
+    ? statement.expression
+    : undefined;
+}
+
 function indexVariable(declaration, state) {
   const symbol = symbolOfName(declaration.name, state);
 
-  if (declaration.initializer === undefined || symbol === undefined) {
+  if (symbol === undefined) {
     return;
   }
 
-  pushInto(state.bySymbol, symbol, { node: declaration.initializer, at: [] }, state);
-  recordTransfer(state, "initializer", declaration.initializer, declaration.name);
+  if (declaration.initializer !== undefined) {
+    pushInto(state.bySymbol, symbol, { node: declaration.initializer, at: [] }, state);
+    recordTransfer(state, "initializer", declaration.initializer, declaration.name);
+    return;
+  }
+
+  const iterated = iteratedExpressionOf(declaration);
+
+  if (iterated !== undefined) {
+    pushInto(state.bySymbol, symbol, { node: iterated, from: [elementSegment] }, state);
+    recordTransfer(state, "iteration", iterated, declaration.name);
+  }
 }
 
 function indexAssignment(assignment, state) {
@@ -214,6 +300,13 @@ function indexAssignment(assignment, state) {
 
 function hasBody(node) {
   return ts.isFunctionLike(node) && node.body !== undefined;
+}
+
+function isAsync(node) {
+  return (
+    ts.canHaveModifiers(node) &&
+    (ts.getModifiers(node) ?? []).some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
+  );
 }
 
 /**
@@ -290,7 +383,7 @@ function functionLiteralsOf(node, state) {
 /**
  * The parameter an argument at this position reaches directly. A rest parameter
  * collects arguments into a new array instead of receiving one, so it is bound
- * at its element position rather than whole.
+ * at the exact slot the argument lands in rather than whole.
  */
 function parameterAt(parameters, position) {
   const parameter = parameters[position];
@@ -335,17 +428,17 @@ function addArgument(state, parameter, argument, at) {
   recordTransfer(state, at.length === 0 ? "argument" : "rest-argument", argument, parameter.name);
 }
 
-function recordGap(state, property) {
+function recordGap(state, property, reason) {
   for (const candidate of resolveCandidates(state.checker, state.byDeclaration, property)) {
     const existing = state.unsupported.get(candidate.id);
 
     if (existing === undefined) {
-      state.unsupported.set(candidate.id, ["erased-call-consumer"]);
+      state.unsupported.set(candidate.id, [reason]);
       continue;
     }
 
-    if (!existing.includes("erased-call-consumer")) {
-      existing.push("erased-call-consumer");
+    if (!existing.includes(reason)) {
+      existing.push(reason);
     }
   }
 }
@@ -361,9 +454,158 @@ function reportErasedCall(call, state) {
     const type = state.checker.getTypeAtLocation(argument);
 
     for (const property of state.checker.getPropertiesOfType(type)) {
-      recordGap(state, property);
+      recordGap(state, property, "erased-call-consumer");
     }
   }
+}
+
+function containerKindOf(type, checker) {
+  if (checker.isArrayType(type) || checker.isTupleType(type)) {
+    return "array";
+  }
+
+  const name = type.aliasSymbol?.name ?? type.symbol?.name;
+
+  if (name === "Promise") {
+    return "promise";
+  }
+
+  return name !== undefined && mapNames.has(name) ? "map" : undefined;
+}
+
+/**
+ * The container a receiver expression names, memoised per node. Asking the
+ * checker forces the receiver's type to be instantiated, which is the most
+ * expensive question this walk asks, and every receiver is asked about twice:
+ * once while indexing and once while tracing.
+ */
+function receiverKindOf(receiver, state) {
+  if (state.kinds.has(receiver)) {
+    return state.kinds.get(receiver);
+  }
+
+  const kind = containerKindOf(state.checker.getTypeAtLocation(receiver), state.checker);
+  state.kinds.set(receiver, kind);
+  return kind;
+}
+
+function elementTypeOf(type, position, checker) {
+  if (position !== undefined && checker.isTupleType(type)) {
+    return checker.getTypeArguments(type)[position];
+  }
+
+  return checker.getIndexTypeOfType(type, ts.IndexKind.Number);
+}
+
+function mapValueTypeOf(type, checker) {
+  return containerKindOf(type, checker) === "map" ? checker.getTypeArguments(type)[1] : undefined;
+}
+
+function isModeledMember(kind, name) {
+  if (kind === "map") {
+    return mapModeled.has(name);
+  }
+
+  return kind === "promise" ? promiseModeled.has(name) : arrayModeled.has(name);
+}
+
+/**
+ * Reports a container operation with no directed semantics here. The values it
+ * could move are the receiver's elements or values, so those are the candidates
+ * left unresolved -- an unmodeled operation is an open question, never a clean
+ * verdict, and never a verdict about anything it did not touch.
+ */
+function reportUnmodeledMember(kind, name, receiver, state) {
+  if (isModeledMember(kind, name) || neutralMembers.has(name)) {
+    return;
+  }
+
+  const type = state.checker.getTypeAtLocation(receiver);
+  const carried =
+    kind === "map"
+      ? mapValueTypeOf(type, state.checker)
+      : elementTypeOf(type, undefined, state.checker);
+
+  if (carried === undefined) {
+    return;
+  }
+
+  for (const property of state.checker.getPropertiesOfType(carried)) {
+    recordGap(state, property, "unmodeled-container-operation");
+  }
+}
+
+/** The path a container hands to the first parameter of a callback it runs. */
+function inwardSegmentOf(kind, name) {
+  if (kind === "promise") {
+    return name === "then" ? awaitSegment : undefined;
+  }
+
+  if (kind === "map") {
+    return name === "forEach" ? mapValueSegment : undefined;
+  }
+
+  return arrayCallbackMethods.has(name) ? elementSegment : undefined;
+}
+
+function indexCallbackInput(call, receiver, segment, state) {
+  for (const argument of call.arguments ?? []) {
+    for (const literal of functionLiteralsOf(argument, state)) {
+      const parameter = literal.parameters[0];
+
+      if (parameter !== undefined) {
+        pushInto(state.byParameter, parameter, { node: receiver, from: [segment] }, state);
+        recordTransfer(state, "container-element", receiver, parameter.name);
+      }
+    }
+  }
+}
+
+function indexMapSet(call, receiver, state) {
+  const value = (call.arguments ?? [])[1];
+  const symbol = ts.isIdentifier(receiver)
+    ? state.checker.getSymbolAtLocation(receiver)
+    : undefined;
+
+  if (value === undefined || symbol === undefined) {
+    return;
+  }
+
+  pushInto(state.bySymbol, symbol, { node: value, at: [mapValueSegment] }, state);
+  recordTransfer(state, "map-value", value, receiver);
+}
+
+/**
+ * Indexes the edges a container operation creates. Returns whether the call was
+ * a container operation at all, because one that was must not also be treated
+ * as an ordinary hand-off into a standard-library signature.
+ */
+function indexContainerCall(call, state) {
+  const callee = call.expression;
+
+  if (!ts.isCallExpression(call) || !ts.isPropertyAccessExpression(callee)) {
+    return false;
+  }
+
+  const receiver = callee.expression;
+  const name = callee.name.text;
+  const kind = receiverKindOf(receiver, state);
+
+  if (kind === undefined) {
+    return false;
+  }
+
+  const inward = inwardSegmentOf(kind, name);
+
+  if (kind === "map" && name === "set") {
+    indexMapSet(call, receiver, state);
+  } else if (inward !== undefined) {
+    indexCallbackInput(call, receiver, inward, state);
+  } else {
+    reportUnmodeledMember(kind, name, receiver, state);
+  }
+
+  return true;
 }
 
 /**
@@ -378,7 +620,16 @@ function indexCall(call, state) {
     pushInto(state.callsBySymbol, symbol, call, state);
   }
 
-  const parameters = signatureTargetOf(call, state)?.parameters;
+  const target = signatureTargetOf(call, state);
+
+  // A call the checker resolved into a body in this program is never a
+  // container operation, and asking whether it is would instantiate the
+  // receiver's type for nothing. Most calls in a project are this one.
+  if ((target === undefined || !hasBody(target)) && indexContainerCall(call, state)) {
+    return;
+  }
+
+  const parameters = target?.parameters;
 
   if (parameters === undefined) {
     reportErasedCall(call, state);
@@ -396,7 +647,7 @@ function indexCall(call, state) {
     }
 
     if (rest !== undefined && position >= parameters.length - 1) {
-      addArgument(state, rest, argument, [elementSegment]);
+      addArgument(state, rest, argument, [indexSegment(position - parameters.length + 1)]);
     }
   });
 }
@@ -428,17 +679,20 @@ function propertyTypeOf(type, key, checker) {
 }
 
 function segmentTypeOf(type, segment, checker) {
-  return segment === elementSegment
-    ? checker.getIndexTypeOfType(type, ts.IndexKind.Number)
+  if (segment === awaitSegment) {
+    return checker.getAwaitedType(type);
+  }
+
+  if (segment === mapValueSegment) {
+    return mapValueTypeOf(type, checker);
+  }
+
+  return isPositional(segment)
+    ? elementTypeOf(type, indexPositionOf(segment), checker)
     : propertyTypeOf(type, segment, checker);
 }
 
-/**
- * The inventoried members a read of `key` would reach if the value sat at this
- * place under this path. The path is followed one segment at a time, so a place
- * whose shape diverges anywhere along it reaches nothing at all.
- */
-function candidatesAt(node, trail, key, state) {
+function resolveCandidatesAt(node, trail, key, state) {
   let type = state.checker.getTypeAtLocation(node);
 
   for (const segment of trail) {
@@ -451,6 +705,28 @@ function candidatesAt(node, trail, key, state) {
 
   const symbol = state.checker.getPropertyOfType(type, key);
   return symbol === undefined ? [] : resolveCandidates(state.checker, state.byDeclaration, symbol);
+}
+
+/**
+ * The inventoried members a read of `key` would reach if the value sat at this
+ * place under this path. The path is followed one segment at a time, so a place
+ * whose shape diverges anywhere along it reaches nothing at all.
+ *
+ * The answer depends only on the place, the path and the key, never on which
+ * read asked, so it is computed once. Walking a path instantiates types, which
+ * is the most expensive thing this module does.
+ */
+function candidatesAt(node, trail, key, state) {
+  const token = `${tokenOf(node, trail, state)}|${key}`;
+  const known = state.resolved.get(token);
+
+  if (known !== undefined) {
+    return known;
+  }
+
+  const found = resolveCandidatesAt(node, trail, key, state);
+  state.resolved.set(token, found);
+  return found;
 }
 
 function pushWitness(state, candidate, read, source) {
@@ -491,28 +767,55 @@ function creditStep(read, step, state) {
 }
 
 /**
- * Follows an edge backwards. The edge says where in the destination the source
- * value was placed, so a trail that does not start with that path was never
- * carried by this edge, and the edge is simply not taken.
+ * Whether one path segment answers a question about another. An exact position
+ * and an unspecified element can answer each other; two different positions
+ * never can, which is what keeps a tuple slot from inheriting its neighbour.
  */
+function segmentsMatch(left, right) {
+  if (left === right) {
+    return true;
+  }
+
+  const positional = isPositional(left) && isPositional(right);
+  return positional && (left === elementSegment || right === elementSegment);
+}
+
+/**
+ * Follows an edge backwards.
+ *
+ * An edge states one of two things. `at` is where inside the destination this
+ * source's value was placed, so the trail must start with that path and the
+ * path is consumed. `from` is where inside the source the destination's whole
+ * value came from, so the path is prepended instead. A rest argument lands at a
+ * slot of its parameter; a loop binding is taken out of an element of the thing
+ * it iterates. Those are opposite directions and must not share one rule.
+ */
+function advance(trail, source) {
+  return source.from === undefined ? consume(trail, source.at ?? []) : [...source.from, ...trail];
+}
+
 function consume(trail, at) {
   if (at.length === 0) {
     return trail;
   }
 
   const matches =
-    trail.length >= at.length && at.every((segment, index) => trail[index] === segment);
+    trail.length >= at.length && at.every((segment, index) => segmentsMatch(trail[index], segment));
   return matches ? trail.slice(at.length) : undefined;
+}
+
+function stepAt(node, trail) {
+  return { node, trail, transferred: true };
 }
 
 function continuations(sources, step) {
   const next = [];
 
   for (const source of sources ?? []) {
-    const trail = consume(step.trail, source.at);
+    const trail = advance(step.trail, source);
 
     if (trail !== undefined && trail.length <= deepestTrail) {
-      next.push({ node: source.node, trail, transferred: true });
+      next.push(stepAt(source.node, trail));
     }
   }
 
@@ -568,23 +871,25 @@ function sourcesOfSymbol(symbol, state) {
   return sources;
 }
 
-function collectReturns(node, found) {
+function collectReturns(node, at, found) {
   ts.forEachChild(node, (child) => {
     if (ts.isFunctionLike(child)) {
       return;
     }
 
     if (ts.isReturnStatement(child) && child.expression !== undefined) {
-      found.push(whole(child.expression));
+      found.push({ node: child.expression, at });
     }
 
-    collectReturns(child, found);
+    collectReturns(child, at, found);
   });
 }
 
 /**
- * The expressions a body hands back. Nested functions are left alone: their
- * returns belong to them, not to the body that encloses their declaration.
+ * The expressions a body hands back, and where in the call's result they land.
+ * An async body hands back the fulfilled value, so its expressions sit at the
+ * awaited position rather than at the result itself. Nested functions are left
+ * alone: their returns belong to them, not to the body that encloses them.
  */
 function returnsOf(fn, state) {
   const known = state.returns.get(fn);
@@ -593,13 +898,14 @@ function returnsOf(fn, state) {
     return known;
   }
 
+  const at = isAsync(fn) ? [awaitSegment] : [];
   const found = [];
 
   if (fn.body !== undefined) {
     if (ts.isBlock(fn.body)) {
-      collectReturns(fn.body, found);
+      collectReturns(fn.body, at, found);
     } else {
-      found.push(whole(fn.body));
+      found.push({ node: fn.body, at });
     }
   }
 
@@ -623,11 +929,112 @@ function targetsOf(call, state) {
   return symbol === undefined ? [] : (state.literalsBySymbol.get(symbol) ?? []);
 }
 
+function callbackReturns(call, rest, state) {
+  const next = [];
+
+  for (const argument of call.arguments ?? []) {
+    for (const literal of functionLiteralsOf(argument, state)) {
+      next.push(...continuations(returnsOf(literal, state), { trail: rest }));
+    }
+  }
+
+  return next;
+}
+
+function arrayResult(name, receiver, call, step, state) {
+  const [segment, ...rest] = step.trail;
+  const positional = segment !== undefined && isPositional(segment);
+
+  if (mappingMethods.has(name)) {
+    return positional ? callbackReturns(call, rest, state) : [];
+  }
+
+  if (shapeKeepingMethods.has(name)) {
+    return [stepAt(receiver, step.trail), ...call.arguments.map((a) => stepAt(a, step.trail))];
+  }
+
+  return pickingMethods.has(name) ? [stepAt(receiver, [elementSegment, ...step.trail])] : [];
+}
+
+function promiseResult(name, receiver, call, step, state) {
+  const [segment, ...rest] = step.trail;
+
+  if (name === "then") {
+    return segment === awaitSegment ? callbackReturns(call, rest, state) : [];
+  }
+
+  return name === "catch" || name === "finally" ? [stepAt(receiver, step.trail)] : [];
+}
+
+function mapResult(name, receiver, step) {
+  if (name === "get") {
+    return [stepAt(receiver, [mapValueSegment, ...step.trail])];
+  }
+
+  const [segment, ...rest] = step.trail;
+  const iterating = name === "values" && segment !== undefined && isPositional(segment);
+  return iterating ? [stepAt(receiver, [mapValueSegment, ...rest])] : [];
+}
+
+function promiseStatic(name, call, step) {
+  const [segment, ...rest] = step.trail;
+
+  if (name !== "resolve" || segment !== awaitSegment) {
+    return [];
+  }
+
+  return (call.arguments ?? []).map((argument) => stepAt(argument, rest));
+}
+
+/**
+ * Where a container operation's result came from, or `undefined` when the call
+ * is not a container operation at all and the ordinary body-and-return rule
+ * should answer instead.
+ */
+function expandContainerCall(call, step, state) {
+  const callee = call.expression;
+
+  if (!ts.isPropertyAccessExpression(callee)) {
+    return undefined;
+  }
+
+  const receiver = callee.expression;
+  const name = callee.name.text;
+
+  if (ts.isIdentifier(receiver) && receiver.text === "Promise") {
+    return promiseStatic(name, call, step);
+  }
+
+  const kind = receiverKindOf(receiver, state);
+
+  if (kind === "map") {
+    return mapResult(name, receiver, step);
+  }
+
+  if (kind === "promise") {
+    return promiseResult(name, receiver, call, step, state);
+  }
+
+  return kind === "array" ? arrayResult(name, receiver, call, step, state) : undefined;
+}
+
 function expandCall(call, step, state) {
+  const target = signatureTargetOf(call, state);
+
+  if (target !== undefined && hasBody(target)) {
+    return continuations(returnsOf(target, state), step);
+  }
+
+  const container = expandContainerCall(call, step, state);
+
+  if (container !== undefined) {
+    return container;
+  }
+
   const sources = [];
 
-  for (const target of targetsOf(call, state)) {
-    sources.push(...returnsOf(target, state));
+  for (const body of targetsOf(call, state)) {
+    sources.push(...returnsOf(body, state));
   }
 
   return continuations(sources, step);
@@ -638,14 +1045,41 @@ function literalKeyOf(node) {
     return node.text;
   }
 
-  return ts.isNumericLiteral(node) ? elementSegment : undefined;
+  return ts.isNumericLiteral(node) ? indexSegment(Number(node.text)) : undefined;
 }
 
 function expandElementAccess(node, step) {
   const segment = literalKeyOf(node.argumentExpression);
-  return segment === undefined
-    ? []
-    : [{ node: node.expression, trail: [segment, ...step.trail], transferred: true }];
+  return segment === undefined ? [] : [stepAt(node.expression, [segment, ...step.trail])];
+}
+
+/**
+ * An array built here supplies one slot from one expression. A spread keeps the
+ * whole path, because it copies the source's own elements rather than naming a
+ * slot of its own.
+ */
+function expandArrayLiteral(node, step) {
+  const [segment, ...rest] = step.trail;
+
+  if (segment === undefined || !isPositional(segment)) {
+    return [];
+  }
+
+  const position = indexPositionOf(segment);
+  const chosen = position === undefined ? [...node.elements] : [node.elements[position]];
+  const next = [];
+
+  for (const element of chosen) {
+    if (element === undefined) {
+      continue;
+    }
+
+    next.push(
+      ts.isSpreadElement(element) ? stepAt(element.expression, step.trail) : stepAt(element, rest),
+    );
+  }
+
+  return next;
 }
 
 function collectLiteralProperty(property, key, sources) {
@@ -688,11 +1122,7 @@ function expandObjectLiteral(node, step) {
     collectLiteralProperty(property, key, sources);
   }
 
-  return sources.map((source) => ({
-    node: source.node,
-    trail: source.spread ? step.trail : rest,
-    transferred: true,
-  }));
+  return sources.map((source) => stepAt(source.node, source.spread ? step.trail : rest));
 }
 
 function expandShorthand(node, step, state) {
@@ -706,9 +1136,15 @@ function expandIdentifier(node, step, state) {
 }
 
 function expandVariable(declaration, step) {
-  return declaration.initializer === undefined
+  const iterated = iteratedExpressionOf(declaration);
+
+  if (declaration.initializer !== undefined) {
+    return continuations([whole(declaration.initializer)], step);
+  }
+
+  return iterated === undefined
     ? []
-    : continuations([whole(declaration.initializer)], step);
+    : continuations([{ node: iterated, from: [elementSegment] }], step);
 }
 
 /** The places a binding could have been filled from. */
@@ -744,6 +1180,25 @@ function expandBranching(node, step) {
     : [];
 }
 
+/** The expressions a built or awaited value could have come from. */
+function expandComposite(step, state) {
+  const node = step.node;
+
+  if (ts.isObjectLiteralExpression(node)) {
+    return expandObjectLiteral(node, step);
+  }
+
+  if (ts.isArrayLiteralExpression(node)) {
+    return expandArrayLiteral(node, step);
+  }
+
+  if (ts.isAwaitExpression(node)) {
+    return [stepAt(node.expression, [awaitSegment, ...step.trail])];
+  }
+
+  return ts.isShorthandPropertyAssignment(node) ? expandShorthand(node, step, state) : undefined;
+}
+
 /** The expressions an expression's value could have come from. */
 function expandValue(step, state) {
   const node = step.node;
@@ -753,30 +1208,38 @@ function expandValue(step, state) {
   }
 
   if (ts.isPropertyAccessExpression(node)) {
-    return [{ node: node.expression, trail: [node.name.text, ...step.trail], transferred: true }];
+    return [stepAt(node.expression, [node.name.text, ...step.trail])];
   }
 
   if (ts.isElementAccessExpression(node)) {
     return expandElementAccess(node, step);
   }
 
-  if (ts.isObjectLiteralExpression(node)) {
-    return expandObjectLiteral(node, step);
-  }
-
-  if (ts.isShorthandPropertyAssignment(node)) {
-    return expandShorthand(node, step, state);
-  }
-
   if (ts.isCallExpression(node)) {
     return expandCall(node, step, state);
   }
 
-  return expandBranching(node, step);
+  return expandComposite(step, state) ?? expandBranching(node, step);
 }
 
+/**
+ * Where a place's value could have come from. Like the member lookup above,
+ * this depends only on the place and the path, so every read asking the same
+ * question gets the same answer without re-deriving it.
+ */
 function expandStep(step, state) {
-  return expandPlace(step, state) ?? expandValue(step, state);
+  const token = tokenOf(step.node, step.trail, state);
+  const known = state.expansions.get(token);
+
+  if (known !== undefined) {
+    return known;
+  }
+
+  const next = (expandPlace(step, state) ?? expandValue(step, state)).filter(
+    (candidate) => candidate.trail.length <= deepestTrail,
+  );
+  state.expansions.set(token, next);
+  return next;
 }
 
 /**
@@ -835,12 +1298,15 @@ function createState({ checker, projectRoot, byDeclaration, budget }) {
     literalsBySymbol: new Map(),
     parametersByLiteral: new Map(),
     targets: new Map(),
+    kinds: new Map(),
     returns: new Map(),
+    resolved: new Map(),
+    expansions: new Map(),
     transfers: [],
     witnesses: new Map(),
     unsupported: new Map(),
     credited: new Set(),
-    counters: { steps: 0, edges: 0, reads: 0 },
+    counters: { steps: 0, edges: 0, reads: 0, elapsedMs: 0 },
     exhausted: undefined,
   };
 }
@@ -860,6 +1326,7 @@ export function collectFlowObservations({
   reads,
   budget,
 }) {
+  const started = Date.now();
   const state = createState({ checker, projectRoot, byDeclaration, budget });
   indexTransfers(collectSyntax(program, state), state);
 
@@ -871,6 +1338,7 @@ export function collectFlowObservations({
     creditRead(read, state);
   }
 
+  state.counters.elapsedMs = Date.now() - started;
   return {
     witnesses: state.witnesses,
     unsupported: state.unsupported,
