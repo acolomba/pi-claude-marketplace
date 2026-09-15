@@ -131,8 +131,8 @@ function witnessShapesFor(report: GateReport, owner: string, key: string): reado
 // outer call and reads one member; the value it reads was produced under the
 // inner annotation, so the inner annotation's member is read at run time.
 //
-// Line 21 holds the only property access. Line 13 holds the relayed call and
-// line 17 the outer call, which are the two transfer sites this pins.
+// Line 21 holds the only property access and line 16 the relayed call, which
+// is the source expression that carried the value into the outer result.
 const asyncRelayCases = `export interface Inner {
   readonly relayed: string;
   readonly untouched: string;
@@ -170,7 +170,7 @@ test("an async relay credits the member on the annotation that produced the valu
       kind: "value-read",
       origin: "production",
       syntax: "value-transfer",
-      via: { path: casesPath, line: 17, column: 10 },
+      via: { path: casesPath, line: 16, column: 10 },
     },
   ]);
   assert.strictEqual(statusFor(report, "Inner", "relayed"), "runtime-observed");
@@ -341,4 +341,106 @@ test("every hop of a relay chain is credited for the member that flowed through 
     report.findings.map((finding) => `${finding.owner}.${finding.key}`).sort(),
     ["Deepest.held", "Middle.held", "Surface.held"],
   );
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// A relay whose result is a union of a success shape and a failure shape
+// ──────────────────────────────────────────────────────────────────────────
+
+// Reduced from `orchestrators/marketplace/remove.ts`, where
+// `resolveRemoveTargetOrSurface` relays `resolveScopeOrFailedOutcome` and the
+// caller destructures the success arm after an `in` guard. Only one arm of the
+// union declares the key, so the value that was read can only have come from
+// that arm: there is nothing for the credit to be ambiguous between.
+const uniqueArmCases = `export interface Failure {
+  readonly status: "failed";
+  readonly cause: string;
+}
+
+async function decide(ok: boolean): Promise<{ readonly picked: string; readonly spare: string } | Failure> {
+  if (ok) {
+    return { picked: "value", spare: "other" };
+  }
+
+  return { status: "failed", cause: "no" };
+}
+
+async function relay(ok: boolean): Promise<{ readonly picked: string; readonly spare: string } | Failure> {
+  return decide(ok);
+}
+
+export async function reader(ok: boolean): Promise<string> {
+  const held = await relay(ok);
+
+  if ("status" in held) {
+    return held.cause;
+  }
+
+  const { picked } = held;
+  return picked;
+}
+`;
+
+test("a read through a union relay credits the only arm that declares the key", async (t) => {
+  // arrange
+  const report = await analyze(t, uniqueArmCases);
+
+  // act & assert
+  assert.strictEqual(statusFor(report, "relay", "picked"), "runtime-observed");
+  assert.strictEqual(statusFor(report, "decide", "picked"), "runtime-observed");
+});
+
+test("a union relay credits no sibling of the member that was read", async (t) => {
+  // arrange
+  const report = await analyze(t, uniqueArmCases);
+
+  // act & assert
+  assert.deepStrictEqual(witnessShapesFor(report, "decide", "spare"), []);
+  assert.strictEqual(statusFor(report, "decide", "spare"), "unread");
+  assert.deepStrictEqual(witnessShapesFor(report, "relay", "spare"), []);
+  assert.strictEqual(statusFor(report, "relay", "spare"), "unread");
+});
+
+// Two arms spelling the same key leave it unsettled which one supplied the
+// value, so neither is credited. Under-crediting is the safe direction: a
+// member stays a finding rather than being excused by its neighbour.
+const ambiguousArmCases = `export interface Absent {
+  readonly missing: string;
+}
+
+async function decide(pick: number): Promise<Absent | { readonly shared: string } | { readonly shared: number; readonly spare: string }> {
+  if (pick === 0) {
+    return { missing: "none" };
+  }
+
+  if (pick === 1) {
+    return { shared: "text" };
+  }
+
+  return { shared: 2, spare: "other" };
+}
+
+async function relay(pick: number): Promise<Absent | { readonly shared: string } | { readonly shared: number; readonly spare: string }> {
+  return decide(pick);
+}
+
+export async function reader(pick: number): Promise<string> {
+  const held = await relay(pick);
+
+  if (!("shared" in held)) {
+    return held.missing;
+  }
+
+  return String(held.shared);
+}
+`;
+
+test("two arms spelling one key leave both uncredited through the relay", async (t) => {
+  // arrange
+  const report = await analyze(t, ambiguousArmCases);
+
+  // act & assert
+  assert.strictEqual(statusFor(report, "decide", "shared"), "unread");
+  assert.strictEqual(statusFor(report, "decide", "spare"), "unread");
+  assert.strictEqual(statusFor(report, "Absent", "missing"), "runtime-observed");
 });

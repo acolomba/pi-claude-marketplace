@@ -767,8 +767,40 @@ function indexTransfers(syntax, state) {
   }
 }
 
+/**
+ * The property a read of `key` would land on, including the case where the
+ * place holds a union and only one of its arms declares the key at all.
+ *
+ * The checker answers a union only when every arm declares the key, which
+ * leaves the common relay shape -- a success arm beside a failure arm -- with
+ * no answer. A key exactly one arm spells can only have come from that arm, so
+ * resolving it there is directed rather than structural. Two arms spelling one
+ * key leave it unsettled which supplied the value, and nothing is resolved:
+ * under-crediting keeps a member a finding rather than excusing it by its
+ * neighbour.
+ */
+function propertySymbolOf(type, key, checker) {
+  const direct = checker.getPropertyOfType(type, key);
+
+  if (direct !== undefined || !type.isUnion()) {
+    return direct;
+  }
+
+  const found = [];
+
+  for (const constituent of type.types) {
+    const property = checker.getPropertyOfType(constituent, key);
+
+    if (property !== undefined) {
+      found.push(property);
+    }
+  }
+
+  return found.length === 1 ? found[0] : undefined;
+}
+
 function propertyTypeOf(type, key, checker) {
-  const symbol = checker.getPropertyOfType(type, key);
+  const symbol = propertySymbolOf(type, key, checker);
   const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
   return symbol === undefined || declaration === undefined
     ? undefined
@@ -800,7 +832,7 @@ function resolveCandidatesAt(node, trail, key, state) {
     }
   }
 
-  const symbol = state.checker.getPropertyOfType(type, key);
+  const symbol = propertySymbolOf(type, key, state.checker);
   return symbol === undefined ? [] : resolveCandidates(state.checker, state.byDeclaration, symbol);
 }
 
@@ -968,25 +1000,45 @@ function sourcesOfSymbol(symbol, state) {
   return sources;
 }
 
-function collectReturns(node, at, found) {
+function collectReturns(node, found) {
   ts.forEachChild(node, (child) => {
     if (ts.isFunctionLike(child)) {
       return;
     }
 
     if (ts.isReturnStatement(child) && child.expression !== undefined) {
-      found.push({ node: child.expression, at });
+      found.push(child.expression);
     }
 
-    collectReturns(child, at, found);
+    collectReturns(child, found);
   });
+}
+
+/** Whether this expression already carries a promise of its own. */
+function isThenable(node, state) {
+  const type = state.checker.getTypeAtLocation(node);
+  const awaited = state.checker.getAwaitedType(type);
+  return awaited !== undefined && awaited !== type;
+}
+
+/**
+ * Where inside the call's result one returned expression lands.
+ *
+ * An async body hands back the fulfilled value, so an ordinary expression sits
+ * at the awaited position rather than at the result itself. An expression that
+ * is already a promise is the exception: the body hands back what that promise
+ * fulfils, so its value sits exactly where its own awaited value does and no
+ * segment is added. Adding one there would consume the reader's await twice and
+ * lose the rest of the chain, which is what left a relayed annotation unread.
+ */
+function returnPositionOf(fn, node, state) {
+  return isAsync(fn) && !isThenable(node, state) ? [awaitSegment] : [];
 }
 
 /**
  * The expressions a body hands back, and where in the call's result they land.
- * An async body hands back the fulfilled value, so its expressions sit at the
- * awaited position rather than at the result itself. Nested functions are left
- * alone: their returns belong to them, not to the body that encloses them.
+ * Nested functions are left alone: their returns belong to them, not to the
+ * body that encloses them.
  */
 function returnsOf(fn, state) {
   const known = state.returns.get(fn);
@@ -995,17 +1047,17 @@ function returnsOf(fn, state) {
     return known;
   }
 
-  const at = isAsync(fn) ? [awaitSegment] : [];
-  const found = [];
+  const expressions = [];
 
   if (fn.body !== undefined) {
     if (ts.isBlock(fn.body)) {
-      collectReturns(fn.body, at, found);
+      collectReturns(fn.body, expressions);
     } else {
-      found.push({ node: fn.body, at });
+      expressions.push(fn.body);
     }
   }
 
+  const found = expressions.map((node) => ({ node, at: returnPositionOf(fn, node, state) }));
   state.returns.set(fn, found);
   return found;
 }
