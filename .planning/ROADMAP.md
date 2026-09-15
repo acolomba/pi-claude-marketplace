@@ -82,7 +82,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 **Success Criteria:**
 1. An unread optional EdgeDeps member fails an automated static-analysis gate.
 2. Read, write-only, structural, external-contract, type-only, alias, and computed-access controls establish scope and limitations.
-**Plans:** 06-01 through 06-08 approved after independent plan review; live triage waits for Phase 5 completion.
+**Plans:** 06-01 through 06-08 approved after independent plan review; live triage waits for Phase 5 completion. 06-01 has landed the runnable gate: compiler inventory, syntax-first read classification, a three-way exit contract and 33 executable controls. Next is Wave 2 (06-02 directed transfers, 06-03 validated contracts).
 
 ### Phase 7: Reliable Coverage Metrics
 
@@ -113,6 +113,6 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 | 3. Reachable Agent Collision Contract | 4/4 | Complete | 2026-09-14 |
 | 4. Strict Command Arguments | 3/3 | Complete | 2026-09-14 |
 | 5. Production Export Ownership | 28/28 | Complete | 2026-09-15 |
-| 6. Unused Type Member Gate | 0/8 | Plans approved | - |
+| 6. Unused Type Member Gate | 1/8 | In Progress | - |
 | 7. Reliable Coverage Metrics | 0/8 | Plans approved | - |
 | 8. Final Verification and Reconciliation | 0/TBD | Not started | - |

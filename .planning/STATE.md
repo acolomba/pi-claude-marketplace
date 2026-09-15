@@ -4,16 +4,17 @@ milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
 status: executing
-last_updated: "2026-09-15T05:10:00Z"
+stopped_at: "completed `06-01-PLAN.md`. Resume file: none."
+last_updated: "2026-09-15T09:20:00.000Z"
 last_activity: 2026-09-15
-last_activity_desc: Phase 05 verified passed 10/10; review findings closed
-state_head: f2c0308d
+last_activity_desc: Phase 06 Plan 01 complete
+state_head: df4b2978e82bfbcf4f95b9239f500904c21885e1
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 54
-  completed_plans: 38
-  percent: 70
+  completed_plans: 39
+  percent: 72
 milestone_name: test-backlog
 ---
 
@@ -26,14 +27,39 @@ See: `.planning/PROJECT.md` (updated 2026-09-13 after the refine-unit-tests mile
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 06 — Unused Type Member Gate (8 approved plans)
+**Current focus:** Phase 06 — Unused Type Member Gate
 
 ## Current Position
 
-Phase: 06 of 8 — Unused Type Member Gate (8 approved plans, not started)
-Plan: none started
-Status: Phase 05 COMPLETE — verified `passed`, 10/10 must-haves
-Last activity: 2026-09-15 — Phase 05 closed. All 28 plans landed; the production
+Phase: 06 (Unused Type Member Gate) — EXECUTING
+Plan: 2 of 8
+Status: Executing Phase 06
+Last activity: 2026-09-15 — Phase 06 Plan 01 complete
+
+Plan 06-01 landed the member gate's compiler tracer: `node
+scripts/check-unused-type-members.mjs` now compiles the project once,
+inventories production member declarations, and matches runtime observations
+back to those exact declarations through checker symbols. Exit 0 is clean,
+1 is unread or unsupported members, 2 is a setup or internal analysis failure,
+and a budget cutoff takes the third path so it can never read as clean.
+
+Classification is by syntax before symbol: writes and `delete` read nothing,
+compound and update expressions keep the read, destructuring reads the source
+member through renames, defaults and nesting, element access resolves literal
+and finite-union keys, and an unbounded key records a gap against that
+receiver's members only. `in` is presence, not a value read.
+
+First live run: 236 production files, 3,464 candidates, 2,739 runtime-observed,
+111 test-only, 614 unread, 0 unsupported, 27s. That count is interim — directed
+transfers (06-02), contracts (06-03) and whole-object operations (06-04) are not
+in the model yet, and 06-06 reconciles every remaining row. `lint:type-members`
+exists as a package alias but is deliberately NOT in `npm run check` until 06-08.
+
+`npm run check` exit 0. Unit 6298/6298 (baseline 6265 plus 33 new), integration
+32/32. Production aggregate unit coverage stays at 100%: 1,834/1,834 functions,
+9,050/9,050 branches, zero modules below 100%. No production source changed.
+
+Phase 05 closed: all 28 plans landed and the production
 dead-code census drained from 111 to 0 with zero net additions at every step.
 Independent verification re-measured the start population from a clean archive
 of `a8ef0dac` (111, matching the first committed pin), confirmed the pins are
@@ -127,9 +153,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Current work:** test-backlog on `features/test-backlog`. Phases 1–4 are complete;
-Phase 5 has completed twenty-seven of twenty-eight plans. Phase 6 and Phase 7 plans are
-approved; their production acceptance follows Phase 5 completion. Earlier milestone continuity is preserved in
+**Current work:** test-backlog on `features/test-backlog`. Phases 1–5 are complete.
+Phase 6 has completed one of eight plans; Phase 7 plans are approved and follow it.
+Earlier milestone continuity is preserved in
 `inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 
 ### Known snag for the next close
@@ -141,6 +167,18 @@ and verify by diff. Two further CLI gaps were worked around at this close and wi
 recur: `milestone complete` leaves the original-path deletions **unstaged**
 (`git add -u .planning/`), and it wrote `completed_phases: 1` / `percent: 11` for a
 9-of-9 milestone, which was corrected by hand.
+
+### Phase 6 Plan 1 complete
+
+Stopped at: completed `06-01-PLAN.md`. Resume file: none. Next is 06-02
+(directed value transfers) and 06-03 (validated contracts), which the plan
+graph runs together in Wave 2 over disjoint files.
+
+Seven commits, `3b5b57c3..df4b2978`, each task executed red then green. The
+red phase of task 1 ran against a deliberately always-clean analysis module
+and failed six of nine cases, so the suite is measured against the mutant the
+phase exists to catch. No gate was weakened: no census pin, no threshold
+override, no suppression, no coverage exclusion.
 
 ### Wave 10 source complete — census reconciliation pending
 
