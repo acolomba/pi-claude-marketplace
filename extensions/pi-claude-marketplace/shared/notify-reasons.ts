@@ -5,14 +5,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 44-entry
+ * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 52-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 44-entry set.
+ * 52-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
@@ -24,7 +24,13 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * length, so the two sentences above cannot drift from the tuple again without
  * a red test. CMP-4 / SCOPE-01 added two structural scope reasons (39 to 41).
  * SCOPE-01 / D-01 added two content scope reasons (41 to 43). WDET-04 /
- * D-106-04 appended the dedicated `workflows` reason (43 to 44).
+ * D-106-04 appended the dedicated `workflows` reason (43 to 44). DATA-01 /
+ * WR-06 added `data kept`, uninstall's data-disposition marker (44 to 45).
+ * RESV-02..06 added the seven dependency-cascade reasons -- `no matching
+ * version`, `version conflict`, `constraint too complex`, `invalid version
+ * constraint`, `dependency marketplace not added`, `dependency cycle` and
+ * `dependency failed` -- which are what let one cascade row name WHICH
+ * dependency failed and WHY, instead of the requesting plugin alone (45 to 52).
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
