@@ -643,6 +643,22 @@ and production-mode gate (EXPORT-01/02). Fallow 3.22.0 on this checkout reports
 one unused class member, and four duplicate-export groups. These are analyzer
 findings for triage, not 111 confirmed defects.
 
+**Ordinary-helper population: DONE.** The 111-finding snapshot above was a
+planning figure; the executable baseline measured after the preceding phases was
+57. Twenty-seven owner plans took it to one unused file, one entry export and one
+class member, with zero net additions at any step, each removal carried by a real
+production consumer, a private declaration, a retired implementation or a
+coherent module split -- never by a pin entry. This is the "roughly 94 ordinary
+internal helpers" population the status notes below separate out, and it is the
+half that actually stood between this repository and production reachability.
+The retired historical `scripts/check-phase-06-hub-ledger.mjs` census verifier is
+the unused file: its work is complete, its archives are preserved, and it had no
+package-script, workflow or production caller.
+
+**Production mode: still open at this line.** It closes below once the shipping
+dead-code command runs under production reachability and returns an empty
+report. Nothing here claims that yet.
+
 The explicit-seam/reset-export portion closed 2026-09-11 by the `refine-unit-tests` milestone. Disposition:
 `implemented`, carried by `TREF-05` and `TREF-06` (Phases 5-6), with the
 standing `no-test-only-production-surface` gate under `GGAT-04` keeping the

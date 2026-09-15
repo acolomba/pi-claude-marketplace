@@ -374,9 +374,12 @@ export default tseslint.config(
     },
   },
   {
-    // These eight owners prove erased types with satisfies and @ts-expect-error.
+    // These nine owners prove erased types with satisfies and @ts-expect-error.
     // Runtime assertions would not test their contract; neighboring runtime owners
     // retain no-empty-test-file. Keep this list exact rather than exempting types.*.
+    // `exec-result.test.ts` joined the eight originally measured when its runtime
+    // cases moved to the shared `assertNever` owner and only its compile-time
+    // proofs stayed behind, so the justification is the same one, not a widening.
     files: [
       "tests/bridges/agents/types.test.ts",
       "tests/bridges/commands/types.test.ts",

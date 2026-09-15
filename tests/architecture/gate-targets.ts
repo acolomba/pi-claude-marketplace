@@ -592,11 +592,7 @@ export const PRODUCTION_FINDING_CENSUS = {
     },
   ],
   unused_types: [],
-  unused_files: [
-    {
-      path: "scripts/check-phase-06-hub-ledger.mjs",
-    },
-  ],
+  unused_files: [],
   unused_class_members: [
     {
       path: "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/ring-buffer.ts",
