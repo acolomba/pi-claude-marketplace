@@ -125,3 +125,23 @@ the owner file so a later bounded plan can pick it up; none is a gate failure.
   must extend that file's destructuring and its `DECLARED_MODULE_ORDER`, and
   point the `hookDebugLog` scan at the new module (keeping or retiring the
   `platform/git.ts` aim as a deliberate choice).
+
+- Two planning records still state the older type-only test-owner count
+  status: open
+  **What:** `.planning/codebase/CONVENTIONS.md` says "Seven exact type-only
+  owners are exempt only from `no-empty-test-file`", and
+  `.planning/phases/02-sonar-rules-for-tests/02-SONAR-POLICY.md` row
+  `no-empty-test-file` says "except seven exact `types.test.ts` owners". The
+  population is nine: `tests/bridges/hooks/exec-result.test.ts` and
+  `tests/orchestrators/types.test.ts` joined the original seven when their
+  concerns' runtime cases moved to shared owners. Both `eslint.config.js` and
+  `tests/architecture/sonar-test-rules.test.ts` carry the correct nine, and
+  the nine match the nine production files that emit no JS, so nothing is
+  ungoverned.
+  **Why it is deferred:** neither file is in plan 05-28's declared owner set.
+  `02-SONAR-POLICY.md` records a measured scan at its own snapshot, so
+  changing its number in place would rewrite a measurement rather than
+  correct a statement; the better repair is a dated note beside it.
+  **Suggested fix:** update the `CONVENTIONS.md` sentence to nine during the
+  next codebase-map refresh, and append a dated line to `02-SONAR-POLICY.md`
+  recording the population change rather than editing its scan row.

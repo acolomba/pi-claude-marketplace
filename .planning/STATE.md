@@ -4,15 +4,15 @@ milestone: test-backlog
 current_phase: 05
 current_phase_name: Production Export Ownership
 status: executing
-last_updated: "2026-09-15T03:45:00Z"
+last_updated: "2026-09-15T05:10:00Z"
 last_activity: 2026-09-15
-last_activity_desc: Wave 10 complete; 05-21 git auth callback and credential ownership
-state_head: 8ae97016
+last_activity_desc: Wave 11 complete; 05-28 production dead-code mode and empty census
+state_head: f2c0308d
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 54
-  completed_plans: 37
+  completed_plans: 38
   percent: 63
 milestone_name: test-backlog
 ---
@@ -30,10 +30,31 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 05 (Production Export Ownership) — EXECUTING
-Plan: 27 of 28 — Wave 10 source writing complete (05-21 landed)
-Status: Executing Phase 05 — Wave 10 frozen, awaiting parent census reconciliation
-Last activity: 2026-09-15 — 05-21 moved the complete git authentication-callback
+Phase: 05 (Production Export Ownership) — ALL PLANS LANDED, AWAITING VERIFICATION
+Plan: 28 of 28 — Wave 11 complete (05-28 landed); no plan remains
+Status: Phase 05 source work complete — ready for phase verification
+Last activity: 2026-09-15 — 05-28 retired the historical hub-ledger census
+verifier with its exclusive paired test, then flipped `.fallowrc.json` to
+`production: {deadCode: true, health: false, dupes: false}` in ONE commit with
+the two exact adjacent exceptions it requires: the manifest-loaded entry
+default and `RingBuffer.read`, whose real readers are the async-rewake
+registry's `entry.stderrBuffer.read()` / `entry.stdoutBuffer.read()` calls.
+Measured before committing that each exception reports as a stale suppression
+under whole-tree reachability and as live under production reachability, which
+is why they could not land apart. Committed in `fc6a6d5a`, `fa81a02e` and
+`f2c0308d`. The production finding census is now EMPTY in every category:
+`npm run fallow` discovers 11 production entry points and reports zero issues.
+The census gate requires the shipping report to EQUAL the explicit
+`--production` report and requires both to be clean; the control harness now
+consumes the shipping production and rule settings verbatim, overriding only
+the fixture entry, so reverting the config fails two controls. Phase total:
+57 -> 0 across 28 plans with zero net additions at any step. FLOW-09 is closed
+in `.planning/BACKLOG.md` with that evidence. One deviation: deleting
+`tests/scripts/` emptied a root named in the vocabulary guard's
+`POLICED_TEST_ROOTS`, which the full gate caught; the vacated root was dropped
+and a planted unreachable root still reddens the clause.
+
+Earlier activity: 2026-09-15 — 05-21 moved the complete git authentication-callback
 protocol into `platform/git-auth-callbacks.ts`, retired the branch and remote
 listing wrappers with caller evidence, and composed `DEFAULT_CREDENTIAL_OPS` in
 `orchestrators/auth-host.ts` from `createCredentialOps`, the published Node

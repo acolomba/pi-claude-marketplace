@@ -22,8 +22,8 @@ Started 2026-09-14 on `features/test-backlog`.
 - [x] **ARGS-01**: Reject unknown flags and surplus positionals across the live command inventory before dispatch.
 - [x] **ARGS-02**: Resolve and enforce --local semantics for marketplace info/list/update with accurate usage.
 - [x] **ARGS-03**: Extend the flag catalog and discriminating drift gate to marketplace verbs.
-- [ ] **EXPORT-01**: Triage all current Fallow production findings; remove ordinary test-only exports through coherent ownership and public tests.
-- [ ] **EXPORT-02**: Enable and validate Fallow production mode while retaining completed explicit-seam protections.
+- [x] **EXPORT-01**: Triage all current Fallow production findings; remove ordinary test-only exports through coherent ownership and public tests.
+- [x] **EXPORT-02**: Enable and validate Fallow production mode while retaining completed explicit-seam protections.
 - [ ] **MEMBER-01**: Add a static gate that detects unused interface/type members, including an unread optional EdgeDeps member.
 - [ ] **MEMBER-02**: Validate read-site analysis with offender and benign controls and document justified external/structural contracts.
 - [ ] **METRIC-01**: Reliably convert current unit coverage to Fallow-compatible Istanbul JSON and verify measurement fidelity.
@@ -45,8 +45,8 @@ Started 2026-09-14 on `features/test-backlog`.
 | ARGS-01 | 4 | Complete |
 | ARGS-02 | 4 | Complete |
 | ARGS-03 | 4 | Complete |
-| EXPORT-01 | 5 | Pending |
-| EXPORT-02 | 5 | Pending |
+| EXPORT-01 | 5 | Complete |
+| EXPORT-02 | 5 | Complete |
 | MEMBER-01 | 6 | Pending |
 | MEMBER-02 | 6 | Pending |
 | METRIC-01 | 7 | Pending |
