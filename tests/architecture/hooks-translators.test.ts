@@ -51,7 +51,7 @@ const EVENT_TO_TRANSLATOR_EXPORT: Readonly<Record<DispatchableEvent, string>> = 
   PreCompact: "translatePreCompact",
   PostCompact: "translatePostCompact",
   SessionEnd: "translateSessionEnd",
-  Stop: "translate",
+  Stop: "translateStop",
   StopFailure: "translate",
 };
 

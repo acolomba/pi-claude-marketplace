@@ -30,7 +30,7 @@ export interface StopEvent {
   readonly stop_hook_active: boolean;
 }
 
-export function translate(event: StopEvent, ctx: TranslationContext): StopStdin {
+export function translateStop(event: StopEvent, ctx: TranslationContext): StopStdin {
   return {
     session_id: ctx.sessionId,
     transcript_path: ctx.transcriptPath,

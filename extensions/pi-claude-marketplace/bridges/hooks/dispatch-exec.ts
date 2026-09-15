@@ -67,7 +67,7 @@ import { translatePreToolUse } from "./payloads/pre-tool-use.ts";
 import { translateSessionEnd } from "./payloads/session-end.ts";
 import { translateSessionStart } from "./payloads/session-start.ts";
 import { translate as translateStopFailure } from "./payloads/stop-failure.ts";
-import { translate as translateStop } from "./payloads/stop.ts";
+import { translateStop } from "./payloads/stop.ts";
 import { translateUserPromptSubmit } from "./payloads/user-prompt-submit.ts";
 import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
 import { resolveTimeoutSeconds } from "./timeout.ts";
