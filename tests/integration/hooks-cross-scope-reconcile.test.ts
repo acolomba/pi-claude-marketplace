@@ -24,7 +24,7 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
-import { applyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import { createApplyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -37,6 +37,12 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+/**
+ * The reconcile composition: the factory bound to the real selected-state
+ * reader, which is the same reader the extension entry point binds.
+ */
+const applyReconcile = createApplyReconcile({ loadState });
 
 function makeMockPi(): ExtensionAPI {
   return {

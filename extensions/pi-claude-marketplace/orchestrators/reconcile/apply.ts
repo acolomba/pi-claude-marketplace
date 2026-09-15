@@ -51,7 +51,6 @@ import path from "node:path";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
-import { loadState } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 import { notifyDiagnostic } from "../../shared/notification-dispatch.ts";
@@ -80,6 +79,7 @@ import { RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ApplyReconcileOptions, ReconcilePlan, ScopeReadResult } from "./types.ts";
+import type { loadState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   EnableDegradationSignals,
@@ -859,7 +859,12 @@ async function applyReconcileWithReader(
   surfacePostCommitWarnings(opts, outcomes);
 }
 
-/** Creates a reconcile apply operation with one required selected-state reader. */
+/**
+ * Creates a reconcile apply operation with one required selected-state reader.
+ * The single production composition of it lives in the extension entry point,
+ * which binds `loadState` once per extension load and hands the operation to
+ * its `resources_discover` handler.
+ */
 export function createApplyReconcile(
   reader: ReconcileStateReader,
 ): (opts: ApplyReconcileOptions) => Promise<void> {
@@ -867,11 +872,6 @@ export function createApplyReconcile(
     await applyReconcileWithReader(reader, opts);
   };
 }
-
-const NODE_RECONCILE_STATE_READER: ReconcileStateReader = { loadState };
-
-/** Applies reconcile through the production state reader and real child orchestrators. */
-export const applyReconcile = createApplyReconcile(NODE_RECONCILE_STATE_READER);
 
 /**
  * DISP-02: rebuild the per-scope routing tables under a brief read-only

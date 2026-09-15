@@ -11,7 +11,7 @@ import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
 import { DEFAULT_GIT_OPS } from "./orchestrators/marketplace/shared.ts";
 import { createPluginUpdateOperations } from "./orchestrators/plugin/update-flow.ts";
 import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
-import { applyReconcile } from "./orchestrators/reconcile/apply.ts";
+import { createApplyReconcile } from "./orchestrators/reconcile/apply.ts";
 import { locationsFor } from "./persistence/locations.ts";
 import { loadState } from "./persistence/state-io.ts";
 import { createCompletionCache } from "./shared/completion-cache.ts";
@@ -39,6 +39,11 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   const completionCache = createCompletionCache();
   const pluginUpdateOperations = createPluginUpdateOperations(hooksRouting, completionCache);
   const hooksHydration = createHooksHydration(hooksRuntime, { loadState, readHooksJson });
+  // RECON-01..05: one reconcile operation per extension load, bound to the
+  // production state reader. The `resources_discover` handler below drives it;
+  // constructing it here keeps the single binding at extension lifetime rather
+  // than rebuilding it on every event.
+  const applyReconcile = createApplyReconcile({ loadState });
   const onResourcesDiscover = pi.on.bind(pi) as unknown as (
     event: "resources_discover",
     handler: (

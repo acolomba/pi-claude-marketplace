@@ -17,10 +17,17 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
-import { applyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import { createApplyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import { makeNotifyCollectingCtx, makeStubPi, type NotificationRecord } from "./ipc-child.ts";
+
+/**
+ * The reconcile composition: the factory bound to the real selected-state
+ * reader, which is the same reader the extension entry point binds.
+ */
+const applyReconcile = createApplyReconcile({ loadState });
 
 interface StartMessage {
   readonly cwd: string;

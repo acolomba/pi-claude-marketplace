@@ -1974,8 +1974,9 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
             await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
           const { planReconcile } =
             await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
-          const { applyReconcile } =
+          const { createApplyReconcile } =
             await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+          const applyReconcile = createApplyReconcile({ loadState });
 
           // Two fixture preconditions, asserted rather than assumed, because
           // either one silently turns the pass below into a no-op that would
@@ -2297,8 +2298,9 @@ test("D-103-16 / DFEN-06 / CFG-02: the reload after a locally-declared install p
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       const { loadMergedScopeConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
-      const { applyReconcile } =
+      const { createApplyReconcile } =
         await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+      const applyReconcile = createApplyReconcile({ loadState });
       const { planReconcile } =
         await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
       const { emptyReconcilePlan } =

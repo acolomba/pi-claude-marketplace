@@ -33,7 +33,7 @@ import {
   writeAdoptingConfigEntries,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
-import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import { createApplyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -56,6 +56,12 @@ import type {
   ToolInventory,
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+/**
+ * The reconcile composition: the factory bound to the real selected-state
+ * reader, which is the same reader the extension entry point binds.
+ */
+const applyReconcile = createApplyReconcile({ loadState });
 
 const REAL_ENABLE_DISABLE_TRANSACTION: EnableDisableTransaction = {
   cascadeUnstagePlugin,

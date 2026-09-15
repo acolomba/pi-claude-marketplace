@@ -765,7 +765,7 @@ test("registers the slash command and the two read-only tools alongside the brid
   verifyBoundary();
 });
 
-test("constructs one runtime and completion cache for edge registration, hook hydration, and plugin update", async () => {
+test("constructs one runtime, completion cache and reconcile operation per extension load", async () => {
   // arrange
   const source = await readFile(
     path.join(import.meta.dirname, "../extensions/pi-claude-marketplace/index.ts"),
@@ -777,6 +777,7 @@ test("constructs one runtime and completion cache for edge registration, hook hy
     source.match(/createHooksRouting\(hooksRuntime, \{ readHooksJson \}\)/g) ?? [];
   const updateConstructions =
     source.match(/createPluginUpdateOperations\(hooksRouting, completionCache\)/g) ?? [];
+  const reconcileConstructions = source.match(/createApplyReconcile\(\{ loadState \}\)/g) ?? [];
 
   // act
   const hydrationConstruction = source.match(
@@ -795,6 +796,7 @@ test("constructs one runtime and completion cache for edge registration, hook hy
   assert.deepStrictEqual(hydrationConstruction, [
     "createHooksHydration(hooksRuntime, { loadState, readHooksJson })",
   ]);
+  assert.deepStrictEqual(reconcileConstructions, ["createApplyReconcile({ loadState })"]);
 });
 
 test("keeps hook routing and command completion state inside each extension-load owner graph", async (t) => {
