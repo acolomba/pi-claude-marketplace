@@ -33,7 +33,37 @@ import {
   renderVersion,
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
-import type { Reason } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import type {
+  PluginNotificationMessage,
+  Reason,
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+
+/**
+ * PL-4: `composePluginLinesWith` selects the description-bearing rows by their
+ * status discriminant. These two spellings of that set -- by the presence of the
+ * optional member, and by the status literals -- must stay the same set, so the
+ * control below pins them against each other in BOTH directions and fails if a
+ * new variant ever joins one and not the other.
+ */
+type DescriptionBearingByMember = Extract<PluginNotificationMessage, { description?: string }>;
+type DescriptionBearingByStatus = Extract<
+  PluginNotificationMessage,
+  {
+    status:
+      | "installed"
+      | "upgradable"
+      | "available"
+      | "remote"
+      | "unavailable"
+      | "partially-available"
+      | "disabled"
+      | "partially-installed"
+      | "partially-upgradable";
+  }
+>;
+type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+
+void (true satisfies MutuallyAssignable<DescriptionBearingByMember, DescriptionBearingByStatus>);
 
 test("exports notification grammar from its named owner", () => {
   // arrange

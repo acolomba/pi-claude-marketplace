@@ -626,6 +626,14 @@
       "filter": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:203:12"
     },
     {
+      "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1545:46",
+      "owner": "isDescriptionBearingRow",
+      "key": "status",
+      "category": "type-selection",
+      "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
+      "filter": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1545:9"
+    },
+    {
       "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:837:7",
       "owner": "renderPendingRow.p",
       "key": "status",

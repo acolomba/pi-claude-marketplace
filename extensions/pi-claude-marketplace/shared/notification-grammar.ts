@@ -1506,7 +1506,7 @@ export function composeReconcileAppliedBody(
  * losing its description line. The list inventory rows carry it; a cascade
  * `installed` row never sets `description`, so those stay single-line.
  */
-const DESCRIPTION_BEARING_STATUS: Record<PluginNotificationMessage["status"], boolean> = {
+const DESCRIPTION_BEARING_STATUS = {
   installed: true,
   upgradable: true,
   available: true,
@@ -1526,12 +1526,23 @@ const DESCRIPTION_BEARING_STATUS: Record<PluginNotificationMessage["status"], bo
   "will uninstall": false,
   "will enable": false,
   "will disable": false,
-};
+} as const satisfies Record<PluginNotificationMessage["status"], boolean>;
 
-/** Narrow to the rows whose variant declares an optional `description`. */
+/**
+ * The statuses the map above marks description-bearing, read back off that map
+ * so the predicate's narrowing and its runtime decision come from one place and
+ * cannot drift apart.
+ */
+type DescriptionBearingStatus = {
+  [K in PluginNotificationMessage["status"]]: (typeof DESCRIPTION_BEARING_STATUS)[K] extends true
+    ? K
+    : never;
+}[PluginNotificationMessage["status"]];
+
+/** Narrow to the rows whose variant carries an optional `description`. */
 function isDescriptionBearingRow(
   p: PluginNotificationMessage,
-): p is Extract<PluginNotificationMessage, { description?: string }> {
+): p is Extract<PluginNotificationMessage, { status: DescriptionBearingStatus }> {
   return DESCRIPTION_BEARING_STATUS[p.status];
 }
 
