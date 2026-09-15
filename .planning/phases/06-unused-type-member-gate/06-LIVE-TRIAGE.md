@@ -5,43 +5,43 @@ Regenerating rewrites this prose and carries every recorded disposition and note
 forward; nothing written outside the ledger block survives.
 
 This is an inventory, not a clean-gate verdict. It records 3464
-candidates, of which 261 are still unresolved and
-483 need a recorded disposition. Closure is
+candidates, of which 138 are still unresolved and
+455 need a recorded disposition. Closure is
 `--check`, which fails every one of them until its evidence is recorded.
 
 ## Measurement
 
 | Measurement | Value |
 | --- | --- |
-| Recorded | 2026-09-15T16:16:44.767Z |
-| Revision | 0dc3666b0739a31df56f02ff0e9b7d254581cafc |
-| Source digest | `08023619455e8db92b7ab9ffb609179fd3adabea8fb30ac2f995eefdeba46cb6` |
-| Source files hashed | 602 |
+| Recorded | 2026-09-15T18:04:02.854Z |
+| Revision | dfe51c0daeb4219ff883032708a352b4cd0bee3e |
+| Source digest | `ba06bb955289500db27dedff78d8a0656b6824e627192c5f50d5548a2065d255` |
+| Source files hashed | 603 |
 | Production files analysed | 236 |
 | Candidates | 3464 |
-| Runtime-observed | 2981 |
-| Test-only-observed | 222 |
-| Explicit-contract | 0 |
-| Unread | 261 |
+| Runtime-observed | 3009 |
+| Test-only-observed | 236 |
+| Explicit-contract | 81 |
+| Unread | 138 |
 | Unsupported analysis | 0 |
-| Transfer steps | 2894478 |
-| Transfer walk milliseconds | 50222 |
+| Transfer steps | 3001672 |
+| Transfer walk milliseconds | 51310 |
 
 ## Population by owner
 
 | Owner | Candidates | Runtime | Test-only | Contract | Unread | Unsupported |
 | --- | --- | --- | --- | --- | --- | --- |
-| bridges/agents | 177 | 164 | 4 | 0 | 9 | 0 |
-| bridges/commands | 76 | 63 | 4 | 0 | 9 | 0 |
-| bridges/hooks | 344 | 232 | 80 | 0 | 32 | 0 |
-| bridges/mcp | 55 | 47 | 4 | 0 | 4 | 0 |
-| bridges/skills | 74 | 61 | 4 | 0 | 9 | 0 |
-| domain | 269 | 226 | 14 | 0 | 29 | 0 |
+| bridges/agents | 177 | 164 | 4 | 5 | 4 | 0 |
+| bridges/commands | 76 | 63 | 4 | 5 | 4 | 0 |
+| bridges/hooks | 344 | 246 | 70 | 2 | 26 | 0 |
+| bridges/mcp | 55 | 47 | 4 | 4 | 0 | 0 |
+| bridges/skills | 74 | 61 | 4 | 5 | 4 | 0 |
+| domain | 269 | 227 | 22 | 10 | 10 | 0 |
 | edge | 131 | 111 | 3 | 0 | 17 | 0 |
-| orchestrators | 1811 | 1613 | 86 | 0 | 112 | 0 |
-| persistence | 80 | 57 | 13 | 0 | 10 | 0 |
-| platform | 84 | 67 | 3 | 0 | 14 | 0 |
-| shared | 346 | 325 | 5 | 0 | 16 | 0 |
+| orchestrators | 1811 | 1624 | 94 | 44 | 49 | 0 |
+| persistence | 80 | 58 | 15 | 1 | 6 | 0 |
+| platform | 84 | 67 | 9 | 1 | 7 | 0 |
+| shared | 346 | 326 | 5 | 4 | 11 | 0 |
 | transaction | 17 | 15 | 2 | 0 | 0 | 0 |
 
 ## Unresolved members
@@ -50,317 +50,189 @@ candidates, of which 261 are still unresolved and
 
 | Declaration | Owner | Member | Status | Reasons | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/bridges/agents/stage.ts:71:23 | AgentsReplacementInternals.renamed | from | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/agents/stage.ts:75:32 | agentsReplacementInternals | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/agents/stage.ts:469:20 | renamed | from | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/agents/stage.ts:526:51 | replacement | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/agents/stage.ts:575:45 | requireAgentsReplacementInternals.replacement | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/agents/stage.ts:587:46 | rollbackAgentsReplacementInternal.prepared | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/agents/stage.ts:588:23 | rollbackAgentsReplacementInternal.renamed | from | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/agents/types.ts:72:3 | StageAgentsInput | resolved | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/agents/types.ts:165:55 | AgentsReplacementNoop.prepared | kind | unread | - | _pending_ |
+| extensions/pi-claude-marketplace/bridges/agents/stage.ts:71:23 | AgentsReplacementInternals.renamed | from | unread | - | Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites). |
+| extensions/pi-claude-marketplace/bridges/agents/stage.ts:469:20 | renamed | from | unread | - | Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites). |
+| extensions/pi-claude-marketplace/bridges/agents/stage.ts:588:23 | rollbackAgentsReplacementInternal.renamed | from | unread | - | Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites). |
+| extensions/pi-claude-marketplace/bridges/agents/types.ts:72:3 | StageAgentsInput | resolved | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-10 (bridges/agents). |
 
 ### bridges/commands
 
 | Declaration | Owner | Member | Status | Reasons | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/bridges/commands/stage.ts:70:23 | CommandsReplacementInternals.renamed | from | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/commands/stage.ts:74:34 | commandsReplacementInternals | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/commands/stage.ts:400:20 | renamed | from | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/commands/stage.ts:452:53 | replacement | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/commands/stage.ts:499:47 | requireCommandsReplacementInternals.replacement | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/commands/stage.ts:511:48 | rollbackCommandsReplacementInternal.prepared | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/commands/stage.ts:512:23 | rollbackCommandsReplacementInternal.renamed | from | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/commands/types.ts:43:3 | StageCommandsInput | marketplaceName | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/commands/types.ts:119:57 | CommandsReplacementNoop.prepared | kind | unread | - | _pending_ |
+| extensions/pi-claude-marketplace/bridges/commands/stage.ts:70:23 | CommandsReplacementInternals.renamed | from | unread | - | Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites). |
+| extensions/pi-claude-marketplace/bridges/commands/stage.ts:400:20 | renamed | from | unread | - | Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites). |
+| extensions/pi-claude-marketplace/bridges/commands/stage.ts:512:23 | rollbackCommandsReplacementInternal.renamed | from | unread | - | Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites). |
+| extensions/pi-claude-marketplace/bridges/commands/types.ts:43:3 | StageCommandsInput | marketplaceName | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-10 (bridges/commands). |
 
 ### bridges/hooks
 
 | Declaration | Owner | Member | Status | Reasons | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:129:3 | AsyncRewakeEntry | dispatchId | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:130:3 | AsyncRewakeEntry | pid | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:131:3 | AsyncRewakeEntry | scope | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:132:3 | AsyncRewakeEntry | marketplace | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:133:3 | AsyncRewakeEntry | pluginId | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:134:3 | AsyncRewakeEntry | claudeEvent | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:135:3 | AsyncRewakeEntry | spawnedAt | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:136:3 | AsyncRewakeEntry | rewakeMessage | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:137:3 | AsyncRewakeEntry | rewakeSummary | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:138:3 | AsyncRewakeEntry | child | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:139:3 | AsyncRewakeEntry | ladder | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:140:3 | AsyncRewakeEntry | stdoutBuffer | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:141:3 | AsyncRewakeEntry | stderrBuffer | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:142:3 | AsyncRewakeEntry | capturedGeneration | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:143:3 | AsyncRewakeEntry | loc | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:320:18 | finalizeOnce.outcome | code | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:320:48 | finalizeOnce.outcome | signal | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:87:37 | applyMutationInPlace.result | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:133:17 | applyToolResultPatch | content | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:137:17 | applyToolResultPatch | isError | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:411:3 | HydratedScope | state | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:457:13 | HooksHydration.registerHooksBridge.opts | ctx | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:457:36 | HooksHydration.registerHooksBridge.opts | cwd | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:457:49 | HooksHydration.registerHooksBridge.opts | executor | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:497:5 | hydrateCacheFromDisk.opts | ctx | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:807:11 | registerHooksBridgeWith.opts | ctx | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:1002:15 | createHooksHydration.opts | ctx | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts:40:21 | HookExecResult | suppressOutput | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts:50:3 | ChildLike | pid | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts:98:35 | IfPredicate | reason | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/stage.ts:227:3 | WriteHookConfigResult | written | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts:141:43 | mutate | kind | unread | - | _pending_ |
-
-### bridges/mcp
-
-| Declaration | Owner | Member | Status | Reasons | Disposition |
-| --- | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/bridges/mcp/stage.ts:49:29 | mcpReplacementInternals | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/mcp/stage.ts:366:48 | replacement | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/mcp/stage.ts:411:42 | requireMcpReplacementInternals.replacement | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/mcp/types.ts:95:52 | McpReplacementNoop.prepared | kind | unread | - | _pending_ |
+| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:129:3 | AsyncRewakeEntry | dispatchId | unread | - | Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:130:3 | AsyncRewakeEntry | pid | unread | - | Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:131:3 | AsyncRewakeEntry | scope | unread | - | Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:132:3 | AsyncRewakeEntry | marketplace | unread | - | Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:133:3 | AsyncRewakeEntry | pluginId | unread | - | Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:134:3 | AsyncRewakeEntry | claudeEvent | unread | - | Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:135:3 | AsyncRewakeEntry | spawnedAt | unread | - | Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:136:3 | AsyncRewakeEntry | rewakeMessage | unread | - | Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:137:3 | AsyncRewakeEntry | rewakeSummary | unread | - | Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:138:3 | AsyncRewakeEntry | child | unread | - | Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:139:3 | AsyncRewakeEntry | ladder | unread | - | Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:140:3 | AsyncRewakeEntry | stdoutBuffer | unread | - | Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:141:3 | AsyncRewakeEntry | stderrBuffer | unread | - | Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:142:3 | AsyncRewakeEntry | capturedGeneration | unread | - | Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:143:3 | AsyncRewakeEntry | loc | unread | - | Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:133:17 | applyToolResultPatch | content | unread | - | Assignment target inside a cast literal. The only syntax naming this member writes to it, and a write is not a read (D-04). The literal exists to make one localized mutation type-check against a readonly shape. Source repair or an owner decision: the write needs a declared home the compiler checks rather than a cast minted at the write site. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:137:17 | applyToolResultPatch | isError | unread | - | Assignment target inside a cast literal. The only syntax naming this member writes to it, and a write is not a read (D-04). The literal exists to make one localized mutation type-check against a readonly shape. Source repair or an owner decision: the write needs a declared home the compiler checks rather than a cast minted at the write site. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:411:3 | HydratedScope | state | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:457:13 | HooksHydration.registerHooksBridge.opts | ctx | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:457:36 | HooksHydration.registerHooksBridge.opts | cwd | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:457:49 | HooksHydration.registerHooksBridge.opts | executor | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:497:5 | hydrateCacheFromDisk.opts | ctx | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:807:11 | registerHooksBridgeWith.opts | ctx | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:1002:15 | createHooksHydration.opts | ctx | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts:50:3 | ChildLike | pid | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-09 (bridges/hooks). |
+| extensions/pi-claude-marketplace/bridges/hooks/stage.ts:227:3 | WriteHookConfigResult | written | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-09 (bridges/hooks). |
 
 ### bridges/skills
 
 | Declaration | Owner | Member | Status | Reasons | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/bridges/skills/stage.ts:62:23 | SkillsReplacementInternals.renamed | from | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/skills/stage.ts:66:32 | skillsReplacementInternals | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/skills/stage.ts:465:20 | renamed | from | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/skills/stage.ts:517:51 | replacement | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/skills/stage.ts:564:45 | requireSkillsReplacementInternals.replacement | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/skills/stage.ts:576:46 | rollbackSkillsReplacementInternal.prepared | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/skills/stage.ts:577:23 | rollbackSkillsReplacementInternal.renamed | from | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/skills/types.ts:29:3 | StageSkillsInput | marketplaceName | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/bridges/skills/types.ts:117:55 | SkillsReplacementNoop.prepared | kind | unread | - | _pending_ |
+| extensions/pi-claude-marketplace/bridges/skills/stage.ts:62:23 | SkillsReplacementInternals.renamed | from | unread | - | Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites). |
+| extensions/pi-claude-marketplace/bridges/skills/stage.ts:465:20 | renamed | from | unread | - | Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites). |
+| extensions/pi-claude-marketplace/bridges/skills/stage.ts:577:23 | rollbackSkillsReplacementInternal.renamed | from | unread | - | Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites). |
+| extensions/pi-claude-marketplace/bridges/skills/types.ts:29:3 | StageSkillsInput | marketplaceName | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-10 (bridges/skills). |
 
 ### domain
 
 | Declaration | Owner | Member | Status | Reasons | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:55:3 | IfPrefixTarget | piEvents | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:56:3 | IfPrefixTarget | extractTarget | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts:52:21 | PiToolName | toolName | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/components/hooks.ts:77:3 | ResolveHookIfContext | homedir | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/components/hooks.ts:79:3 | ResolveHookIfContext | projectRoot | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts:14:25 | ParsedMatcher | token | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:20:7 | DroppedHook | cond | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:22:62 | DroppedHook | handlerType | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:29:48 | MatcherCondition | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/components/hooks/schema.ts:8:3 | HookHandlerEntry | statusMessage | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/components/hooks/schema.ts:9:3 | HookHandlerEntry | once | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/components/hooks/schema.ts:10:3 | HookHandlerEntry | async | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/github-auth.ts:145:17 | DeviceFlowResult | cred | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/github-auth.ts:146:18 | DeviceFlowResult | reason | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/manifest-lookup.ts:57:30 | lookupDeclaredPlugin | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/plugin-root.ts:23:45 | AbsolutePluginRoot | __absolutePluginRootBrand | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:19:7 | DroppedHookSchema | matcher | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:20:7 | DroppedHookSchema | cond | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:32:7 | DroppedHookSchema | matcher | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:33:7 | DroppedHookSchema | handlerType | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:49:32 | DroppedHookArmKeysMatch | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:50:60 | DroppedHookArmKeysMatch | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:51:54 | DroppedHookArmKeysMatch | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:52:36 | DroppedHookArmKeysMatch | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:121:67 | ResolvedPluginInstallable | state | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:124:5 | ResolvedPluginPartiallyAvailable | state | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:126:67 | ResolvedPluginUnavailable | state | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:142:7 | GitPluginRootResult | resolvedSha | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/domain/source.ts:61:3 | NpmSource | registry | unread | - | _pending_ |
+| extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:55:3 | IfPrefixTarget | piEvents | unread | - | Compile-time shape constraint. The interface exists only as the right-hand side of the `as const satisfies Record<string, IfPrefixTarget>` gate at hook-if-targets.ts:107, which the const's own inferred type is checked against; every read goes through that inferred type, never through this declaration. Owner decision: accept the finding, or a further bounded engine plan adding a `satisfies`-constraint category with evidence of the constrained const. Owner plan 06-13 (domain). |
+| extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:56:3 | IfPrefixTarget | extractTarget | unread | - | Compile-time shape constraint. The interface exists only as the right-hand side of the `as const satisfies Record<string, IfPrefixTarget>` gate at hook-if-targets.ts:107, which the const's own inferred type is checked against; every read goes through that inferred type, never through this declaration. Owner decision: accept the finding, or a further bounded engine plan adding a `satisfies`-constraint category with evidence of the constrained const. Owner plan 06-13 (domain). |
+| extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts:52:21 | PiToolName | toolName | unread | - | Filter literal in a conditional type's `extends` clause. The member does the same type-system work a two-argument selection does, but the engine proves only the two-argument form, so there is no category that fits. Owner decision: accept the finding, or a further bounded engine plan adding a conditional-clause proof with its own drift controls. Owner plan 06-13 (domain). |
+| extensions/pi-claude-marketplace/domain/components/hooks.ts:77:3 | ResolveHookIfContext | homedir | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (domain). |
+| extensions/pi-claude-marketplace/domain/components/hooks.ts:79:3 | ResolveHookIfContext | projectRoot | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (domain). |
+| extensions/pi-claude-marketplace/domain/components/hooks/schema.ts:8:3 | HookHandlerEntry | statusMessage | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (domain). |
+| extensions/pi-claude-marketplace/domain/components/hooks/schema.ts:9:3 | HookHandlerEntry | once | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (domain). |
+| extensions/pi-claude-marketplace/domain/components/hooks/schema.ts:10:3 | HookHandlerEntry | async | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (domain). |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:19:7 | DroppedHookSchema | matcher | unread | - | Compile-time schema proof. The typebox schema member exists so `DroppedHookArmKeysMatch` can assert the schema's static type and the hand-written `DroppedHook` union carry the same keys. Nothing reads it at run time and nothing can: the proof is the whole purpose. Owner decision: accept the finding, or a further bounded engine plan adding a compile-time-proof category with evidence of the assertion that consumes it. Owner plan 06-13 (domain). |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:32:7 | DroppedHookSchema | matcher | unread | - | Compile-time schema proof. The typebox schema member exists so `DroppedHookArmKeysMatch` can assert the schema's static type and the hand-written `DroppedHook` union carry the same keys. Nothing reads it at run time and nothing can: the proof is the whole purpose. Owner decision: accept the finding, or a further bounded engine plan adding a compile-time-proof category with evidence of the assertion that consumes it. Owner plan 06-13 (domain). |
 
 ### edge
 
 | Declaration | Owner | Member | Status | Reasons | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/edge/args-schema.ts:60:70 | ParsedCommandArgs | required | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/edge/completions/data.ts:132:3 | LocationsResolver | marketplaceNamesCachePath | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/edge/completions/data.ts:145:3 | MarketplaceStateRecord | manifestPath | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts:27:3 | SingleNameMarketplaceRun.opts | ctx | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts:28:3 | SingleNameMarketplaceRun.opts | pi | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts:29:3 | SingleNameMarketplaceRun.opts | name | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts:30:3 | SingleNameMarketplaceRun.opts | cwd | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts:31:3 | SingleNameMarketplaceRun.opts | scope | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/edge/handlers/tools.ts:100:9 | marketplaces | name | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/edge/handlers/tools.ts:101:9 | marketplaces | scope | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/edge/handlers/tools.ts:102:9 | marketplaces | pluginCount | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/edge/handlers/tools.ts:103:9 | marketplaces | source | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/edge/handlers/tools.ts:140:3 | PluginRow | marketplace | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/edge/handlers/tools.ts:141:3 | PluginRow | scope | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/edge/handlers/tools.ts:284:5 | loadToolPluginPayload.params | installed | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/edge/handlers/tools.ts:285:5 | loadToolPluginPayload.params | available | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/edge/handlers/tools.ts:286:5 | loadToolPluginPayload.params | unavailable | unread | - | _pending_ |
+| extensions/pi-claude-marketplace/edge/args-schema.ts:60:70 | ParsedCommandArgs | required | unread | - | Filter literal in a conditional type's `extends` clause. The member does the same type-system work a two-argument selection does, but the engine proves only the two-argument form, so there is no category that fits. Owner decision: accept the finding, or a further bounded engine plan adding a conditional-clause proof with its own drift controls. Owner plan 06-11 (edge). |
+| extensions/pi-claude-marketplace/edge/completions/data.ts:132:3 | LocationsResolver | marketplaceNamesCachePath | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge). |
+| extensions/pi-claude-marketplace/edge/completions/data.ts:145:3 | MarketplaceStateRecord | manifestPath | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge). |
+| extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts:27:3 | SingleNameMarketplaceRun.opts | ctx | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge). |
+| extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts:28:3 | SingleNameMarketplaceRun.opts | pi | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge). |
+| extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts:29:3 | SingleNameMarketplaceRun.opts | name | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge). |
+| extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts:30:3 | SingleNameMarketplaceRun.opts | cwd | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge). |
+| extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts:31:3 | SingleNameMarketplaceRun.opts | scope | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge). |
+| extensions/pi-claude-marketplace/edge/handlers/tools.ts:100:9 | marketplaces | name | unread | - | Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-11 (edge). |
+| extensions/pi-claude-marketplace/edge/handlers/tools.ts:101:9 | marketplaces | scope | unread | - | Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-11 (edge). |
+| extensions/pi-claude-marketplace/edge/handlers/tools.ts:102:9 | marketplaces | pluginCount | unread | - | Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-11 (edge). |
+| extensions/pi-claude-marketplace/edge/handlers/tools.ts:103:9 | marketplaces | source | unread | - | Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-11 (edge). |
+| extensions/pi-claude-marketplace/edge/handlers/tools.ts:140:3 | PluginRow | marketplace | unread | - | Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-11 (edge). |
+| extensions/pi-claude-marketplace/edge/handlers/tools.ts:141:3 | PluginRow | scope | unread | - | Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-11 (edge). |
+| extensions/pi-claude-marketplace/edge/handlers/tools.ts:284:5 | loadToolPluginPayload.params | installed | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge). |
+| extensions/pi-claude-marketplace/edge/handlers/tools.ts:285:5 | loadToolPluginPayload.params | available | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge). |
+| extensions/pi-claude-marketplace/edge/handlers/tools.ts:286:5 | loadToolPluginPayload.params | unavailable | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge). |
 
 ### orchestrators
 
 | Declaration | Owner | Member | Status | Reasons | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:58:3 | MarketplaceStateRecordLike | manifestPath | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:59:3 | MarketplaceStateRecordLike | plugins | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:66:5 | LocationsResolverLike.loadStateForScope | marketplaces | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:158:7 | makeLocationsResolver | marketplaces | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:161:13 | ImportDeps.loadSettings.opts | cwd | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:216:27 | settingsLoader.opts | cwd | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:263:13 | pushDiagnostic.extra | ref | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:263:27 | pushDiagnostic.extra | marketplace | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:1005:40 | marketplaces | source | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:1049:40 | marketplaces | source | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:540:35 | addMarketplace.opts | notifications | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:540:52 | addMarketplace.opts.notifications | mode | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts:306:23 | buildAutoupdatePatch | autoupdate | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts:307:35 | patch | autoupdate | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts:500:33 | errors | cause | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:114:35 | RemoveMarketplaceOutcome | name | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:129:7 | RemoveMarketplaceOutcome | name | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:190:14 | resolveScopeOrFailedOutcome | scope | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:190:28 | resolveScopeOrFailedOutcome | locations | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:310:29 | cascadePluginsInPlace.args.failedPlugins | name | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:310:43 | cascadePluginsInPlace.args.failedPlugins | cause | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:439:29 | runRemoveLockBody.args.failedPlugins | name | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:439:43 | runRemoveLockBody.args.failedPlugins | cause | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:505:3 | ExtensionMarketplaceRow | plugins | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:661:38 | removeMarketplace.opts | notifications | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:661:55 | removeMarketplace.opts.notifications | mode | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:699:26 | failedPlugins | name | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:699:40 | failedPlugins | cause | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:76:75 | ENABLE_RENDER | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:105:78 | DISABLE_RENDER | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:126:67 | InstalledEnableLedgerResult | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:174:7 | EnableDisablePluginOutcome | name | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:460:3 | FailedUnstageOutcome | ok | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:565:41 | addCachedHooksAfterSave.outcome | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:596:72 | SelectedConfigWriteTarget | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:688:62 | emitUnresolvedTarget.args.resolution | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:985:42 | SetPluginEnabledOperation.opts | notifications | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:985:59 | SetPluginEnabledOperation.opts.notifications | mode | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:995:42 | configuredSetPluginEnabled.opts | notifications | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:995:59 | configuredSetPluginEnabled.opts.notifications | mode | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1153:41 | freshOutcomeToTypedResult.outcome | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1402:41 | enableFailedRow.outcome | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts:62:72 | FETCH_RENDER | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts:68:69 | PLUGIN_INFO_RENDER | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1244:49 | composeStateOnlyComponents.components | componentsResolved | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1318:7 | buildNotInstallablePathRowFields | components | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:2209:24 | autoupdateDetails.details | autoupdate | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:26:3 | FreshInstallDisableOptions | scope | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:60:3 | FailedUnstageOutcome | ok | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:302:14 | loadCachedMarketplaceManifest | name | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1007:3 | FailedRunPhasesResult | ok | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:77:3 | EntityErrorRow | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:78:3 | EntityErrorRow | name | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:79:3 | EntityErrorRow | marketplace | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:80:3 | EntityErrorRow | scope | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:108:78 | INSTALL_RENDER | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:83:42 | PayloadListMsg | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:392:27 | ScopedManifest | loadError | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:592:46 | detailsField.details | autoupdate | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:615:56 | loadPluginListPayload | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts:101:69 | LIST_RENDER | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts:80:5 | InstalledRecordLike.compatibility | installable | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:58:14 | RemoveDataDirFn.options | recursive | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:58:31 | RemoveDataDirFn.options | force | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:77:45 | selectMarketplaceTargets.target | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:95:45 | resolveMarketplaceScope.target | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:96:37 | resolveMarketplaceScope | record | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:107:45 | resolvePluginMarketplaceScope.target | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:108:14 | resolvePluginMarketplaceScope | scope | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:108:37 | resolvePluginMarketplaceScope | record | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:141:45 | resolveExplicitPluginScope.target | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:142:14 | resolveExplicitPluginScope | scope | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:142:37 | resolveExplicitPluginScope | record | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:163:14 | resolveMarketplaceTargetScope | scope | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:163:37 | resolveMarketplaceTargetScope | record | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:73:60 | REINSTALL_RENDER | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:210:42 | isManualRecoveryOutcome | failureClass | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:129:5 | enableRowDependencies.signals | partition | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:158:3 | ResolvedInstallMarketplaceSource | sourceScope | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:200:37 | CrossScopePluginResolution | presentIn | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:689:54 | InvalidConfigLoad | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:829:37 | ScopedMarketplaceResolution | presentIn | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:955:3 | NameOwner | marketplace | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts:41:60 | UNINSTALL_RENDER | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:392:10 | commitPluginRemoval.ids | scope | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:392:33 | commitPluginRemoval.ids | marketplace | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:857:38 | UninstallPluginOperation.opts | notifications | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:857:55 | UninstallPluginOperation.opts.notifications | mode | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:868:38 | configuredUninstallPlugin.opts | notifications | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:868:55 | configuredUninstallPlugin.opts.notifications | mode | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:832:42 | enumerateMarketplaceTarget.target | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:913:42 | resolveUpdateMarketplaceScope.target | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:116:3 | PreflightFailedOutcome | cause | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:118:3 | PreflightFailedOutcome | phaseFailures | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:119:3 | PreflightFailedOutcome | toVersion | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:132:5 | PartialableUpdateShapeError.shape | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:133:5 | PartialableUpdateShapeError.shape | partialable | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:316:37 | StaticPreflightRowOptions | fromVersion | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:188:3 | DirectRenderableFailedOutcome | cause | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:191:3 | DirectRenderableFailedOutcome | toVersion | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts:57:75 | UPDATE_RENDER | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:552:49 | degradationFromEnable.result | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:90:3 | MarketplaceBlock | key | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:662:7 | applyMarketplaceOutcomeToBlock.outcome | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:758:7 | applyPluginOutcomeToBlock.outcome | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:165:3 | PlannedSourceMismatchOfSourceMismatch | declaredSource | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:166:3 | PlannedSourceMismatchOfSourceMismatch | recordedSource | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:173:3 | PlannedSourceMismatchOfUnknownStored | declaredSource | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:174:3 | PlannedSourceMismatchOfUnknownStored | recordedSource | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:281:3 | ScopeReadResult | scope | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/types.ts:155:3 | UpdatePhaseFailure | msg | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/types.ts:289:3 | PluginUpdateUnchangedOutcome | toVersion | unread | - | _pending_ |
+| extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:58:3 | MarketplaceStateRecordLike | manifestPath | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:59:3 | MarketplaceStateRecordLike | plugins | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:66:5 | LocationsResolverLike.loadStateForScope | marketplaces | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:158:7 | makeLocationsResolver | marketplaces | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:161:13 | ImportDeps.loadSettings.opts | cwd | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:216:27 | settingsLoader.opts | cwd | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:1005:40 | marketplaces | source | unread | - | Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:1049:40 | marketplaces | source | unread | - | Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts:306:23 | buildAutoupdatePatch | autoupdate | unread | - | Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts:307:35 | patch | autoupdate | unread | - | Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts:500:33 | errors | cause | unread | - | Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:114:35 | RemoveMarketplaceOutcome | name | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:129:7 | RemoveMarketplaceOutcome | name | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:310:29 | cascadePluginsInPlace.args.failedPlugins | name | unread | - | Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:310:43 | cascadePluginsInPlace.args.failedPlugins | cause | unread | - | Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:439:29 | runRemoveLockBody.args.failedPlugins | name | unread | - | Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:439:43 | runRemoveLockBody.args.failedPlugins | cause | unread | - | Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:505:3 | ExtensionMarketplaceRow | plugins | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:699:26 | failedPlugins | name | unread | - | Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:699:40 | failedPlugins | cause | unread | - | Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:174:7 | EnableDisablePluginOutcome | name | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts:68:69 | PLUGIN_INFO_RENDER | status | unread | - | Selection over a single-variant type. `PluginInfoCascadeMsg` is `PluginSkippedMessage` with no union around it, so the filter refines nothing today and the proof refuses it. The shape is there for symmetry with the other render maps and becomes a real selection the moment info gains a second cascade status. Owner decision: leave it and accept the finding, or drop the filter until a second status exists. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:2209:24 | autoupdateDetails.details | autoupdate | unread | - | Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:26:3 | FreshInstallDisableOptions | scope | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:302:14 | loadCachedMarketplaceManifest | name | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:392:27 | ScopedManifest | loadError | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:592:46 | detailsField.details | autoupdate | unread | - | Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts:80:5 | InstalledRecordLike.compatibility | installable | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:58:14 | RemoveDataDirFn.options | recursive | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:58:31 | RemoveDataDirFn.options | force | unread | - | Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:96:37 | resolveMarketplaceScope | record | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:108:37 | resolvePluginMarketplaceScope | record | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:142:37 | resolveExplicitPluginScope | record | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:163:37 | resolveMarketplaceTargetScope | record | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:129:5 | enableRowDependencies.signals | partition | unread | - | Absence marker. The slot exists so the compiler admits only the shape that omits it, and no run-time syntax can read a slot whose type is `never` or whose value is fixed. It adds a key the rest of its intersection does not declare, so the `type-refinement` proof does not apply and refuses it by name. Owner decision: keep the marker and accept the finding, or express the absence as a discriminated variant the proof can reach. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:955:3 | NameOwner | marketplace | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:392:10 | commitPluginRemoval.ids | scope | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:392:33 | commitPluginRemoval.ids | marketplace | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:133:5 | PartialableUpdateShapeError.shape | partialable | unread | - | Absence marker. The slot exists so the compiler admits only the shape that omits it, and no run-time syntax can read a slot whose type is `never` or whose value is fixed. It adds a key the rest of its intersection does not declare, so the `type-refinement` proof does not apply and refuses it by name. Owner decision: keep the marker and accept the finding, or express the absence as a discriminated variant the proof can reach. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:316:37 | StaticPreflightRowOptions | fromVersion | unread | - | Absence marker. The slot exists so the compiler admits only the shape that omits it, and no run-time syntax can read a slot whose type is `never` or whose value is fixed. It adds a key the rest of its intersection does not declare, so the `type-refinement` proof does not apply and refuses it by name. Owner decision: keep the marker and accept the finding, or express the absence as a discriminated variant the proof can reach. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:188:3 | DirectRenderableFailedOutcome | cause | unread | - | Absence marker. The slot exists so the compiler admits only the shape that omits it, and no run-time syntax can read a slot whose type is `never` or whose value is fixed. It adds a key the rest of its intersection does not declare, so the `type-refinement` proof does not apply and refuses it by name. Owner decision: keep the marker and accept the finding, or express the absence as a discriminated variant the proof can reach. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:191:3 | DirectRenderableFailedOutcome | toVersion | unread | - | Absence marker. The slot exists so the compiler admits only the shape that omits it, and no run-time syntax can read a slot whose type is `never` or whose value is fixed. It adds a key the rest of its intersection does not declare, so the `type-refinement` proof does not apply and refuses it by name. Owner decision: keep the marker and accept the finding, or express the absence as a discriminated variant the proof can reach. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:90:3 | MarketplaceBlock | key | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:165:3 | PlannedSourceMismatchOfSourceMismatch | declaredSource | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:166:3 | PlannedSourceMismatchOfSourceMismatch | recordedSource | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:173:3 | PlannedSourceMismatchOfUnknownStored | declaredSource | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:174:3 | PlannedSourceMismatchOfUnknownStored | recordedSource | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:281:3 | ScopeReadResult | scope | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
+| extensions/pi-claude-marketplace/orchestrators/types.ts:155:3 | UpdatePhaseFailure | msg | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators). |
 
 ### persistence
 
 | Declaration | Owner | Member | Status | Reasons | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/persistence/agents-index-io.ts:120:27 | obj | schemaVersion | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/persistence/config-io.ts:115:33 | ConfigLoadResult | filePath | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/persistence/locations.ts:39:3 | ScopedLocations | SCOPED_LOCATIONS_BRAND | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/persistence/migrate-config.ts:66:7 | MigrateFirstRunResult | entryCount | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/persistence/migrate-config.ts:71:7 | MigrateFirstRunResult | reason | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/persistence/migrate-config.ts:76:7 | MigrateFirstRunResult | reason | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/persistence/migrate-config.ts:77:7 | MigrateFirstRunResult | error | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/persistence/migrate-config.ts:82:7 | MigrateFirstRunResult | reason | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/persistence/migrate-config.ts:140:20 | entry | source | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/persistence/migrate-config.ts:140:36 | entry | autoupdate | unread | - | _pending_ |
+| extensions/pi-claude-marketplace/persistence/agents-index-io.ts:120:27 | obj | schemaVersion | unread | - | Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-13 (persistence). |
+| extensions/pi-claude-marketplace/persistence/migrate-config.ts:71:7 | MigrateFirstRunResult | reason | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (persistence). |
+| extensions/pi-claude-marketplace/persistence/migrate-config.ts:76:7 | MigrateFirstRunResult | reason | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (persistence). |
+| extensions/pi-claude-marketplace/persistence/migrate-config.ts:82:7 | MigrateFirstRunResult | reason | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (persistence). |
+| extensions/pi-claude-marketplace/persistence/migrate-config.ts:140:20 | entry | source | unread | - | Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-13 (persistence). |
+| extensions/pi-claude-marketplace/persistence/migrate-config.ts:140:36 | entry | autoupdate | unread | - | Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-13 (persistence). |
 
 ### platform
 
 | Declaration | Owner | Member | Status | Reasons | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:41:39 | AuthAttemptResult | authAttempted | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:42:34 | AuthAttemptResult | authAttempted | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/platform/git.ts:302:3 | GitCredentials | headers | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:68:3 | PiTextContentBlock | type | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:69:3 | PiTextContentBlock | text | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:85:3 | ToolResultEventResult | content | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:86:3 | ToolResultEventResult | details | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:87:3 | ToolResultEventResult | isError | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:91:3 | ResourcesDiscoverEvent | type | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:93:3 | ResourcesDiscoverEvent | reason | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:97:3 | ResourcesDiscoverResult | skillPaths | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:98:3 | ResourcesDiscoverResult | promptPaths | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:99:3 | ResourcesDiscoverResult | themePaths | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:117:56 | AssistantMessage | role | unread | - | _pending_ |
+| extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:41:39 | AuthAttemptResult | authAttempted | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (platform). |
+| extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:42:34 | AuthAttemptResult | authAttempted | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (platform). |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:91:3 | ResourcesDiscoverEvent | type | unread | - | Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. The handler builds this slot, and a build is a write, not a read. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform). |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:93:3 | ResourcesDiscoverEvent | reason | unread | - | Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. The handler builds this slot, and a build is a write, not a read. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform). |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:97:3 | ResourcesDiscoverResult | skillPaths | unread | - | Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. The handler builds this slot, and a build is a write, not a read. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform). |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:98:3 | ResourcesDiscoverResult | promptPaths | unread | - | Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. The handler builds this slot, and a build is a write, not a read. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform). |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:99:3 | ResourcesDiscoverResult | themePaths | unread | - | Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. This slot is never even built. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform). |
 
 ### shared
 
 | Declaration | Owner | Member | Status | Reasons | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/shared/concerns/hooks.ts:87:7 | HookSummaryEntry | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/shared/errors-bridges.ts:27:26 | AgentOwnershipConflictError.stagingFor | marketplace | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/shared/errors-bridges.ts:27:56 | AgentOwnershipConflictError.stagingFor | plugin | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/shared/errors-bridges.ts:65:44 | BridgeStagingError.options | cause | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/shared/errors-bridges.ts:85:68 | CommandNameError.options | cause | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/shared/errors.ts:501:3 | Phase3Failure | cause | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/shared/fs-utils.ts:225:32 | RollbackReplacementInput.renamed | from | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/shared/notification-dispatch.ts:203:43 | dispatchInfoMessage.message | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/shared/notification-grammar.ts:837:7 | renderPendingRow.p | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/shared/notification-grammar.ts:1534:46 | isDescriptionBearingRow | description | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/shared/notification-summary.ts:43:40 | isInfoKind | kind | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/shared/notification-types.ts:399:48 | isScopeBearingListRow | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/shared/notify-context.ts:64:61 | CommandContext.render | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/shared/notify-context.ts:269:45 | notifyReconcileAppliedWithContext | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/shared/notify-context.ts:323:29 | arm | status | unread | - | _pending_ |
-| extensions/pi-claude-marketplace/shared/notify-context.ts:332:15 | dispatchRow | severity | unread | - | _pending_ |
+| extensions/pi-claude-marketplace/shared/errors-bridges.ts:27:26 | AgentOwnershipConflictError.stagingFor | marketplace | unread | - | Public error field nobody reads. The constructor parameter of the same shape IS read (errors-bridges.ts:35 builds the message from it), but that is a different declaration; nothing reads `this.stagingFor.marketplace` or `.plugin` off an instance. Owner decision: drop the frozen copy if no consumer needs it, or name the consumer that will. Owner plan 06-14 (shared). |
+| extensions/pi-claude-marketplace/shared/errors-bridges.ts:27:56 | AgentOwnershipConflictError.stagingFor | plugin | unread | - | Public error field nobody reads. The constructor parameter of the same shape IS read (errors-bridges.ts:35 builds the message from it), but that is a different declaration; nothing reads `this.stagingFor.marketplace` or `.plugin` off an instance. Owner decision: drop the frozen copy if no consumer needs it, or name the consumer that will. Owner plan 06-14 (shared). |
+| extensions/pi-claude-marketplace/shared/errors-bridges.ts:65:44 | BridgeStagingError.options | cause | unread | - | Local mirror of `ErrorOptions`, handed whole to `super(message, options)`. The read is the ambient `Error` constructor's own `cause`, which is an installed declaration, so this is a genuine external input -- but the `external-input` proof needs a callback an external signature checks, and a value passed straight to a constructor is the necessity shape 06-03 recorded as unsupported. Source repair, behaviour-free and already the house pattern: annotate the parameter `ErrorOptions`, as `PluginUpdatePhase3Error` does. Owner plan 06-14 (shared). |
+| extensions/pi-claude-marketplace/shared/errors-bridges.ts:85:68 | CommandNameError.options | cause | unread | - | Local mirror of `ErrorOptions`, handed whole to `super(message, options)`. The read is the ambient `Error` constructor's own `cause`, which is an installed declaration, so this is a genuine external input -- but the `external-input` proof needs a callback an external signature checks, and a value passed straight to a constructor is the necessity shape 06-03 recorded as unsupported. Source repair, behaviour-free and already the house pattern: annotate the parameter `ErrorOptions`, as `PluginUpdatePhase3Error` does. Owner plan 06-14 (shared). |
+| extensions/pi-claude-marketplace/shared/errors.ts:501:3 | Phase3Failure | cause | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-14 (shared). |
+| extensions/pi-claude-marketplace/shared/fs-utils.ts:225:32 | RollbackReplacementInput.renamed | from | unread | - | Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites). |
+| extensions/pi-claude-marketplace/shared/notification-grammar.ts:1534:46 | isDescriptionBearingRow | description | unread | - | Selection by member presence rather than by a discriminant. `Extract<PluginNotificationMessage, { description?: string }>` picks the variants that carry a description; `description` is not a unit type, so it cannot tell the variants apart the way the `type-selection` proof requires. Owner decision: keep it and accept the finding, or narrow by a discriminant the proof can read. Owner plan 06-14 (shared). |
+| extensions/pi-claude-marketplace/shared/notify-context.ts:64:61 | CommandContext.render | status | unread | - | Selection over an open type parameter. `CommandContext<Status, Msg>` leaves `Msg` unconstrained, so at the declaration the compiler cannot say the filter discriminates on anything: the proof is only available at each instantiation. The contract engine refuses it by name rather than accepting an unproven selection. Owner decision: constrain `Msg` to the message union it is always instantiated with, which makes the existing `type-selection` proof reach it. Owner plan 06-14 (shared). |
+| extensions/pi-claude-marketplace/shared/notify-context.ts:269:45 | notifyReconcileAppliedWithContext | status | unread | - | Selection over an open type parameter. `CommandContext<Status, Msg>` leaves `Msg` unconstrained, so at the declaration the compiler cannot say the filter discriminates on anything: the proof is only available at each instantiation. The contract engine refuses it by name rather than accepting an unproven selection. Owner decision: constrain `Msg` to the message union it is always instantiated with, which makes the existing `type-selection` proof reach it. Owner plan 06-14 (shared). |
+| extensions/pi-claude-marketplace/shared/notify-context.ts:323:29 | arm | status | unread | - | Selection over an open type parameter. `CommandContext<Status, Msg>` leaves `Msg` unconstrained, so at the declaration the compiler cannot say the filter discriminates on anything: the proof is only available at each instantiation. The contract engine refuses it by name rather than accepting an unproven selection. Owner decision: constrain `Msg` to the message union it is always instantiated with, which makes the existing `type-selection` proof reach it. Owner plan 06-14 (shared). |
+| extensions/pi-claude-marketplace/shared/notify-context.ts:332:15 | dispatchRow | severity | unread | - | Assignment target inside a cast literal. The only syntax naming this member writes to it, and a write is not a read (D-04). The literal exists to make one localized mutation type-check against a readonly shape. Source repair or an owner decision: the write needs a declared home the compiler checks rather than a cast minted at the write site. Owner plan 06-14 (shared). |
 
 ## Members only tests read
 
@@ -368,287 +240,430 @@ candidates, of which 261 are still unresolved and
 
 | Declaration | Owner | Member | First witness | Disposition |
 | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/bridges/agents/types.ts:102:3 | StagedAgentRecord | sourcePath | tests/bridges/agents/stage.test.ts:1990:30 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/agents/types.ts:103:3 | StagedAgentRecord | targetPath | tests/bridges/agents/stage.test.ts:1990:30 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/agents/types.ts:114:3 | StageAgentsCommitResult | stagedNames | tests/bridges/agents/stage.test.ts:181:56 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/agents/types.ts:182:3 | UnstageAgentsResult | warnings | tests/bridges/agents/unstage.test.ts:518:26 | _pending_ |
+| extensions/pi-claude-marketplace/bridges/agents/types.ts:102:3 | StagedAgentRecord | sourcePath | tests/bridges/agents/stage.test.ts:1990:30 | Read only by tests: 7 witnesses, first at tests/bridges/agents/stage.test.ts:1990:30 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/agents/types.ts:103:3 | StagedAgentRecord | targetPath | tests/bridges/agents/stage.test.ts:1990:30 | Read only by tests: 7 witnesses, first at tests/bridges/agents/stage.test.ts:1990:30 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/agents/types.ts:114:3 | StageAgentsCommitResult | stagedNames | tests/bridges/agents/stage.test.ts:181:56 | Read only by tests: 14 witnesses, first at tests/bridges/agents/stage.test.ts:181:56 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/agents/types.ts:182:3 | UnstageAgentsResult | warnings | tests/bridges/agents/unstage.test.ts:518:26 | Read only by tests: 8 witnesses, first at tests/bridges/agents/unstage.test.ts:518:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
 
 ### bridges/commands
 
 | Declaration | Owner | Member | First witness | Disposition |
 | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/bridges/commands/types.ts:65:3 | StagedCommandRecord | sourcePath | tests/bridges/commands/stage.test.ts:358:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/commands/types.ts:67:3 | StagedCommandRecord | targetPath | tests/bridges/commands/stage.test.ts:358:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/commands/types.ts:81:3 | StageCommandsCommitResult | stagedNames | tests/bridges/commands/stage.test.ts:594:42 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/commands/types.ts:136:3 | UnstageCommandsResult | warnings | tests/bridges/commands/unstage.test.ts:112:26 | _pending_ |
+| extensions/pi-claude-marketplace/bridges/commands/types.ts:65:3 | StagedCommandRecord | sourcePath | tests/bridges/commands/stage.test.ts:358:26 | Read only by tests: 4 witnesses, first at tests/bridges/commands/stage.test.ts:358:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/commands/types.ts:67:3 | StagedCommandRecord | targetPath | tests/bridges/commands/stage.test.ts:358:26 | Read only by tests: 4 witnesses, first at tests/bridges/commands/stage.test.ts:358:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/commands/types.ts:81:3 | StageCommandsCommitResult | stagedNames | tests/bridges/commands/stage.test.ts:594:42 | Read only by tests: 9 witnesses, first at tests/bridges/commands/stage.test.ts:594:42 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/commands/types.ts:136:3 | UnstageCommandsResult | warnings | tests/bridges/commands/unstage.test.ts:112:26 | Read only by tests: 6 witnesses, first at tests/bridges/commands/unstage.test.ts:112:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
 
 ### bridges/hooks
 
 | Declaration | Owner | Member | First witness | Disposition |
 | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:113:3 | CompiledBashGlob | raw | tests/bridges/hooks/if-field/glob.test.ts:36:21 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:114:3 | CompiledBashGlob | tokens | tests/bridges/hooks/if-field/glob.test.ts:37:24 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:115:3 | CompiledBashGlob | trailingWordBoundary | tests/bridges/hooks/if-field/glob.test.ts:38:38 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:129:3 | CompiledPowerShellGlob | raw | tests/bridges/hooks/if-field/glob.test.ts:298:19 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:130:3 | CompiledPowerShellGlob | tokens | tests/bridges/hooks/if-field/glob.test.ts:299:22 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:131:3 | CompiledPowerShellGlob | trailingWordBoundary | tests/bridges/hooks/if-field/glob.test.ts:300:36 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:147:3 | CompiledPathGlob | raw | tests/bridges/hooks/if-field/glob.test.ts:433:21 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:148:3 | CompiledPathGlob | anchor | tests/bridges/hooks/if-field/glob.test.ts:434:24 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:149:3 | CompiledPathGlob | absoluteBase | tests/bridges/hooks/if-field/glob.test.ts:435:30 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:150:3 | CompiledPathGlob | tokens | tests/bridges/hooks/if-field/glob.test.ts:436:24 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts:15:3 | PostCompactStdin | session_id | tests/bridges/hooks/payloads/post-compact.test.ts:98:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts:16:3 | PostCompactStdin | transcript_path | tests/bridges/hooks/payloads/post-compact.test.ts:98:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts:17:3 | PostCompactStdin | cwd | tests/bridges/hooks/payloads/post-compact.test.ts:98:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts:18:3 | PostCompactStdin | hook_event_name | tests/bridges/hooks/payloads/post-compact.test.ts:98:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts:19:3 | PostCompactStdin | trigger | tests/bridges/hooks/payloads/post-compact.test.ts:98:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:19:3 | PostToolUseFailureStdin | session_id | tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:20:3 | PostToolUseFailureStdin | transcript_path | tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:21:3 | PostToolUseFailureStdin | cwd | tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:22:3 | PostToolUseFailureStdin | hook_event_name | tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:23:3 | PostToolUseFailureStdin | tool_name | tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:24:3 | PostToolUseFailureStdin | tool_input | tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:46:30 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:25:3 | PostToolUseFailureStdin | tool_response | tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:47:30 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:23:3 | PostToolUseStdin | session_id | tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:24:3 | PostToolUseStdin | transcript_path | tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:25:3 | PostToolUseStdin | cwd | tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:26:3 | PostToolUseStdin | hook_event_name | tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:27:3 | PostToolUseStdin | tool_name | tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:28:3 | PostToolUseStdin | tool_input | tests/bridges/hooks/payloads/post-tool-use.test.ts:50:30 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:29:3 | PostToolUseStdin | tool_response | tests/bridges/hooks/payloads/post-tool-use.test.ts:51:30 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts:15:3 | PreCompactStdin | session_id | tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts:16:3 | PreCompactStdin | transcript_path | tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts:17:3 | PreCompactStdin | cwd | tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts:18:3 | PreCompactStdin | hook_event_name | tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts:19:3 | PreCompactStdin | trigger | tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:20:3 | PreToolUseStdin | session_id | tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:21:3 | PreToolUseStdin | transcript_path | tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:22:3 | PreToolUseStdin | cwd | tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:23:3 | PreToolUseStdin | hook_event_name | tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:24:3 | PreToolUseStdin | tool_name | tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:25:3 | PreToolUseStdin | tool_input | tests/bridges/hooks/payloads/pre-tool-use.test.ts:45:30 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts:17:3 | SessionEndStdin | session_id | tests/bridges/hooks/payloads/session-end.test.ts:34:30 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts:18:3 | SessionEndStdin | transcript_path | tests/bridges/hooks/payloads/session-end.test.ts:35:30 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts:19:3 | SessionEndStdin | cwd | tests/bridges/hooks/payloads/session-end.test.ts:36:30 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts:20:3 | SessionEndStdin | hook_event_name | tests/bridges/hooks/payloads/session-end.test.ts:158:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts:21:3 | SessionEndStdin | reason | tests/bridges/hooks/payloads/session-end.test.ts:158:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts:18:3 | SessionStartStdin | session_id | tests/bridges/hooks/payloads/session-start.test.ts:34:30 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts:19:3 | SessionStartStdin | transcript_path | tests/bridges/hooks/payloads/session-start.test.ts:35:30 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts:20:3 | SessionStartStdin | cwd | tests/bridges/hooks/payloads/session-start.test.ts:36:30 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts:21:3 | SessionStartStdin | hook_event_name | tests/bridges/hooks/payloads/session-start.test.ts:155:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts:22:3 | SessionStartStdin | source | tests/bridges/hooks/payloads/session-start.test.ts:155:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:17:3 | StopFailureStdin | session_id | tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:18:3 | StopFailureStdin | transcript_path | tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:19:3 | StopFailureStdin | cwd | tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:20:3 | StopFailureStdin | hook_event_name | tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:21:3 | StopFailureStdin | error | tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:22:3 | StopFailureStdin | error_details | tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:23:3 | StopFailureStdin | last_assistant_message | tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:15:3 | StopStdin | session_id | tests/bridges/hooks/payloads/stop.test.ts:132:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:16:3 | StopStdin | transcript_path | tests/bridges/hooks/payloads/stop.test.ts:132:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:17:3 | StopStdin | cwd | tests/bridges/hooks/payloads/stop.test.ts:132:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:18:3 | StopStdin | hook_event_name | tests/bridges/hooks/payloads/stop.test.ts:132:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:19:3 | StopStdin | last_assistant_message | tests/bridges/hooks/payloads/stop.test.ts:132:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:20:3 | StopStdin | stop_hook_active | tests/bridges/hooks/payloads/stop.test.ts:132:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts:14:3 | UserPromptSubmitStdin | session_id | tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts:15:3 | UserPromptSubmitStdin | transcript_path | tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts:16:3 | UserPromptSubmitStdin | cwd | tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts:17:3 | UserPromptSubmitStdin | hook_event_name | tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts:18:3 | UserPromptSubmitStdin | prompt | tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:75:3 | RoutingEntry | declarationIndex | tests/architecture/hooks-if-field.test.ts:120:27 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:138:3 | PendingSessionStartContext | pluginId | tests/architecture/hooks-lifecycle.test.ts:457:44 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:139:3 | PendingSessionStartContext | marketplace | tests/architecture/hooks-lifecycle.test.ts:457:44 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:140:3 | PendingSessionStartContext | scope | tests/architecture/hooks-lifecycle.test.ts:457:44 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:149:3 | RoutingStateOperations | currentEpoch | tests/bridges/hooks/routing-state.test.ts:28:18 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:150:3 | RoutingStateOperations | bumpEpoch | tests/bridges/hooks/routing-state.test.ts:29:18 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:151:3 | RoutingStateOperations | appendPendingSessionStartContext | tests/bridges/hooks/routing-state.test.ts:87:16 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:152:3 | RoutingStateOperations | pendingSessionStartContextEntries | tests/bridges/hooks/routing-state.test.ts:66:32 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:153:3 | RoutingStateOperations | clearPendingSessionStartContext | tests/bridges/hooks/routing-state.test.ts:60:16 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:159:3 | RoutingStateOperations | routingTableEntries | tests/bridges/hooks/routing-state.test.ts:324:50 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/runtime.ts:17:3 | HooksRuntimeChildEntry | claudeEvent | tests/bridges/hooks/runtime.test.ts:286:8 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/hooks/stage.ts:228:3 | WriteHookConfigResult | path | tests/bridges/hooks/stage.test.ts:721:71 | _pending_ |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts:15:3 | PostCompactStdin | session_id | tests/bridges/hooks/payloads/post-compact.test.ts:98:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/post-compact.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts:16:3 | PostCompactStdin | transcript_path | tests/bridges/hooks/payloads/post-compact.test.ts:98:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/post-compact.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts:17:3 | PostCompactStdin | cwd | tests/bridges/hooks/payloads/post-compact.test.ts:98:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/post-compact.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts:18:3 | PostCompactStdin | hook_event_name | tests/bridges/hooks/payloads/post-compact.test.ts:98:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/post-compact.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts:19:3 | PostCompactStdin | trigger | tests/bridges/hooks/payloads/post-compact.test.ts:98:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/post-compact.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:19:3 | PostToolUseFailureStdin | session_id | tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:20:3 | PostToolUseFailureStdin | transcript_path | tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:21:3 | PostToolUseFailureStdin | cwd | tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:22:3 | PostToolUseFailureStdin | hook_event_name | tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:23:3 | PostToolUseFailureStdin | tool_name | tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:24:3 | PostToolUseFailureStdin | tool_input | tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:46:30 | Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:46:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:25:3 | PostToolUseFailureStdin | tool_response | tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:47:30 | Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:47:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:23:3 | PostToolUseStdin | session_id | tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:24:3 | PostToolUseStdin | transcript_path | tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:25:3 | PostToolUseStdin | cwd | tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:26:3 | PostToolUseStdin | hook_event_name | tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:27:3 | PostToolUseStdin | tool_name | tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:28:3 | PostToolUseStdin | tool_input | tests/bridges/hooks/payloads/post-tool-use.test.ts:50:30 | Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/post-tool-use.test.ts:50:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:29:3 | PostToolUseStdin | tool_response | tests/bridges/hooks/payloads/post-tool-use.test.ts:51:30 | Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/post-tool-use.test.ts:51:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts:15:3 | PreCompactStdin | session_id | tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts:16:3 | PreCompactStdin | transcript_path | tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts:17:3 | PreCompactStdin | cwd | tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts:18:3 | PreCompactStdin | hook_event_name | tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts:19:3 | PreCompactStdin | trigger | tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:20:3 | PreToolUseStdin | session_id | tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:21:3 | PreToolUseStdin | transcript_path | tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:22:3 | PreToolUseStdin | cwd | tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:23:3 | PreToolUseStdin | hook_event_name | tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:24:3 | PreToolUseStdin | tool_name | tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:25:3 | PreToolUseStdin | tool_input | tests/bridges/hooks/payloads/pre-tool-use.test.ts:45:30 | Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/pre-tool-use.test.ts:45:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts:17:3 | SessionEndStdin | session_id | tests/bridges/hooks/payloads/session-end.test.ts:34:30 | Read only by tests: 7 witnesses, first at tests/bridges/hooks/payloads/session-end.test.ts:34:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts:18:3 | SessionEndStdin | transcript_path | tests/bridges/hooks/payloads/session-end.test.ts:35:30 | Read only by tests: 7 witnesses, first at tests/bridges/hooks/payloads/session-end.test.ts:35:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts:19:3 | SessionEndStdin | cwd | tests/bridges/hooks/payloads/session-end.test.ts:36:30 | Read only by tests: 7 witnesses, first at tests/bridges/hooks/payloads/session-end.test.ts:36:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts:20:3 | SessionEndStdin | hook_event_name | tests/bridges/hooks/payloads/session-end.test.ts:158:26 | Read only by tests: 6 witnesses, first at tests/bridges/hooks/payloads/session-end.test.ts:158:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts:21:3 | SessionEndStdin | reason | tests/bridges/hooks/payloads/session-end.test.ts:158:26 | Read only by tests: 6 witnesses, first at tests/bridges/hooks/payloads/session-end.test.ts:158:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts:18:3 | SessionStartStdin | session_id | tests/bridges/hooks/payloads/session-start.test.ts:34:30 | Read only by tests: 7 witnesses, first at tests/bridges/hooks/payloads/session-start.test.ts:34:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts:19:3 | SessionStartStdin | transcript_path | tests/bridges/hooks/payloads/session-start.test.ts:35:30 | Read only by tests: 7 witnesses, first at tests/bridges/hooks/payloads/session-start.test.ts:35:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts:20:3 | SessionStartStdin | cwd | tests/bridges/hooks/payloads/session-start.test.ts:36:30 | Read only by tests: 7 witnesses, first at tests/bridges/hooks/payloads/session-start.test.ts:36:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts:21:3 | SessionStartStdin | hook_event_name | tests/bridges/hooks/payloads/session-start.test.ts:155:26 | Read only by tests: 6 witnesses, first at tests/bridges/hooks/payloads/session-start.test.ts:155:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts:22:3 | SessionStartStdin | source | tests/bridges/hooks/payloads/session-start.test.ts:155:26 | Read only by tests: 6 witnesses, first at tests/bridges/hooks/payloads/session-start.test.ts:155:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:17:3 | StopFailureStdin | session_id | tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:18:3 | StopFailureStdin | transcript_path | tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:19:3 | StopFailureStdin | cwd | tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:20:3 | StopFailureStdin | hook_event_name | tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:21:3 | StopFailureStdin | error | tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:22:3 | StopFailureStdin | error_details | tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:23:3 | StopFailureStdin | last_assistant_message | tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:15:3 | StopStdin | session_id | tests/bridges/hooks/payloads/stop.test.ts:132:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop.test.ts:132:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:16:3 | StopStdin | transcript_path | tests/bridges/hooks/payloads/stop.test.ts:132:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop.test.ts:132:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:17:3 | StopStdin | cwd | tests/bridges/hooks/payloads/stop.test.ts:132:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop.test.ts:132:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:18:3 | StopStdin | hook_event_name | tests/bridges/hooks/payloads/stop.test.ts:132:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop.test.ts:132:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:19:3 | StopStdin | last_assistant_message | tests/bridges/hooks/payloads/stop.test.ts:132:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop.test.ts:132:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:20:3 | StopStdin | stop_hook_active | tests/bridges/hooks/payloads/stop.test.ts:132:26 | Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop.test.ts:132:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts:14:3 | UserPromptSubmitStdin | session_id | tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 | Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts:15:3 | UserPromptSubmitStdin | transcript_path | tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 | Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts:16:3 | UserPromptSubmitStdin | cwd | tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 | Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts:17:3 | UserPromptSubmitStdin | hook_event_name | tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 | Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts:18:3 | UserPromptSubmitStdin | prompt | tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 | Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:75:3 | RoutingEntry | declarationIndex | tests/architecture/hooks-if-field.test.ts:120:27 | Read only by tests: 10 witnesses, first at tests/architecture/hooks-if-field.test.ts:120:27 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:138:3 | PendingSessionStartContext | pluginId | tests/architecture/hooks-lifecycle.test.ts:457:44 | Read only by tests: 2 witnesses, first at tests/architecture/hooks-lifecycle.test.ts:457:44 (json-serialization). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:139:3 | PendingSessionStartContext | marketplace | tests/architecture/hooks-lifecycle.test.ts:457:44 | Read only by tests: 2 witnesses, first at tests/architecture/hooks-lifecycle.test.ts:457:44 (json-serialization). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:140:3 | PendingSessionStartContext | scope | tests/architecture/hooks-lifecycle.test.ts:457:44 | Read only by tests: 2 witnesses, first at tests/architecture/hooks-lifecycle.test.ts:457:44 (json-serialization). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:149:3 | RoutingStateOperations | currentEpoch | tests/bridges/hooks/routing-state.test.ts:28:18 | Read only by tests: 11 witnesses, first at tests/bridges/hooks/routing-state.test.ts:28:18 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:150:3 | RoutingStateOperations | bumpEpoch | tests/bridges/hooks/routing-state.test.ts:29:18 | Read only by tests: 10 witnesses, first at tests/bridges/hooks/routing-state.test.ts:29:18 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:151:3 | RoutingStateOperations | appendPendingSessionStartContext | tests/bridges/hooks/routing-state.test.ts:87:16 | Read only by tests: 8 witnesses, first at tests/bridges/hooks/routing-state.test.ts:87:16 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:152:3 | RoutingStateOperations | pendingSessionStartContextEntries | tests/bridges/hooks/routing-state.test.ts:66:32 | Read only by tests: 12 witnesses, first at tests/bridges/hooks/routing-state.test.ts:66:32 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:153:3 | RoutingStateOperations | clearPendingSessionStartContext | tests/bridges/hooks/routing-state.test.ts:60:16 | Read only by tests: 10 witnesses, first at tests/bridges/hooks/routing-state.test.ts:60:16 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:159:3 | RoutingStateOperations | routingTableEntries | tests/bridges/hooks/routing-state.test.ts:324:50 | Read only by tests: 10 witnesses, first at tests/bridges/hooks/routing-state.test.ts:324:50 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/runtime.ts:17:3 | HooksRuntimeChildEntry | claudeEvent | tests/bridges/hooks/runtime.test.ts:286:8 | Read only by tests: 1 witness, first at tests/bridges/hooks/runtime.test.ts:286:8 (object-copy). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/hooks/stage.ts:228:3 | WriteHookConfigResult | path | tests/bridges/hooks/stage.test.ts:721:71 | Read only by tests: 1 witness, first at tests/bridges/hooks/stage.test.ts:721:71 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
 
 ### bridges/mcp
 
 | Declaration | Owner | Member | First witness | Disposition |
 | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/bridges/mcp/types.ts:49:3 | StagedMcpRecord | sourcePath | tests/architecture/integration-materialization-gate.test.ts:124:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/mcp/types.ts:51:3 | StagedMcpRecord | targetPath | tests/architecture/integration-materialization-gate.test.ts:124:26 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/mcp/types.ts:85:3 | PreparedMcpStaged | stagedNames | tests/bridges/mcp/stage.test.ts:982:22 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/mcp/types.ts:113:3 | UnstageMcpResult | warnings | tests/bridges/mcp/unstage.test.ts:506:26 | _pending_ |
+| extensions/pi-claude-marketplace/bridges/mcp/types.ts:49:3 | StagedMcpRecord | sourcePath | tests/architecture/integration-materialization-gate.test.ts:124:26 | Read only by tests: 5 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:124:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/mcp/types.ts:51:3 | StagedMcpRecord | targetPath | tests/architecture/integration-materialization-gate.test.ts:124:26 | Read only by tests: 5 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:124:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/mcp/types.ts:85:3 | PreparedMcpStaged | stagedNames | tests/bridges/mcp/stage.test.ts:778:28 | Read only by tests: 6 witnesses, first at tests/bridges/mcp/stage.test.ts:778:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/mcp/types.ts:113:3 | UnstageMcpResult | warnings | tests/bridges/mcp/unstage.test.ts:506:26 | Read only by tests: 9 witnesses, first at tests/bridges/mcp/unstage.test.ts:506:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
 
 ### bridges/skills
 
 | Declaration | Owner | Member | First witness | Disposition |
 | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/bridges/skills/types.ts:58:3 | StagedSkillRecord | sourcePath | tests/bridges/skills/stage.test.ts:580:28 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/skills/types.ts:60:3 | StagedSkillRecord | targetPath | tests/bridges/skills/stage.test.ts:580:28 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/skills/types.ts:74:3 | StageSkillsCommitResult | stagedNames | tests/bridges/skills/stage.test.ts:308:44 | _pending_ |
-| extensions/pi-claude-marketplace/bridges/skills/types.ts:134:3 | UnstageSkillsResult | warnings | tests/bridges/skills/index.test.ts:211:54 | _pending_ |
+| extensions/pi-claude-marketplace/bridges/skills/types.ts:58:3 | StagedSkillRecord | sourcePath | tests/bridges/skills/stage.test.ts:580:28 | Read only by tests: 5 witnesses, first at tests/bridges/skills/stage.test.ts:580:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/skills/types.ts:60:3 | StagedSkillRecord | targetPath | tests/bridges/skills/stage.test.ts:580:28 | Read only by tests: 5 witnesses, first at tests/bridges/skills/stage.test.ts:580:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/skills/types.ts:74:3 | StageSkillsCommitResult | stagedNames | tests/bridges/skills/stage.test.ts:308:44 | Read only by tests: 12 witnesses, first at tests/bridges/skills/stage.test.ts:308:44 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/bridges/skills/types.ts:134:3 | UnstageSkillsResult | warnings | tests/bridges/skills/index.test.ts:211:54 | Read only by tests: 3 witnesses, first at tests/bridges/skills/index.test.ts:211:54 (value-transfer). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
 
 ### domain
 
 | Declaration | Owner | Member | First witness | Disposition |
 | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/domain/auth-registry.ts:28:3 | GitAuthProvider | id | tests/domain/auth-registry.test.ts:48:27 | _pending_ |
-| extensions/pi-claude-marketplace/domain/components/hooks.ts:78:3 | ResolveHookIfContext | cwd | tests/domain/components/hooks.test.ts:141:14 | _pending_ |
-| extensions/pi-claude-marketplace/domain/github-auth.ts:77:45 | PollResult | tokenType | tests/domain/github-auth.test.ts:83:34 | _pending_ |
-| extensions/pi-claude-marketplace/domain/github-auth.ts:77:64 | PollResult | scope | tests/domain/github-auth.test.ts:84:29 | _pending_ |
-| extensions/pi-claude-marketplace/domain/github-auth.ts:145:7 | DeviceFlowResult | ok | tests/domain/github-auth.test.ts:323:35 | _pending_ |
-| extensions/pi-claude-marketplace/domain/github-auth.ts:145:39 | DeviceFlowResult | authAttempted | tests/domain/github-auth.test.ts:1238:28 | _pending_ |
-| extensions/pi-claude-marketplace/domain/github-auth.ts:146:7 | DeviceFlowResult | ok | tests/domain/github-auth.test.ts:323:35 | _pending_ |
-| extensions/pi-claude-marketplace/domain/github-auth.ts:146:34 | DeviceFlowResult | authAttempted | tests/domain/github-auth.test.ts:1238:28 | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:15:20 | DroppedHookSchema | kind | tests/architecture/integration-materialization-gate.test.ts:122:26 | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:15:50 | DroppedHookSchema | event | tests/architecture/integration-materialization-gate.test.ts:122:26 | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:17:7 | DroppedHookSchema | kind | tests/architecture/integration-materialization-gate.test.ts:122:26 | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:18:7 | DroppedHookSchema | event | tests/architecture/integration-materialization-gate.test.ts:122:26 | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:30:7 | DroppedHookSchema | kind | tests/architecture/integration-materialization-gate.test.ts:122:26 | _pending_ |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:31:7 | DroppedHookSchema | event | tests/architecture/integration-materialization-gate.test.ts:122:26 | _pending_ |
+| extensions/pi-claude-marketplace/domain/auth-registry.ts:28:3 | GitAuthProvider | id | tests/domain/auth-registry.test.ts:48:27 | Read only by tests: 2 witnesses, first at tests/domain/auth-registry.test.ts:48:27 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/components/hooks.ts:78:3 | ResolveHookIfContext | cwd | tests/domain/components/hooks.test.ts:141:14 | Read only by tests: 1 witness, first at tests/domain/components/hooks.test.ts:141:14 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts:14:25 | ParsedMatcher | token | tests/domain/components/hooks/matcher.test.ts:162:28 | Read only by tests: 10 witnesses, first at tests/domain/components/hooks/matcher.test.ts:162:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:20:7 | DroppedHook | cond | tests/architecture/hooks-foundation.test.ts:96:28 | Read only by tests: 22 witnesses, first at tests/architecture/hooks-foundation.test.ts:96:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:22:62 | DroppedHook | handlerType | tests/architecture/hooks-foundation.test.ts:96:28 | Read only by tests: 22 witnesses, first at tests/architecture/hooks-foundation.test.ts:96:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/github-auth.ts:77:45 | PollResult | tokenType | tests/domain/github-auth.test.ts:83:34 | Read only by tests: 1 witness, first at tests/domain/github-auth.test.ts:83:34 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/github-auth.ts:77:64 | PollResult | scope | tests/domain/github-auth.test.ts:84:29 | Read only by tests: 1 witness, first at tests/domain/github-auth.test.ts:84:29 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/github-auth.ts:145:7 | DeviceFlowResult | ok | tests/domain/github-auth.test.ts:323:35 | Read only by tests: 40 witnesses, first at tests/domain/github-auth.test.ts:323:35 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/github-auth.ts:145:17 | DeviceFlowResult | cred | tests/domain/github-auth.test.ts:1238:28 | Read only by tests: 18 witnesses, first at tests/domain/github-auth.test.ts:1238:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/github-auth.ts:145:39 | DeviceFlowResult | authAttempted | tests/domain/github-auth.test.ts:1238:28 | Read only by tests: 36 witnesses, first at tests/domain/github-auth.test.ts:1238:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/github-auth.ts:146:7 | DeviceFlowResult | ok | tests/domain/github-auth.test.ts:323:35 | Read only by tests: 40 witnesses, first at tests/domain/github-auth.test.ts:323:35 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/github-auth.ts:146:18 | DeviceFlowResult | reason | tests/domain/github-auth.test.ts:1238:28 | Read only by tests: 18 witnesses, first at tests/domain/github-auth.test.ts:1238:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/github-auth.ts:146:34 | DeviceFlowResult | authAttempted | tests/domain/github-auth.test.ts:1238:28 | Read only by tests: 36 witnesses, first at tests/domain/github-auth.test.ts:1238:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:15:20 | DroppedHookSchema | kind | tests/architecture/integration-materialization-gate.test.ts:122:26 | Read only by tests: 6 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:122:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:15:50 | DroppedHookSchema | event | tests/architecture/integration-materialization-gate.test.ts:122:26 | Read only by tests: 6 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:122:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:17:7 | DroppedHookSchema | kind | tests/architecture/integration-materialization-gate.test.ts:122:26 | Read only by tests: 6 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:122:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:18:7 | DroppedHookSchema | event | tests/architecture/integration-materialization-gate.test.ts:122:26 | Read only by tests: 6 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:122:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:20:7 | DroppedHookSchema | cond | tests/architecture/integration-materialization-gate.test.ts:122:26 | Read only by tests: 2 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:122:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:30:7 | DroppedHookSchema | kind | tests/architecture/integration-materialization-gate.test.ts:122:26 | Read only by tests: 6 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:122:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:31:7 | DroppedHookSchema | event | tests/architecture/integration-materialization-gate.test.ts:122:26 | Read only by tests: 6 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:122:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:33:7 | DroppedHookSchema | handlerType | tests/architecture/integration-materialization-gate.test.ts:122:26 | Read only by tests: 2 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:122:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:142:7 | GitPluginRootResult | resolvedSha | tests/orchestrators/plugin/clone-cache.test.ts:1549:20 | Read only by tests: 16 witnesses, first at tests/orchestrators/plugin/clone-cache.test.ts:1549:20 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
 
 ### edge
 
 | Declaration | Owner | Member | First witness | Disposition |
 | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/edge/completions/normalize.ts:29:7 | normalizeCompletionWhitespace | lines | tests/edge/completions/normalize.test.ts:125:16 | _pending_ |
-| extensions/pi-claude-marketplace/edge/completions/normalize.ts:29:24 | normalizeCompletionWhitespace | cursorLine | tests/edge/completions/normalize.test.ts:107:26 | _pending_ |
-| extensions/pi-claude-marketplace/edge/completions/normalize.ts:29:44 | normalizeCompletionWhitespace | cursorCol | tests/edge/completions/normalize.test.ts:107:26 | _pending_ |
+| extensions/pi-claude-marketplace/edge/completions/normalize.ts:29:7 | normalizeCompletionWhitespace | lines | tests/edge/completions/normalize.test.ts:125:16 | Read only by tests: 5 witnesses, first at tests/edge/completions/normalize.test.ts:125:16 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/edge/completions/normalize.ts:29:24 | normalizeCompletionWhitespace | cursorLine | tests/edge/completions/normalize.test.ts:107:26 | Read only by tests: 4 witnesses, first at tests/edge/completions/normalize.test.ts:107:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/edge/completions/normalize.ts:29:44 | normalizeCompletionWhitespace | cursorCol | tests/edge/completions/normalize.test.ts:107:26 | Read only by tests: 4 witnesses, first at tests/edge/completions/normalize.test.ts:107:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
 
 ### orchestrators
 
 | Declaration | Owner | Member | First witness | Disposition |
 | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:63:3 | LocationsResolverLike | marketplaceNamesCachePath | tests/orchestrators/edge-deps.test.ts:235:32 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:51:3 | MarketplaceAddedOutcome | kind | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:54:3 | MarketplaceAddedOutcome | reason | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:58:3 | MarketplaceSkipOutcome | kind | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:61:3 | MarketplaceSkipOutcome | reason | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:65:3 | PluginInstalledOutcome | kind | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:69:3 | PluginInstalledOutcome | ref | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:70:3 | PluginInstalledOutcome | reason | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:71:3 | PluginInstalledOutcome | resourcesChanged | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:83:3 | PluginSkipOutcome | kind | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:87:3 | PluginSkipOutcome | ref | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:88:3 | PluginSkipOutcome | reason | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:92:3 | ImportWarningOutcome | kind | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:96:3 | ImportWarningOutcome | ref | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:99:3 | ImportWarningOutcome | cause | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:103:3 | MarketplaceFailureOutcome | kind | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:106:3 | MarketplaceFailureOutcome | reason | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:107:3 | MarketplaceFailureOutcome | cause | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:111:3 | SourceMismatchOutcome | kind | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:115:3 | SourceMismatchOutcome | ref | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:116:3 | SourceMismatchOutcome | reason | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:117:3 | SourceMismatchOutcome | cause | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:121:3 | UnexpectedPluginFailureOutcome | kind | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:125:3 | UnexpectedPluginFailureOutcome | ref | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:126:3 | UnexpectedPluginFailureOutcome | reason | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:140:3 | ClaudeImportExecutionResult | diagnostics | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:141:3 | ClaudeImportExecutionResult | changedResources | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/types.ts:15:3 | ImportDiagnostic | severity | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/types.ts:16:3 | ImportDiagnostic | scope | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/types.ts:17:3 | ImportDiagnostic | code | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/types.ts:18:3 | ImportDiagnostic | message | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/types.ts:19:3 | ImportDiagnostic | path | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/types.ts:20:3 | ImportDiagnostic | ref | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/types.ts:21:3 | ImportDiagnostic | marketplace | tests/orchestrators/import/execute.test.ts:2547:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/import/types.ts:40:3 | MergedClaudeSettingsResult | paths | tests/orchestrators/import/settings.test.ts:726:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:146:7 | AddMarketplaceOutcome | error | tests/orchestrators/marketplace/add.test.ts:1800:25 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:118:7 | RemoveMarketplaceOutcome | error | tests/orchestrators/marketplace/remove.test.ts:238:20 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:119:7 | RemoveMarketplaceOutcome | cause | tests/orchestrators/marketplace/remove.test.ts:235:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:116:5 | GitOps.clone.opts | dir | tests/platform/git-ops-fake.ts:160:34 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:117:5 | GitOps.clone.opts | url | tests/platform/git-ops-fake.ts:154:34 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:118:5 | GitOps.clone.opts | ref | tests/orchestrators/plugin/fetch.test.ts:172:55 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:119:5 | GitOps.clone.opts | singleBranch | tests/orchestrators/plugin/fetch.test.ts:172:96 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:120:5 | GitOps.clone.opts | auth | tests/platform/git-ops-fake.ts:79:11 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:123:17 | GitOps.fetch.opts | dir | tests/platform/git-ops-fake.ts:89:47 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:123:30 | GitOps.fetch.opts | remote | tests/platform/git-ops-fake.ts:176:35 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:123:47 | GitOps.fetch.opts | ref | tests/platform/git-ops-fake.ts:177:32 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:123:61 | GitOps.fetch.opts | auth | tests/platform/git-ops-fake.ts:87:11 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:125:26 | GitOps.forceUpdateRef.opts | dir | tests/orchestrators/marketplace/shared.test.ts:124:60 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:125:39 | GitOps.forceUpdateRef.opts | ref | tests/platform/git-ops-fake.ts:183:37 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:125:52 | GitOps.forceUpdateRef.opts | value | tests/platform/git-ops-fake.ts:183:58 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:127:20 | GitOps.checkout.opts | dir | tests/platform/git-ops-fake.ts:205:38 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:127:33 | GitOps.checkout.opts | ref | tests/platform/git-ops-fake.ts:193:41 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:129:22 | GitOps.resolveRef.opts | dir | tests/orchestrators/marketplace/shared.test.ts:106:56 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:129:35 | GitOps.resolveRef.opts | ref | tests/platform/git-ops-fake.ts:210:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:136:25 | GitOps.currentBranch.opts | dir | tests/orchestrators/marketplace/shared.test.ts:116:59 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:144:28 | GitOps.resolveRemoteRef.opts | url | tests/platform/git-ops-fake.ts:228:36 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:144:41 | GitOps.resolveRemoteRef.opts | ref | tests/platform/git-ops-fake.ts:234:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:144:55 | GitOps.resolveRemoteRef.opts | auth | tests/platform/git-ops-fake.ts:95:11 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:168:7 | EnableDisablePluginOutcome | name | tests/orchestrators/plugin/enable-disable.test.ts:2785:28 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:171:36 | EnableDisablePluginOutcome | name | tests/orchestrators/plugin/enable-disable.test.ts:2212:28 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:175:7 | EnableDisablePluginOutcome | reason | tests/orchestrators/plugin/enable-disable.test.ts:2245:28 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:180:7 | EnableDisablePluginOutcome | error | tests/orchestrators/plugin/enable-disable.test.ts:2337:25 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:181:7 | EnableDisablePluginOutcome | cause | tests/orchestrators/plugin/enable-disable.test.ts:2523:18 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:190:3 | InstallLedgerSummary | cwd | tests/orchestrators/plugin/install-outcome.test.ts:278:8 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:1245:7 | emitMarketplaceNotAdded | status | tests/orchestrators/plugin/shared.test.ts:1632:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:1246:7 | emitMarketplaceNotAdded | reason | tests/orchestrators/plugin/shared.test.ts:1633:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:1247:7 | emitMarketplaceNotAdded | error | tests/orchestrators/plugin/shared.test.ts:1634:23 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:1248:7 | emitMarketplaceNotAdded | cause | tests/orchestrators/plugin/shared.test.ts:1637:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:113:39 | UninstallPluginOutcome | name | tests/orchestrators/plugin/uninstall.test.ts:1625:30 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:114:37 | UninstallPluginOutcome | name | tests/orchestrators/plugin/uninstall.test.ts:1682:30 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:118:7 | UninstallPluginOutcome | error | tests/orchestrators/plugin/uninstall.test.ts:1795:27 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:119:7 | UninstallPluginOutcome | cause | tests/orchestrators/plugin/uninstall.test.ts:3040:20 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:76:3 | PreparedPluginUpdate | entry | tests/orchestrators/plugin/update-preflight.test.ts:149:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:115:3 | PreflightFailedOutcome | reasons | tests/orchestrators/plugin/update-preflight.test.ts:149:26 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:198:3 | UpdatePhase3FailedOutcome | fromVersion | tests/orchestrators/plugin/update-swap.test.ts:175:30 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:199:3 | UpdatePhase3FailedOutcome | reasons | tests/orchestrators/plugin/update-swap.test.ts:175:30 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:201:3 | UpdatePhase3FailedOutcome | cause | tests/orchestrators/plugin/update-swap.test.ts:175:30 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:66:3 | PlannedMarketplaceAdd | configSource | tests/architecture/config-state-consistency.test.ts:579:22 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:214:3 | ReconcilePlan | scope | tests/architecture/config-state-consistency.test.ts:142:23 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/types.ts:154:3 | UpdatePhaseFailure | phase | tests/orchestrators/plugin/update-flow.test.ts:2189:14 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/types.ts:156:3 | UpdatePhaseFailure | cleanupFailures | tests/orchestrators/plugin/update-flow.test.ts:2192:45 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/types.ts:204:3 | PluginUpdateUpdatedOutcome | stagedAgentNames | tests/orchestrators/plugin/update-flow.test.ts:2558:27 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/types.ts:205:3 | PluginUpdateUpdatedOutcome | stagedMcpServerNames | tests/orchestrators/plugin/update-flow.test.ts:2560:27 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/types.ts:221:3 | PluginUpdateUpdatedOutcome | unsupported | tests/orchestrators/plugin/update-flow.test.ts:8879:66 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/types.ts:222:3 | PluginUpdateUpdatedOutcome | stagedAgents | tests/orchestrators/plugin/update-flow.test.ts:8879:66 | _pending_ |
-| extensions/pi-claude-marketplace/orchestrators/types.ts:223:3 | PluginUpdateUpdatedOutcome | stagedMcpServers | tests/orchestrators/plugin/update-flow.test.ts:8879:66 | _pending_ |
+| extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:63:3 | LocationsResolverLike | marketplaceNamesCachePath | tests/orchestrators/edge-deps.test.ts:235:32 | Read only by tests: 2 witnesses, first at tests/orchestrators/edge-deps.test.ts:235:32 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:51:3 | MarketplaceAddedOutcome | kind | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:54:3 | MarketplaceAddedOutcome | reason | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:58:3 | MarketplaceSkipOutcome | kind | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:61:3 | MarketplaceSkipOutcome | reason | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:65:3 | PluginInstalledOutcome | kind | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:69:3 | PluginInstalledOutcome | ref | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:70:3 | PluginInstalledOutcome | reason | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:71:3 | PluginInstalledOutcome | resourcesChanged | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:83:3 | PluginSkipOutcome | kind | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:87:3 | PluginSkipOutcome | ref | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:88:3 | PluginSkipOutcome | reason | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:92:3 | ImportWarningOutcome | kind | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:96:3 | ImportWarningOutcome | ref | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:99:3 | ImportWarningOutcome | cause | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:103:3 | MarketplaceFailureOutcome | kind | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:106:3 | MarketplaceFailureOutcome | reason | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:107:3 | MarketplaceFailureOutcome | cause | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:111:3 | SourceMismatchOutcome | kind | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:115:3 | SourceMismatchOutcome | ref | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:116:3 | SourceMismatchOutcome | reason | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:117:3 | SourceMismatchOutcome | cause | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:121:3 | UnexpectedPluginFailureOutcome | kind | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:125:3 | UnexpectedPluginFailureOutcome | ref | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:126:3 | UnexpectedPluginFailureOutcome | reason | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:140:3 | ClaudeImportExecutionResult | diagnostics | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 45 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/execute.ts:141:3 | ClaudeImportExecutionResult | changedResources | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 45 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/types.ts:15:3 | ImportDiagnostic | severity | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 63 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/types.ts:16:3 | ImportDiagnostic | scope | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 63 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/types.ts:17:3 | ImportDiagnostic | code | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 63 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/types.ts:18:3 | ImportDiagnostic | message | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 63 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/types.ts:19:3 | ImportDiagnostic | path | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 63 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/types.ts:20:3 | ImportDiagnostic | ref | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 63 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/types.ts:21:3 | ImportDiagnostic | marketplace | tests/orchestrators/import/execute.test.ts:2547:26 | Read only by tests: 63 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/import/types.ts:40:3 | MergedClaudeSettingsResult | paths | tests/orchestrators/import/settings.test.ts:726:26 | Read only by tests: 17 witnesses, first at tests/orchestrators/import/settings.test.ts:726:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:146:7 | AddMarketplaceOutcome | error | tests/orchestrators/marketplace/add.test.ts:1800:25 | Read only by tests: 12 witnesses, first at tests/orchestrators/marketplace/add.test.ts:1800:25 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:118:7 | RemoveMarketplaceOutcome | error | tests/orchestrators/marketplace/remove.test.ts:238:20 | Read only by tests: 11 witnesses, first at tests/orchestrators/marketplace/remove.test.ts:238:20 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:119:7 | RemoveMarketplaceOutcome | cause | tests/orchestrators/marketplace/remove.test.ts:1439:26 | Read only by tests: 7 witnesses, first at tests/orchestrators/marketplace/remove.test.ts:1439:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:116:5 | GitOps.clone.opts | dir | tests/platform/git-ops-fake.ts:160:34 | Read only by tests: 23 witnesses, first at tests/platform/git-ops-fake.ts:160:34 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:117:5 | GitOps.clone.opts | url | tests/platform/git-ops-fake.ts:154:34 | Read only by tests: 23 witnesses, first at tests/platform/git-ops-fake.ts:154:34 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:118:5 | GitOps.clone.opts | ref | tests/orchestrators/plugin/fetch.test.ts:172:55 | Read only by tests: 11 witnesses, first at tests/orchestrators/plugin/fetch.test.ts:172:55 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:119:5 | GitOps.clone.opts | singleBranch | tests/orchestrators/plugin/fetch.test.ts:172:96 | Read only by tests: 11 witnesses, first at tests/orchestrators/plugin/fetch.test.ts:172:96 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:120:5 | GitOps.clone.opts | auth | tests/platform/git-ops-fake.ts:79:11 | Read only by tests: 6 witnesses, first at tests/platform/git-ops-fake.ts:79:11 (binding-destructuring). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:123:17 | GitOps.fetch.opts | dir | tests/platform/git-ops-fake.ts:89:47 | Read only by tests: 3 witnesses, first at tests/platform/git-ops-fake.ts:89:47 (object-copy). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:123:30 | GitOps.fetch.opts | remote | tests/platform/git-ops-fake.ts:176:35 | Read only by tests: 5 witnesses, first at tests/platform/git-ops-fake.ts:176:35 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:123:47 | GitOps.fetch.opts | ref | tests/platform/git-ops-fake.ts:177:32 | Read only by tests: 11 witnesses, first at tests/platform/git-ops-fake.ts:177:32 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:123:61 | GitOps.fetch.opts | auth | tests/platform/git-ops-fake.ts:87:11 | Read only by tests: 4 witnesses, first at tests/platform/git-ops-fake.ts:87:11 (binding-destructuring). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:125:26 | GitOps.forceUpdateRef.opts | dir | tests/orchestrators/marketplace/shared.test.ts:124:60 | Read only by tests: 1 witness, first at tests/orchestrators/marketplace/shared.test.ts:124:60 (object-copy). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:125:39 | GitOps.forceUpdateRef.opts | ref | tests/platform/git-ops-fake.ts:183:37 | Read only by tests: 3 witnesses, first at tests/platform/git-ops-fake.ts:183:37 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:125:52 | GitOps.forceUpdateRef.opts | value | tests/platform/git-ops-fake.ts:183:58 | Read only by tests: 3 witnesses, first at tests/platform/git-ops-fake.ts:183:58 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:127:20 | GitOps.checkout.opts | dir | tests/platform/git-ops-fake.ts:205:38 | Read only by tests: 5 witnesses, first at tests/platform/git-ops-fake.ts:205:38 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:127:33 | GitOps.checkout.opts | ref | tests/platform/git-ops-fake.ts:193:41 | Read only by tests: 18 witnesses, first at tests/platform/git-ops-fake.ts:193:41 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:129:22 | GitOps.resolveRef.opts | dir | tests/orchestrators/marketplace/shared.test.ts:106:56 | Read only by tests: 1 witness, first at tests/orchestrators/marketplace/shared.test.ts:106:56 (object-copy). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:129:35 | GitOps.resolveRef.opts | ref | tests/platform/git-ops-fake.ts:210:26 | Read only by tests: 14 witnesses, first at tests/platform/git-ops-fake.ts:210:26 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:136:25 | GitOps.currentBranch.opts | dir | tests/orchestrators/marketplace/shared.test.ts:116:59 | Read only by tests: 1 witness, first at tests/orchestrators/marketplace/shared.test.ts:116:59 (object-copy). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:144:28 | GitOps.resolveRemoteRef.opts | url | tests/platform/git-ops-fake.ts:228:36 | Read only by tests: 6 witnesses, first at tests/platform/git-ops-fake.ts:228:36 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:144:41 | GitOps.resolveRemoteRef.opts | ref | tests/platform/git-ops-fake.ts:234:26 | Read only by tests: 7 witnesses, first at tests/platform/git-ops-fake.ts:234:26 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:144:55 | GitOps.resolveRemoteRef.opts | auth | tests/platform/git-ops-fake.ts:95:11 | Read only by tests: 3 witnesses, first at tests/platform/git-ops-fake.ts:95:11 (binding-destructuring). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:168:7 | EnableDisablePluginOutcome | name | tests/orchestrators/plugin/enable-disable.test.ts:2785:28 | Read only by tests: 1 witness, first at tests/orchestrators/plugin/enable-disable.test.ts:2785:28 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:171:36 | EnableDisablePluginOutcome | name | tests/orchestrators/plugin/enable-disable.test.ts:2212:28 | Read only by tests: 1 witness, first at tests/orchestrators/plugin/enable-disable.test.ts:2212:28 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:175:7 | EnableDisablePluginOutcome | reason | tests/orchestrators/plugin/enable-disable.test.ts:2245:28 | Read only by tests: 2 witnesses, first at tests/orchestrators/plugin/enable-disable.test.ts:2245:28 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:180:7 | EnableDisablePluginOutcome | error | tests/orchestrators/plugin/enable-disable.test.ts:2337:25 | Read only by tests: 1 witness, first at tests/orchestrators/plugin/enable-disable.test.ts:2337:25 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:181:7 | EnableDisablePluginOutcome | cause | tests/orchestrators/plugin/enable-disable.test.ts:2523:18 | Read only by tests: 4 witnesses, first at tests/orchestrators/plugin/enable-disable.test.ts:2523:18 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:190:3 | InstallLedgerSummary | cwd | tests/orchestrators/plugin/install-outcome.test.ts:235:26 | Read only by tests: 3 witnesses, first at tests/orchestrators/plugin/install-outcome.test.ts:235:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:77:3 | EntityErrorRow | kind | tests/orchestrators/plugin/install.messaging.test.ts:720:28 | Read only by tests: 4 witnesses, first at tests/orchestrators/plugin/install.messaging.test.ts:720:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:78:3 | EntityErrorRow | name | tests/orchestrators/plugin/install.messaging.test.ts:720:28 | Read only by tests: 4 witnesses, first at tests/orchestrators/plugin/install.messaging.test.ts:720:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:79:3 | EntityErrorRow | marketplace | tests/orchestrators/plugin/install.messaging.test.ts:720:28 | Read only by tests: 4 witnesses, first at tests/orchestrators/plugin/install.messaging.test.ts:720:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:80:3 | EntityErrorRow | scope | tests/orchestrators/plugin/install.messaging.test.ts:720:28 | Read only by tests: 4 witnesses, first at tests/orchestrators/plugin/install.messaging.test.ts:720:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:158:3 | ResolvedInstallMarketplaceSource | sourceScope | tests/orchestrators/plugin/shared.test.ts:682:30 | Read only by tests: 2 witnesses, first at tests/orchestrators/plugin/shared.test.ts:682:30 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:200:37 | CrossScopePluginResolution | presentIn | tests/orchestrators/plugin/shared.test.ts:623:30 | Read only by tests: 3 witnesses, first at tests/orchestrators/plugin/shared.test.ts:623:30 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:829:37 | ScopedMarketplaceResolution | presentIn | tests/orchestrators/plugin/shared.test.ts:1255:30 | Read only by tests: 3 witnesses, first at tests/orchestrators/plugin/shared.test.ts:1255:30 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:1245:7 | emitMarketplaceNotAdded | status | tests/orchestrators/plugin/shared.test.ts:1632:26 | Read only by tests: 2 witnesses, first at tests/orchestrators/plugin/shared.test.ts:1632:26 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:1246:7 | emitMarketplaceNotAdded | reason | tests/orchestrators/plugin/shared.test.ts:1633:26 | Read only by tests: 2 witnesses, first at tests/orchestrators/plugin/shared.test.ts:1633:26 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:1247:7 | emitMarketplaceNotAdded | error | tests/orchestrators/plugin/shared.test.ts:1634:23 | Read only by tests: 6 witnesses, first at tests/orchestrators/plugin/shared.test.ts:1634:23 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:1248:7 | emitMarketplaceNotAdded | cause | tests/orchestrators/plugin/shared.test.ts:1637:26 | Read only by tests: 2 witnesses, first at tests/orchestrators/plugin/shared.test.ts:1637:26 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:113:39 | UninstallPluginOutcome | name | tests/orchestrators/plugin/uninstall.test.ts:1625:30 | Read only by tests: 1 witness, first at tests/orchestrators/plugin/uninstall.test.ts:1625:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:114:37 | UninstallPluginOutcome | name | tests/orchestrators/plugin/uninstall.test.ts:1682:30 | Read only by tests: 1 witness, first at tests/orchestrators/plugin/uninstall.test.ts:1682:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:118:7 | UninstallPluginOutcome | error | tests/orchestrators/plugin/uninstall.test.ts:1795:27 | Read only by tests: 4 witnesses, first at tests/orchestrators/plugin/uninstall.test.ts:1795:27 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:119:7 | UninstallPluginOutcome | cause | tests/orchestrators/plugin/uninstall.test.ts:3040:20 | Read only by tests: 1 witness, first at tests/orchestrators/plugin/uninstall.test.ts:3040:20 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:76:3 | PreparedPluginUpdate | entry | tests/orchestrators/plugin/update-preflight.test.ts:350:26 | Read only by tests: 7 witnesses, first at tests/orchestrators/plugin/update-preflight.test.ts:350:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:115:3 | PreflightFailedOutcome | reasons | tests/orchestrators/plugin/update-preflight.test.ts:306:36 | Read only by tests: 19 witnesses, first at tests/orchestrators/plugin/update-preflight.test.ts:306:36 (value-transfer). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:116:3 | PreflightFailedOutcome | cause | tests/orchestrators/plugin/update-preflight.test.ts:461:26 | Read only by tests: 8 witnesses, first at tests/orchestrators/plugin/update-preflight.test.ts:461:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:198:3 | UpdatePhase3FailedOutcome | fromVersion | tests/orchestrators/plugin/update-swap.test.ts:175:30 | Read only by tests: 11 witnesses, first at tests/orchestrators/plugin/update-swap.test.ts:175:30 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:199:3 | UpdatePhase3FailedOutcome | reasons | tests/orchestrators/plugin/update-swap.test.ts:175:30 | Read only by tests: 6 witnesses, first at tests/orchestrators/plugin/update-swap.test.ts:175:30 (value-transfer). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:201:3 | UpdatePhase3FailedOutcome | cause | tests/orchestrators/plugin/update-swap.test.ts:175:30 | Read only by tests: 4 witnesses, first at tests/orchestrators/plugin/update-swap.test.ts:175:30 (value-transfer). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:66:3 | PlannedMarketplaceAdd | configSource | tests/architecture/config-state-consistency.test.ts:579:22 | Read only by tests: 41 witnesses, first at tests/architecture/config-state-consistency.test.ts:579:22 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:214:3 | ReconcilePlan | scope | tests/architecture/config-state-consistency.test.ts:142:23 | Read only by tests: 42 witnesses, first at tests/architecture/config-state-consistency.test.ts:142:23 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/types.ts:154:3 | UpdatePhaseFailure | phase | tests/orchestrators/plugin/update-flow.test.ts:2189:14 | Read only by tests: 2 witnesses, first at tests/orchestrators/plugin/update-flow.test.ts:2189:14 (binding-destructuring). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/types.ts:156:3 | UpdatePhaseFailure | cleanupFailures | tests/orchestrators/plugin/update-flow.test.ts:2192:45 | Read only by tests: 2 witnesses, first at tests/orchestrators/plugin/update-flow.test.ts:2192:45 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/types.ts:204:3 | PluginUpdateUpdatedOutcome | stagedAgentNames | tests/orchestrators/plugin/update-flow.test.ts:2558:27 | Read only by tests: 5 witnesses, first at tests/orchestrators/plugin/update-flow.test.ts:2558:27 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/types.ts:205:3 | PluginUpdateUpdatedOutcome | stagedMcpServerNames | tests/orchestrators/plugin/update-flow.test.ts:2560:27 | Read only by tests: 5 witnesses, first at tests/orchestrators/plugin/update-flow.test.ts:2560:27 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/types.ts:221:3 | PluginUpdateUpdatedOutcome | unsupported | tests/orchestrators/plugin/update-flow.test.ts:8879:66 | Read only by tests: 3 witnesses, first at tests/orchestrators/plugin/update-flow.test.ts:8879:66 (json-serialization). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/types.ts:222:3 | PluginUpdateUpdatedOutcome | stagedAgents | tests/orchestrators/plugin/update-flow.test.ts:8879:66 | Read only by tests: 3 witnesses, first at tests/orchestrators/plugin/update-flow.test.ts:8879:66 (json-serialization). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/orchestrators/types.ts:223:3 | PluginUpdateUpdatedOutcome | stagedMcpServers | tests/orchestrators/plugin/update-flow.test.ts:8879:66 | Read only by tests: 3 witnesses, first at tests/orchestrators/plugin/update-flow.test.ts:8879:66 (json-serialization). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
 
 ### persistence
 
 | Declaration | Owner | Member | First witness | Disposition |
 | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/persistence/agents-index-io.ts:45:3 | LoadedAgentsIndex | schemaVersion | tests/persistence/agents-index-io.test.ts:503:28 | _pending_ |
-| extensions/pi-claude-marketplace/persistence/locations.ts:72:3 | ScopedLocations | sourcesDir | tests/orchestrators/plugin/shared.test.ts:230:29 | _pending_ |
-| extensions/pi-claude-marketplace/persistence/locations.ts:96:3 | ScopedLocations | cacheDir | tests/orchestrators/marketplace/add.test.ts:965:47 | _pending_ |
-| extensions/pi-claude-marketplace/persistence/migrate-config.ts:65:7 | MigrateFirstRunResult | migrated | tests/persistence/migrate-config.test.ts:299:26 | _pending_ |
-| extensions/pi-claude-marketplace/persistence/migrate-config.ts:67:7 | MigrateFirstRunResult | filePath | tests/persistence/migrate-config.test.ts:299:26 | _pending_ |
-| extensions/pi-claude-marketplace/persistence/migrate-config.ts:70:7 | MigrateFirstRunResult | migrated | tests/persistence/migrate-config.test.ts:299:26 | _pending_ |
-| extensions/pi-claude-marketplace/persistence/migrate-config.ts:72:7 | MigrateFirstRunResult | filePath | tests/persistence/migrate-config.test.ts:299:26 | _pending_ |
-| extensions/pi-claude-marketplace/persistence/migrate-config.ts:75:7 | MigrateFirstRunResult | migrated | tests/persistence/migrate-config.test.ts:299:26 | _pending_ |
-| extensions/pi-claude-marketplace/persistence/migrate-config.ts:78:7 | MigrateFirstRunResult | filePath | tests/persistence/migrate-config.test.ts:299:26 | _pending_ |
-| extensions/pi-claude-marketplace/persistence/migrate-config.ts:81:7 | MigrateFirstRunResult | migrated | tests/persistence/migrate-config.test.ts:299:26 | _pending_ |
-| extensions/pi-claude-marketplace/persistence/migrate-config.ts:83:7 | MigrateFirstRunResult | filePath | tests/persistence/migrate-config.test.ts:299:26 | _pending_ |
-| extensions/pi-claude-marketplace/persistence/state-io.ts:202:3 | DisabledPluginRecord | enabled | tests/persistence/state-io.test.ts:206:26 | _pending_ |
-| extensions/pi-claude-marketplace/persistence/state-io.ts:203:3 | DisabledPluginRecord | resources | tests/persistence/state-io.test.ts:207:37 | _pending_ |
+| extensions/pi-claude-marketplace/persistence/agents-index-io.ts:45:3 | LoadedAgentsIndex | schemaVersion | tests/persistence/agents-index-io.test.ts:503:28 | Read only by tests: 7 witnesses, first at tests/persistence/agents-index-io.test.ts:503:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/persistence/locations.ts:72:3 | ScopedLocations | sourcesDir | tests/orchestrators/plugin/shared.test.ts:230:29 | Read only by tests: 36 witnesses, first at tests/orchestrators/plugin/shared.test.ts:230:29 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/persistence/locations.ts:96:3 | ScopedLocations | cacheDir | tests/orchestrators/marketplace/add.test.ts:965:47 | Read only by tests: 40 witnesses, first at tests/orchestrators/marketplace/add.test.ts:965:47 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/persistence/migrate-config.ts:65:7 | MigrateFirstRunResult | migrated | tests/persistence/migrate-config.test.ts:299:26 | Read only by tests: 20 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/persistence/migrate-config.ts:66:7 | MigrateFirstRunResult | entryCount | tests/persistence/migrate-config.test.ts:299:26 | Read only by tests: 5 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/persistence/migrate-config.ts:67:7 | MigrateFirstRunResult | filePath | tests/persistence/migrate-config.test.ts:299:26 | Read only by tests: 20 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/persistence/migrate-config.ts:70:7 | MigrateFirstRunResult | migrated | tests/persistence/migrate-config.test.ts:299:26 | Read only by tests: 20 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/persistence/migrate-config.ts:72:7 | MigrateFirstRunResult | filePath | tests/persistence/migrate-config.test.ts:299:26 | Read only by tests: 20 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/persistence/migrate-config.ts:75:7 | MigrateFirstRunResult | migrated | tests/persistence/migrate-config.test.ts:299:26 | Read only by tests: 20 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/persistence/migrate-config.ts:77:7 | MigrateFirstRunResult | error | tests/persistence/migrate-config.test.ts:299:26 | Read only by tests: 5 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/persistence/migrate-config.ts:78:7 | MigrateFirstRunResult | filePath | tests/persistence/migrate-config.test.ts:299:26 | Read only by tests: 20 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/persistence/migrate-config.ts:81:7 | MigrateFirstRunResult | migrated | tests/persistence/migrate-config.test.ts:299:26 | Read only by tests: 20 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/persistence/migrate-config.ts:83:7 | MigrateFirstRunResult | filePath | tests/persistence/migrate-config.test.ts:299:26 | Read only by tests: 20 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/persistence/state-io.ts:202:3 | DisabledPluginRecord | enabled | tests/persistence/state-io.test.ts:206:26 | Read only by tests: 1 witness, first at tests/persistence/state-io.test.ts:206:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/persistence/state-io.ts:203:3 | DisabledPluginRecord | resources | tests/persistence/state-io.test.ts:207:37 | Read only by tests: 2 witnesses, first at tests/persistence/state-io.test.ts:207:37 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
 
 ### platform
 
 | Declaration | Owner | Member | First witness | Disposition |
 | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/platform/git-credential.ts:88:3 | CredentialSpawnOptions | env | tests/platform/credential-process-fake.ts:52:13 | _pending_ |
-| extensions/pi-claude-marketplace/platform/git-credential.ts:89:3 | CredentialSpawnOptions | stdio | tests/platform/credential-process-fake.ts:54:13 | _pending_ |
-| extensions/pi-claude-marketplace/platform/git.ts:304:3 | GitCredentials | cancel | tests/integration/auth-e2e.test.ts:302:30 | _pending_ |
+| extensions/pi-claude-marketplace/platform/git-credential.ts:88:3 | CredentialSpawnOptions | env | tests/platform/credential-process-fake.ts:52:13 | Read only by tests: 5 witnesses, first at tests/platform/credential-process-fake.ts:52:13 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/platform/git-credential.ts:89:3 | CredentialSpawnOptions | stdio | tests/platform/credential-process-fake.ts:54:13 | Read only by tests: 5 witnesses, first at tests/platform/credential-process-fake.ts:54:13 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/platform/git.ts:302:3 | GitCredentials | headers | tests/domain/github-auth.test.ts:1238:28 | Read only by tests: 18 witnesses, first at tests/domain/github-auth.test.ts:1238:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/platform/git.ts:304:3 | GitCredentials | cancel | tests/integration/auth-e2e.test.ts:302:30 | Read only by tests: 19 witnesses, first at tests/integration/auth-e2e.test.ts:302:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:68:3 | PiTextContentBlock | type | tests/bridges/hooks/event-adapters.test.ts:383:28 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/event-adapters.test.ts:383:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:69:3 | PiTextContentBlock | text | tests/bridges/hooks/event-adapters.test.ts:383:28 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/event-adapters.test.ts:383:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:85:3 | ToolResultEventResult | content | tests/bridges/hooks/event-adapters.test.ts:383:28 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/event-adapters.test.ts:383:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:86:3 | ToolResultEventResult | details | tests/bridges/hooks/event-adapters.test.ts:383:28 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/event-adapters.test.ts:383:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:87:3 | ToolResultEventResult | isError | tests/bridges/hooks/event-adapters.test.ts:383:28 | Read only by tests: 2 witnesses, first at tests/bridges/hooks/event-adapters.test.ts:383:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
 
 ### shared
 
 | Declaration | Owner | Member | First witness | Disposition |
 | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/shared/completion-cache.ts:361:3 | CompletionCache | invalidateMarketplaceCache | tests/orchestrators/marketplace/add.test.ts:247:16 | _pending_ |
-| extensions/pi-claude-marketplace/shared/fs-utils.ts:73:33 | RemovalOps.rm.options | recursive | tests/platform/removal-ops-fake.ts:138:19 | _pending_ |
-| extensions/pi-claude-marketplace/shared/fs-utils.ts:73:54 | RemovalOps.rm.options | force | tests/platform/removal-ops-fake.ts:129:23 | _pending_ |
-| extensions/pi-claude-marketplace/shared/fs-utils.ts:325:24 | resolveGitSubdirRoot | detail | tests/orchestrators/plugin/clone-cache.test.ts:1549:20 | _pending_ |
-| extensions/pi-claude-marketplace/shared/fs-utils.ts:326:31 | resolveGitSubdirRoot | detail | tests/orchestrators/plugin/clone-cache.test.ts:1549:20 | _pending_ |
+| extensions/pi-claude-marketplace/shared/completion-cache.ts:361:3 | CompletionCache | invalidateMarketplaceCache | tests/orchestrators/marketplace/add.test.ts:247:16 | Read only by tests: 24 witnesses, first at tests/orchestrators/marketplace/add.test.ts:247:16 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/shared/fs-utils.ts:73:33 | RemovalOps.rm.options | recursive | tests/platform/removal-ops-fake.ts:138:19 | Read only by tests: 3 witnesses, first at tests/platform/removal-ops-fake.ts:138:19 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/shared/fs-utils.ts:73:54 | RemovalOps.rm.options | force | tests/platform/removal-ops-fake.ts:129:23 | Read only by tests: 3 witnesses, first at tests/platform/removal-ops-fake.ts:129:23 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/shared/fs-utils.ts:325:24 | resolveGitSubdirRoot | detail | tests/orchestrators/plugin/clone-cache.test.ts:1549:20 | Read only by tests: 22 witnesses, first at tests/orchestrators/plugin/clone-cache.test.ts:1549:20 (value-transfer). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/shared/fs-utils.ts:326:31 | resolveGitSubdirRoot | detail | tests/orchestrators/plugin/clone-cache.test.ts:1549:20 | Read only by tests: 22 witnesses, first at tests/orchestrators/plugin/clone-cache.test.ts:1549:20 (value-transfer). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
 
 ### transaction
 
 | Declaration | Owner | Member | First witness | Disposition |
 | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/transaction/phase-ledger.ts:59:3 | RollbackPartial | msg | tests/transaction/phase-ledger.test.ts:510:26 | _pending_ |
-| extensions/pi-claude-marketplace/transaction/phase-ledger.ts:73:3 | RunPhasesResult | leaks | tests/transaction/phase-ledger.test.ts:510:26 | _pending_ |
+| extensions/pi-claude-marketplace/transaction/phase-ledger.ts:59:3 | RollbackPartial | msg | tests/transaction/phase-ledger.test.ts:510:26 | Read only by tests: 15 witnesses, first at tests/transaction/phase-ledger.test.ts:510:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
+| extensions/pi-claude-marketplace/transaction/phase-ledger.ts:73:3 | RunPhasesResult | leaks | tests/transaction/phase-ledger.test.ts:510:26 | Read only by tests: 10 witnesses, first at tests/transaction/phase-ledger.test.ts:510:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass. |
 
 ## Members accepted by a validated contract
 
-None. The contract file excuses nothing on this tree.
+### bridges/agents
+
+| Declaration | Owner | Member | Contract reason | Disposition |
+| --- | --- | --- | --- | --- |
+| extensions/pi-claude-marketplace/bridges/agents/stage.ts:75:32 | agentsReplacementInternals | kind | type-selection: Selects within AgentsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/agents/stage.ts:75:3 selects by kind) | Validated contract. type-selection: Selects within AgentsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/agents/stage.ts:75:3 selects by kind) |
+| extensions/pi-claude-marketplace/bridges/agents/stage.ts:526:51 | replacement | kind | type-selection: Selects within AgentsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/agents/stage.ts:526:22 selects by kind) | Validated contract. type-selection: Selects within AgentsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/agents/stage.ts:526:22 selects by kind) |
+| extensions/pi-claude-marketplace/bridges/agents/stage.ts:575:45 | requireAgentsReplacementInternals.replacement | kind | type-selection: Selects within AgentsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/agents/stage.ts:575:16 selects by kind) | Validated contract. type-selection: Selects within AgentsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/agents/stage.ts:575:16 selects by kind) |
+| extensions/pi-claude-marketplace/bridges/agents/stage.ts:587:46 | rollbackAgentsReplacementInternal.prepared | kind | type-selection: Selects within PreparedAgentsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/agents/stage.ts:587:13 selects by kind) | Validated contract. type-selection: Selects within PreparedAgentsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/agents/stage.ts:587:13 selects by kind) |
+| extensions/pi-claude-marketplace/bridges/agents/types.ts:165:55 | AgentsReplacementNoop.prepared | kind | type-selection: Selects within PreparedAgentsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/agents/types.ts:165:22 selects by kind) | Validated contract. type-selection: Selects within PreparedAgentsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/agents/types.ts:165:22 selects by kind) |
+
+### bridges/commands
+
+| Declaration | Owner | Member | Contract reason | Disposition |
+| --- | --- | --- | --- | --- |
+| extensions/pi-claude-marketplace/bridges/commands/stage.ts:74:34 | commandsReplacementInternals | kind | type-selection: Selects within CommandsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/commands/stage.ts:74:3 selects by kind) | Validated contract. type-selection: Selects within CommandsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/commands/stage.ts:74:3 selects by kind) |
+| extensions/pi-claude-marketplace/bridges/commands/stage.ts:452:53 | replacement | kind | type-selection: Selects within CommandsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/commands/stage.ts:452:22 selects by kind) | Validated contract. type-selection: Selects within CommandsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/commands/stage.ts:452:22 selects by kind) |
+| extensions/pi-claude-marketplace/bridges/commands/stage.ts:499:47 | requireCommandsReplacementInternals.replacement | kind | type-selection: Selects within CommandsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/commands/stage.ts:499:16 selects by kind) | Validated contract. type-selection: Selects within CommandsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/commands/stage.ts:499:16 selects by kind) |
+| extensions/pi-claude-marketplace/bridges/commands/stage.ts:511:48 | rollbackCommandsReplacementInternal.prepared | kind | type-selection: Selects within PreparedCommandsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/commands/stage.ts:511:13 selects by kind) | Validated contract. type-selection: Selects within PreparedCommandsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/commands/stage.ts:511:13 selects by kind) |
+| extensions/pi-claude-marketplace/bridges/commands/types.ts:119:57 | CommandsReplacementNoop.prepared | kind | type-selection: Selects within PreparedCommandsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/commands/types.ts:119:22 selects by kind) | Validated contract. type-selection: Selects within PreparedCommandsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/commands/types.ts:119:22 selects by kind) |
+
+### bridges/hooks
+
+| Declaration | Owner | Member | Contract reason | Disposition |
+| --- | --- | --- | --- | --- |
+| extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:87:37 | applyMutationInPlace.result | kind | type-selection: Selects within HookExecResult by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:87:11 selects by kind) | Validated contract. type-selection: Selects within HookExecResult by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:87:11 selects by kind) |
+| extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts:141:43 | mutate | kind | type-selection: Selects within HookExecResult by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts:141:17 selects by kind) | Validated contract. type-selection: Selects within HookExecResult by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts:141:17 selects by kind) |
+
+### bridges/mcp
+
+| Declaration | Owner | Member | Contract reason | Disposition |
+| --- | --- | --- | --- | --- |
+| extensions/pi-claude-marketplace/bridges/mcp/stage.ts:49:29 | mcpReplacementInternals | kind | type-selection: Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/mcp/stage.ts:49:3 selects by kind) | Validated contract. type-selection: Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/mcp/stage.ts:49:3 selects by kind) |
+| extensions/pi-claude-marketplace/bridges/mcp/stage.ts:366:48 | replacement | kind | type-selection: Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/mcp/stage.ts:366:22 selects by kind) | Validated contract. type-selection: Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/mcp/stage.ts:366:22 selects by kind) |
+| extensions/pi-claude-marketplace/bridges/mcp/stage.ts:411:42 | requireMcpReplacementInternals.replacement | kind | type-selection: Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/mcp/stage.ts:411:16 selects by kind) | Validated contract. type-selection: Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/mcp/stage.ts:411:16 selects by kind) |
+| extensions/pi-claude-marketplace/bridges/mcp/types.ts:95:52 | McpReplacementNoop.prepared | kind | type-selection: Selects within PreparedMcpStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/mcp/types.ts:95:22 selects by kind) | Validated contract. type-selection: Selects within PreparedMcpStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/mcp/types.ts:95:22 selects by kind) |
+
+### bridges/skills
+
+| Declaration | Owner | Member | Contract reason | Disposition |
+| --- | --- | --- | --- | --- |
+| extensions/pi-claude-marketplace/bridges/skills/stage.ts:66:32 | skillsReplacementInternals | kind | type-selection: Selects within SkillsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/skills/stage.ts:66:3 selects by kind) | Validated contract. type-selection: Selects within SkillsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/skills/stage.ts:66:3 selects by kind) |
+| extensions/pi-claude-marketplace/bridges/skills/stage.ts:517:51 | replacement | kind | type-selection: Selects within SkillsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/skills/stage.ts:517:22 selects by kind) | Validated contract. type-selection: Selects within SkillsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/skills/stage.ts:517:22 selects by kind) |
+| extensions/pi-claude-marketplace/bridges/skills/stage.ts:564:45 | requireSkillsReplacementInternals.replacement | kind | type-selection: Selects within SkillsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/skills/stage.ts:564:16 selects by kind) | Validated contract. type-selection: Selects within SkillsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/skills/stage.ts:564:16 selects by kind) |
+| extensions/pi-claude-marketplace/bridges/skills/stage.ts:576:46 | rollbackSkillsReplacementInternal.prepared | kind | type-selection: Selects within PreparedSkillsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/skills/stage.ts:576:13 selects by kind) | Validated contract. type-selection: Selects within PreparedSkillsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/skills/stage.ts:576:13 selects by kind) |
+| extensions/pi-claude-marketplace/bridges/skills/types.ts:117:55 | SkillsReplacementNoop.prepared | kind | type-selection: Selects within PreparedSkillsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/skills/types.ts:117:22 selects by kind) | Validated contract. type-selection: Selects within PreparedSkillsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/skills/types.ts:117:22 selects by kind) |
+
+### domain
+
+| Declaration | Owner | Member | Contract reason | Disposition |
+| --- | --- | --- | --- | --- |
+| extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:29:48 | MatcherCondition | kind | type-selection: Selects within DroppedHook by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:29:25 selects by kind) | Validated contract. type-selection: Selects within DroppedHook by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:29:25 selects by kind) |
+| extensions/pi-claude-marketplace/domain/manifest-lookup.ts:57:30 | lookupDeclaredPlugin | kind | type-selection: Selects within ManifestLookup by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/manifest-lookup.ts:57:4 selects by kind) | Validated contract. type-selection: Selects within ManifestLookup by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/manifest-lookup.ts:57:4 selects by kind) |
+| extensions/pi-claude-marketplace/domain/plugin-root.ts:23:45 | AbsolutePluginRoot | __absolutePluginRootBrand | nominal-brand: Marks AbsolutePluginRoot so a value no branding module minted cannot stand in for it. (unique symbol extensions/pi-claude-marketplace/domain/plugin-root.ts:16:15 cannot be spelled outside its module) | Validated contract. nominal-brand: Marks AbsolutePluginRoot so a value no branding module minted cannot stand in for it. (unique symbol extensions/pi-claude-marketplace/domain/plugin-root.ts:16:15 cannot be spelled outside its module) |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:49:32 | DroppedHookArmKeysMatch | kind | type-selection: Selects within DroppedHook by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:49:9 selects by kind) | Validated contract. type-selection: Selects within DroppedHook by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:49:9 selects by kind) |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:50:60 | DroppedHookArmKeysMatch | kind | type-selection: Selects within Type.Static<DroppedHookSchema> by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:50:18 selects by kind) | Validated contract. type-selection: Selects within Type.Static<DroppedHookSchema> by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:50:18 selects by kind) |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:51:54 | DroppedHookArmKeysMatch | kind | type-selection: Selects within Type.Static<DroppedHookSchema> by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:51:12 selects by kind) | Validated contract. type-selection: Selects within Type.Static<DroppedHookSchema> by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:51:12 selects by kind) |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:52:36 | DroppedHookArmKeysMatch | kind | type-selection: Selects within DroppedHook by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:52:13 selects by kind) | Validated contract. type-selection: Selects within DroppedHook by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:52:13 selects by kind) |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:121:67 | ResolvedPluginInstallable | state | type-selection: Selects within ResolvedPlugin by state, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:121:41 selects by state) | Validated contract. type-selection: Selects within ResolvedPlugin by state, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:121:41 selects by state) |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:124:5 | ResolvedPluginPartiallyAvailable | state | type-selection: Selects within ResolvedPlugin by state, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:122:48 selects by state) | Validated contract. type-selection: Selects within ResolvedPlugin by state, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:122:48 selects by state) |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:126:67 | ResolvedPluginUnavailable | state | type-selection: Selects within ResolvedPlugin by state, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:126:41 selects by state) | Validated contract. type-selection: Selects within ResolvedPlugin by state, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:126:41 selects by state) |
+
+### orchestrators
+
+| Declaration | Owner | Member | Contract reason | Disposition |
+| --- | --- | --- | --- | --- |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:540:35 | addMarketplace.opts | notifications | type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:540:9 narrows notifications) | Validated contract. type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:540:9 narrows notifications) |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:540:52 | addMarketplace.opts.notifications | mode | type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:540:9 narrows notifications.mode) | Validated contract. type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:540:9 narrows notifications.mode) |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:661:38 | removeMarketplace.opts | notifications | type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:661:9 narrows notifications) | Validated contract. type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:661:9 narrows notifications) |
+| extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:661:55 | removeMarketplace.opts.notifications | mode | type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:661:9 narrows notifications.mode) | Validated contract. type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:661:9 narrows notifications.mode) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:76:75 | ENABLE_RENDER | status | type-selection: Selects within EnableMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:76:54 selects by status) | Validated contract. type-selection: Selects within EnableMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:76:54 selects by status) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:105:78 | DISABLE_RENDER | status | type-selection: Selects within DisableMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:105:56 selects by status) | Validated contract. type-selection: Selects within DisableMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:105:56 selects by status) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:126:67 | InstalledEnableLedgerResult | kind | type-selection: Selects within InstallLedgerResult by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:126:36 selects by kind) | Validated contract. type-selection: Selects within InstallLedgerResult by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:126:36 selects by kind) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:460:3 | FailedUnstageOutcome | ok | type-refinement: Narrows ok at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:459:29 narrows ok) | Validated contract. type-refinement: Narrows ok at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:459:29 narrows ok) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:565:41 | addCachedHooksAfterSave.outcome | kind | type-selection: Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:565:12 selects by kind) | Validated contract. type-selection: Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:565:12 selects by kind) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:596:72 | SelectedConfigWriteTarget | kind | type-selection: Selects within DeclaringConfigWriteTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:596:34 selects by kind) | Validated contract. type-selection: Selects within DeclaringConfigWriteTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:596:34 selects by kind) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:688:62 | emitUnresolvedTarget.args.resolution | kind | type-selection: Excludes from CrossScopePluginResolution by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:688:24 selects by kind) | Validated contract. type-selection: Excludes from CrossScopePluginResolution by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:688:24 selects by kind) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:985:42 | SetPluginEnabledOperation.opts | notifications | type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:985:11 narrows notifications) | Validated contract. type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:985:11 narrows notifications) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:985:59 | SetPluginEnabledOperation.opts.notifications | mode | type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:985:11 narrows notifications.mode) | Validated contract. type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:985:11 narrows notifications.mode) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:995:42 | configuredSetPluginEnabled.opts | notifications | type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:995:11 narrows notifications) | Validated contract. type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:995:11 narrows notifications) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:995:59 | configuredSetPluginEnabled.opts.notifications | mode | type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:995:11 narrows notifications.mode) | Validated contract. type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:995:11 narrows notifications.mode) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1153:41 | freshOutcomeToTypedResult.outcome | kind | type-selection: Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1153:12 selects by kind) | Validated contract. type-selection: Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1153:12 selects by kind) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1402:41 | enableFailedRow.outcome | kind | type-selection: Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1402:12 selects by kind) | Validated contract. type-selection: Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1402:12 selects by kind) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts:62:72 | FETCH_RENDER | status | type-selection: Selects within FetchMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts:62:52 selects by status) | Validated contract. type-selection: Selects within FetchMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts:62:52 selects by status) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1244:49 | composeStateOnlyComponents.components | componentsResolved | type-selection: Selects within PluginInfoRow by componentsResolved, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1244:24 selects by componentsResolved) | Validated contract. type-selection: Selects within PluginInfoRow by componentsResolved, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1244:24 selects by componentsResolved) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:60:3 | FailedUnstageOutcome | ok | type-refinement: Narrows ok at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:59:29 narrows ok) | Validated contract. type-refinement: Narrows ok at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:59:29 narrows ok) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1007:3 | FailedRunPhasesResult | ok | type-refinement: Narrows ok at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1006:30 narrows ok) | Validated contract. type-refinement: Narrows ok at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1006:30 narrows ok) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:108:78 | INSTALL_RENDER | status | type-selection: Selects within InstallMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:108:56 selects by status) | Validated contract. type-selection: Selects within InstallMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:108:56 selects by status) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:83:42 | PayloadListMsg | status | type-selection: Excludes from ListMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:83:23 selects by status) | Validated contract. type-selection: Excludes from ListMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:83:23 selects by status) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:615:56 | loadPluginListPayload | status | type-selection: Excludes from ListMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:615:37 selects by status) | Validated contract. type-selection: Excludes from ListMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:615:37 selects by status) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts:101:69 | LIST_RENDER | status | type-selection: Selects within ListMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts:101:50 selects by status) | Validated contract. type-selection: Selects within ListMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts:101:50 selects by status) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:77:45 | selectMarketplaceTargets.target | kind | type-selection: Selects within ReinstallPluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:77:11 selects by kind) | Validated contract. type-selection: Selects within ReinstallPluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:77:11 selects by kind) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:95:45 | resolveMarketplaceScope.target | kind | type-selection: Selects within ReinstallPluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:95:11 selects by kind) | Validated contract. type-selection: Selects within ReinstallPluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:95:11 selects by kind) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:107:45 | resolvePluginMarketplaceScope.target | kind | type-selection: Selects within ReinstallPluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:107:11 selects by kind) | Validated contract. type-selection: Selects within ReinstallPluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:107:11 selects by kind) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:141:45 | resolveExplicitPluginScope.target | kind | type-selection: Selects within ReinstallPluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:141:11 selects by kind) | Validated contract. type-selection: Selects within ReinstallPluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:141:11 selects by kind) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:73:60 | REINSTALL_RENDER | status | type-selection: Selects within ReinstallMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:73:36 selects by status) | Validated contract. type-selection: Selects within ReinstallMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:73:36 selects by status) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:210:42 | isManualRecoveryOutcome | failureClass | type-refinement: Narrows failureClass at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:210:15 narrows failureClass) | Validated contract. type-refinement: Narrows failureClass at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:210:15 narrows failureClass) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:689:54 | InvalidConfigLoad | status | type-selection: Selects within ConfigLoadResult by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:689:26 selects by status) | Validated contract. type-selection: Selects within ConfigLoadResult by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:689:26 selects by status) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts:41:60 | UNINSTALL_RENDER | status | type-selection: Selects within UninstallMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts:41:36 selects by status) | Validated contract. type-selection: Selects within UninstallMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts:41:36 selects by status) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:857:38 | UninstallPluginOperation.opts | notifications | type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:857:11 narrows notifications) | Validated contract. type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:857:11 narrows notifications) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:857:55 | UninstallPluginOperation.opts.notifications | mode | type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:857:11 narrows notifications.mode) | Validated contract. type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:857:11 narrows notifications.mode) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:868:38 | configuredUninstallPlugin.opts | notifications | type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:868:11 narrows notifications) | Validated contract. type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:868:11 narrows notifications) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:868:55 | configuredUninstallPlugin.opts.notifications | mode | type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:868:11 narrows notifications.mode) | Validated contract. type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:868:11 narrows notifications.mode) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:832:42 | enumerateMarketplaceTarget.target | kind | type-selection: Selects within UpdatePluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:832:11 selects by kind) | Validated contract. type-selection: Selects within UpdatePluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:832:11 selects by kind) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:913:42 | resolveUpdateMarketplaceScope.target | kind | type-selection: Selects within UpdatePluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:913:11 selects by kind) | Validated contract. type-selection: Selects within UpdatePluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:913:11 selects by kind) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:132:5 | PartialableUpdateShapeError.shape | kind | type-refinement: Narrows kind at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:131:19 narrows kind) | Validated contract. type-refinement: Narrows kind at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:131:19 narrows kind) |
+| extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts:57:75 | UPDATE_RENDER | status | type-selection: Selects within UpdateMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts:57:54 selects by status) | Validated contract. type-selection: Selects within UpdateMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts:57:54 selects by status) |
+| extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:552:49 | degradationFromEnable.result | status | type-selection: Selects within EnableDisablePluginOutcome by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:552:11 selects by status) | Validated contract. type-selection: Selects within EnableDisablePluginOutcome by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:552:11 selects by status) |
+| extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:662:7 | applyMarketplaceOutcomeToBlock.outcome | kind | type-selection: Selects within PerEntryOutcome by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:659:12 selects by kind) | Validated contract. type-selection: Selects within PerEntryOutcome by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:659:12 selects by kind) |
+| extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:758:7 | applyPluginOutcomeToBlock.outcome | kind | type-selection: Selects within PerEntryOutcome by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:755:12 selects by kind) | Validated contract. type-selection: Selects within PerEntryOutcome by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:755:12 selects by kind) |
+
+### persistence
+
+| Declaration | Owner | Member | Contract reason | Disposition |
+| --- | --- | --- | --- | --- |
+| extensions/pi-claude-marketplace/persistence/locations.ts:39:3 | ScopedLocations | SCOPED_LOCATIONS_BRAND | nominal-brand: Marks ScopedLocations so a value no branding module minted cannot stand in for it. (unique symbol extensions/pi-claude-marketplace/persistence/locations.ts:25:7 cannot be spelled outside its module) | Validated contract. nominal-brand: Marks ScopedLocations so a value no branding module minted cannot stand in for it. (unique symbol extensions/pi-claude-marketplace/persistence/locations.ts:25:7 cannot be spelled outside its module) |
+
+### platform
+
+| Declaration | Owner | Member | Contract reason | Disposition |
+| --- | --- | --- | --- | --- |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:117:56 | AssistantMessage | role | type-selection: Selects within AgentMessage by role, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/platform/pi-api.ts:117:32 selects by role) | Validated contract. type-selection: Selects within AgentMessage by role, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/platform/pi-api.ts:117:32 selects by role) |
+
+### shared
+
+| Declaration | Owner | Member | Contract reason | Disposition |
+| --- | --- | --- | --- | --- |
+| extensions/pi-claude-marketplace/shared/notification-dispatch.ts:203:43 | dispatchInfoMessage.message | kind | type-selection: Selects within NotificationMessage by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/shared/notification-dispatch.ts:203:12 selects by kind) | Validated contract. type-selection: Selects within NotificationMessage by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/shared/notification-dispatch.ts:203:12 selects by kind) |
+| extensions/pi-claude-marketplace/shared/notification-grammar.ts:837:7 | renderPendingRow.p | status | type-selection: Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/shared/notification-grammar.ts:835:6 selects by status) | Validated contract. type-selection: Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/shared/notification-grammar.ts:835:6 selects by status) |
+| extensions/pi-claude-marketplace/shared/notification-summary.ts:43:40 | isInfoKind | kind | type-selection: Selects within NotificationMessage by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/shared/notification-summary.ts:43:9 selects by kind) | Validated contract. type-selection: Selects within NotificationMessage by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/shared/notification-summary.ts:43:9 selects by kind) |
+| extensions/pi-claude-marketplace/shared/notification-types.ts:399:48 | isScopeBearingListRow | status | type-selection: Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/shared/notification-types.ts:399:11 selects by status) | Validated contract. type-selection: Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/shared/notification-types.ts:399:11 selects by status) |
 
 ## Ledger
 
@@ -659,28 +674,28 @@ and writing the evidence into its `note`.
 ```json
 {
   "schemaVersion": 1,
-  "generated": "2026-09-15T16:16:44.767Z",
-  "revision": "0dc3666b0739a31df56f02ff0e9b7d254581cafc",
+  "generated": "2026-09-15T18:04:02.854Z",
+  "revision": "dfe51c0daeb4219ff883032708a352b4cd0bee3e",
   "fingerprint": {
     "algorithm": "sha256",
-    "files": 602,
-    "digest": "08023619455e8db92b7ab9ffb609179fd3adabea8fb30ac2f995eefdeba46cb6"
+    "files": 603,
+    "digest": "ba06bb955289500db27dedff78d8a0656b6824e627192c5f50d5548a2065d255"
   },
   "counts": {
     "productionFiles": 236,
     "candidates": 3464,
-    "runtimeObserved": 2981,
-    "testOnlyObserved": 222,
-    "explicitContract": 0,
-    "unread": 261,
+    "runtimeObserved": 3009,
+    "testOnlyObserved": 236,
+    "explicitContract": 81,
+    "unread": 138,
     "unsupportedAnalysis": 0
   },
   "work": {
-    "transferSteps": 2894478,
-    "transferEdges": 215836,
-    "transferReads": 82427,
-    "operationReads": 939596,
-    "transferMs": 50222
+    "transferSteps": 3001672,
+    "transferEdges": 216490,
+    "transferReads": 82772,
+    "operationReads": 985894,
+    "transferMs": 51310
   },
   "owners": [
     {
@@ -688,8 +703,8 @@ and writing the evidence into its `note`.
       "candidates": 177,
       "runtimeObserved": 164,
       "testOnlyObserved": 4,
-      "explicitContract": 0,
-      "unread": 9,
+      "explicitContract": 5,
+      "unread": 4,
       "unsupportedAnalysis": 0
     },
     {
@@ -697,17 +712,17 @@ and writing the evidence into its `note`.
       "candidates": 76,
       "runtimeObserved": 63,
       "testOnlyObserved": 4,
-      "explicitContract": 0,
-      "unread": 9,
+      "explicitContract": 5,
+      "unread": 4,
       "unsupportedAnalysis": 0
     },
     {
       "owner": "bridges/hooks",
       "candidates": 344,
-      "runtimeObserved": 232,
-      "testOnlyObserved": 80,
-      "explicitContract": 0,
-      "unread": 32,
+      "runtimeObserved": 246,
+      "testOnlyObserved": 70,
+      "explicitContract": 2,
+      "unread": 26,
       "unsupportedAnalysis": 0
     },
     {
@@ -715,8 +730,8 @@ and writing the evidence into its `note`.
       "candidates": 55,
       "runtimeObserved": 47,
       "testOnlyObserved": 4,
-      "explicitContract": 0,
-      "unread": 4,
+      "explicitContract": 4,
+      "unread": 0,
       "unsupportedAnalysis": 0
     },
     {
@@ -724,17 +739,17 @@ and writing the evidence into its `note`.
       "candidates": 74,
       "runtimeObserved": 61,
       "testOnlyObserved": 4,
-      "explicitContract": 0,
-      "unread": 9,
+      "explicitContract": 5,
+      "unread": 4,
       "unsupportedAnalysis": 0
     },
     {
       "owner": "domain",
       "candidates": 269,
-      "runtimeObserved": 226,
-      "testOnlyObserved": 14,
-      "explicitContract": 0,
-      "unread": 29,
+      "runtimeObserved": 227,
+      "testOnlyObserved": 22,
+      "explicitContract": 10,
+      "unread": 10,
       "unsupportedAnalysis": 0
     },
     {
@@ -749,37 +764,37 @@ and writing the evidence into its `note`.
     {
       "owner": "orchestrators",
       "candidates": 1811,
-      "runtimeObserved": 1613,
-      "testOnlyObserved": 86,
-      "explicitContract": 0,
-      "unread": 112,
+      "runtimeObserved": 1624,
+      "testOnlyObserved": 94,
+      "explicitContract": 44,
+      "unread": 49,
       "unsupportedAnalysis": 0
     },
     {
       "owner": "persistence",
       "candidates": 80,
-      "runtimeObserved": 57,
-      "testOnlyObserved": 13,
-      "explicitContract": 0,
-      "unread": 10,
+      "runtimeObserved": 58,
+      "testOnlyObserved": 15,
+      "explicitContract": 1,
+      "unread": 6,
       "unsupportedAnalysis": 0
     },
     {
       "owner": "platform",
       "candidates": 84,
       "runtimeObserved": 67,
-      "testOnlyObserved": 3,
-      "explicitContract": 0,
-      "unread": 14,
+      "testOnlyObserved": 9,
+      "explicitContract": 1,
+      "unread": 7,
       "unsupportedAnalysis": 0
     },
     {
       "owner": "shared",
       "candidates": 346,
-      "runtimeObserved": 325,
+      "runtimeObserved": 326,
       "testOnlyObserved": 5,
-      "explicitContract": 0,
-      "unread": 16,
+      "explicitContract": 4,
+      "unread": 11,
       "unsupportedAnalysis": 0
     },
     {
@@ -799,17 +814,17 @@ and writing the evidence into its `note`.
       "owner": "AgentsReplacementInternals.renamed",
       "key": "from",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:75:32",
       "path": "extensions/pi-claude-marketplace/bridges/agents/stage.ts",
       "owner": "agentsReplacementInternals",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within AgentsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/agents/stage.ts:75:3 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:469:20",
@@ -817,35 +832,35 @@ and writing the evidence into its `note`.
       "owner": "renamed",
       "key": "from",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:526:51",
       "path": "extensions/pi-claude-marketplace/bridges/agents/stage.ts",
       "owner": "replacement",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within AgentsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/agents/stage.ts:526:22 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:575:45",
       "path": "extensions/pi-claude-marketplace/bridges/agents/stage.ts",
       "owner": "requireAgentsReplacementInternals.replacement",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within AgentsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/agents/stage.ts:575:16 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:587:46",
       "path": "extensions/pi-claude-marketplace/bridges/agents/stage.ts",
       "owner": "rollbackAgentsReplacementInternal.prepared",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within PreparedAgentsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/agents/stage.ts:587:13 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:588:23",
@@ -853,8 +868,8 @@ and writing the evidence into its `note`.
       "owner": "rollbackAgentsReplacementInternal.renamed",
       "key": "from",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/agents/types.ts:72:3",
@@ -862,8 +877,8 @@ and writing the evidence into its `note`.
       "owner": "StageAgentsInput",
       "key": "resolved",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-10 (bridges/agents)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/agents/types.ts:102:3",
@@ -871,8 +886,8 @@ and writing the evidence into its `note`.
       "owner": "StagedAgentRecord",
       "key": "sourcePath",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 7 witnesses, first at tests/bridges/agents/stage.test.ts:1990:30 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/agents/types.ts:103:3",
@@ -880,8 +895,8 @@ and writing the evidence into its `note`.
       "owner": "StagedAgentRecord",
       "key": "targetPath",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 7 witnesses, first at tests/bridges/agents/stage.test.ts:1990:30 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/agents/types.ts:114:3",
@@ -889,17 +904,17 @@ and writing the evidence into its `note`.
       "owner": "StageAgentsCommitResult",
       "key": "stagedNames",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 14 witnesses, first at tests/bridges/agents/stage.test.ts:181:56 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/agents/types.ts:165:55",
       "path": "extensions/pi-claude-marketplace/bridges/agents/types.ts",
       "owner": "AgentsReplacementNoop.prepared",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within PreparedAgentsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/agents/types.ts:165:22 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/agents/types.ts:182:3",
@@ -907,8 +922,8 @@ and writing the evidence into its `note`.
       "owner": "UnstageAgentsResult",
       "key": "warnings",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 8 witnesses, first at tests/bridges/agents/unstage.test.ts:518:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:70:23",
@@ -916,17 +931,17 @@ and writing the evidence into its `note`.
       "owner": "CommandsReplacementInternals.renamed",
       "key": "from",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:74:34",
       "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts",
       "owner": "commandsReplacementInternals",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within CommandsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/commands/stage.ts:74:3 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:400:20",
@@ -934,35 +949,35 @@ and writing the evidence into its `note`.
       "owner": "renamed",
       "key": "from",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:452:53",
       "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts",
       "owner": "replacement",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within CommandsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/commands/stage.ts:452:22 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:499:47",
       "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts",
       "owner": "requireCommandsReplacementInternals.replacement",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within CommandsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/commands/stage.ts:499:16 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:511:48",
       "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts",
       "owner": "rollbackCommandsReplacementInternal.prepared",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within PreparedCommandsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/commands/stage.ts:511:13 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:512:23",
@@ -970,8 +985,8 @@ and writing the evidence into its `note`.
       "owner": "rollbackCommandsReplacementInternal.renamed",
       "key": "from",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/commands/types.ts:43:3",
@@ -979,8 +994,8 @@ and writing the evidence into its `note`.
       "owner": "StageCommandsInput",
       "key": "marketplaceName",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-10 (bridges/commands)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/commands/types.ts:65:3",
@@ -988,8 +1003,8 @@ and writing the evidence into its `note`.
       "owner": "StagedCommandRecord",
       "key": "sourcePath",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/bridges/commands/stage.test.ts:358:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/commands/types.ts:67:3",
@@ -997,8 +1012,8 @@ and writing the evidence into its `note`.
       "owner": "StagedCommandRecord",
       "key": "targetPath",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/bridges/commands/stage.test.ts:358:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/commands/types.ts:81:3",
@@ -1006,17 +1021,17 @@ and writing the evidence into its `note`.
       "owner": "StageCommandsCommitResult",
       "key": "stagedNames",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 9 witnesses, first at tests/bridges/commands/stage.test.ts:594:42 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/commands/types.ts:119:57",
       "path": "extensions/pi-claude-marketplace/bridges/commands/types.ts",
       "owner": "CommandsReplacementNoop.prepared",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within PreparedCommandsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/commands/types.ts:119:22 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/commands/types.ts:136:3",
@@ -1024,8 +1039,8 @@ and writing the evidence into its `note`.
       "owner": "UnstageCommandsResult",
       "key": "warnings",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 6 witnesses, first at tests/bridges/commands/unstage.test.ts:112:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:129:3",
@@ -1033,8 +1048,8 @@ and writing the evidence into its `note`.
       "owner": "AsyncRewakeEntry",
       "key": "dispatchId",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:130:3",
@@ -1042,8 +1057,8 @@ and writing the evidence into its `note`.
       "owner": "AsyncRewakeEntry",
       "key": "pid",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:131:3",
@@ -1051,8 +1066,8 @@ and writing the evidence into its `note`.
       "owner": "AsyncRewakeEntry",
       "key": "scope",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:132:3",
@@ -1060,8 +1075,8 @@ and writing the evidence into its `note`.
       "owner": "AsyncRewakeEntry",
       "key": "marketplace",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:133:3",
@@ -1069,8 +1084,8 @@ and writing the evidence into its `note`.
       "owner": "AsyncRewakeEntry",
       "key": "pluginId",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:134:3",
@@ -1078,8 +1093,8 @@ and writing the evidence into its `note`.
       "owner": "AsyncRewakeEntry",
       "key": "claudeEvent",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:135:3",
@@ -1087,8 +1102,8 @@ and writing the evidence into its `note`.
       "owner": "AsyncRewakeEntry",
       "key": "spawnedAt",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:136:3",
@@ -1096,8 +1111,8 @@ and writing the evidence into its `note`.
       "owner": "AsyncRewakeEntry",
       "key": "rewakeMessage",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:137:3",
@@ -1105,8 +1120,8 @@ and writing the evidence into its `note`.
       "owner": "AsyncRewakeEntry",
       "key": "rewakeSummary",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:138:3",
@@ -1114,8 +1129,8 @@ and writing the evidence into its `note`.
       "owner": "AsyncRewakeEntry",
       "key": "child",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:139:3",
@@ -1123,8 +1138,8 @@ and writing the evidence into its `note`.
       "owner": "AsyncRewakeEntry",
       "key": "ladder",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:140:3",
@@ -1132,8 +1147,8 @@ and writing the evidence into its `note`.
       "owner": "AsyncRewakeEntry",
       "key": "stdoutBuffer",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:141:3",
@@ -1141,8 +1156,8 @@ and writing the evidence into its `note`.
       "owner": "AsyncRewakeEntry",
       "key": "stderrBuffer",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:142:3",
@@ -1150,8 +1165,8 @@ and writing the evidence into its `note`.
       "owner": "AsyncRewakeEntry",
       "key": "capturedGeneration",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:143:3",
@@ -1159,35 +1174,17 @@ and writing the evidence into its `note`.
       "owner": "AsyncRewakeEntry",
       "key": "loc",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:320:18",
-      "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
-      "owner": "finalizeOnce.outcome",
-      "key": "code",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:320:48",
-      "path": "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
-      "owner": "finalizeOnce.outcome",
-      "key": "signal",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Duplicate declaration. Every member is the structural twin of `HooksRuntimeChildEntry` (bridges/hooks/runtime.ts:11), and the reads land there because the one value built as an `AsyncRewakeEntry` (registry.ts:293) is handed straight to `runtime.registerChild`, whose parameter is the runtime row. Resolving the member by declaration identity is correct: structural compatibility is not a read. Source repair, behaviour-free: make the published name an alias of the runtime row so it declares no members of its own. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:87:37",
       "path": "extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts",
       "owner": "applyMutationInPlace.result",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within HookExecResult by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:87:11 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:133:17",
@@ -1195,8 +1192,8 @@ and writing the evidence into its `note`.
       "owner": "applyToolResultPatch",
       "key": "content",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Assignment target inside a cast literal. The only syntax naming this member writes to it, and a write is not a read (D-04). The literal exists to make one localized mutation type-check against a readonly shape. Source repair or an owner decision: the write needs a declared home the compiler checks rather than a cast minted at the write site. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:137:17",
@@ -1204,8 +1201,8 @@ and writing the evidence into its `note`.
       "owner": "applyToolResultPatch",
       "key": "isError",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Assignment target inside a cast literal. The only syntax naming this member writes to it, and a write is not a read (D-04). The literal exists to make one localized mutation type-check against a readonly shape. Source repair or an owner decision: the write needs a declared home the compiler checks rather than a cast minted at the write site. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:411:3",
@@ -1213,8 +1210,8 @@ and writing the evidence into its `note`.
       "owner": "HydratedScope",
       "key": "state",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:457:13",
@@ -1222,8 +1219,8 @@ and writing the evidence into its `note`.
       "owner": "HooksHydration.registerHooksBridge.opts",
       "key": "ctx",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:457:36",
@@ -1231,8 +1228,8 @@ and writing the evidence into its `note`.
       "owner": "HooksHydration.registerHooksBridge.opts",
       "key": "cwd",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:457:49",
@@ -1240,8 +1237,8 @@ and writing the evidence into its `note`.
       "owner": "HooksHydration.registerHooksBridge.opts",
       "key": "executor",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:497:5",
@@ -1249,8 +1246,8 @@ and writing the evidence into its `note`.
       "owner": "hydrateCacheFromDisk.opts",
       "key": "ctx",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:807:11",
@@ -1258,8 +1255,8 @@ and writing the evidence into its `note`.
       "owner": "registerHooksBridgeWith.opts",
       "key": "ctx",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:1002:15",
@@ -1267,17 +1264,8 @@ and writing the evidence into its `note`.
       "owner": "createHooksHydration.opts",
       "key": "ctx",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts:40:21",
-      "path": "extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts",
-      "owner": "HookExecResult",
-      "key": "suppressOutput",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts:50:3",
@@ -1285,107 +1273,8 @@ and writing the evidence into its `note`.
       "owner": "ChildLike",
       "key": "pid",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:113:3",
-      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts",
-      "owner": "CompiledBashGlob",
-      "key": "raw",
-      "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:114:3",
-      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts",
-      "owner": "CompiledBashGlob",
-      "key": "tokens",
-      "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:115:3",
-      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts",
-      "owner": "CompiledBashGlob",
-      "key": "trailingWordBoundary",
-      "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:129:3",
-      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts",
-      "owner": "CompiledPowerShellGlob",
-      "key": "raw",
-      "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:130:3",
-      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts",
-      "owner": "CompiledPowerShellGlob",
-      "key": "tokens",
-      "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:131:3",
-      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts",
-      "owner": "CompiledPowerShellGlob",
-      "key": "trailingWordBoundary",
-      "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:147:3",
-      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts",
-      "owner": "CompiledPathGlob",
-      "key": "raw",
-      "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:148:3",
-      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts",
-      "owner": "CompiledPathGlob",
-      "key": "anchor",
-      "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:149:3",
-      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts",
-      "owner": "CompiledPathGlob",
-      "key": "absoluteBase",
-      "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts:150:3",
-      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts",
-      "owner": "CompiledPathGlob",
-      "key": "tokens",
-      "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts:98:35",
-      "path": "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
-      "owner": "IfPredicate",
-      "key": "reason",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts:15:3",
@@ -1393,8 +1282,8 @@ and writing the evidence into its `note`.
       "owner": "PostCompactStdin",
       "key": "session_id",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/post-compact.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts:16:3",
@@ -1402,8 +1291,8 @@ and writing the evidence into its `note`.
       "owner": "PostCompactStdin",
       "key": "transcript_path",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/post-compact.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts:17:3",
@@ -1411,8 +1300,8 @@ and writing the evidence into its `note`.
       "owner": "PostCompactStdin",
       "key": "cwd",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/post-compact.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts:18:3",
@@ -1420,8 +1309,8 @@ and writing the evidence into its `note`.
       "owner": "PostCompactStdin",
       "key": "hook_event_name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/post-compact.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts:19:3",
@@ -1429,8 +1318,8 @@ and writing the evidence into its `note`.
       "owner": "PostCompactStdin",
       "key": "trigger",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/post-compact.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:19:3",
@@ -1438,8 +1327,8 @@ and writing the evidence into its `note`.
       "owner": "PostToolUseFailureStdin",
       "key": "session_id",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:20:3",
@@ -1447,8 +1336,8 @@ and writing the evidence into its `note`.
       "owner": "PostToolUseFailureStdin",
       "key": "transcript_path",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:21:3",
@@ -1456,8 +1345,8 @@ and writing the evidence into its `note`.
       "owner": "PostToolUseFailureStdin",
       "key": "cwd",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:22:3",
@@ -1465,8 +1354,8 @@ and writing the evidence into its `note`.
       "owner": "PostToolUseFailureStdin",
       "key": "hook_event_name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:23:3",
@@ -1474,8 +1363,8 @@ and writing the evidence into its `note`.
       "owner": "PostToolUseFailureStdin",
       "key": "tool_name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:94:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:24:3",
@@ -1483,8 +1372,8 @@ and writing the evidence into its `note`.
       "owner": "PostToolUseFailureStdin",
       "key": "tool_input",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:46:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:25:3",
@@ -1492,8 +1381,8 @@ and writing the evidence into its `note`.
       "owner": "PostToolUseFailureStdin",
       "key": "tool_response",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/post-tool-use-failure.test.ts:47:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:23:3",
@@ -1501,8 +1390,8 @@ and writing the evidence into its `note`.
       "owner": "PostToolUseStdin",
       "key": "session_id",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:24:3",
@@ -1510,8 +1399,8 @@ and writing the evidence into its `note`.
       "owner": "PostToolUseStdin",
       "key": "transcript_path",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:25:3",
@@ -1519,8 +1408,8 @@ and writing the evidence into its `note`.
       "owner": "PostToolUseStdin",
       "key": "cwd",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:26:3",
@@ -1528,8 +1417,8 @@ and writing the evidence into its `note`.
       "owner": "PostToolUseStdin",
       "key": "hook_event_name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:27:3",
@@ -1537,8 +1426,8 @@ and writing the evidence into its `note`.
       "owner": "PostToolUseStdin",
       "key": "tool_name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/post-tool-use.test.ts:98:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:28:3",
@@ -1546,8 +1435,8 @@ and writing the evidence into its `note`.
       "owner": "PostToolUseStdin",
       "key": "tool_input",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/post-tool-use.test.ts:50:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:29:3",
@@ -1555,8 +1444,8 @@ and writing the evidence into its `note`.
       "owner": "PostToolUseStdin",
       "key": "tool_response",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/post-tool-use.test.ts:51:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts:15:3",
@@ -1564,8 +1453,8 @@ and writing the evidence into its `note`.
       "owner": "PreCompactStdin",
       "key": "session_id",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts:16:3",
@@ -1573,8 +1462,8 @@ and writing the evidence into its `note`.
       "owner": "PreCompactStdin",
       "key": "transcript_path",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts:17:3",
@@ -1582,8 +1471,8 @@ and writing the evidence into its `note`.
       "owner": "PreCompactStdin",
       "key": "cwd",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts:18:3",
@@ -1591,8 +1480,8 @@ and writing the evidence into its `note`.
       "owner": "PreCompactStdin",
       "key": "hook_event_name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts:19:3",
@@ -1600,8 +1489,8 @@ and writing the evidence into its `note`.
       "owner": "PreCompactStdin",
       "key": "trigger",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/pre-compact.test.ts:125:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:20:3",
@@ -1609,8 +1498,8 @@ and writing the evidence into its `note`.
       "owner": "PreToolUseStdin",
       "key": "session_id",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:21:3",
@@ -1618,8 +1507,8 @@ and writing the evidence into its `note`.
       "owner": "PreToolUseStdin",
       "key": "transcript_path",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:22:3",
@@ -1627,8 +1516,8 @@ and writing the evidence into its `note`.
       "owner": "PreToolUseStdin",
       "key": "cwd",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:23:3",
@@ -1636,8 +1525,8 @@ and writing the evidence into its `note`.
       "owner": "PreToolUseStdin",
       "key": "hook_event_name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:24:3",
@@ -1645,8 +1534,8 @@ and writing the evidence into its `note`.
       "owner": "PreToolUseStdin",
       "key": "tool_name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/payloads/pre-tool-use.test.ts:83:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts:25:3",
@@ -1654,8 +1543,8 @@ and writing the evidence into its `note`.
       "owner": "PreToolUseStdin",
       "key": "tool_input",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/pre-tool-use.test.ts:45:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts:17:3",
@@ -1663,8 +1552,8 @@ and writing the evidence into its `note`.
       "owner": "SessionEndStdin",
       "key": "session_id",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 7 witnesses, first at tests/bridges/hooks/payloads/session-end.test.ts:34:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts:18:3",
@@ -1672,8 +1561,8 @@ and writing the evidence into its `note`.
       "owner": "SessionEndStdin",
       "key": "transcript_path",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 7 witnesses, first at tests/bridges/hooks/payloads/session-end.test.ts:35:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts:19:3",
@@ -1681,8 +1570,8 @@ and writing the evidence into its `note`.
       "owner": "SessionEndStdin",
       "key": "cwd",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 7 witnesses, first at tests/bridges/hooks/payloads/session-end.test.ts:36:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts:20:3",
@@ -1690,8 +1579,8 @@ and writing the evidence into its `note`.
       "owner": "SessionEndStdin",
       "key": "hook_event_name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 6 witnesses, first at tests/bridges/hooks/payloads/session-end.test.ts:158:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts:21:3",
@@ -1699,8 +1588,8 @@ and writing the evidence into its `note`.
       "owner": "SessionEndStdin",
       "key": "reason",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 6 witnesses, first at tests/bridges/hooks/payloads/session-end.test.ts:158:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts:18:3",
@@ -1708,8 +1597,8 @@ and writing the evidence into its `note`.
       "owner": "SessionStartStdin",
       "key": "session_id",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 7 witnesses, first at tests/bridges/hooks/payloads/session-start.test.ts:34:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts:19:3",
@@ -1717,8 +1606,8 @@ and writing the evidence into its `note`.
       "owner": "SessionStartStdin",
       "key": "transcript_path",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 7 witnesses, first at tests/bridges/hooks/payloads/session-start.test.ts:35:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts:20:3",
@@ -1726,8 +1615,8 @@ and writing the evidence into its `note`.
       "owner": "SessionStartStdin",
       "key": "cwd",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 7 witnesses, first at tests/bridges/hooks/payloads/session-start.test.ts:36:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts:21:3",
@@ -1735,8 +1624,8 @@ and writing the evidence into its `note`.
       "owner": "SessionStartStdin",
       "key": "hook_event_name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 6 witnesses, first at tests/bridges/hooks/payloads/session-start.test.ts:155:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts:22:3",
@@ -1744,8 +1633,8 @@ and writing the evidence into its `note`.
       "owner": "SessionStartStdin",
       "key": "source",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 6 witnesses, first at tests/bridges/hooks/payloads/session-start.test.ts:155:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:17:3",
@@ -1753,8 +1642,8 @@ and writing the evidence into its `note`.
       "owner": "StopFailureStdin",
       "key": "session_id",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:18:3",
@@ -1762,8 +1651,8 @@ and writing the evidence into its `note`.
       "owner": "StopFailureStdin",
       "key": "transcript_path",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:19:3",
@@ -1771,8 +1660,8 @@ and writing the evidence into its `note`.
       "owner": "StopFailureStdin",
       "key": "cwd",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:20:3",
@@ -1780,8 +1669,8 @@ and writing the evidence into its `note`.
       "owner": "StopFailureStdin",
       "key": "hook_event_name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:21:3",
@@ -1789,8 +1678,8 @@ and writing the evidence into its `note`.
       "owner": "StopFailureStdin",
       "key": "error",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:22:3",
@@ -1798,8 +1687,8 @@ and writing the evidence into its `note`.
       "owner": "StopFailureStdin",
       "key": "error_details",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts:23:3",
@@ -1807,8 +1696,8 @@ and writing the evidence into its `note`.
       "owner": "StopFailureStdin",
       "key": "last_assistant_message",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop-failure.test.ts:142:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:15:3",
@@ -1816,8 +1705,8 @@ and writing the evidence into its `note`.
       "owner": "StopStdin",
       "key": "session_id",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop.test.ts:132:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:16:3",
@@ -1825,8 +1714,8 @@ and writing the evidence into its `note`.
       "owner": "StopStdin",
       "key": "transcript_path",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop.test.ts:132:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:17:3",
@@ -1834,8 +1723,8 @@ and writing the evidence into its `note`.
       "owner": "StopStdin",
       "key": "cwd",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop.test.ts:132:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:18:3",
@@ -1843,8 +1732,8 @@ and writing the evidence into its `note`.
       "owner": "StopStdin",
       "key": "hook_event_name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop.test.ts:132:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:19:3",
@@ -1852,8 +1741,8 @@ and writing the evidence into its `note`.
       "owner": "StopStdin",
       "key": "last_assistant_message",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop.test.ts:132:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts:20:3",
@@ -1861,8 +1750,8 @@ and writing the evidence into its `note`.
       "owner": "StopStdin",
       "key": "stop_hook_active",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/hooks/payloads/stop.test.ts:132:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts:14:3",
@@ -1870,8 +1759,8 @@ and writing the evidence into its `note`.
       "owner": "UserPromptSubmitStdin",
       "key": "session_id",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts:15:3",
@@ -1879,8 +1768,8 @@ and writing the evidence into its `note`.
       "owner": "UserPromptSubmitStdin",
       "key": "transcript_path",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts:16:3",
@@ -1888,8 +1777,8 @@ and writing the evidence into its `note`.
       "owner": "UserPromptSubmitStdin",
       "key": "cwd",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts:17:3",
@@ -1897,8 +1786,8 @@ and writing the evidence into its `note`.
       "owner": "UserPromptSubmitStdin",
       "key": "hook_event_name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts:18:3",
@@ -1906,8 +1795,8 @@ and writing the evidence into its `note`.
       "owner": "UserPromptSubmitStdin",
       "key": "prompt",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/bridges/hooks/payloads/user-prompt-submit.test.ts:170:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:75:3",
@@ -1915,8 +1804,8 @@ and writing the evidence into its `note`.
       "owner": "RoutingEntry",
       "key": "declarationIndex",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 10 witnesses, first at tests/architecture/hooks-if-field.test.ts:120:27 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:138:3",
@@ -1924,8 +1813,8 @@ and writing the evidence into its `note`.
       "owner": "PendingSessionStartContext",
       "key": "pluginId",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/architecture/hooks-lifecycle.test.ts:457:44 (json-serialization). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:139:3",
@@ -1933,8 +1822,8 @@ and writing the evidence into its `note`.
       "owner": "PendingSessionStartContext",
       "key": "marketplace",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/architecture/hooks-lifecycle.test.ts:457:44 (json-serialization). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:140:3",
@@ -1942,8 +1831,8 @@ and writing the evidence into its `note`.
       "owner": "PendingSessionStartContext",
       "key": "scope",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/architecture/hooks-lifecycle.test.ts:457:44 (json-serialization). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:149:3",
@@ -1951,8 +1840,8 @@ and writing the evidence into its `note`.
       "owner": "RoutingStateOperations",
       "key": "currentEpoch",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 11 witnesses, first at tests/bridges/hooks/routing-state.test.ts:28:18 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:150:3",
@@ -1960,8 +1849,8 @@ and writing the evidence into its `note`.
       "owner": "RoutingStateOperations",
       "key": "bumpEpoch",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 10 witnesses, first at tests/bridges/hooks/routing-state.test.ts:29:18 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:151:3",
@@ -1969,8 +1858,8 @@ and writing the evidence into its `note`.
       "owner": "RoutingStateOperations",
       "key": "appendPendingSessionStartContext",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 8 witnesses, first at tests/bridges/hooks/routing-state.test.ts:87:16 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:152:3",
@@ -1978,8 +1867,8 @@ and writing the evidence into its `note`.
       "owner": "RoutingStateOperations",
       "key": "pendingSessionStartContextEntries",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 12 witnesses, first at tests/bridges/hooks/routing-state.test.ts:66:32 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:153:3",
@@ -1987,8 +1876,8 @@ and writing the evidence into its `note`.
       "owner": "RoutingStateOperations",
       "key": "clearPendingSessionStartContext",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 10 witnesses, first at tests/bridges/hooks/routing-state.test.ts:60:16 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:159:3",
@@ -1996,8 +1885,8 @@ and writing the evidence into its `note`.
       "owner": "RoutingStateOperations",
       "key": "routingTableEntries",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 10 witnesses, first at tests/bridges/hooks/routing-state.test.ts:324:50 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/runtime.ts:17:3",
@@ -2005,8 +1894,8 @@ and writing the evidence into its `note`.
       "owner": "HooksRuntimeChildEntry",
       "key": "claudeEvent",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 1 witness, first at tests/bridges/hooks/runtime.test.ts:286:8 (object-copy). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/stage.ts:227:3",
@@ -2014,8 +1903,8 @@ and writing the evidence into its `note`.
       "owner": "WriteHookConfigResult",
       "key": "written",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-09 (bridges/hooks)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/stage.ts:228:3",
@@ -2023,44 +1912,44 @@ and writing the evidence into its `note`.
       "owner": "WriteHookConfigResult",
       "key": "path",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 1 witness, first at tests/bridges/hooks/stage.test.ts:721:71 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts:141:43",
       "path": "extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts",
       "owner": "mutate",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within HookExecResult by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts:141:17 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:49:29",
       "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts",
       "owner": "mcpReplacementInternals",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/mcp/stage.ts:49:3 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:366:48",
       "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts",
       "owner": "replacement",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/mcp/stage.ts:366:22 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts:411:42",
       "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts",
       "owner": "requireMcpReplacementInternals.replacement",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within McpReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/mcp/stage.ts:411:16 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/mcp/types.ts:49:3",
@@ -2068,8 +1957,8 @@ and writing the evidence into its `note`.
       "owner": "StagedMcpRecord",
       "key": "sourcePath",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 5 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:124:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/mcp/types.ts:51:3",
@@ -2077,8 +1966,8 @@ and writing the evidence into its `note`.
       "owner": "StagedMcpRecord",
       "key": "targetPath",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 5 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:124:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/mcp/types.ts:85:3",
@@ -2086,17 +1975,17 @@ and writing the evidence into its `note`.
       "owner": "PreparedMcpStaged",
       "key": "stagedNames",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 6 witnesses, first at tests/bridges/mcp/stage.test.ts:778:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/mcp/types.ts:95:52",
       "path": "extensions/pi-claude-marketplace/bridges/mcp/types.ts",
       "owner": "McpReplacementNoop.prepared",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within PreparedMcpStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/mcp/types.ts:95:22 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/mcp/types.ts:113:3",
@@ -2104,8 +1993,8 @@ and writing the evidence into its `note`.
       "owner": "UnstageMcpResult",
       "key": "warnings",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 9 witnesses, first at tests/bridges/mcp/unstage.test.ts:506:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:62:23",
@@ -2113,17 +2002,17 @@ and writing the evidence into its `note`.
       "owner": "SkillsReplacementInternals.renamed",
       "key": "from",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:66:32",
       "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts",
       "owner": "skillsReplacementInternals",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within SkillsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/skills/stage.ts:66:3 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:465:20",
@@ -2131,35 +2020,35 @@ and writing the evidence into its `note`.
       "owner": "renamed",
       "key": "from",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:517:51",
       "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts",
       "owner": "replacement",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within SkillsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/skills/stage.ts:517:22 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:564:45",
       "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts",
       "owner": "requireSkillsReplacementInternals.replacement",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within SkillsReplacement by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/skills/stage.ts:564:16 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:576:46",
       "path": "extensions/pi-claude-marketplace/bridges/skills/stage.ts",
       "owner": "rollbackSkillsReplacementInternal.prepared",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within PreparedSkillsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/skills/stage.ts:576:13 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:577:23",
@@ -2167,8 +2056,8 @@ and writing the evidence into its `note`.
       "owner": "rollbackSkillsReplacementInternal.renamed",
       "key": "from",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/skills/types.ts:29:3",
@@ -2176,8 +2065,8 @@ and writing the evidence into its `note`.
       "owner": "StageSkillsInput",
       "key": "marketplaceName",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-10 (bridges/skills)."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/skills/types.ts:58:3",
@@ -2185,8 +2074,8 @@ and writing the evidence into its `note`.
       "owner": "StagedSkillRecord",
       "key": "sourcePath",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 5 witnesses, first at tests/bridges/skills/stage.test.ts:580:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/skills/types.ts:60:3",
@@ -2194,8 +2083,8 @@ and writing the evidence into its `note`.
       "owner": "StagedSkillRecord",
       "key": "targetPath",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 5 witnesses, first at tests/bridges/skills/stage.test.ts:580:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/skills/types.ts:74:3",
@@ -2203,17 +2092,17 @@ and writing the evidence into its `note`.
       "owner": "StageSkillsCommitResult",
       "key": "stagedNames",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 12 witnesses, first at tests/bridges/skills/stage.test.ts:308:44 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/skills/types.ts:117:55",
       "path": "extensions/pi-claude-marketplace/bridges/skills/types.ts",
       "owner": "SkillsReplacementNoop.prepared",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within PreparedSkillsStaging by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/bridges/skills/types.ts:117:22 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/skills/types.ts:134:3",
@@ -2221,8 +2110,8 @@ and writing the evidence into its `note`.
       "owner": "UnstageSkillsResult",
       "key": "warnings",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/bridges/skills/index.test.ts:211:54 (value-transfer). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/auth-registry.ts:28:3",
@@ -2230,8 +2119,8 @@ and writing the evidence into its `note`.
       "owner": "GitAuthProvider",
       "key": "id",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/domain/auth-registry.test.ts:48:27 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:55:3",
@@ -2239,8 +2128,8 @@ and writing the evidence into its `note`.
       "owner": "IfPrefixTarget",
       "key": "piEvents",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Compile-time shape constraint. The interface exists only as the right-hand side of the `as const satisfies Record<string, IfPrefixTarget>` gate at hook-if-targets.ts:107, which the const's own inferred type is checked against; every read goes through that inferred type, never through this declaration. Owner decision: accept the finding, or a further bounded engine plan adding a `satisfies`-constraint category with evidence of the constrained const. Owner plan 06-13 (domain)."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:56:3",
@@ -2248,8 +2137,8 @@ and writing the evidence into its `note`.
       "owner": "IfPrefixTarget",
       "key": "extractTarget",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Compile-time shape constraint. The interface exists only as the right-hand side of the `as const satisfies Record<string, IfPrefixTarget>` gate at hook-if-targets.ts:107, which the const's own inferred type is checked against; every read goes through that inferred type, never through this declaration. Owner decision: accept the finding, or a further bounded engine plan adding a `satisfies`-constraint category with evidence of the constrained const. Owner plan 06-13 (domain)."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts:52:21",
@@ -2257,8 +2146,8 @@ and writing the evidence into its `note`.
       "owner": "PiToolName",
       "key": "toolName",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Filter literal in a conditional type's `extends` clause. The member does the same type-system work a two-argument selection does, but the engine proves only the two-argument form, so there is no category that fits. Owner decision: accept the finding, or a further bounded engine plan adding a conditional-clause proof with its own drift controls. Owner plan 06-13 (domain)."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hooks.ts:77:3",
@@ -2266,8 +2155,8 @@ and writing the evidence into its `note`.
       "owner": "ResolveHookIfContext",
       "key": "homedir",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (domain)."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hooks.ts:78:3",
@@ -2275,8 +2164,8 @@ and writing the evidence into its `note`.
       "owner": "ResolveHookIfContext",
       "key": "cwd",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 1 witness, first at tests/domain/components/hooks.test.ts:141:14 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hooks.ts:79:3",
@@ -2284,44 +2173,44 @@ and writing the evidence into its `note`.
       "owner": "ResolveHookIfContext",
       "key": "projectRoot",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (domain)."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts:14:25",
       "path": "extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts",
       "owner": "ParsedMatcher",
       "key": "token",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 10 witnesses, first at tests/domain/components/hooks/matcher.test.ts:162:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:20:7",
       "path": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts",
       "owner": "DroppedHook",
       "key": "cond",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 22 witnesses, first at tests/architecture/hooks-foundation.test.ts:96:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:22:62",
       "path": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts",
       "owner": "DroppedHook",
       "key": "handlerType",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 22 witnesses, first at tests/architecture/hooks-foundation.test.ts:96:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:29:48",
       "path": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts",
       "owner": "MatcherCondition",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within DroppedHook by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:29:25 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts:8:3",
@@ -2329,8 +2218,8 @@ and writing the evidence into its `note`.
       "owner": "HookHandlerEntry",
       "key": "statusMessage",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (domain)."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts:9:3",
@@ -2338,8 +2227,8 @@ and writing the evidence into its `note`.
       "owner": "HookHandlerEntry",
       "key": "once",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (domain)."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts:10:3",
@@ -2347,8 +2236,8 @@ and writing the evidence into its `note`.
       "owner": "HookHandlerEntry",
       "key": "async",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (domain)."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/github-auth.ts:77:45",
@@ -2356,8 +2245,8 @@ and writing the evidence into its `note`.
       "owner": "PollResult",
       "key": "tokenType",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 1 witness, first at tests/domain/github-auth.test.ts:83:34 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/github-auth.ts:77:64",
@@ -2365,8 +2254,8 @@ and writing the evidence into its `note`.
       "owner": "PollResult",
       "key": "scope",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 1 witness, first at tests/domain/github-auth.test.ts:84:29 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/github-auth.ts:145:7",
@@ -2374,17 +2263,17 @@ and writing the evidence into its `note`.
       "owner": "DeviceFlowResult",
       "key": "ok",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 40 witnesses, first at tests/domain/github-auth.test.ts:323:35 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/github-auth.ts:145:17",
       "path": "extensions/pi-claude-marketplace/domain/github-auth.ts",
       "owner": "DeviceFlowResult",
       "key": "cred",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 18 witnesses, first at tests/domain/github-auth.test.ts:1238:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/github-auth.ts:145:39",
@@ -2392,8 +2281,8 @@ and writing the evidence into its `note`.
       "owner": "DeviceFlowResult",
       "key": "authAttempted",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 36 witnesses, first at tests/domain/github-auth.test.ts:1238:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/github-auth.ts:146:7",
@@ -2401,17 +2290,17 @@ and writing the evidence into its `note`.
       "owner": "DeviceFlowResult",
       "key": "ok",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 40 witnesses, first at tests/domain/github-auth.test.ts:323:35 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/github-auth.ts:146:18",
       "path": "extensions/pi-claude-marketplace/domain/github-auth.ts",
       "owner": "DeviceFlowResult",
       "key": "reason",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 18 witnesses, first at tests/domain/github-auth.test.ts:1238:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/github-auth.ts:146:34",
@@ -2419,26 +2308,26 @@ and writing the evidence into its `note`.
       "owner": "DeviceFlowResult",
       "key": "authAttempted",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 36 witnesses, first at tests/domain/github-auth.test.ts:1238:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/manifest-lookup.ts:57:30",
       "path": "extensions/pi-claude-marketplace/domain/manifest-lookup.ts",
       "owner": "lookupDeclaredPlugin",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within ManifestLookup by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/manifest-lookup.ts:57:4 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/plugin-root.ts:23:45",
       "path": "extensions/pi-claude-marketplace/domain/plugin-root.ts",
       "owner": "AbsolutePluginRoot",
       "key": "__absolutePluginRootBrand",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. nominal-brand: Marks AbsolutePluginRoot so a value no branding module minted cannot stand in for it. (unique symbol extensions/pi-claude-marketplace/domain/plugin-root.ts:16:15 cannot be spelled outside its module)"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:15:20",
@@ -2446,8 +2335,8 @@ and writing the evidence into its `note`.
       "owner": "DroppedHookSchema",
       "key": "kind",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 6 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:122:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:15:50",
@@ -2455,8 +2344,8 @@ and writing the evidence into its `note`.
       "owner": "DroppedHookSchema",
       "key": "event",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 6 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:122:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:17:7",
@@ -2464,8 +2353,8 @@ and writing the evidence into its `note`.
       "owner": "DroppedHookSchema",
       "key": "kind",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 6 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:122:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:18:7",
@@ -2473,8 +2362,8 @@ and writing the evidence into its `note`.
       "owner": "DroppedHookSchema",
       "key": "event",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 6 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:122:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:19:7",
@@ -2482,17 +2371,17 @@ and writing the evidence into its `note`.
       "owner": "DroppedHookSchema",
       "key": "matcher",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Compile-time schema proof. The typebox schema member exists so `DroppedHookArmKeysMatch` can assert the schema's static type and the hand-written `DroppedHook` union carry the same keys. Nothing reads it at run time and nothing can: the proof is the whole purpose. Owner decision: accept the finding, or a further bounded engine plan adding a compile-time-proof category with evidence of the assertion that consumes it. Owner plan 06-13 (domain)."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:20:7",
       "path": "extensions/pi-claude-marketplace/domain/resolver-types.ts",
       "owner": "DroppedHookSchema",
       "key": "cond",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:122:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:30:7",
@@ -2500,8 +2389,8 @@ and writing the evidence into its `note`.
       "owner": "DroppedHookSchema",
       "key": "kind",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 6 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:122:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:31:7",
@@ -2509,8 +2398,8 @@ and writing the evidence into its `note`.
       "owner": "DroppedHookSchema",
       "key": "event",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 6 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:122:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:32:7",
@@ -2518,98 +2407,89 @@ and writing the evidence into its `note`.
       "owner": "DroppedHookSchema",
       "key": "matcher",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Compile-time schema proof. The typebox schema member exists so `DroppedHookArmKeysMatch` can assert the schema's static type and the hand-written `DroppedHook` union carry the same keys. Nothing reads it at run time and nothing can: the proof is the whole purpose. Owner decision: accept the finding, or a further bounded engine plan adding a compile-time-proof category with evidence of the assertion that consumes it. Owner plan 06-13 (domain)."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:33:7",
       "path": "extensions/pi-claude-marketplace/domain/resolver-types.ts",
       "owner": "DroppedHookSchema",
       "key": "handlerType",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/architecture/integration-materialization-gate.test.ts:122:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:49:32",
       "path": "extensions/pi-claude-marketplace/domain/resolver-types.ts",
       "owner": "DroppedHookArmKeysMatch",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within DroppedHook by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:49:9 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:50:60",
       "path": "extensions/pi-claude-marketplace/domain/resolver-types.ts",
       "owner": "DroppedHookArmKeysMatch",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within Type.Static<DroppedHookSchema> by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:50:18 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:51:54",
       "path": "extensions/pi-claude-marketplace/domain/resolver-types.ts",
       "owner": "DroppedHookArmKeysMatch",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within Type.Static<DroppedHookSchema> by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:51:12 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:52:36",
       "path": "extensions/pi-claude-marketplace/domain/resolver-types.ts",
       "owner": "DroppedHookArmKeysMatch",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within DroppedHook by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:52:13 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:121:67",
       "path": "extensions/pi-claude-marketplace/domain/resolver-types.ts",
       "owner": "ResolvedPluginInstallable",
       "key": "state",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within ResolvedPlugin by state, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:121:41 selects by state)"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:124:5",
       "path": "extensions/pi-claude-marketplace/domain/resolver-types.ts",
       "owner": "ResolvedPluginPartiallyAvailable",
       "key": "state",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within ResolvedPlugin by state, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:122:48 selects by state)"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:126:67",
       "path": "extensions/pi-claude-marketplace/domain/resolver-types.ts",
       "owner": "ResolvedPluginUnavailable",
       "key": "state",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within ResolvedPlugin by state, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:126:41 selects by state)"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:142:7",
       "path": "extensions/pi-claude-marketplace/domain/resolver-types.ts",
       "owner": "GitPluginRootResult",
       "key": "resolvedSha",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/domain/source.ts:61:3",
-      "path": "extensions/pi-claude-marketplace/domain/source.ts",
-      "owner": "NpmSource",
-      "key": "registry",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 16 witnesses, first at tests/orchestrators/plugin/clone-cache.test.ts:1549:20 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/args-schema.ts:60:70",
@@ -2617,8 +2497,8 @@ and writing the evidence into its `note`.
       "owner": "ParsedCommandArgs",
       "key": "required",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Filter literal in a conditional type's `extends` clause. The member does the same type-system work a two-argument selection does, but the engine proves only the two-argument form, so there is no category that fits. Owner decision: accept the finding, or a further bounded engine plan adding a conditional-clause proof with its own drift controls. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/completions/data.ts:132:3",
@@ -2626,8 +2506,8 @@ and writing the evidence into its `note`.
       "owner": "LocationsResolver",
       "key": "marketplaceNamesCachePath",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/completions/data.ts:145:3",
@@ -2635,8 +2515,8 @@ and writing the evidence into its `note`.
       "owner": "MarketplaceStateRecord",
       "key": "manifestPath",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/completions/normalize.ts:29:7",
@@ -2644,8 +2524,8 @@ and writing the evidence into its `note`.
       "owner": "normalizeCompletionWhitespace",
       "key": "lines",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 5 witnesses, first at tests/edge/completions/normalize.test.ts:125:16 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/completions/normalize.ts:29:24",
@@ -2653,8 +2533,8 @@ and writing the evidence into its `note`.
       "owner": "normalizeCompletionWhitespace",
       "key": "cursorLine",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/edge/completions/normalize.test.ts:107:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/completions/normalize.ts:29:44",
@@ -2662,8 +2542,8 @@ and writing the evidence into its `note`.
       "owner": "normalizeCompletionWhitespace",
       "key": "cursorCol",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/edge/completions/normalize.test.ts:107:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts:27:3",
@@ -2671,8 +2551,8 @@ and writing the evidence into its `note`.
       "owner": "SingleNameMarketplaceRun.opts",
       "key": "ctx",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts:28:3",
@@ -2680,8 +2560,8 @@ and writing the evidence into its `note`.
       "owner": "SingleNameMarketplaceRun.opts",
       "key": "pi",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts:29:3",
@@ -2689,8 +2569,8 @@ and writing the evidence into its `note`.
       "owner": "SingleNameMarketplaceRun.opts",
       "key": "name",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts:30:3",
@@ -2698,8 +2578,8 @@ and writing the evidence into its `note`.
       "owner": "SingleNameMarketplaceRun.opts",
       "key": "cwd",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts:31:3",
@@ -2707,8 +2587,8 @@ and writing the evidence into its `note`.
       "owner": "SingleNameMarketplaceRun.opts",
       "key": "scope",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:100:9",
@@ -2716,8 +2596,8 @@ and writing the evidence into its `note`.
       "owner": "marketplaces",
       "key": "name",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:101:9",
@@ -2725,8 +2605,8 @@ and writing the evidence into its `note`.
       "owner": "marketplaces",
       "key": "scope",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:102:9",
@@ -2734,8 +2614,8 @@ and writing the evidence into its `note`.
       "owner": "marketplaces",
       "key": "pluginCount",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:103:9",
@@ -2743,8 +2623,8 @@ and writing the evidence into its `note`.
       "owner": "marketplaces",
       "key": "source",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:140:3",
@@ -2752,8 +2632,8 @@ and writing the evidence into its `note`.
       "owner": "PluginRow",
       "key": "marketplace",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:141:3",
@@ -2761,8 +2641,8 @@ and writing the evidence into its `note`.
       "owner": "PluginRow",
       "key": "scope",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:284:5",
@@ -2770,8 +2650,8 @@ and writing the evidence into its `note`.
       "owner": "loadToolPluginPayload.params",
       "key": "installed",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:285:5",
@@ -2779,8 +2659,8 @@ and writing the evidence into its `note`.
       "owner": "loadToolPluginPayload.params",
       "key": "available",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:286:5",
@@ -2788,8 +2668,8 @@ and writing the evidence into its `note`.
       "owner": "loadToolPluginPayload.params",
       "key": "unavailable",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-11 (edge)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:58:3",
@@ -2797,8 +2677,8 @@ and writing the evidence into its `note`.
       "owner": "MarketplaceStateRecordLike",
       "key": "manifestPath",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:59:3",
@@ -2806,8 +2686,8 @@ and writing the evidence into its `note`.
       "owner": "MarketplaceStateRecordLike",
       "key": "plugins",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:63:3",
@@ -2815,8 +2695,8 @@ and writing the evidence into its `note`.
       "owner": "LocationsResolverLike",
       "key": "marketplaceNamesCachePath",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/orchestrators/edge-deps.test.ts:235:32 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:66:5",
@@ -2824,8 +2704,8 @@ and writing the evidence into its `note`.
       "owner": "LocationsResolverLike.loadStateForScope",
       "key": "marketplaces",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:158:7",
@@ -2833,8 +2713,8 @@ and writing the evidence into its `note`.
       "owner": "makeLocationsResolver",
       "key": "marketplaces",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:51:3",
@@ -2842,8 +2722,8 @@ and writing the evidence into its `note`.
       "owner": "MarketplaceAddedOutcome",
       "key": "kind",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:54:3",
@@ -2851,8 +2731,8 @@ and writing the evidence into its `note`.
       "owner": "MarketplaceAddedOutcome",
       "key": "reason",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:58:3",
@@ -2860,8 +2740,8 @@ and writing the evidence into its `note`.
       "owner": "MarketplaceSkipOutcome",
       "key": "kind",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:61:3",
@@ -2869,8 +2749,8 @@ and writing the evidence into its `note`.
       "owner": "MarketplaceSkipOutcome",
       "key": "reason",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:65:3",
@@ -2878,8 +2758,8 @@ and writing the evidence into its `note`.
       "owner": "PluginInstalledOutcome",
       "key": "kind",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:69:3",
@@ -2887,8 +2767,8 @@ and writing the evidence into its `note`.
       "owner": "PluginInstalledOutcome",
       "key": "ref",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:70:3",
@@ -2896,8 +2776,8 @@ and writing the evidence into its `note`.
       "owner": "PluginInstalledOutcome",
       "key": "reason",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:71:3",
@@ -2905,8 +2785,8 @@ and writing the evidence into its `note`.
       "owner": "PluginInstalledOutcome",
       "key": "resourcesChanged",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:83:3",
@@ -2914,8 +2794,8 @@ and writing the evidence into its `note`.
       "owner": "PluginSkipOutcome",
       "key": "kind",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:87:3",
@@ -2923,8 +2803,8 @@ and writing the evidence into its `note`.
       "owner": "PluginSkipOutcome",
       "key": "ref",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:88:3",
@@ -2932,8 +2812,8 @@ and writing the evidence into its `note`.
       "owner": "PluginSkipOutcome",
       "key": "reason",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:92:3",
@@ -2941,8 +2821,8 @@ and writing the evidence into its `note`.
       "owner": "ImportWarningOutcome",
       "key": "kind",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:96:3",
@@ -2950,8 +2830,8 @@ and writing the evidence into its `note`.
       "owner": "ImportWarningOutcome",
       "key": "ref",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:99:3",
@@ -2959,8 +2839,8 @@ and writing the evidence into its `note`.
       "owner": "ImportWarningOutcome",
       "key": "cause",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:103:3",
@@ -2968,8 +2848,8 @@ and writing the evidence into its `note`.
       "owner": "MarketplaceFailureOutcome",
       "key": "kind",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:106:3",
@@ -2977,8 +2857,8 @@ and writing the evidence into its `note`.
       "owner": "MarketplaceFailureOutcome",
       "key": "reason",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:107:3",
@@ -2986,8 +2866,8 @@ and writing the evidence into its `note`.
       "owner": "MarketplaceFailureOutcome",
       "key": "cause",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:111:3",
@@ -2995,8 +2875,8 @@ and writing the evidence into its `note`.
       "owner": "SourceMismatchOutcome",
       "key": "kind",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:115:3",
@@ -3004,8 +2884,8 @@ and writing the evidence into its `note`.
       "owner": "SourceMismatchOutcome",
       "key": "ref",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:116:3",
@@ -3013,8 +2893,8 @@ and writing the evidence into its `note`.
       "owner": "SourceMismatchOutcome",
       "key": "reason",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:117:3",
@@ -3022,8 +2902,8 @@ and writing the evidence into its `note`.
       "owner": "SourceMismatchOutcome",
       "key": "cause",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:121:3",
@@ -3031,8 +2911,8 @@ and writing the evidence into its `note`.
       "owner": "UnexpectedPluginFailureOutcome",
       "key": "kind",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:125:3",
@@ -3040,8 +2920,8 @@ and writing the evidence into its `note`.
       "owner": "UnexpectedPluginFailureOutcome",
       "key": "ref",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:126:3",
@@ -3049,8 +2929,8 @@ and writing the evidence into its `note`.
       "owner": "UnexpectedPluginFailureOutcome",
       "key": "reason",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:140:3",
@@ -3058,8 +2938,8 @@ and writing the evidence into its `note`.
       "owner": "ClaudeImportExecutionResult",
       "key": "diagnostics",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 45 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:141:3",
@@ -3067,8 +2947,8 @@ and writing the evidence into its `note`.
       "owner": "ClaudeImportExecutionResult",
       "key": "changedResources",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 45 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:161:13",
@@ -3076,8 +2956,8 @@ and writing the evidence into its `note`.
       "owner": "ImportDeps.loadSettings.opts",
       "key": "cwd",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:216:27",
@@ -3085,26 +2965,8 @@ and writing the evidence into its `note`.
       "owner": "settingsLoader.opts",
       "key": "cwd",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:263:13",
-      "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts",
-      "owner": "pushDiagnostic.extra",
-      "key": "ref",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:263:27",
-      "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts",
-      "owner": "pushDiagnostic.extra",
-      "key": "marketplace",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:1005:40",
@@ -3112,8 +2974,8 @@ and writing the evidence into its `note`.
       "owner": "marketplaces",
       "key": "source",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts:1049:40",
@@ -3121,8 +2983,8 @@ and writing the evidence into its `note`.
       "owner": "marketplaces",
       "key": "source",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/types.ts:15:3",
@@ -3130,8 +2992,8 @@ and writing the evidence into its `note`.
       "owner": "ImportDiagnostic",
       "key": "severity",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 63 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/types.ts:16:3",
@@ -3139,8 +3001,8 @@ and writing the evidence into its `note`.
       "owner": "ImportDiagnostic",
       "key": "scope",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 63 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/types.ts:17:3",
@@ -3148,8 +3010,8 @@ and writing the evidence into its `note`.
       "owner": "ImportDiagnostic",
       "key": "code",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 63 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/types.ts:18:3",
@@ -3157,8 +3019,8 @@ and writing the evidence into its `note`.
       "owner": "ImportDiagnostic",
       "key": "message",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 63 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/types.ts:19:3",
@@ -3166,8 +3028,8 @@ and writing the evidence into its `note`.
       "owner": "ImportDiagnostic",
       "key": "path",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 63 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/types.ts:20:3",
@@ -3175,8 +3037,8 @@ and writing the evidence into its `note`.
       "owner": "ImportDiagnostic",
       "key": "ref",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 63 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/types.ts:21:3",
@@ -3184,8 +3046,8 @@ and writing the evidence into its `note`.
       "owner": "ImportDiagnostic",
       "key": "marketplace",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 63 witnesses, first at tests/orchestrators/import/execute.test.ts:2547:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/import/types.ts:40:3",
@@ -3193,8 +3055,8 @@ and writing the evidence into its `note`.
       "owner": "MergedClaudeSettingsResult",
       "key": "paths",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 17 witnesses, first at tests/orchestrators/import/settings.test.ts:726:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:146:7",
@@ -3202,26 +3064,26 @@ and writing the evidence into its `note`.
       "owner": "AddMarketplaceOutcome",
       "key": "error",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 12 witnesses, first at tests/orchestrators/marketplace/add.test.ts:1800:25 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:540:35",
       "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
       "owner": "addMarketplace.opts",
       "key": "notifications",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:540:9 narrows notifications)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:540:52",
       "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
       "owner": "addMarketplace.opts.notifications",
       "key": "mode",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:540:9 narrows notifications.mode)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts:306:23",
@@ -3229,8 +3091,8 @@ and writing the evidence into its `note`.
       "owner": "buildAutoupdatePatch",
       "key": "autoupdate",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts:307:35",
@@ -3238,8 +3100,8 @@ and writing the evidence into its `note`.
       "owner": "patch",
       "key": "autoupdate",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts:500:33",
@@ -3247,8 +3109,8 @@ and writing the evidence into its `note`.
       "owner": "errors",
       "key": "cause",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:114:35",
@@ -3256,8 +3118,8 @@ and writing the evidence into its `note`.
       "owner": "RemoveMarketplaceOutcome",
       "key": "name",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:118:7",
@@ -3265,8 +3127,8 @@ and writing the evidence into its `note`.
       "owner": "RemoveMarketplaceOutcome",
       "key": "error",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 11 witnesses, first at tests/orchestrators/marketplace/remove.test.ts:238:20 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:119:7",
@@ -3274,8 +3136,8 @@ and writing the evidence into its `note`.
       "owner": "RemoveMarketplaceOutcome",
       "key": "cause",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 7 witnesses, first at tests/orchestrators/marketplace/remove.test.ts:1439:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:129:7",
@@ -3283,26 +3145,8 @@ and writing the evidence into its `note`.
       "owner": "RemoveMarketplaceOutcome",
       "key": "name",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:190:14",
-      "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts",
-      "owner": "resolveScopeOrFailedOutcome",
-      "key": "scope",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:190:28",
-      "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts",
-      "owner": "resolveScopeOrFailedOutcome",
-      "key": "locations",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:310:29",
@@ -3310,8 +3154,8 @@ and writing the evidence into its `note`.
       "owner": "cascadePluginsInPlace.args.failedPlugins",
       "key": "name",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:310:43",
@@ -3319,8 +3163,8 @@ and writing the evidence into its `note`.
       "owner": "cascadePluginsInPlace.args.failedPlugins",
       "key": "cause",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:439:29",
@@ -3328,8 +3172,8 @@ and writing the evidence into its `note`.
       "owner": "runRemoveLockBody.args.failedPlugins",
       "key": "name",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:439:43",
@@ -3337,8 +3181,8 @@ and writing the evidence into its `note`.
       "owner": "runRemoveLockBody.args.failedPlugins",
       "key": "cause",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:505:3",
@@ -3346,26 +3190,26 @@ and writing the evidence into its `note`.
       "owner": "ExtensionMarketplaceRow",
       "key": "plugins",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:661:38",
       "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts",
       "owner": "removeMarketplace.opts",
       "key": "notifications",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:661:9 narrows notifications)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:661:55",
       "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts",
       "owner": "removeMarketplace.opts.notifications",
       "key": "mode",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:661:9 narrows notifications.mode)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:699:26",
@@ -3373,8 +3217,8 @@ and writing the evidence into its `note`.
       "owner": "failedPlugins",
       "key": "name",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:699:40",
@@ -3382,8 +3226,8 @@ and writing the evidence into its `note`.
       "owner": "failedPlugins",
       "key": "cause",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:116:5",
@@ -3391,8 +3235,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.clone.opts",
       "key": "dir",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/platform/git-ops-fake.ts:160:34 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:117:5",
@@ -3400,8 +3244,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.clone.opts",
       "key": "url",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 23 witnesses, first at tests/platform/git-ops-fake.ts:154:34 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:118:5",
@@ -3409,8 +3253,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.clone.opts",
       "key": "ref",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 11 witnesses, first at tests/orchestrators/plugin/fetch.test.ts:172:55 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:119:5",
@@ -3418,8 +3262,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.clone.opts",
       "key": "singleBranch",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 11 witnesses, first at tests/orchestrators/plugin/fetch.test.ts:172:96 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:120:5",
@@ -3427,8 +3271,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.clone.opts",
       "key": "auth",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 6 witnesses, first at tests/platform/git-ops-fake.ts:79:11 (binding-destructuring). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:123:17",
@@ -3436,8 +3280,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.fetch.opts",
       "key": "dir",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/platform/git-ops-fake.ts:89:47 (object-copy). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:123:30",
@@ -3445,8 +3289,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.fetch.opts",
       "key": "remote",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 5 witnesses, first at tests/platform/git-ops-fake.ts:176:35 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:123:47",
@@ -3454,8 +3298,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.fetch.opts",
       "key": "ref",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 11 witnesses, first at tests/platform/git-ops-fake.ts:177:32 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:123:61",
@@ -3463,8 +3307,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.fetch.opts",
       "key": "auth",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/platform/git-ops-fake.ts:87:11 (binding-destructuring). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:125:26",
@@ -3472,8 +3316,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.forceUpdateRef.opts",
       "key": "dir",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 1 witness, first at tests/orchestrators/marketplace/shared.test.ts:124:60 (object-copy). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:125:39",
@@ -3481,8 +3325,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.forceUpdateRef.opts",
       "key": "ref",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/platform/git-ops-fake.ts:183:37 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:125:52",
@@ -3490,8 +3334,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.forceUpdateRef.opts",
       "key": "value",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/platform/git-ops-fake.ts:183:58 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:127:20",
@@ -3499,8 +3343,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.checkout.opts",
       "key": "dir",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 5 witnesses, first at tests/platform/git-ops-fake.ts:205:38 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:127:33",
@@ -3508,8 +3352,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.checkout.opts",
       "key": "ref",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 18 witnesses, first at tests/platform/git-ops-fake.ts:193:41 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:129:22",
@@ -3517,8 +3361,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.resolveRef.opts",
       "key": "dir",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 1 witness, first at tests/orchestrators/marketplace/shared.test.ts:106:56 (object-copy). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:129:35",
@@ -3526,8 +3370,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.resolveRef.opts",
       "key": "ref",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 14 witnesses, first at tests/platform/git-ops-fake.ts:210:26 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:136:25",
@@ -3535,8 +3379,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.currentBranch.opts",
       "key": "dir",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 1 witness, first at tests/orchestrators/marketplace/shared.test.ts:116:59 (object-copy). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:144:28",
@@ -3544,8 +3388,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.resolveRemoteRef.opts",
       "key": "url",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 6 witnesses, first at tests/platform/git-ops-fake.ts:228:36 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:144:41",
@@ -3553,8 +3397,8 @@ and writing the evidence into its `note`.
       "owner": "GitOps.resolveRemoteRef.opts",
       "key": "ref",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 7 witnesses, first at tests/platform/git-ops-fake.ts:234:26 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:144:55",
@@ -3562,35 +3406,35 @@ and writing the evidence into its `note`.
       "owner": "GitOps.resolveRemoteRef.opts",
       "key": "auth",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/platform/git-ops-fake.ts:95:11 (binding-destructuring). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:76:75",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts",
       "owner": "ENABLE_RENDER",
       "key": "status",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within EnableMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:76:54 selects by status)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:105:78",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts",
       "owner": "DISABLE_RENDER",
       "key": "status",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within DisableMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:105:56 selects by status)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:126:67",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
       "owner": "InstalledEnableLedgerResult",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within InstallLedgerResult by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:126:36 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:168:7",
@@ -3598,8 +3442,8 @@ and writing the evidence into its `note`.
       "owner": "EnableDisablePluginOutcome",
       "key": "name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 1 witness, first at tests/orchestrators/plugin/enable-disable.test.ts:2785:28 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:171:36",
@@ -3607,8 +3451,8 @@ and writing the evidence into its `note`.
       "owner": "EnableDisablePluginOutcome",
       "key": "name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 1 witness, first at tests/orchestrators/plugin/enable-disable.test.ts:2212:28 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:174:7",
@@ -3616,8 +3460,8 @@ and writing the evidence into its `note`.
       "owner": "EnableDisablePluginOutcome",
       "key": "name",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:175:7",
@@ -3625,8 +3469,8 @@ and writing the evidence into its `note`.
       "owner": "EnableDisablePluginOutcome",
       "key": "reason",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/orchestrators/plugin/enable-disable.test.ts:2245:28 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:180:7",
@@ -3634,8 +3478,8 @@ and writing the evidence into its `note`.
       "owner": "EnableDisablePluginOutcome",
       "key": "error",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 1 witness, first at tests/orchestrators/plugin/enable-disable.test.ts:2337:25 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:181:7",
@@ -3643,107 +3487,107 @@ and writing the evidence into its `note`.
       "owner": "EnableDisablePluginOutcome",
       "key": "cause",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/orchestrators/plugin/enable-disable.test.ts:2523:18 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:460:3",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
       "owner": "FailedUnstageOutcome",
       "key": "ok",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows ok at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:459:29 narrows ok)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:565:41",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
       "owner": "addCachedHooksAfterSave.outcome",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:565:12 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:596:72",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
       "owner": "SelectedConfigWriteTarget",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within DeclaringConfigWriteTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:596:34 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:688:62",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
       "owner": "emitUnresolvedTarget.args.resolution",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Excludes from CrossScopePluginResolution by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:688:24 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:985:42",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
       "owner": "SetPluginEnabledOperation.opts",
       "key": "notifications",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:985:11 narrows notifications)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:985:59",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
       "owner": "SetPluginEnabledOperation.opts.notifications",
       "key": "mode",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:985:11 narrows notifications.mode)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:995:42",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
       "owner": "configuredSetPluginEnabled.opts",
       "key": "notifications",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:995:11 narrows notifications)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:995:59",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
       "owner": "configuredSetPluginEnabled.opts.notifications",
       "key": "mode",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:995:11 narrows notifications.mode)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1153:41",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
       "owner": "freshOutcomeToTypedResult.outcome",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1153:12 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1402:41",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
       "owner": "enableFailedRow.outcome",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1402:12 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts:62:72",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts",
       "owner": "FETCH_RENDER",
       "key": "status",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within FetchMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts:62:52 selects by status)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts:68:69",
@@ -3751,26 +3595,17 @@ and writing the evidence into its `note`.
       "owner": "PLUGIN_INFO_RENDER",
       "key": "status",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Selection over a single-variant type. `PluginInfoCascadeMsg` is `PluginSkippedMessage` with no union around it, so the filter refines nothing today and the proof refuses it. The shape is there for symmetry with the other render maps and becomes a real selection the moment info gains a second cascade status. Owner decision: leave it and accept the finding, or drop the filter until a second status exists. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1244:49",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
       "owner": "composeStateOnlyComponents.components",
       "key": "componentsResolved",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1318:7",
-      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
-      "owner": "buildNotInstallablePathRowFields",
-      "key": "components",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within PluginInfoRow by componentsResolved, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1244:24 selects by componentsResolved)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:2209:24",
@@ -3778,8 +3613,8 @@ and writing the evidence into its `note`.
       "owner": "autoupdateDetails.details",
       "key": "autoupdate",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:26:3",
@@ -3787,17 +3622,17 @@ and writing the evidence into its `note`.
       "owner": "FreshInstallDisableOptions",
       "key": "scope",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:60:3",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts",
       "owner": "FailedUnstageOutcome",
       "key": "ok",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows ok at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:59:29 narrows ok)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:190:3",
@@ -3805,8 +3640,8 @@ and writing the evidence into its `note`.
       "owner": "InstallLedgerSummary",
       "key": "cwd",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/orchestrators/plugin/install-outcome.test.ts:235:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:302:14",
@@ -3814,71 +3649,71 @@ and writing the evidence into its `note`.
       "owner": "loadCachedMarketplaceManifest",
       "key": "name",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1007:3",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
       "owner": "FailedRunPhasesResult",
       "key": "ok",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows ok at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1006:30 narrows ok)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:77:3",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts",
       "owner": "EntityErrorRow",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/orchestrators/plugin/install.messaging.test.ts:720:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:78:3",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts",
       "owner": "EntityErrorRow",
       "key": "name",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/orchestrators/plugin/install.messaging.test.ts:720:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:79:3",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts",
       "owner": "EntityErrorRow",
       "key": "marketplace",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/orchestrators/plugin/install.messaging.test.ts:720:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:80:3",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts",
       "owner": "EntityErrorRow",
       "key": "scope",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/orchestrators/plugin/install.messaging.test.ts:720:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:108:78",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts",
       "owner": "INSTALL_RENDER",
       "key": "status",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within InstallMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:108:56 selects by status)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:83:42",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts",
       "owner": "PayloadListMsg",
       "key": "status",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Excludes from ListMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:83:23 selects by status)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:392:27",
@@ -3886,8 +3721,8 @@ and writing the evidence into its `note`.
       "owner": "ScopedManifest",
       "key": "loadError",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:592:46",
@@ -3895,26 +3730,26 @@ and writing the evidence into its `note`.
       "owner": "detailsField.details",
       "key": "autoupdate",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:615:56",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts",
       "owner": "loadPluginListPayload",
       "key": "status",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Excludes from ListMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:615:37 selects by status)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts:101:69",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts",
       "owner": "LIST_RENDER",
       "key": "status",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within ListMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts:101:50 selects by status)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts:80:5",
@@ -3922,8 +3757,8 @@ and writing the evidence into its `note`.
       "owner": "InstalledRecordLike.compatibility",
       "key": "installable",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:58:14",
@@ -3931,8 +3766,8 @@ and writing the evidence into its `note`.
       "owner": "RemoveDataDirFn.options",
       "key": "recursive",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:58:31",
@@ -3940,26 +3775,26 @@ and writing the evidence into its `note`.
       "owner": "RemoveDataDirFn.options",
       "key": "force",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Delegate parameter shape. The caller builds the value and the concrete implementation reads it through its own declaration, so no run-time syntax reads this one. Treating the implementation's read as a read of this declaration would be exactly the structural matching D-03 forbids. Owner decision: point the delegate at the implementation's own parameter type, or keep the mirror and accept the finding. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:77:45",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts",
       "owner": "selectMarketplaceTargets.target",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within ReinstallPluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:77:11 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:95:45",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts",
       "owner": "resolveMarketplaceScope.target",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within ReinstallPluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:95:11 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:96:37",
@@ -3967,26 +3802,17 @@ and writing the evidence into its `note`.
       "owner": "resolveMarketplaceScope",
       "key": "record",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:107:45",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts",
       "owner": "resolvePluginMarketplaceScope.target",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:108:14",
-      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts",
-      "owner": "resolvePluginMarketplaceScope",
-      "key": "scope",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within ReinstallPluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:107:11 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:108:37",
@@ -3994,26 +3820,17 @@ and writing the evidence into its `note`.
       "owner": "resolvePluginMarketplaceScope",
       "key": "record",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:141:45",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts",
       "owner": "resolveExplicitPluginScope.target",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:142:14",
-      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts",
-      "owner": "resolveExplicitPluginScope",
-      "key": "scope",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within ReinstallPluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:141:11 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:142:37",
@@ -4021,17 +3838,8 @@ and writing the evidence into its `note`.
       "owner": "resolveExplicitPluginScope",
       "key": "record",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:163:14",
-      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts",
-      "owner": "resolveMarketplaceTargetScope",
-      "key": "scope",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:163:37",
@@ -4039,26 +3847,26 @@ and writing the evidence into its `note`.
       "owner": "resolveMarketplaceTargetScope",
       "key": "record",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:73:60",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts",
       "owner": "REINSTALL_RENDER",
       "key": "status",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within ReinstallMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:73:36 selects by status)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:210:42",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts",
       "owner": "isManualRecoveryOutcome",
       "key": "failureClass",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows failureClass at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:210:15 narrows failureClass)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:129:5",
@@ -4066,44 +3874,44 @@ and writing the evidence into its `note`.
       "owner": "enableRowDependencies.signals",
       "key": "partition",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Absence marker. The slot exists so the compiler admits only the shape that omits it, and no run-time syntax can read a slot whose type is `never` or whose value is fixed. It adds a key the rest of its intersection does not declare, so the `type-refinement` proof does not apply and refuses it by name. Owner decision: keep the marker and accept the finding, or express the absence as a discriminated variant the proof can reach. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:158:3",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts",
       "owner": "ResolvedInstallMarketplaceSource",
       "key": "sourceScope",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/orchestrators/plugin/shared.test.ts:682:30 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:200:37",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts",
       "owner": "CrossScopePluginResolution",
       "key": "presentIn",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/orchestrators/plugin/shared.test.ts:623:30 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:689:54",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts",
       "owner": "InvalidConfigLoad",
       "key": "status",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within ConfigLoadResult by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:689:26 selects by status)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:829:37",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts",
       "owner": "ScopedMarketplaceResolution",
       "key": "presentIn",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/orchestrators/plugin/shared.test.ts:1255:30 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:955:3",
@@ -4111,8 +3919,8 @@ and writing the evidence into its `note`.
       "owner": "NameOwner",
       "key": "marketplace",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:1245:7",
@@ -4120,8 +3928,8 @@ and writing the evidence into its `note`.
       "owner": "emitMarketplaceNotAdded",
       "key": "status",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/orchestrators/plugin/shared.test.ts:1632:26 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:1246:7",
@@ -4129,8 +3937,8 @@ and writing the evidence into its `note`.
       "owner": "emitMarketplaceNotAdded",
       "key": "reason",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/orchestrators/plugin/shared.test.ts:1633:26 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:1247:7",
@@ -4138,8 +3946,8 @@ and writing the evidence into its `note`.
       "owner": "emitMarketplaceNotAdded",
       "key": "error",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 6 witnesses, first at tests/orchestrators/plugin/shared.test.ts:1634:23 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:1248:7",
@@ -4147,17 +3955,17 @@ and writing the evidence into its `note`.
       "owner": "emitMarketplaceNotAdded",
       "key": "cause",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/orchestrators/plugin/shared.test.ts:1637:26 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts:41:60",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts",
       "owner": "UNINSTALL_RENDER",
       "key": "status",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within UninstallMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts:41:36 selects by status)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:113:39",
@@ -4165,8 +3973,8 @@ and writing the evidence into its `note`.
       "owner": "UninstallPluginOutcome",
       "key": "name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 1 witness, first at tests/orchestrators/plugin/uninstall.test.ts:1625:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:114:37",
@@ -4174,8 +3982,8 @@ and writing the evidence into its `note`.
       "owner": "UninstallPluginOutcome",
       "key": "name",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 1 witness, first at tests/orchestrators/plugin/uninstall.test.ts:1682:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:118:7",
@@ -4183,8 +3991,8 @@ and writing the evidence into its `note`.
       "owner": "UninstallPluginOutcome",
       "key": "error",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/orchestrators/plugin/uninstall.test.ts:1795:27 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:119:7",
@@ -4192,8 +4000,8 @@ and writing the evidence into its `note`.
       "owner": "UninstallPluginOutcome",
       "key": "cause",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 1 witness, first at tests/orchestrators/plugin/uninstall.test.ts:3040:20 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:392:10",
@@ -4201,8 +4009,8 @@ and writing the evidence into its `note`.
       "owner": "commitPluginRemoval.ids",
       "key": "scope",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:392:33",
@@ -4210,62 +4018,62 @@ and writing the evidence into its `note`.
       "owner": "commitPluginRemoval.ids",
       "key": "marketplace",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:857:38",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
       "owner": "UninstallPluginOperation.opts",
       "key": "notifications",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:857:11 narrows notifications)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:857:55",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
       "owner": "UninstallPluginOperation.opts.notifications",
       "key": "mode",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:857:11 narrows notifications.mode)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:868:38",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
       "owner": "configuredUninstallPlugin.opts",
       "key": "notifications",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows notifications at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:868:11 narrows notifications)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:868:55",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
       "owner": "configuredUninstallPlugin.opts.notifications",
       "key": "mode",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows mode at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:868:11 narrows notifications.mode)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:832:42",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
       "owner": "enumerateMarketplaceTarget.target",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within UpdatePluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:832:11 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:913:42",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
       "owner": "resolveUpdateMarketplaceScope.target",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within UpdatePluginsTarget by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:913:11 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:76:3",
@@ -4273,8 +4081,8 @@ and writing the evidence into its `note`.
       "owner": "PreparedPluginUpdate",
       "key": "entry",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 7 witnesses, first at tests/orchestrators/plugin/update-preflight.test.ts:350:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:115:3",
@@ -4282,44 +4090,26 @@ and writing the evidence into its `note`.
       "owner": "PreflightFailedOutcome",
       "key": "reasons",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 19 witnesses, first at tests/orchestrators/plugin/update-preflight.test.ts:306:36 (value-transfer). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:116:3",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
       "owner": "PreflightFailedOutcome",
       "key": "cause",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:118:3",
-      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
-      "owner": "PreflightFailedOutcome",
-      "key": "phaseFailures",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:119:3",
-      "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
-      "owner": "PreflightFailedOutcome",
-      "key": "toVersion",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 8 witnesses, first at tests/orchestrators/plugin/update-preflight.test.ts:461:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:132:5",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
       "owner": "PartialableUpdateShapeError.shape",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-refinement: Narrows kind at this position, so the compiler admits only the shape this entry point handles. (intersection extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:131:19 narrows kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:133:5",
@@ -4327,8 +4117,8 @@ and writing the evidence into its `note`.
       "owner": "PartialableUpdateShapeError.shape",
       "key": "partialable",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Absence marker. The slot exists so the compiler admits only the shape that omits it, and no run-time syntax can read a slot whose type is `never` or whose value is fixed. It adds a key the rest of its intersection does not declare, so the `type-refinement` proof does not apply and refuses it by name. Owner decision: keep the marker and accept the finding, or express the absence as a discriminated variant the proof can reach. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:316:37",
@@ -4336,8 +4126,8 @@ and writing the evidence into its `note`.
       "owner": "StaticPreflightRowOptions",
       "key": "fromVersion",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Absence marker. The slot exists so the compiler admits only the shape that omits it, and no run-time syntax can read a slot whose type is `never` or whose value is fixed. It adds a key the rest of its intersection does not declare, so the `type-refinement` proof does not apply and refuses it by name. Owner decision: keep the marker and accept the finding, or express the absence as a discriminated variant the proof can reach. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:188:3",
@@ -4345,8 +4135,8 @@ and writing the evidence into its `note`.
       "owner": "DirectRenderableFailedOutcome",
       "key": "cause",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Absence marker. The slot exists so the compiler admits only the shape that omits it, and no run-time syntax can read a slot whose type is `never` or whose value is fixed. It adds a key the rest of its intersection does not declare, so the `type-refinement` proof does not apply and refuses it by name. Owner decision: keep the marker and accept the finding, or express the absence as a discriminated variant the proof can reach. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:191:3",
@@ -4354,8 +4144,8 @@ and writing the evidence into its `note`.
       "owner": "DirectRenderableFailedOutcome",
       "key": "toVersion",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Absence marker. The slot exists so the compiler admits only the shape that omits it, and no run-time syntax can read a slot whose type is `never` or whose value is fixed. It adds a key the rest of its intersection does not declare, so the `type-refinement` proof does not apply and refuses it by name. Owner decision: keep the marker and accept the finding, or express the absence as a discriminated variant the proof can reach. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:198:3",
@@ -4363,8 +4153,8 @@ and writing the evidence into its `note`.
       "owner": "UpdatePhase3FailedOutcome",
       "key": "fromVersion",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 11 witnesses, first at tests/orchestrators/plugin/update-swap.test.ts:175:30 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:199:3",
@@ -4372,8 +4162,8 @@ and writing the evidence into its `note`.
       "owner": "UpdatePhase3FailedOutcome",
       "key": "reasons",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 6 witnesses, first at tests/orchestrators/plugin/update-swap.test.ts:175:30 (value-transfer). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:201:3",
@@ -4381,26 +4171,26 @@ and writing the evidence into its `note`.
       "owner": "UpdatePhase3FailedOutcome",
       "key": "cause",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 4 witnesses, first at tests/orchestrators/plugin/update-swap.test.ts:175:30 (value-transfer). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts:57:75",
       "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts",
       "owner": "UPDATE_RENDER",
       "key": "status",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within UpdateMsg by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts:57:54 selects by status)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:552:49",
       "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
       "owner": "degradationFromEnable.result",
       "key": "status",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within EnableDisablePluginOutcome by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:552:11 selects by status)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:90:3",
@@ -4408,26 +4198,26 @@ and writing the evidence into its `note`.
       "owner": "MarketplaceBlock",
       "key": "key",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:662:7",
       "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts",
       "owner": "applyMarketplaceOutcomeToBlock.outcome",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within PerEntryOutcome by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:659:12 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:758:7",
       "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts",
       "owner": "applyPluginOutcomeToBlock.outcome",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within PerEntryOutcome by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:755:12 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:66:3",
@@ -4435,8 +4225,8 @@ and writing the evidence into its `note`.
       "owner": "PlannedMarketplaceAdd",
       "key": "configSource",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 41 witnesses, first at tests/architecture/config-state-consistency.test.ts:579:22 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:165:3",
@@ -4444,8 +4234,8 @@ and writing the evidence into its `note`.
       "owner": "PlannedSourceMismatchOfSourceMismatch",
       "key": "declaredSource",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:166:3",
@@ -4453,8 +4243,8 @@ and writing the evidence into its `note`.
       "owner": "PlannedSourceMismatchOfSourceMismatch",
       "key": "recordedSource",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:173:3",
@@ -4462,8 +4252,8 @@ and writing the evidence into its `note`.
       "owner": "PlannedSourceMismatchOfUnknownStored",
       "key": "declaredSource",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:174:3",
@@ -4471,8 +4261,8 @@ and writing the evidence into its `note`.
       "owner": "PlannedSourceMismatchOfUnknownStored",
       "key": "recordedSource",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:214:3",
@@ -4480,8 +4270,8 @@ and writing the evidence into its `note`.
       "owner": "ReconcilePlan",
       "key": "scope",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 42 witnesses, first at tests/architecture/config-state-consistency.test.ts:142:23 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts:281:3",
@@ -4489,8 +4279,8 @@ and writing the evidence into its `note`.
       "owner": "ScopeReadResult",
       "key": "scope",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/types.ts:154:3",
@@ -4498,8 +4288,8 @@ and writing the evidence into its `note`.
       "owner": "UpdatePhaseFailure",
       "key": "phase",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/orchestrators/plugin/update-flow.test.ts:2189:14 (binding-destructuring). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/types.ts:155:3",
@@ -4507,8 +4297,8 @@ and writing the evidence into its `note`.
       "owner": "UpdatePhaseFailure",
       "key": "msg",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-12 (orchestrators)."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/types.ts:156:3",
@@ -4516,8 +4306,8 @@ and writing the evidence into its `note`.
       "owner": "UpdatePhaseFailure",
       "key": "cleanupFailures",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/orchestrators/plugin/update-flow.test.ts:2192:45 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/types.ts:204:3",
@@ -4525,8 +4315,8 @@ and writing the evidence into its `note`.
       "owner": "PluginUpdateUpdatedOutcome",
       "key": "stagedAgentNames",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 5 witnesses, first at tests/orchestrators/plugin/update-flow.test.ts:2558:27 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/types.ts:205:3",
@@ -4534,8 +4324,8 @@ and writing the evidence into its `note`.
       "owner": "PluginUpdateUpdatedOutcome",
       "key": "stagedMcpServerNames",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 5 witnesses, first at tests/orchestrators/plugin/update-flow.test.ts:2560:27 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/types.ts:221:3",
@@ -4543,8 +4333,8 @@ and writing the evidence into its `note`.
       "owner": "PluginUpdateUpdatedOutcome",
       "key": "unsupported",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/orchestrators/plugin/update-flow.test.ts:8879:66 (json-serialization). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/types.ts:222:3",
@@ -4552,8 +4342,8 @@ and writing the evidence into its `note`.
       "owner": "PluginUpdateUpdatedOutcome",
       "key": "stagedAgents",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/orchestrators/plugin/update-flow.test.ts:8879:66 (json-serialization). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/types.ts:223:3",
@@ -4561,17 +4351,8 @@ and writing the evidence into its `note`.
       "owner": "PluginUpdateUpdatedOutcome",
       "key": "stagedMcpServers",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/orchestrators/types.ts:289:3",
-      "path": "extensions/pi-claude-marketplace/orchestrators/types.ts",
-      "owner": "PluginUpdateUnchangedOutcome",
-      "key": "toVersion",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/orchestrators/plugin/update-flow.test.ts:8879:66 (json-serialization). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/agents-index-io.ts:45:3",
@@ -4579,8 +4360,8 @@ and writing the evidence into its `note`.
       "owner": "LoadedAgentsIndex",
       "key": "schemaVersion",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 7 witnesses, first at tests/persistence/agents-index-io.test.ts:503:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/agents-index-io.ts:120:27",
@@ -4588,26 +4369,17 @@ and writing the evidence into its `note`.
       "owner": "obj",
       "key": "schemaVersion",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/persistence/config-io.ts:115:33",
-      "path": "extensions/pi-claude-marketplace/persistence/config-io.ts",
-      "owner": "ConfigLoadResult",
-      "key": "filePath",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Payload slot handed to a consumer outside this tree. The value is built and placed in a structured result the tool surface or a written file carries away; nothing in this tree reads it back. A build is a write, so the gate is right that no read exists here. Owner decision: keep the slot and accept the finding, or state the consumer's contract where the compiler can check it. Owner plan 06-13 (persistence)."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/locations.ts:39:3",
       "path": "extensions/pi-claude-marketplace/persistence/locations.ts",
       "owner": "ScopedLocations",
       "key": "SCOPED_LOCATIONS_BRAND",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. nominal-brand: Marks ScopedLocations so a value no branding module minted cannot stand in for it. (unique symbol extensions/pi-claude-marketplace/persistence/locations.ts:25:7 cannot be spelled outside its module)"
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/locations.ts:72:3",
@@ -4615,8 +4387,8 @@ and writing the evidence into its `note`.
       "owner": "ScopedLocations",
       "key": "sourcesDir",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 36 witnesses, first at tests/orchestrators/plugin/shared.test.ts:230:29 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/locations.ts:96:3",
@@ -4624,8 +4396,8 @@ and writing the evidence into its `note`.
       "owner": "ScopedLocations",
       "key": "cacheDir",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 40 witnesses, first at tests/orchestrators/marketplace/add.test.ts:965:47 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/migrate-config.ts:65:7",
@@ -4633,17 +4405,17 @@ and writing the evidence into its `note`.
       "owner": "MigrateFirstRunResult",
       "key": "migrated",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 20 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/migrate-config.ts:66:7",
       "path": "extensions/pi-claude-marketplace/persistence/migrate-config.ts",
       "owner": "MigrateFirstRunResult",
       "key": "entryCount",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 5 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/migrate-config.ts:67:7",
@@ -4651,8 +4423,8 @@ and writing the evidence into its `note`.
       "owner": "MigrateFirstRunResult",
       "key": "filePath",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 20 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/migrate-config.ts:70:7",
@@ -4660,8 +4432,8 @@ and writing the evidence into its `note`.
       "owner": "MigrateFirstRunResult",
       "key": "migrated",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 20 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/migrate-config.ts:71:7",
@@ -4669,8 +4441,8 @@ and writing the evidence into its `note`.
       "owner": "MigrateFirstRunResult",
       "key": "reason",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (persistence)."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/migrate-config.ts:72:7",
@@ -4678,8 +4450,8 @@ and writing the evidence into its `note`.
       "owner": "MigrateFirstRunResult",
       "key": "filePath",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 20 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/migrate-config.ts:75:7",
@@ -4687,8 +4459,8 @@ and writing the evidence into its `note`.
       "owner": "MigrateFirstRunResult",
       "key": "migrated",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 20 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/migrate-config.ts:76:7",
@@ -4696,17 +4468,17 @@ and writing the evidence into its `note`.
       "owner": "MigrateFirstRunResult",
       "key": "reason",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (persistence)."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/migrate-config.ts:77:7",
       "path": "extensions/pi-claude-marketplace/persistence/migrate-config.ts",
       "owner": "MigrateFirstRunResult",
       "key": "error",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 5 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/migrate-config.ts:78:7",
@@ -4714,8 +4486,8 @@ and writing the evidence into its `note`.
       "owner": "MigrateFirstRunResult",
       "key": "filePath",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 20 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/migrate-config.ts:81:7",
@@ -4723,8 +4495,8 @@ and writing the evidence into its `note`.
       "owner": "MigrateFirstRunResult",
       "key": "migrated",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 20 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/migrate-config.ts:82:7",
@@ -4732,8 +4504,8 @@ and writing the evidence into its `note`.
       "owner": "MigrateFirstRunResult",
       "key": "reason",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (persistence)."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/migrate-config.ts:83:7",
@@ -4741,8 +4513,8 @@ and writing the evidence into its `note`.
       "owner": "MigrateFirstRunResult",
       "key": "filePath",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 20 witnesses, first at tests/persistence/migrate-config.test.ts:299:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/migrate-config.ts:140:20",
@@ -4750,8 +4522,8 @@ and writing the evidence into its `note`.
       "owner": "entry",
       "key": "source",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-13 (persistence)."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/migrate-config.ts:140:36",
@@ -4759,8 +4531,8 @@ and writing the evidence into its `note`.
       "owner": "entry",
       "key": "autoupdate",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Accumulator or patch literal. The slot is filled at its build site and the whole object is then handed on; whatever reads it reads through the consumer's own declaration, so no run-time syntax reads this one. Owner decision: annotate the local with the consumer's type so one declaration carries both the build and the read, or accept the finding. Owner plan 06-13 (persistence)."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/state-io.ts:202:3",
@@ -4768,8 +4540,8 @@ and writing the evidence into its `note`.
       "owner": "DisabledPluginRecord",
       "key": "enabled",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 1 witness, first at tests/persistence/state-io.test.ts:206:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/state-io.ts:203:3",
@@ -4777,8 +4549,8 @@ and writing the evidence into its `note`.
       "owner": "DisabledPluginRecord",
       "key": "resources",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/persistence/state-io.test.ts:207:37 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:41:39",
@@ -4786,8 +4558,8 @@ and writing the evidence into its `note`.
       "owner": "AuthAttemptResult",
       "key": "authAttempted",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (platform)."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:42:34",
@@ -4795,8 +4567,8 @@ and writing the evidence into its `note`.
       "owner": "AuthAttemptResult",
       "key": "authAttempted",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (platform)."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/git-credential.ts:88:3",
@@ -4804,8 +4576,8 @@ and writing the evidence into its `note`.
       "owner": "CredentialSpawnOptions",
       "key": "env",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 5 witnesses, first at tests/platform/credential-process-fake.ts:52:13 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/git-credential.ts:89:3",
@@ -4813,17 +4585,17 @@ and writing the evidence into its `note`.
       "owner": "CredentialSpawnOptions",
       "key": "stdio",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 5 witnesses, first at tests/platform/credential-process-fake.ts:54:13 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/git.ts:302:3",
       "path": "extensions/pi-claude-marketplace/platform/git.ts",
       "owner": "GitCredentials",
       "key": "headers",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 18 witnesses, first at tests/domain/github-auth.test.ts:1238:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/git.ts:304:3",
@@ -4831,53 +4603,53 @@ and writing the evidence into its `note`.
       "owner": "GitCredentials",
       "key": "cancel",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 19 witnesses, first at tests/integration/auth-e2e.test.ts:302:30 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:68:3",
       "path": "extensions/pi-claude-marketplace/platform/pi-api.ts",
       "owner": "PiTextContentBlock",
       "key": "type",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/event-adapters.test.ts:383:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:69:3",
       "path": "extensions/pi-claude-marketplace/platform/pi-api.ts",
       "owner": "PiTextContentBlock",
       "key": "text",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/event-adapters.test.ts:383:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:85:3",
       "path": "extensions/pi-claude-marketplace/platform/pi-api.ts",
       "owner": "ToolResultEventResult",
       "key": "content",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/event-adapters.test.ts:383:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:86:3",
       "path": "extensions/pi-claude-marketplace/platform/pi-api.ts",
       "owner": "ToolResultEventResult",
       "key": "details",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/event-adapters.test.ts:383:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:87:3",
       "path": "extensions/pi-claude-marketplace/platform/pi-api.ts",
       "owner": "ToolResultEventResult",
       "key": "isError",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "test-only-observed",
+      "disposition": "explained",
+      "note": "Read only by tests: 2 witnesses, first at tests/bridges/hooks/event-adapters.test.ts:383:28 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:91:3",
@@ -4885,8 +4657,8 @@ and writing the evidence into its `note`.
       "owner": "ResourcesDiscoverEvent",
       "key": "type",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. The handler builds this slot, and a build is a write, not a read. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform)."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:93:3",
@@ -4894,8 +4666,8 @@ and writing the evidence into its `note`.
       "owner": "ResourcesDiscoverEvent",
       "key": "reason",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. The handler builds this slot, and a build is a write, not a read. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform)."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:97:3",
@@ -4903,8 +4675,8 @@ and writing the evidence into its `note`.
       "owner": "ResourcesDiscoverResult",
       "key": "skillPaths",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. The handler builds this slot, and a build is a write, not a read. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform)."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:98:3",
@@ -4912,8 +4684,8 @@ and writing the evidence into its `note`.
       "owner": "ResourcesDiscoverResult",
       "key": "promptPaths",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. The handler builds this slot, and a build is a write, not a read. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform)."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:99:3",
@@ -4921,17 +4693,17 @@ and writing the evidence into its `note`.
       "owner": "ResourcesDiscoverResult",
       "key": "themePaths",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. This slot is never even built. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform)."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:117:56",
       "path": "extensions/pi-claude-marketplace/platform/pi-api.ts",
       "owner": "AssistantMessage",
       "key": "role",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within AgentMessage by role, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/platform/pi-api.ts:117:32 selects by role)"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/completion-cache.ts:361:3",
@@ -4939,17 +4711,8 @@ and writing the evidence into its `note`.
       "owner": "CompletionCache",
       "key": "invalidateMarketplaceCache",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/shared/concerns/hooks.ts:87:7",
-      "path": "extensions/pi-claude-marketplace/shared/concerns/hooks.ts",
-      "owner": "HookSummaryEntry",
-      "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 24 witnesses, first at tests/orchestrators/marketplace/add.test.ts:247:16 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/errors-bridges.ts:27:26",
@@ -4957,8 +4720,8 @@ and writing the evidence into its `note`.
       "owner": "AgentOwnershipConflictError.stagingFor",
       "key": "marketplace",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Public error field nobody reads. The constructor parameter of the same shape IS read (errors-bridges.ts:35 builds the message from it), but that is a different declaration; nothing reads `this.stagingFor.marketplace` or `.plugin` off an instance. Owner decision: drop the frozen copy if no consumer needs it, or name the consumer that will. Owner plan 06-14 (shared)."
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/errors-bridges.ts:27:56",
@@ -4966,8 +4729,8 @@ and writing the evidence into its `note`.
       "owner": "AgentOwnershipConflictError.stagingFor",
       "key": "plugin",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Public error field nobody reads. The constructor parameter of the same shape IS read (errors-bridges.ts:35 builds the message from it), but that is a different declaration; nothing reads `this.stagingFor.marketplace` or `.plugin` off an instance. Owner decision: drop the frozen copy if no consumer needs it, or name the consumer that will. Owner plan 06-14 (shared)."
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/errors-bridges.ts:65:44",
@@ -4975,8 +4738,8 @@ and writing the evidence into its `note`.
       "owner": "BridgeStagingError.options",
       "key": "cause",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Local mirror of `ErrorOptions`, handed whole to `super(message, options)`. The read is the ambient `Error` constructor's own `cause`, which is an installed declaration, so this is a genuine external input -- but the `external-input` proof needs a callback an external signature checks, and a value passed straight to a constructor is the necessity shape 06-03 recorded as unsupported. Source repair, behaviour-free and already the house pattern: annotate the parameter `ErrorOptions`, as `PluginUpdatePhase3Error` does. Owner plan 06-14 (shared)."
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/errors-bridges.ts:85:68",
@@ -4984,8 +4747,8 @@ and writing the evidence into its `note`.
       "owner": "CommandNameError.options",
       "key": "cause",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Local mirror of `ErrorOptions`, handed whole to `super(message, options)`. The read is the ambient `Error` constructor's own `cause`, which is an installed declaration, so this is a genuine external input -- but the `external-input` proof needs a callback an external signature checks, and a value passed straight to a constructor is the necessity shape 06-03 recorded as unsupported. Source repair, behaviour-free and already the house pattern: annotate the parameter `ErrorOptions`, as `PluginUpdatePhase3Error` does. Owner plan 06-14 (shared)."
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/errors.ts:501:3",
@@ -4993,8 +4756,8 @@ and writing the evidence into its `note`.
       "owner": "Phase3Failure",
       "key": "cause",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-14 (shared)."
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/fs-utils.ts:73:33",
@@ -5002,8 +4765,8 @@ and writing the evidence into its `note`.
       "owner": "RemovalOps.rm.options",
       "key": "recursive",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/platform/removal-ops-fake.ts:138:19 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/fs-utils.ts:73:54",
@@ -5011,8 +4774,8 @@ and writing the evidence into its `note`.
       "owner": "RemovalOps.rm.options",
       "key": "force",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 3 witnesses, first at tests/platform/removal-ops-fake.ts:129:23 (property-access). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/fs-utils.ts:225:32",
@@ -5020,8 +4783,8 @@ and writing the evidence into its `note`.
       "owner": "RollbackReplacementInput.renamed",
       "key": "from",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Dead field. `rollbackReplacement` reads only `pair.to` (shared/fs-utils.ts:277) and the backup restore reads `backup.from` from a different slot; nothing anywhere reads `renamed[].from`. Source repair: drop `from` from the renamed pair shape and from the three bridge staging sites that build it. Owner plan 06-10 (bridges/agents, bridges/commands, bridges/skills and shared/fs-utils.ts together: one field, four declaration sites)."
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/fs-utils.ts:325:24",
@@ -5029,8 +4792,8 @@ and writing the evidence into its `note`.
       "owner": "resolveGitSubdirRoot",
       "key": "detail",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 22 witnesses, first at tests/orchestrators/plugin/clone-cache.test.ts:1549:20 (value-transfer). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/fs-utils.ts:326:31",
@@ -5038,26 +4801,26 @@ and writing the evidence into its `note`.
       "owner": "resolveGitSubdirRoot",
       "key": "detail",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 22 witnesses, first at tests/orchestrators/plugin/clone-cache.test.ts:1549:20 (value-transfer). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:203:43",
       "path": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts",
       "owner": "dispatchInfoMessage.message",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within NotificationMessage by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/shared/notification-dispatch.ts:203:12 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:837:7",
       "path": "extensions/pi-claude-marketplace/shared/notification-grammar.ts",
       "owner": "renderPendingRow.p",
       "key": "status",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/shared/notification-grammar.ts:835:6 selects by status)"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-grammar.ts:1534:46",
@@ -5065,26 +4828,26 @@ and writing the evidence into its `note`.
       "owner": "isDescriptionBearingRow",
       "key": "description",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Selection by member presence rather than by a discriminant. `Extract<PluginNotificationMessage, { description?: string }>` picks the variants that carry a description; `description` is not a unit type, so it cannot tell the variants apart the way the `type-selection` proof requires. Owner decision: keep it and accept the finding, or narrow by a discriminant the proof can read. Owner plan 06-14 (shared)."
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-summary.ts:43:40",
       "path": "extensions/pi-claude-marketplace/shared/notification-summary.ts",
       "owner": "isInfoKind",
       "key": "kind",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within NotificationMessage by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/shared/notification-summary.ts:43:9 selects by kind)"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-types.ts:399:48",
       "path": "extensions/pi-claude-marketplace/shared/notification-types.ts",
       "owner": "isScopeBearingListRow",
       "key": "status",
-      "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "status": "explicit-contract",
+      "disposition": "explained",
+      "note": "Validated contract. type-selection: Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/shared/notification-types.ts:399:11 selects by status)"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:64:61",
@@ -5092,8 +4855,8 @@ and writing the evidence into its `note`.
       "owner": "CommandContext.render",
       "key": "status",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Selection over an open type parameter. `CommandContext<Status, Msg>` leaves `Msg` unconstrained, so at the declaration the compiler cannot say the filter discriminates on anything: the proof is only available at each instantiation. The contract engine refuses it by name rather than accepting an unproven selection. Owner decision: constrain `Msg` to the message union it is always instantiated with, which makes the existing `type-selection` proof reach it. Owner plan 06-14 (shared)."
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:269:45",
@@ -5101,8 +4864,8 @@ and writing the evidence into its `note`.
       "owner": "notifyReconcileAppliedWithContext",
       "key": "status",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Selection over an open type parameter. `CommandContext<Status, Msg>` leaves `Msg` unconstrained, so at the declaration the compiler cannot say the filter discriminates on anything: the proof is only available at each instantiation. The contract engine refuses it by name rather than accepting an unproven selection. Owner decision: constrain `Msg` to the message union it is always instantiated with, which makes the existing `type-selection` proof reach it. Owner plan 06-14 (shared)."
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:323:29",
@@ -5110,8 +4873,8 @@ and writing the evidence into its `note`.
       "owner": "arm",
       "key": "status",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Selection over an open type parameter. `CommandContext<Status, Msg>` leaves `Msg` unconstrained, so at the declaration the compiler cannot say the filter discriminates on anything: the proof is only available at each instantiation. The contract engine refuses it by name rather than accepting an unproven selection. Owner decision: constrain `Msg` to the message union it is always instantiated with, which makes the existing `type-selection` proof reach it. Owner plan 06-14 (shared)."
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:332:15",
@@ -5119,8 +4882,8 @@ and writing the evidence into its `note`.
       "owner": "dispatchRow",
       "key": "severity",
       "status": "unread",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Assignment target inside a cast literal. The only syntax naming this member writes to it, and a write is not a read (D-04). The literal exists to make one localized mutation type-check against a readonly shape. Source repair or an owner decision: the write needs a declared home the compiler checks rather than a cast minted at the write site. Owner plan 06-14 (shared)."
     },
     {
       "id": "extensions/pi-claude-marketplace/transaction/phase-ledger.ts:59:3",
@@ -5128,8 +4891,8 @@ and writing the evidence into its `note`.
       "owner": "RollbackPartial",
       "key": "msg",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 15 witnesses, first at tests/transaction/phase-ledger.test.ts:510:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     },
     {
       "id": "extensions/pi-claude-marketplace/transaction/phase-ledger.ts:73:3",
@@ -5137,8 +4900,8 @@ and writing the evidence into its `note`.
       "owner": "RunPhasesResult",
       "key": "leaks",
       "status": "test-only-observed",
-      "disposition": "pending",
-      "note": ""
+      "disposition": "explained",
+      "note": "Read only by tests: 10 witnesses, first at tests/transaction/phase-ledger.test.ts:510:26 (deep-comparison). No production syntax reads it. Recorded rather than excused, because a member only tests read is a signal, not a pass."
     }
   ]
 }

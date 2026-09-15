@@ -53,10 +53,12 @@ const defaultNodeBudget = 20_000_000;
 
 // The transfer walk indexes every transfer site once, then answers one memoised
 // question per read site, and charges the same meter for every place a
-// whole-object operation reads. Measured against this repository: 2,889,809
-// steps for 82,164 traced reads and 939,556 operation reads, so the default
-// leaves the tree room to grow several times over while still bounding a
-// runaway walk.
+// whole-object operation reads. Measured against this repository: 3,001,651
+// steps for 82,772 traced reads and 985,894 operation reads over 216,490
+// indexed edges, in 52 s of an 82 s run at 2.05 GiB peak resident size. The
+// default is four times the measured cost, so the tree has room to grow several
+// times over while a runaway walk is still bounded. Running out is a refusal
+// naming the file being traced, never a partial answer that reads as clean.
 const defaultTransferBudget = 12_000_000;
 
 /**
