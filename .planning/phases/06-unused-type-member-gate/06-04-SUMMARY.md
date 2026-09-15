@@ -339,4 +339,6 @@ unread members and zero unsupported rows.
 - `scripts/check-unused-type-members.operations.mjs` -- FOUND
 - `tests/scripts/check-unused-type-members.operations.test.ts` -- FOUND
 - `66bdeb61`, `d00c4584`, `70e2fa35` -- all three FOUND in `git log`
-- `git rev-list --count ba86ec18..HEAD` -- 3, matching the recorded `commits`
+- `commits: 3` counts the production commits from `plan_head_before`. The documentation
+  commits that close the plan are excluded, which is what 06-02 and 06-03 recorded too;
+  a raw `git rev-list --count ba86ec18..HEAD` therefore reads higher by that number.
