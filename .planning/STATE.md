@@ -4,15 +4,15 @@ milestone: test-backlog
 current_phase: 05
 current_phase_name: Production Export Ownership
 status: executing
-last_updated: "2026-09-15T02:30:00Z"
-last_activity: 2026-09-14
-last_activity_desc: Wave 9 plan 05-18 read-command composition ownership complete
-state_head: f712f031
+last_updated: "2026-09-15T02:45:00Z"
+last_activity: 2026-09-15
+last_activity_desc: Wave 9 complete; 05-20 reconcile composition and backfill ownership
+state_head: 258e0515
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 54
-  completed_plans: 35
+  completed_plans: 36
   percent: 63
 milestone_name: test-backlog
 ---
@@ -31,9 +31,20 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 05 (Production Export Ownership) — EXECUTING
-Plan: 25 of 28 — Wave 9 source writing under way (05-18 complete)
-Status: Executing Phase 05 Wave 9 — awaiting parent census reconciliation
-Last activity: 2026-09-15 — 05-18 added `fetchPlugins` and `getPluginInfo` to the
+Plan: 26 of 28 — Wave 9 source writing complete (05-18 and 05-20 landed)
+Status: Executing Phase 05 — Wave 9 frozen, awaiting parent census reconciliation
+Last activity: 2026-09-15 — 05-20 moved the reconcile apply composition into the
+extension entry point, which now builds `createApplyReconcile({ loadState })`
+once per extension load and drives it from `resources_discover`, and made the
+partially-installed backfill scan and the pending status set module-private
+behind TS2578-discriminating missing-export proofs. Committed in `7c01a833`,
+`85505191` and `258e0515`. Three identities leave the census with zero
+additions; the live total moves 10 -> 7. `index.ts|default` is still live after
+this plan, which is expected: it is the manifest-loaded default export and
+05-28 owns its adjacent annotation together with the production-mode flip.
+Task order held at 1 -> 2, both tasks touching disjoint modules.
+
+Earlier activity: 2026-09-15 — 05-18 added `fetchPlugins` and `getPluginInfo` to the
 plugin composition owner, binding the fs-only status probes and the Node read-only
 filesystem capability, switched both command handlers and the cross-op convergence
 gate onto them, and retired the flow owners' duplicate compositions behind
@@ -185,22 +196,35 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 (`git add -u .planning/`), and it wrote `completed_phases: 1` / `percent: 11` for a
 9-of-9 milestone, which was corrected by hand.
 
-### Wave 9 in progress — census reconciliation pending
+### Wave 9 source complete — census reconciliation pending
 
-Stopped at: completed `05-18-PLAN.md`. Resume file: none. One Wave 9 plan remains
-before the tree is frozen for the reconciliation.
+Stopped at: completed `05-20-PLAN.md`. Resume file: none. Both Wave 9 plans have
+landed, so the tree is frozen for the parent reconciliation.
 
-Full unit run after 05-18: 6266 tests, 6264 pass, 2 fail. Both failures are the
+Full unit run after 05-20: 6267 tests, 6265 pass, 2 fail. Both failures are the
 `tests/architecture/unowned-exports-census.test.ts` pin-equality gates, red by
 design until the parent applies its single pin edit. Integration: 32/32, exit 0.
-`npm run fallow` exit 0. Every direct owner touched in the plan measures
+`npm run fallow` exit 0. Every direct owner touched in either plan measures
 hit == found.
 
-05-18's contribution to the parent's one pin edit is two identity removals from
-`tests/architecture/gate-targets.ts` — `orchestrators/plugin/fetch.ts`'s
-`createFetchPlugins` and `orchestrators/plugin/info.ts`'s `createGetPluginInfo`,
-each the only member of its key — and zero additions. The live production census
-moves 12 -> 10. The exact identity strings are listed in `05-18-SUMMARY.md`.
+The wave's combined contribution to the parent's one pin edit is five identity
+removals from `tests/architecture/gate-targets.ts` and zero additions, taking
+the live production census 12 -> 7:
+
+- 05-18: `orchestrators/plugin/fetch.ts`'s `createFetchPlugins` and
+  `orchestrators/plugin/info.ts`'s `createGetPluginInfo`.
+- 05-20: `orchestrators/reconcile/apply.ts`'s `createApplyReconcile`,
+  `orchestrators/reconcile/backfill.ts`'s `scanForceInstalledBackfills` and
+  `orchestrators/reconcile/reconcile.messaging.ts`'s `PENDING_STATUSES`.
+
+Each is the only member of its key, so all five keys go. The exact identity
+strings are listed in `05-18-SUMMARY.md` and `05-20-SUMMARY.md`.
+
+The seven survivors are the four Wave 10 (05-21) `platform/` identities and the
+three Wave 11 (05-28) ones: `index.ts|default`, `RingBuffer.read` and
+`scripts/check-phase-06-hub-ledger.mjs`. 05-20 measured `index.ts|default`
+before and after its own work and it did not move, which is the expected
+outcome for a manifest-loaded default export.
 
 ## Operator Next Steps
 
