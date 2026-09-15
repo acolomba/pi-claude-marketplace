@@ -1084,6 +1084,47 @@ for (const { label, pluginNames, gitSourced, knownMarketplaces, dependencyMarket
   });
 }
 
+test("RESV-05 a skipped dependency reports whether the record it rests on is disabled", async (t) => {
+  // arrange: `bar` predates the run and its record is DISABLED, so it keeps its
+  // inventory and its name reservations while its artifacts are off disk. The
+  // skip is still correct -- nothing here decides enablement on a dependency's
+  // behalf -- but the projection has to carry the fact, or the row that is the
+  // whole remedy cannot state it.
+  const environment = await createHermeticEnvironment(t, "install-cascade-disabled-skip-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo"], ["bar", "baz"]);
+  const locations = locationsFor("project", environment.cwd);
+  const disabled = state.marketplaces[MARKETPLACE]?.plugins.bar;
+  assert.ok(disabled !== undefined, "the fixture pre-installs the dependency");
+  disabled.enabled = false;
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar" }, { name: "baz" }],
+      [`bar@${MARKETPLACE}`]: [],
+      [`baz@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`, `baz@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, []),
+  });
+
+  // assert: `baz` is the control -- an enabled record on the same skip path,
+  // so a projection that reported every skip as disabled would fail here.
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(
+    [...cascade.alreadyInstalled].sort((a, b) => a.key.localeCompare(b.key)),
+    [
+      { key: `bar@${MARKETPLACE}`, version: "0.0.1", disabled: true },
+      { key: `baz@${MARKETPLACE}`, version: "0.0.1", disabled: false },
+    ],
+  );
+});
+
 test("CMP-3 a constrained member whose marketplace the snapshot does not record resolves through the caller's lookup", async (t) => {
   // arrange: the snapshot carries the marketplace under its own name, and the
   // member names a SECOND name the snapshot does not record -- the shape a
@@ -1322,7 +1363,7 @@ for (const { label, declared, recorded } of [
     assert.deepStrictEqual(seen, [], "what could be fetched is not the question being asked");
     assert.deepStrictEqual(
       cascade.alreadyInstalled,
-      [{ key: `bar@${MARKETPLACE}`, version: recorded }],
+      [{ key: `bar@${MARKETPLACE}`, version: recorded, disabled: false }],
       "RESV-06: a member that was left alone is reported, not omitted",
     );
     assert.deepStrictEqual(

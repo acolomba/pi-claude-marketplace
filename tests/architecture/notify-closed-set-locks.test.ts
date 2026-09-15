@@ -57,7 +57,11 @@ test("OUT-08: REASONS is the closed 52-entry reason set", () => {
   // `dependency failed`. They are what let one cascade row name WHICH
   // dependency failed and WHY, instead of the requesting plugin alone
   // (45 -> 52).
-  assert.equal(REASONS.length, 52);
+  // RESV-05: +1 for `dependency disabled` -- the marker that lifts a skipped
+  // dependency off the benign-skip default when its record is disabled and it
+  // therefore materialized nothing for the requesting plugin to install
+  // against (52 -> 53).
+  assert.equal(REASONS.length, 53);
 });
 
 test("SNM-02: STATUS_TOKENS is the closed 24-entry token set", () => {

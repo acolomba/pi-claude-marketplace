@@ -803,6 +803,22 @@ A plugin that declares `dependencies` installs as a CASCADE: the requesting plug
 
 `helper` declares `formatter@tools` and `linter@tools`. `formatter` was materialized by this command and renders the ordinary `(installed)` row; `linter` was already present in the target scope, so RESV-05 CHECKED it against the effective constraint and left it exactly as it was -- reported as the benign `(skipped) {already installed}` and never reinstalled. That token pair is what makes "installed by this command" and "already here" readable apart. Severity `info`: the benign skip is in the idempotent closed set, so the cascade does not compute warning. The reload-hint fires on the `installed` rows.
 
+### Dependency cascade -- the skipped dependency is disabled (RESV-05)
+
+<!-- catalog-state: dependency-cascade-disabled-skip -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ● helper v1.0.0 (installed)
+  ⊘ linter@tools v3.0.0 (skipped) {already installed, dependency disabled}
+
+/reload to pick up changes
+```
+
+The same skip, against a record that is DISABLED. A disabled record keeps its inventory and its name reservations while its artifacts are off disk (ENBL-18 / ENBL-19), so `helper` installed against a dependency that materialized nothing. `{already installed}` alone is in the idempotent closed set and would report that as fine; `{dependency disabled}` names it, and `skipSeverity` reads the pair and computes `warning`, which raises the block. The install still stands and the dependency is still untouched -- enablement is never decided on a dependency's behalf (see `docs/plugin-enablement.md`), so the row is the whole remedy and `/claude:plugin enable linter@tools` is the user's move.
+
 ### Dependency cascade -- no release tag satisfies the constraint (RESV-03)
 
 <!-- catalog-state: dependency-no-matching-version -->

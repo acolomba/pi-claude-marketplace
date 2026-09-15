@@ -91,6 +91,14 @@ export const REASONS = [
   // produced -- reads as an unexplained failure beside the dependency row that
   // carries the real cause.
   "dependency failed",
+  // RESV-05: the dependency the cascade left alone is RECORDED but disabled, so
+  // it materialized nothing on disk. `already installed` alone is true and
+  // misleading together -- it reads as the benign idempotent skip, and the
+  // requesting plugin installs against a dependency whose artifacts are not
+  // there. This token is what raises that row off info and names the one thing
+  // the user can act on. Enablement is never decided on a dependency's behalf
+  // (see `docs/plugin-enablement.md`), so reporting it is the whole remedy.
+  "dependency disabled",
 ] as const;
 
 /** Literal union derived from the closed reason vocabulary. */

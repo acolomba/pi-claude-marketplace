@@ -41,8 +41,11 @@ const EXPECTED_SECTION_COUNT = 20;
 // six constraint arms, the four closure arms, and a member whose own ledger
 // threw. Every one of them is a row the cascade renders and nothing else does
 // (192 -> 204).
-const EXPECTED_STATE_COUNT = 204;
-const EXPECTED_UTF8_BYTES = 27_100;
+// RESV-05: +1 state for the cascade skip whose record is DISABLED -- the
+// `{already installed, dependency disabled}` brace and the warning it raises
+// (204 -> 205).
+const EXPECTED_STATE_COUNT = 205;
+const EXPECTED_UTF8_BYTES = 27_293;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -331,7 +334,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 204 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 205 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

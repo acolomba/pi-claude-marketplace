@@ -93,6 +93,12 @@ This name comes from Anthropic's own plugin-release tooling. Git does not define
 
 This extension does not install a dependency again when the target scope already has it. It still checks the recorded version against the effective constraint. A recorded version that does not satisfy the constraint is a conflict, and the install fails.
 
+A disabled plugin still counts as installed. Its record and its reserved names stay, but its files are off disk. So this extension does not install it again, and it does not enable it for you either. Enablement is always your decision. The install goes ahead and the dependency's row says `{already installed, dependency disabled}`, which raises the message to a warning. To make the dependency work, enable it yourself.
+
+```text
+/claude:plugin enable <plugin>@<marketplace>
+```
+
 Some plugins carry no real semantic version. This extension then records a content hash (`hash-` and 12 hexadecimal characters) or a git object name (`sha-` and 12 hexadecimal characters). Such a value goes through the same normalization as any other recorded version, with no special case. A hexadecimal string can yield a misleading version number this way. This behavior matches Claude Code and is a deliberate choice (D-03-04).
 
 ## Where a dependency lands

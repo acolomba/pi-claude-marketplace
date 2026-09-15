@@ -451,6 +451,44 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
       },
     },
 
+    // RESV-05: the same skip, against a record that is DISABLED. A disabled
+    // record keeps its inventory and its name reservations while its artifacts
+    // are off disk, so the requesting plugin installed against a dependency
+    // that materialized nothing. `{already installed}` alone is the benign
+    // idempotent skip and would report that as fine; the second token names it
+    // and lifts the row -- and the block -- to warning. The install still
+    // stands: enablement is never decided on a dependency's behalf, so the row
+    // is the whole remedy.
+    "dependency-cascade-disabled-skip": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "helper",
+                version: "1.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "skipped",
+                name: "linter@tools",
+                version: "3.0.0",
+                reasons: ["already installed", "dependency disabled"],
+                severity: "warning",
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // RESV-03: the constraint is satisfiable but the dependency's source
     // advertises no release tag inside it. The failing DEPENDENCY is the row's
     // subject and carries the constraint in its cause; the requesting plugin

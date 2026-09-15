@@ -1,6 +1,6 @@
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { ICON_UNINSTALLABLE, pluginRow } from "../../shared/notification-grammar.ts";
-import { companionSeverity } from "../../shared/notify-reasons.ts";
+import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
 
 import { INSTALL_CONTEXT } from "./install.messaging.ts";
 
@@ -211,11 +211,22 @@ export function composeCascadeMemberRows(args: {
   }
 
   for (const member of args.alreadyInstalled) {
+    // RESV-05: a disabled record keeps its inventory and its name reservations
+    // while its artifacts are off disk, so `already installed` alone is true
+    // and misleading together -- the requesting plugin installed against a
+    // dependency that materialized nothing. The second token names that, and
+    // `skipSeverity` reads the pair rather than the producer asserting a
+    // verdict beside them: `already installed` alone is the benign idempotent
+    // skip and stays `info`, and anything else is actionable.
+    const reasons: ContentReason[] = member.disabled
+      ? ["already installed", "dependency disabled"]
+      : ["already installed"];
     rows.push({
       status: "skipped",
       name: member.key,
       ...(member.version !== undefined && { version: member.version }),
-      reasons: ["already installed"],
+      reasons,
+      severity: skipSeverity(reasons),
     });
   }
 

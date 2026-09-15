@@ -165,7 +165,7 @@ describe("composeCascadeMemberRows", () => {
       rootKey: ROOT_KEY,
       rootRow: ROOT_ROW,
       installed: [member()],
-      alreadyInstalled: [{ key: "linter@tools", version: "3.0.0" }],
+      alreadyInstalled: [{ key: "linter@tools", version: "3.0.0", disabled: false }],
       probe: PROBE_BOTH_LOADED,
     });
 
@@ -180,6 +180,38 @@ describe("composeCascadeMemberRows", () => {
         "  ● formatter@tools v2.1.0 (installed)",
         "  ● helper v1.0.0 (installed)",
         "  ⊘ linter@tools v3.0.0 (skipped) {already installed}",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    });
+  });
+
+  test("RESV-05 a skipped member whose record is disabled names it and raises the block", () => {
+    // arrange: a disabled record keeps its inventory and its name reservations
+    // while its artifacts are off disk, so the requesting plugin installed
+    // against a dependency that materialized nothing. Reported as the bare
+    // idempotent skip, the block tells the user everything is fine.
+    const rows = composeCascadeMemberRows({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootRow: ROOT_ROW,
+      installed: [],
+      alreadyInstalled: [{ key: "linter@tools", version: "3.0.0", disabled: true }],
+      probe: PROBE_BOTH_LOADED,
+    });
+
+    // act
+    const emitted = emit(rows, BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "warning",
+      message: [
+        "A plugin operation needs attention.",
+        "",
+        "● official [user]",
+        "  ● helper v1.0.0 (installed)",
+        "  ⊘ linter@tools v3.0.0 (skipped) {already installed, dependency disabled}",
         "",
         "/reload to pick up changes",
       ].join("\n"),
@@ -241,7 +273,7 @@ describe("composeCascadeMemberRows", () => {
       rootKey: ROOT_KEY,
       rootRow: ROOT_ROW,
       installed: [],
-      alreadyInstalled: [{ key: "linter@tools", version: undefined }],
+      alreadyInstalled: [{ key: "linter@tools", version: undefined, disabled: false }],
       probe: PROBE_BOTH_LOADED,
     });
 

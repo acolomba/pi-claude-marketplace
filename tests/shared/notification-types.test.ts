@@ -69,6 +69,7 @@ const EXPECTED_REASONS = [
   "dependency marketplace not added",
   "dependency cycle",
   "dependency failed",
+  "dependency disabled",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

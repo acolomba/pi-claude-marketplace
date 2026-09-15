@@ -208,6 +208,10 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
     "dependency cycle",
     // RESV-06: the requesting plugin's own row, when a dependency is what failed.
     "dependency failed",
+    // RESV-05: the dependency the cascade left alone is recorded but disabled,
+    // so it materialized nothing. It joins `already installed` in the same
+    // brace and lifts that row off the benign-skip default.
+    "dependency disabled",
   ];
 
   // act

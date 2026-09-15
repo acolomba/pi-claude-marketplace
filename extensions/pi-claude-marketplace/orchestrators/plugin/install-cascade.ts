@@ -70,6 +70,7 @@ import {
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
+import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
@@ -296,6 +297,17 @@ export interface CascadeMemberOutcome {
 export interface CascadeSkippedMember {
   readonly key: string;
   readonly version: string | undefined;
+  /**
+   * Whether the record the skip rests on is DISABLED.
+   *
+   * A disabled record keeps its inventory and its name reservations while its
+   * artifacts are off disk (ENBL-18 / ENBL-19), so the requesting plugin
+   * installs against a dependency that materialized nothing. RESV-05 still
+   * leaves it exactly as it was -- enablement is never decided on a
+   * dependency's behalf -- so the row is the whole remedy, and it can only be
+   * truthful if it knows this.
+   */
+  readonly disabled: boolean;
 }
 
 /** Inputs of one cascade run. */
@@ -532,6 +544,18 @@ async function resolveOneMember(
  */
 function recordedVersionOf(state: ExtensionState, member: ClosureMember): string | undefined {
   return state.marketplaces[member.marketplace]?.plugins[member.name]?.version;
+}
+
+/**
+ * Whether the snapshot's record for a skipped member says it is disabled.
+ *
+ * A member the snapshot records nothing for reads as not-disabled: there is no
+ * record to be disabled, and the version projection beside this one already
+ * reports that state as an absent version.
+ */
+function recordedDisabled(state: ExtensionState, member: ClosureMember): boolean {
+  const record = state.marketplaces[member.marketplace]?.plugins[member.name];
+  return record !== undefined && isRecordedButDisabled(record);
 }
 
 /**
@@ -781,7 +805,11 @@ export async function runInstallCascade(
   // record about them. They are carried out of the cascade so the block can
   // report them as left alone rather than omitting them entirely.
   const alreadyInstalled: readonly CascadeSkippedMember[] = closure.alreadyInstalled.map(
-    (member) => ({ key: member.key, version: recordedVersionOf(options.state, member) }),
+    (member) => ({
+      key: member.key,
+      version: recordedVersionOf(options.state, member),
+      disabled: recordedDisabled(options.state, member),
+    }),
   );
 
   return toCascadeResult(options, await transaction.runPhases(phases, run), run, alreadyInstalled);

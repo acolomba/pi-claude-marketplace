@@ -5,14 +5,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 52-entry
+ * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 53-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 52-entry set.
+ * 53-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
@@ -31,6 +31,8 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * constraint`, `dependency marketplace not added`, `dependency cycle` and
  * `dependency failed` -- which are what let one cascade row name WHICH
  * dependency failed and WHY, instead of the requesting plugin alone (45 to 52).
+ * RESV-05 added `dependency disabled`, which lifts a skipped-but-inert
+ * dependency off the benign-skip default (52 to 53).
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -271,6 +273,10 @@ type CommandPrivateReason =
   | "dependency marketplace not added"
   | "dependency cycle"
   | "dependency failed"
+  // RESV-05: the skipped dependency is recorded but disabled, so it
+  // materialized nothing. It joins `already installed` in the same brace and
+  // is what lifts that row off the benign-skip default.
+  | "dependency disabled"
   | "plugins remain"
   | "stale clone"
   | "duplicate name"
