@@ -218,7 +218,7 @@ export function pull(source: Source): string {
     {
       path: casesPath,
       line: 9,
-      column: 61,
+      column: 62,
       kind: "value-read",
       origin: "production",
       syntax: "binding-destructuring",
