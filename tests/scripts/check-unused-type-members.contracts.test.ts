@@ -104,13 +104,26 @@ const hostManifest = `${JSON.stringify(
   2,
 )}\n`;
 
+// `HostEvent` declares `reason` as required and `note` as optional, at lines 10
+// and 11. That difference is what separates an input mirror the host compels
+// from one it merely happens to have.
 const hostTypes = `export interface HostResult {
   payload?: unknown;
   unsent?: unknown;
 }
 
 export declare function register(handler: () => HostResult): void;
+
+export interface HostEvent {
+  kind: "discover";
+  reason: "startup" | "reload";
+  note?: string;
+}
+
+export declare function observe(handler: (event: HostEvent) => void): void;
 `;
+
+const hostTypesPath = "node_modules/external-host/index.d.ts";
 
 async function createRoot(
   t: TestContext,
@@ -427,4 +440,420 @@ test("the command-line tool applies the contract file and still reports the sibl
     report.findings.map((finding) => `${finding.owner}.${finding.key}`),
     ["Carried.ignored", "Emitted.unsent"],
   );
+});
+
+// The three unique symbols are declared at lines 1, 3 and 5. `openBrand` is
+// exported, so any module can spell its key; the other two cannot be reached
+// from outside this file at all.
+const brandCases = `declare const shapeBrand: unique symbol;
+
+export declare const openBrand: unique symbol;
+
+const scopeBrand: unique symbol = Symbol("scope");
+
+export interface Branded {
+  readonly [shapeBrand]: never;
+  readonly ordinary?: string;
+}
+
+export interface Scoped {
+  readonly [scopeBrand]: true;
+}
+
+export interface Opened {
+  readonly [openBrand]: never;
+}
+
+export interface Faked {
+  readonly __brand: never;
+}
+
+export interface Valued {
+  readonly [shapeBrand]: string;
+}
+`;
+
+function brandContract(line: number, key: string, owner: string, symbol: string): unknown {
+  return {
+    id: `${casesPath}:${line}:3`,
+    owner,
+    key,
+    category: "nominal-brand",
+    purpose: "Compile-time marker; the runtime value is the underlying shape.",
+    symbol: `${casesPath}:${symbol}`,
+  };
+}
+
+test("an ambient unique-symbol brand keeps its type-system role", async (t) => {
+  // arrange
+  const report = await analyzeWith(
+    t,
+    brandCases,
+    documentWith(brandContract(8, "shapeBrand", "Branded", "1:15")),
+  );
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "Branded", "shapeBrand").status, "explicit-contract");
+  assert.deepStrictEqual(memberFor(report, "Branded", "shapeBrand").reasons, [
+    "nominal-brand: Compile-time marker; the runtime value is the underlying shape. " +
+      `(unique symbol ${casesPath}:1:15 cannot be spelled outside its module)`,
+  ]);
+});
+
+test("an object brand scoped by a module-private symbol keeps its role", async (t) => {
+  // arrange
+  const report = await analyzeWith(
+    t,
+    brandCases,
+    documentWith(brandContract(13, "scopeBrand", "Scoped", "5:7")),
+  );
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "Scoped", "scopeBrand").status, "explicit-contract");
+});
+
+test("the ordinary sibling of a branded member is not covered", async (t) => {
+  // arrange
+  const report = await analyzeWith(
+    t,
+    brandCases,
+    documentWith(brandContract(8, "shapeBrand", "Branded", "1:15")),
+  );
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "Branded", "ordinary").status, "unread");
+  assert.ok(
+    report.findings.some((finding) => finding.id === `${casesPath}:9:3`),
+    "the ordinary sibling must still be reported",
+  );
+});
+
+test("an ordinary property that merely looks branded is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(t, brandCases, documentWith(brandContract(21, "__brand", "Faked", "1:15"))),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:21:3 does not declare a computed unique-symbol key`,
+    },
+  );
+});
+
+test("a brand whose key symbol any module can spell is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(t, brandCases, documentWith(brandContract(17, "openBrand", "Opened", "3:22"))),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:17:3 key symbol openBrand is exported, so any module can mint this shape`,
+    },
+  );
+});
+
+test("a symbol-keyed member carrying a real value type is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(t, brandCases, documentWith(brandContract(25, "shapeBrand", "Valued", "1:15"))),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:25:3 declares type string, which an ordinary value can supply`,
+    },
+  );
+});
+
+test("a brand whose recorded symbol site has drifted is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(t, brandCases, documentWith(brandContract(8, "shapeBrand", "Branded", "3:22"))),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:8:3 key symbol is declared at ${casesPath}:1:15, not ${casesPath}:3:22`,
+    },
+  );
+});
+
+test("a brand entry carrying another category's key is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(t, brandCases, {
+      schemaVersion: 1,
+      contracts: [
+        {
+          ...(brandContract(8, "shapeBrand", "Branded", "1:15") as object),
+          origin: `${casesPath}:8:3`,
+        },
+      ],
+    }),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:8:3 carries unknown key origin`,
+    },
+  );
+});
+
+// The filter literal's own `status` is declared at line 14, column 31, and the
+// selection that holds it starts at line 14, column 12. Nothing here is ever
+// read at run time; the members exist to make the compiler choose a variant.
+const selectionCases = `export interface Started {
+  readonly status: "started";
+  readonly at: string;
+}
+
+export interface Stopped {
+  readonly status: "stopped";
+  readonly until: string;
+}
+
+export type Message = Started | Stopped;
+
+export type Render<K extends Message["status"]> = (
+  message: Extract<Message, { status: K }>,
+) => string;
+
+export type Both = Extract<Message, { status: "started" | "stopped" }>;
+`;
+
+// The same syntax over a union whose variants share one literal. The filter is
+// still shaped like a selection and still selects nothing.
+const flatCases = `export interface Started {
+  readonly status: "same";
+  readonly at: string;
+}
+
+export interface Stopped {
+  readonly status: "same";
+  readonly until: string;
+}
+
+export type Message = Started | Stopped;
+
+export type Render<K extends Message["status"]> = (
+  message: Extract<Message, { status: K }>,
+) => string;
+`;
+
+const selectionContract = {
+  id: `${casesPath}:14:31`,
+  owner: "Render.message",
+  key: "status",
+  category: "type-selection",
+  purpose: "Selects the message variant each render arm receives.",
+  filter: `${casesPath}:14:12`,
+};
+
+test("a genuine selection literal keeps its type-system role", async (t) => {
+  // arrange
+  const report = await analyzeWith(t, selectionCases, documentWith(selectionContract));
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "Render.message", "status").status, "explicit-contract");
+  assert.deepStrictEqual(memberFor(report, "Render.message", "status").reasons, [
+    "type-selection: Selects the message variant each render arm receives. " +
+      `(filter ${casesPath}:14:12 selects by status)`,
+  ]);
+});
+
+test("a discriminant the selection reads at run time is not covered by it", async (t) => {
+  // arrange
+  const report = await analyzeWith(t, selectionCases, documentWith(selectionContract));
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "Started", "status").status, "unread");
+  assert.strictEqual(memberFor(report, "Stopped", "status").status, "unread");
+});
+
+test("a filter over a union that does not discriminate on the key is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(analyzeWith(t, flatCases, documentWith(selectionContract)), {
+    name: "AnalysisSetupError",
+    message: `Invalid contract: ${casesPath}:14:31 filter ${casesPath}:14:12 selects over a type that does not discriminate on status`,
+  });
+});
+
+test("a resolved filter that keeps the whole union refines nothing", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      selectionCases,
+      documentWith({
+        ...selectionContract,
+        id: `${casesPath}:17:39`,
+        owner: "Both",
+        filter: `${casesPath}:17:20`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:17:39 filter ${casesPath}:17:20 selects the whole union, so it refines nothing`,
+    },
+  );
+});
+
+test("a member outside the named filter is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      selectionCases,
+      documentWith({ ...selectionContract, id: `${casesPath}:2:3`, owner: "Started" }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:2:3 is not a member of the filter at ${casesPath}:14:12`,
+    },
+  );
+});
+
+test("a filter site that names no selection is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      selectionCases,
+      documentWith({ ...selectionContract, filter: `${casesPath}:11:1` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:14:31 filter ${casesPath}:11:1 is not a two-argument type selection`,
+    },
+  );
+});
+
+// The handler at line 10, column 11 is checked against the installed
+// `observe` signature. Nothing in the body reads the event.
+const inputCases = `import { observe } from "external-host";
+
+export interface LocalEvent {
+  readonly kind: "discover";
+  readonly reason: "startup" | "reload";
+  readonly note?: string;
+}
+
+export function watch(): void {
+  observe((event: LocalEvent) => {
+    void event;
+  });
+}
+`;
+
+// The same handler, reached only through an assertion. The compiler checks the
+// assertion, not the function.
+const assertedCases = `import { observe } from "external-host";
+
+import type { HostEvent } from "external-host";
+
+export interface LocalEvent {
+  readonly kind: "discover";
+  readonly reason: "startup" | "reload";
+  readonly note?: string;
+}
+
+export function watch(): void {
+  observe(((event: LocalEvent) => {
+    void event;
+  }) as (event: HostEvent) => void);
+}
+`;
+
+// Adds an ordinary read of `LocalEvent.reason` at line 16, column 16.
+const readInputCases = `${inputCases}
+export function peek(event: LocalEvent): string {
+  return event.reason;
+}
+`;
+
+const inputContract = {
+  id: `${casesPath}:5:3`,
+  owner: "LocalEvent",
+  key: "reason",
+  category: "external-input",
+  purpose: "The host always supplies this slot, and the handler signature must accept it.",
+  upstream: `${hostTypesPath}:10:3`,
+  necessity: `${casesPath}:10:11`,
+};
+
+test("an input mirror the installed signature compels is accepted", async (t) => {
+  // arrange
+  const report = await analyzeWith(t, inputCases, documentWith(inputContract));
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "LocalEvent", "reason").status, "explicit-contract");
+  assert.deepStrictEqual(memberFor(report, "LocalEvent", "reason").reasons, [
+    "external-input: The host always supplies this slot, and the handler signature must accept it. " +
+      `(upstream ${hostTypesPath}:10:3 requires it at ${casesPath}:10:11)`,
+  ]);
+});
+
+test("an unread input sibling is not covered by its neighbour's contract", async (t) => {
+  // arrange
+  const report = await analyzeWith(t, inputCases, documentWith(inputContract));
+
+  // act & assert
+  assert.deepStrictEqual(
+    report.findings.map((finding) => `${finding.owner}.${finding.key}`),
+    ["LocalEvent.kind", "LocalEvent.note"],
+  );
+});
+
+test("an upstream slot the host declares as optional compels no mirror", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      inputCases,
+      documentWith({
+        ...inputContract,
+        id: `${casesPath}:6:3`,
+        key: "note",
+        upstream: `${hostTypesPath}:11:3`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:6:3 upstream ${hostTypesPath}:11:3 declares note as optional, so no local mirror is compelled`,
+    },
+  );
+});
+
+test("an upstream site that no longer declares the member is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      inputCases,
+      documentWith({ ...inputContract, upstream: `${hostTypesPath}:9:3` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:5:3 upstream ${hostTypesPath}:9:3 does not declare reason in an installed declaration`,
+    },
+  );
+});
+
+test("a handler reached only through an assertion proves no external expectation", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      assertedCases,
+      documentWith({
+        ...inputContract,
+        id: `${casesPath}:7:3`,
+        necessity: `${casesPath}:12:12`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:7:3 necessity ${casesPath}:12:12 is reached only through an assertion, which checks nothing`,
+    },
+  );
+});
+
+test("an input contract a genuine read has made redundant is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(analyzeWith(t, readInputCases, documentWith(inputContract)), {
+    name: "AnalysisSetupError",
+    message: `Invalid contract: ${casesPath}:5:3 is already read at ${casesPath}:16:16; remove the contract`,
+  });
 });
