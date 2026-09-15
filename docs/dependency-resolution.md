@@ -89,6 +89,14 @@ A dependency pinned this way records the version the tag names, for example `1.2
 
 This name comes from Anthropic's own plugin-release tooling. Git does not define it, and most repositories outside Anthropic do not use it. Such a repository reports no matching tag. Today that is the expected answer for most third-party sources. It is not a defect in the repository or in this extension.
 
+### Only a git-backed dependency can be version-constrained
+
+Release tags live in a git repository. So a dependency can satisfy a real constraint only when its marketplace entry names a git-backed source: `url`, a git repository plus a subdirectory, or `owner/repo`.
+
+A `path` source has no tag list at all. Most marketplaces use path sources, for example `"source": "./plugins/formatter"`, so this is the common case and not a corner case. Such a dependency reports `{no matching version}` for every constraint except the wildcard. To depend on a path-source plugin, declare it with no version.
+
+The already-installed check does not have this limit, and the difference is deliberate. That check reads the version already in the record and never asks a repository for anything, so a path-source dependency you installed earlier can satisfy a constraint that the same plugin, not yet installed, cannot. The two answers come from two different questions: what is on disk now, and what could be fetched.
+
 ## What happens to a dependency you already installed
 
 This extension does not install a dependency again when the target scope already has it. It still checks the recorded version against the effective constraint. A recorded version that does not satisfy the constraint is a conflict, and the install fails.
