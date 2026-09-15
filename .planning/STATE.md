@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: test-backlog
-current_phase: 05
-current_phase_name: Production Export Ownership
+current_phase: 06
+current_phase_name: Unused Type Member Gate
 status: executing
 last_updated: "2026-09-15T05:10:00Z"
 last_activity: 2026-09-15
-last_activity_desc: Wave 11 complete; 05-28 production dead-code mode and empty census
+last_activity_desc: Phase 05 verified passed 10/10; review findings closed
 state_head: f2c0308d
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 54
   completed_plans: 38
-  percent: 63
+  percent: 70
 milestone_name: test-backlog
 ---
 
@@ -26,120 +26,32 @@ See: `.planning/PROJECT.md` (updated 2026-09-13 after the refine-unit-tests mile
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 05 — Production Export Ownership
+**Current focus:** Phase 06 — Unused Type Member Gate (8 approved plans)
 
 ## Current Position
 
-Phase: 05 (Production Export Ownership) — ALL PLANS LANDED, AWAITING VERIFICATION
-Plan: 28 of 28 — Wave 11 complete (05-28 landed); no plan remains
-Status: Phase 05 source work complete — ready for phase verification
-Last activity: 2026-09-15 — 05-28 retired the historical hub-ledger census
-verifier with its exclusive paired test, then flipped `.fallowrc.json` to
-`production: {deadCode: true, health: false, dupes: false}` in ONE commit with
-the two exact adjacent exceptions it requires: the manifest-loaded entry
-default and `RingBuffer.read`, whose real readers are the async-rewake
-registry's `entry.stderrBuffer.read()` / `entry.stdoutBuffer.read()` calls.
-Measured before committing that each exception reports as a stale suppression
-under whole-tree reachability and as live under production reachability, which
-is why they could not land apart. Committed in `fc6a6d5a`, `fa81a02e` and
-`f2c0308d`. The production finding census is now EMPTY in every category:
-`npm run fallow` discovers 11 production entry points and reports zero issues.
-The census gate requires the shipping report to EQUAL the explicit
-`--production` report and requires both to be clean; the control harness now
-consumes the shipping production and rule settings verbatim, overriding only
-the fixture entry, so reverting the config fails two controls. Phase total:
-57 -> 0 across 28 plans with zero net additions at any step. FLOW-09 is closed
-in `.planning/BACKLOG.md` with that evidence. One deviation: deleting
-`tests/scripts/` emptied a root named in the vocabulary guard's
-`POLICED_TEST_ROOTS`, which the full gate caught; the vacated root was dropped
-and a planted unreachable root still reddens the clause.
+Phase: 06 of 8 — Unused Type Member Gate (8 approved plans, not started)
+Plan: none started
+Status: Phase 05 COMPLETE — verified `passed`, 10/10 must-haves
+Last activity: 2026-09-15 — Phase 05 closed. All 28 plans landed; the production
+dead-code census drained from 111 to 0 with zero net additions at every step.
+Independent verification re-measured the start population from a clean archive
+of `a8ef0dac` (111, matching the first committed pin), confirmed the pins are
+empty because the tree measures empty rather than because identities were
+allowlisted, and proved the gates discriminate with seven planted violations.
+Aggregate production unit coverage held at exactly 100%: 62,889 lines,
+1,834 functions, 9,050 branches, zero modules below 100%.
 
-Earlier activity: 2026-09-15 — 05-21 moved the complete git authentication-callback
-protocol into `platform/git-auth-callbacks.ts`, retired the branch and remote
-listing wrappers with caller evidence, and composed `DEFAULT_CREDENTIAL_OPS` in
-`orchestrators/auth-host.ts` from `createCredentialOps`, the published Node
-launcher and an explicit 5000 ms timeout. Committed in `e5464690` and
-`8ae97016`. Four identities leave the census with zero additions; the live
-total moves 7 -> 3, and the three survivors are exactly 05-28's. Tasks 1 and 2
-were merged into one commit because the declaration move and every importer
-repoint must land together under the typecheck-gated hook chain. The new
-module is NOT named by `CREDENTIAL_LEAK_TARGETS`, which now aims its
-`hookDebugLog` scan at a `platform/git.ts` holding no such call — the parent
-owns that registry edit; see `05-21-SUMMARY.md`.
-
-Earlier activity: 2026-09-15 — 05-20 moved the reconcile apply composition into the
-extension entry point, which now builds `createApplyReconcile({ loadState })`
-once per extension load and drives it from `resources_discover`, and made the
-partially-installed backfill scan and the pending status set module-private
-behind TS2578-discriminating missing-export proofs. Committed in `7c01a833`,
-`85505191` and `258e0515`. Three identities leave the census with zero
-additions; the live total moves 10 -> 7. `index.ts|default` is still live after
-this plan, which is expected: it is the manifest-loaded default export and
-05-28 owns its adjacent annotation together with the production-mode flip.
-Task order held at 1 -> 2, both tasks touching disjoint modules.
-
-Earlier activity: 2026-09-15 — 05-18 added `fetchPlugins` and `getPluginInfo` to the
-plugin composition owner, binding the fs-only status probes and the Node read-only
-filesystem capability, switched both command handlers and the cross-op convergence
-gate onto them, and retired the flow owners' duplicate compositions behind
-TS2578-discriminating missing-export proofs. Committed in `44925576`, `e2ad1efd`
-and `f712f031`. Two identities leave the census with zero additions; the live total
-moves 12 -> 10. Task order was reordered to 1 -> 3 -> 2 because the plan's stated
-order leaves the tree uncompilable between tasks 2 and 3.
-
-Earlier activity: 2026-09-15 — 05-27 gave the Stop and StopFailure payload modules
-their event-specific export names, `translateStop` and `translateStopFailure`,
-committed in `5283b2e6` and `c26352b7`. The `translate` duplicate-export group
-disappears entirely rather than shrinking, because a duplicate needs at least two
-locations and these were its last two members. No payload module publishes a bare
-`translate` any more. The live census total moves 13 -> 12 with zero additions.
-
-Earlier activity: 2026-09-15 — 05-17 added `createReinstallOperation` to the plugin
-composition owner, pointed the load-time backfill scan at it, migrated the two
-outside single-reinstall call sites, and made `createNodeReinstallPlugin`
-module-private behind a TS2578-discriminating missing-export proof. Committed in
-`5ac7e4fe` and `e7fe8c47`. One identity leaves the census with zero additions;
-the live total moves 14 -> 13.
-
-Earlier activity: 2026-09-15 — 05-26 gave the PreCompact and PostCompact payload
-modules their event-specific export names, `translatePreCompact` and
-`translatePostCompact`, committed in `42477b85` and `94b46e37`. The `translate`
-duplicate-export group drops from four members to two; the census total stays 14
-with zero additions.
-
-Earlier activity: 2026-09-14 — 05-16 added `createEnableOperation` and
-`createUninstallOperation` to the plugin composition owner, switched both command
-handlers and reconcile onto them, and retired `createNodeSetPluginEnabled` and
-`createNodeUninstallPlugin` with no-caller evidence. Committed in `d3d7abba`,
-`11fe18f3` and `4d48f853`. Two identities leave the census with zero additions;
-the live total moves 16 -> 14.
-
-Earlier activity: 2026-09-15 — 05-25 gave the SessionStart, SessionEnd and
-UserPromptSubmit payload modules their event-specific export names, committed in
-`fbce2dfc`, `6823c071` and `fefd6fe9`. The `translate` duplicate-export group
-drops from seven members to four; the census total stays 16 with zero additions.
-
-Earlier activity: 2026-09-14 — 05-23 retired the four notification vocabulary tuples
-in favour of bare literal unions, privatized `ICON_REMOTE`,
-`ICON_PARTIALLY_AVAILABLE` and `emitWithSummary`, and folded the reason coverage
-proof into the per-kind malformed-reason map, committed in `b191b2bc`,
-`5e7d0ef3`, `95cf4929` and `3997bbda`. Eight identities leave the production
-census, 24 to 16, with zero additions and no transitive finding.
-
-Earlier activity: 2026-09-14 — 05-19 privatized install reason narrowing, plugin-PATH
-bin collection, the four reinstall replacement steps and the reinstall row
-projection, committed in `accb1fcd` and `0f5f9d4c`. Seven identities leave the
-production census, 31 to 24, with zero additions; the one transitive finding the
-privatization exposed, the now-unreferenced `ReinstallMsg` union, was dispositioned
-inside the same owner file.
-
-Earlier activity: 2026-09-14 — 05-15 gave install its production composition owner,
-committed in `dd8547ec` and `a99d7dd1`. `orchestrators/plugin/operations.ts` now
-holds the one concrete `runPhases` / `withLockedStateTransaction` binding;
-`createNodeInstallPlugin` is retired and all eleven callers ask the new owner for a
-composed operation. The production census drops one identity, from 32 to 31, with
-zero additions; the shared census pin edit remains deferred to the parent wave
-reconciliation
+Independent code review of waves 5-11 returned 0 blockers and 5 warnings; four
+were closed in `dfe78c9e`, `e2285f73`, `bf7584da`, `dcb16d40`. The one that
+mattered: `production.deadCode` scoped cycle detection to the production entry
+graph, so a cycle under `tests/` or `scripts/` was reported by nothing — measured
+both ways, then fixed by adding a second `--no-production --circular-deps
+--re-export-cycles` link to `npm run fallow` and pinning the split with a planted
+offender. The credential scan re-aimed after `buildAuthCallbacks` moved was also
+measurably inert; it now fails when its subject set is empty. The fifth warning
+(persistence validation's `Errors()`-based fail-open shape) is the operator's
+approved design and was recorded, not reverted.
 
 ### Historical refine-unit-tests closeout: `override_closeout`
 
