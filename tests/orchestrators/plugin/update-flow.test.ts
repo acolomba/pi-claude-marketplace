@@ -3245,9 +3245,7 @@ for (const { title, makeFailure, reason } of [
     title: "classifies rollback marketplace refresh failures",
     makeFailure: () =>
       Object.assign(
-        new PluginUpdatePhase3Error("replace failed", [
-          { phase: "skills", msg: "replace failed", cause: new Error("disk failure") },
-        ]),
+        new PluginUpdatePhase3Error("replace failed", [{ phase: "skills", msg: "replace failed" }]),
         { message: "opaque typed phase failure" },
       ),
     reason: "rollback partial",

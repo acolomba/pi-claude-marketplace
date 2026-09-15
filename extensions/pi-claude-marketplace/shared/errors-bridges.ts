@@ -6,6 +6,17 @@
 // uniform.
 
 /**
+ * The (marketplace, plugin) tuple an agent name belongs to. Declared once so
+ * the conflict's owner, the error's public `stagingFor` field and the
+ * constructor parameter behind it all name the same two members rather than
+ * three copies of them.
+ */
+export interface PluginCoordinate {
+  readonly marketplace: string;
+  readonly plugin: string;
+}
+
+/**
  * One ownership conflict surfaced by the agents-index when a generated
  * agent name in a stage operation is already owned by a different
  * (marketplace, plugin) tuple. AgentOwnershipConflictError carries an array
@@ -13,7 +24,7 @@
  */
 export interface AgentOwnershipConflict {
   readonly generatedName: string;
-  readonly owner: { readonly marketplace: string; readonly plugin: string };
+  readonly owner: PluginCoordinate;
 }
 
 /**
@@ -24,11 +35,8 @@ export interface AgentOwnershipConflict {
  */
 export class AgentOwnershipConflictError extends Error {
   readonly conflicts: readonly AgentOwnershipConflict[];
-  readonly stagingFor: { readonly marketplace: string; readonly plugin: string };
-  constructor(
-    stagingFor: { marketplace: string; plugin: string },
-    conflicts: readonly AgentOwnershipConflict[],
-  ) {
+  readonly stagingFor: PluginCoordinate;
+  constructor(stagingFor: PluginCoordinate, conflicts: readonly AgentOwnershipConflict[]) {
     const list = conflicts
       .map((c) => `"${c.generatedName}" already owned by ${c.owner.marketplace}/${c.owner.plugin}`)
       .join("; ");

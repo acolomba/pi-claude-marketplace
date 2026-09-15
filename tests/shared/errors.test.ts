@@ -39,25 +39,16 @@ import type {
   ResourcesDiscoverFailure,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
-void ({
-  phase: "skills",
-  msg: "skills failed",
-  cause: new Error("skills"),
-} satisfies Phase3Failure);
-void ({
-  phase: "commands",
-  msg: "commands failed",
-  cause: new Error("commands"),
-} satisfies Phase3Failure);
-void ({
-  phase: "agents",
-  msg: "agents failed",
-  cause: new Error("agents"),
-} satisfies Phase3Failure);
-void ({ phase: "hooks", msg: "hooks failed", cause: new Error("hooks") } satisfies Phase3Failure);
-void ({ phase: "mcp", msg: "mcp failed", cause: new Error("mcp") } satisfies Phase3Failure);
+void ({ phase: "skills", msg: "skills failed" } satisfies Phase3Failure);
+void ({ phase: "commands", msg: "commands failed" } satisfies Phase3Failure);
+void ({ phase: "agents", msg: "agents failed" } satisfies Phase3Failure);
+void ({ phase: "hooks", msg: "hooks failed" } satisfies Phase3Failure);
+void ({ phase: "mcp", msg: "mcp failed" } satisfies Phase3Failure);
 // @ts-expect-error phase 3 failures use the closed bridge phase union
-void ({ phase: "files", msg: "files failed", cause: new Error("files") } satisfies Phase3Failure);
+void ({ phase: "files", msg: "files failed" } satisfies Phase3Failure);
+// @ts-expect-error the shared entry shape declares no per-entry cause; the
+// update family restates one as a required Error in UpdatePhase3Failure
+void ({ phase: "skills", msg: "skills failed", cause: new Error("x") } satisfies Phase3Failure);
 
 void ({
   kind: "not-in-manifest",
@@ -977,11 +968,8 @@ describe("CleanupContextError", () => {
 describe("PluginUpdatePhase3Error", () => {
   test("exposes the complete aggregate failure and cause", () => {
     // arrange
-    const bridgeCause = new Error("skills failed");
     const outerCause = new Error("commit failed");
-    const failures = [
-      { phase: "skills", msg: "skills rollback failed", cause: bridgeCause },
-    ] satisfies Phase3Failure[];
+    const failures = [{ phase: "skills", msg: "skills rollback failed" }] satisfies Phase3Failure[];
 
     // act
     const error = new PluginUpdatePhase3Error("phase 3 failed", failures, {
@@ -1001,7 +989,7 @@ describe("PluginUpdatePhase3Error", () => {
       {
         name: "PluginUpdatePhase3Error",
         message: "phase 3 failed",
-        failures: [{ phase: "skills", msg: "skills rollback failed", cause: bridgeCause }],
+        failures: [{ phase: "skills", msg: "skills rollback failed" }],
         cause: outerCause,
       },
     );
@@ -1035,13 +1023,12 @@ describe("PluginUpdatePhase3Error", () => {
 
   test("preserves every bridge phase and repeated failure text in caller order", () => {
     // arrange
-    const repeatedCause = new Error("repeated");
     const failures = [
-      { phase: "skills", msg: "same", cause: repeatedCause },
-      { phase: "commands", msg: "same", cause: repeatedCause },
-      { phase: "agents", msg: "agents", cause: new Error("agents") },
-      { phase: "hooks", msg: "hooks", cause: new Error("hooks") },
-      { phase: "mcp", msg: "mcp", cause: new Error("mcp") },
+      { phase: "skills", msg: "same" },
+      { phase: "commands", msg: "same" },
+      { phase: "agents", msg: "agents" },
+      { phase: "hooks", msg: "hooks" },
+      { phase: "mcp", msg: "mcp" },
     ] satisfies Phase3Failure[];
 
     // act
@@ -1049,11 +1036,11 @@ describe("PluginUpdatePhase3Error", () => {
 
     // assert
     assert.deepStrictEqual(error.failures, [
-      { phase: "skills", msg: "same", cause: repeatedCause },
-      { phase: "commands", msg: "same", cause: repeatedCause },
-      { phase: "agents", msg: "agents", cause: failures[2]?.cause },
-      { phase: "hooks", msg: "hooks", cause: failures[3]?.cause },
-      { phase: "mcp", msg: "mcp", cause: failures[4]?.cause },
+      { phase: "skills", msg: "same" },
+      { phase: "commands", msg: "same" },
+      { phase: "agents", msg: "agents" },
+      { phase: "hooks", msg: "hooks" },
+      { phase: "mcp", msg: "mcp" },
     ]);
     assert.strictEqual(error.failures, failures);
   });

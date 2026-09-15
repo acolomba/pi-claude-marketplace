@@ -494,11 +494,15 @@ export class StateLockHeldError extends Error {
  * RECOVERY_PLUGIN_REINSTALL_PREFIX-composed recovery hint; the
  * `Error.cause` (passed via the options bag) carries the chained
  * originating error for the depth-5 `causeChainTrailer` walk.
+ *
+ * The entry shape carries no per-entry cause. `update-swap.ts`'s
+ * `UpdatePhase3Failure` restates the slot as a required `Error`, and that
+ * narrower declaration is where the one production read of an originating
+ * error resolves (`update-flow.ts`'s `rollbackPartialCauseSlot`).
  */
 export interface Phase3Failure {
   readonly phase: "skills" | "commands" | "agents" | "hooks" | "mcp";
   readonly msg: string;
-  readonly cause: unknown;
   readonly cleanupFailures?: readonly CleanupFailure[];
 }
 
