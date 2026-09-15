@@ -13,6 +13,8 @@ import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 import { createSetPluginEnabled } from "./enable-disable.ts";
 import { createInstallPlugin } from "./install-flow.ts";
 import { runInstallLedger } from "./install-outcome.ts";
+import { createReinstallPlugin } from "./reinstall-flow.ts";
+import { REAL_REINSTALL_TRANSACTION } from "./reinstall-replace.ts";
 import { selectDeclaringConfigWriteTarget, writeAdoptingConfigEntries } from "./shared.ts";
 import { createUninstallPlugin, REAL_UNINSTALL_TRANSACTION } from "./uninstall.ts";
 
@@ -23,6 +25,7 @@ import type {
 } from "./enable-disable.ts";
 import type { InstallHooksRouting } from "./install-disable-cascade.ts";
 import type { InstallTransaction } from "./install-flow.ts";
+import type { ReinstallHooksRouting, ReinstallPluginFn } from "./reinstall-flow.ts";
 import type { UninstallHooksRouting, UninstallPluginOperation } from "./uninstall.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 
@@ -89,4 +92,25 @@ export function createUninstallOperation(
   completionCache: CompletionCache,
 ): UninstallPluginOperation {
   return createUninstallPlugin(REAL_UNINSTALL_TRANSACTION, hooksRouting, completionCache);
+}
+
+/**
+ * Composes the single-plugin reinstall operation from its production
+ * transaction owner and the caller's routing and completion-cache owners.
+ * Constructing the operation runs no work of its own -- only invoking the
+ * returned operation does.
+ *
+ * Reinstall's binding is imported rather than built here for the same reason as
+ * uninstall's: five of `REAL_REINSTALL_TRANSACTION`'s six members are steps of
+ * reinstall's own prepare/replace/compensate schedule, private to
+ * `reinstall-replace.ts`, so this module imports the bound object and never its
+ * parts (D-03). The binding names no network capability, which is what keeps
+ * this module inside the network-free gate while composing an operation that
+ * materializes artifacts (NFR-5: reinstall reads the cached manifest only).
+ */
+export function createReinstallOperation(
+  hooksRouting: ReinstallHooksRouting,
+  completionCache: CompletionCache,
+): ReinstallPluginFn {
+  return createReinstallPlugin(REAL_REINSTALL_TRANSACTION, hooksRouting, completionCache);
 }

@@ -24,8 +24,10 @@ import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/
 import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { createSetPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
-import { createEnableOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
-import { createNodeReinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
+import {
+  createEnableOperation,
+  createReinstallOperation,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import {
   selectDeclaringConfigWriteTarget,
   writeAdoptingConfigEntries,
@@ -121,7 +123,7 @@ function createUpdatePlugins() {
 }
 
 function createReinstallPlugin() {
-  return createNodeReinstallPlugin(
+  return createReinstallOperation(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );

@@ -15,6 +15,7 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   createEnableOperation,
   createInstallOperation,
+  createReinstallOperation,
   createUninstallOperation,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -28,6 +29,7 @@ import { createHermeticEnvironment } from "../../platform/hermetic-environment.t
 
 import type { EnableDisableHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import type { InstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts";
+import type { ReinstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import type { UninstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -290,6 +292,30 @@ test("constructs the uninstall operation without using its owners or starting as
   verify(completionCache);
 });
 
+test("constructs the reinstall operation without using its owners or starting asynchronous work", (t) => {
+  // arrange
+  const hooksRouting = mock<ReinstallHooksRouting>({ exactParams: true, name: "hooks routing" });
+  const completionCache = mock<CompletionCache>({ exactParams: true, name: "completion cache" });
+  const startedResourceTypes: string[] = [];
+  const resources = createHook({
+    init: (_asyncId, type) => {
+      startedResourceTypes.push(type);
+    },
+  });
+  t.after(() => resources.disable());
+
+  // act
+  resources.enable();
+  const reinstallPlugin = createReinstallOperation(hooksRouting, completionCache);
+  resources.disable();
+
+  // assert
+  assert.strictEqual(typeof reinstallPlugin, "function");
+  assert.deepStrictEqual(startedResourceTypes, []);
+  verify(hooksRouting);
+  verify(completionCache);
+});
+
 /**
  * Install the seeded hooks-declaring plugin through the composed install
  * operation and hand back the live lifecycle owners the enable and uninstall
@@ -429,4 +455,84 @@ test("uninstallPlugin removes the record, the staged artifacts and the routes", 
 
   assert.equal(await pathExists(path.join(locations.hooksDir, "p1")), false);
   assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRL-02 / D-68-02: the composed reinstall operation runs against the real
+// prepare, replace, rollback, finalize and state-lock bindings this module
+// holds. Re-materializing an edited source in place -- the replaced bytes on
+// disk, the replaced handler in the routing table, and the recorded version
+// left where it was because reinstall never upgrades -- is an effect of those
+// concrete bindings, so replacing any one of them with a no-op is visible here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("reinstallPlugin replaces the staged artifacts in place and re-routes the plugin", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 0, 1) });
+  const { cwd, runtime, hooksRouting, locations } = await installHooksDeclaringPlugin(
+    t,
+    "reinstall-operation-",
+  );
+  const reinstallPlugin = createReinstallOperation(hooksRouting, createCompletionCache());
+  // Pre-condition: the install staged and routed the original handler.
+  assert.equal(runtime.getRoutingBucket("PreToolUse")[0]?.handlerDecl["command"], "echo hello");
+  await writeFile(
+    path.join(cwd, "mp-src", "plugins", "p1", "hooks", "hooks.json"),
+    JSON.stringify({
+      PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo goodbye" }] }],
+    }),
+  );
+  const { ctx, pi } = makeCtx();
+
+  // act
+  const outcome = await reinstallPlugin({
+    ctx,
+    pi,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "p1",
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "reinstalled",
+    name: "p1",
+    marketplace: "mp",
+    scope: "project",
+    version: "0.0.1",
+    resourcesChanged: false,
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+  });
+
+  // The whole record is pinned: D-68-02 forbids an upgrade, so `version` and
+  // the complete `resources` inventory survive the replacement unchanged.
+  const afterState = await loadState(locations.extensionRoot);
+  assert.deepStrictEqual(afterState.marketplaces["mp"]?.plugins["p1"], {
+    version: "0.0.1",
+    resolvedSource: path.join(cwd, "mp-src", "plugins", "p1"),
+    compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["p1"] },
+    hookEntries: [{ event: "PreToolUse", matcher: "" }],
+    enabled: true,
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
+
+  // The replaced config is the dispatch input, so its complete bytes are the
+  // contract -- written as an independent literal, not re-serialized here.
+  assert.strictEqual(
+    await readFile(path.join(locations.hooksDir, "p1", "hooks.json"), "utf8"),
+    '{\n  "PreToolUse": [\n    {\n      "matcher": "",\n      "hooks": [\n        {\n          "type": "command",\n          "command": "echo goodbye"\n        }\n      ]\n    }\n  ]\n}\n',
+  );
+
+  // Post-condition: the routing table dispatches the replaced handler, with no
+  // stale duplicate left behind by the removed one.
+  const bucket = runtime.getRoutingBucket("PreToolUse");
+  assert.equal(bucket.length, 1);
+  assert.equal(bucket[0]?.pluginId, "p1");
+  assert.equal(bucket[0]?.handlerDecl["command"], "echo goodbye");
 });

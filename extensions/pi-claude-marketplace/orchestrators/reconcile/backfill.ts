@@ -20,7 +20,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import { EXTENSION_VERSION } from "../../shared/extension-version.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
-import { createNodeReinstallPlugin } from "../plugin/reinstall-flow.ts";
+import { createReinstallOperation } from "../plugin/operations.ts";
 
 import {
   classifyOrchestratorThrow,
@@ -211,7 +211,7 @@ export async function scanForceInstalledBackfills(
   state: ExtensionState,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
-  const reinstallPlugin = createNodeReinstallPlugin(opts.hooksRouting, opts.completionCache);
+  const reinstallPlugin = createReinstallOperation(opts.hooksRouting, opts.completionCache);
   const alreadyTouched = new Set<string>();
   for (const o of outcomes) {
     if (o.scope === scope && "plugin" in o) {

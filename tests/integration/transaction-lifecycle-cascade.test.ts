@@ -12,9 +12,9 @@ import {
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   createInstallOperation,
+  createReinstallOperation,
   createUninstallOperation,
 } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
-import { createNodeReinstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -150,7 +150,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
       const hooksRouting = createHooksRouting(hooksRuntime, { readHooksJson });
       const completionCache = createCompletionCache();
       const installPlugin = createInstallOperation(hooksRouting, completionCache);
-      const reinstallPlugin = createNodeReinstallPlugin(hooksRouting, completionCache);
+      const reinstallPlugin = createReinstallOperation(hooksRouting, completionCache);
       const updatePlugins = createPluginUpdateOperations(
         hooksRouting,
         completionCache,
