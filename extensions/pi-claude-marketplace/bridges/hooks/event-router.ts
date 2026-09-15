@@ -403,12 +403,12 @@ function flattenPluginIntoBuckets(
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * Result of the hydrate pass for a single scope: the loaded state AND the
- * fully-constructed ScopedLocations. registerHooksBridge needs both to
- * call rebuildRoutingTables() per scope after hydrate completes.
+ * Result of the hydrate pass for a single scope: the fully-constructed
+ * ScopedLocations. registerHooksBridge needs it to call
+ * rebuildRoutingTables() per scope after hydrate completes; the state the
+ * pass loaded is consumed inside the pass and not carried back out.
  */
 interface HydratedScope {
-  readonly state: ExtensionState;
   readonly loc: ScopedLocations;
 }
 
@@ -449,12 +449,25 @@ export interface HooksHydrationDeps extends HooksFileReader {
   readonly loadState: (extensionRoot: string) => Promise<ExtensionState>;
 }
 
+/**
+ * The options every hooks-bridge registration entry point takes.
+ *
+ * One declaration rather than four matching spellings, so `cwd` and
+ * `executor` each resolve every read to a single home. `executor` is the
+ * injection seam documented on `registerHooksBridgeWith`: the sole
+ * production caller omits it and runs on the `dispatchHookExec` default.
+ */
+export interface RegisterHooksBridgeOptions {
+  readonly cwd: string;
+  readonly executor?: HookExecutor;
+}
+
 /** Hooks hydration operations bound to one required state reader. */
 export interface HooksHydration {
   readonly hydrateProjectScopeForCwd: (cwd: string) => Promise<void>;
   readonly registerHooksBridge: (
     pi: ExtensionAPI,
-    opts: { ctx: ExtensionContext; cwd: string; executor?: HookExecutor },
+    opts: RegisterHooksBridgeOptions,
   ) => Promise<void>;
 }
 
@@ -493,10 +506,7 @@ function bindRegistrationCallback<Args extends readonly unknown[], Result>(
  * silent omission here is the correct factory-time disposition.
  */
 async function hydrateCacheFromDisk(
-  opts: {
-    ctx: ExtensionContext;
-    cwd: string;
-  },
+  opts: RegisterHooksBridgeOptions,
   reader: HooksHydrationDeps,
   routingState: EventRouterRoutingState,
   generationIsCurrent: GenerationGuard,
@@ -524,7 +534,7 @@ async function hydrateCacheFromDisk(
     // homedir-rooted paths so opts.cwd is the right "current project"
     // anchor for path globs.
     await hydrateScopeFromState(state, loc, opts.cwd, reader, routingState, generationIsCurrent);
-    hydrated.push({ state, loc });
+    hydrated.push({ loc });
   }
 
   return hydrated;
@@ -804,7 +814,7 @@ async function registerHooksBridgeWith(
   runtime: HooksRuntime,
   reader: HooksHydrationDeps,
   pi: ExtensionAPI,
-  opts: { ctx: ExtensionContext; cwd: string; executor?: HookExecutor },
+  opts: RegisterHooksBridgeOptions,
 ): Promise<void> {
   const routingState = createRoutingStateOperations(runtime);
   const capturedGeneration = runtime.advanceGeneration();
@@ -997,10 +1007,7 @@ export function createHooksHydration(
         return;
       }
     },
-    async registerHooksBridge(
-      pi: ExtensionAPI,
-      opts: { ctx: ExtensionContext; cwd: string; executor?: HookExecutor },
-    ): Promise<void> {
+    async registerHooksBridge(pi: ExtensionAPI, opts: RegisterHooksBridgeOptions): Promise<void> {
       await registerHooksBridgeWith(runtime, reader, pi, opts);
     },
   };

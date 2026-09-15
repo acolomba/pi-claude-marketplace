@@ -199,7 +199,7 @@ echo '{}'
         getSessionFile: () => undefined,
       },
     } as unknown as ExtensionContext;
-    await hooksHydration.registerHooksBridge(pi, { ctx: placeholderCtx, cwd: extensionRoot });
+    await hooksHydration.registerHooksBridge(pi, { cwd: extensionRoot });
 
     const sessionStartReg = registrations.find((r) => r.event === "session_start");
     assert.ok(sessionStartReg, "bridge must register session_start handler");
@@ -342,7 +342,7 @@ echo '{}'
         getSessionFile: () => undefined,
       },
     } as unknown as ExtensionContext;
-    await hooksHydration.registerHooksBridge(pi, { ctx: placeholderCtx, cwd: extensionRoot });
+    await hooksHydration.registerHooksBridge(pi, { cwd: extensionRoot });
 
     const sessionStartReg = registrations.find((r) => r.event === "session_start");
     assert.ok(sessionStartReg);

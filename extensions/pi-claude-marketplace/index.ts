@@ -62,17 +62,14 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   ) => void;
 
   // DISP-01 / DISP-02 / D-59-02 / D-59-03: register the hooks bridge at
-  // factory time. The bridge's signature requires `{ ctx; cwd }`, but neither
-  // exists at extension-load time -- Pi's `resources_discover` event is the
-  // first signal that delivers an `ExtensionContext` + project `cwd`. So:
+  // factory time. The bridge's signature requires a `cwd`, which does not
+  // exist at extension-load time -- Pi's `resources_discover` event is the
+  // first signal that delivers a project `cwd`. So:
   //
   //   1. Pass `homedir()` as cwd: this hydrates the USER scope correctly (the
   //      bridge derefs project cwd via `locationsFor("project", cwd)` and
   //      ignores it for user scope, which uses `getAgentDir()`).
-  //   2. Pass a placeholder `ctx`: the bridge's hydrate path does not consume
-  //      `opts.ctx` (only `opts.cwd`); the field is structurally required by
-  //      the signature but functionally unused at factory time.
-  //   3. Defer project-scope hydrate to event time, where a real `cwd` exists.
+  //   2. Defer project-scope hydrate to event time, where a real `cwd` exists.
   //      There are TWO deferral points, and the ORDER matters: the bridge's own
   //      `session_start` wrapper hydrates against `ctx.cwd` first (Pi emits
   //      `session_start` BEFORE `resources_discover`, so a project-scope
@@ -84,8 +81,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // The `await` is LOAD-BEARING: Pi's loader awaits the factory Promise, so
   // the 7 pi.on calls + user-scope cache hydrate inside `registerHooksBridge`
   // are guaranteed to complete BEFORE the first Pi event fires.
-  const placeholderCtx = {} as unknown as ExtensionContext;
-  await hooksHydration.registerHooksBridge(pi, { ctx: placeholderCtx, cwd: homedir() });
+  await hooksHydration.registerHooksBridge(pi, { cwd: homedir() });
 
   onResourcesDiscover("resources_discover", async (event, ctx) => {
     // D-59-02 deferred project-scope hydrate: the factory-time bridge

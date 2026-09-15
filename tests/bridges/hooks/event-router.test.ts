@@ -349,7 +349,7 @@ test(
       return Promise.resolve({ kind: "noop" });
     };
 
-    await hydration.registerHooksBridge(pi, { ctx: context, cwd: projectRoot, executor });
+    await hydration.registerHooksBridge(pi, { cwd: projectRoot, executor });
     const previousEpoch = runtime.currentGeneration();
     const staleBeforeAgentStartHandler = registeredHandler(registrations, "before_agent_start");
     const staleToolCallHandler = registrations.find(({ event }) => event === "tool_call")?.handler;
@@ -529,7 +529,7 @@ test(
     traceReload = true;
 
     // act
-    await hydration.registerHooksBridge(pi, { ctx: context, cwd: projectRoot, executor });
+    await hydration.registerHooksBridge(pi, { cwd: projectRoot, executor });
     const persistedOrphanOutcome = await persistedOrphanExit;
     await Promise.all(settleResetPromises);
     if (typeof staleToolCallHandler === "function") {
@@ -1100,7 +1100,7 @@ test("registered before_agent_start drains ordered context once and leaves an em
   const { pi, registrations } = makeRecordingPi();
   const context = makeContext(root, root);
   const hydration = createHooksHydration(runtime, EMPTY_STATE_READER);
-  await hydration.registerHooksBridge(pi, { ctx: context, cwd: root });
+  await hydration.registerHooksBridge(pi, { cwd: root });
   const handler = registeredHandler(registrations, "before_agent_start");
   adaptObservationResultForEvent(
     runtime,
@@ -1142,9 +1142,9 @@ test("registered before_agent_start rejects a stale epoch without draining live 
   const { pi, registrations } = makeRecordingPi();
   const context = makeContext(root, root);
   const hydration = createHooksHydration(runtime, EMPTY_STATE_READER);
-  await hydration.registerHooksBridge(pi, { ctx: context, cwd: root });
+  await hydration.registerHooksBridge(pi, { cwd: root });
   const handler = registeredHandler(registrations, "before_agent_start");
-  await hydration.registerHooksBridge(pi, { ctx: context, cwd: root });
+  await hydration.registerHooksBridge(pi, { cwd: root });
   adaptObservationResultForEvent(
     runtime,
     { kind: "mutate", additionalContext: "live context" },
@@ -1598,7 +1598,6 @@ test(
 
     const hooksHydration = createHooksHydration(runtime, hydrationReader);
     await hooksHydration.registerHooksBridge(pi, {
-      ctx: context,
       cwd: factoryRoot,
     });
     const sessionStart = registeredHandler(registrations, "session_start");
@@ -1644,9 +1643,9 @@ test("same-runtime registration invalidates an earlier callback before lazy hydr
   const hooksHydration = createHooksHydration(runtime, hydrationReader);
   const { pi, registrations, messages } = makeRecordingPi();
   const context = makeContext(projectRoot, root);
-  await hooksHydration.registerHooksBridge(pi, { ctx: context, cwd: factoryRoot });
+  await hooksHydration.registerHooksBridge(pi, { cwd: factoryRoot });
   const staleSessionStart = registeredHandler(registrations, "session_start");
-  await hooksHydration.registerHooksBridge(pi, { ctx: context, cwd: factoryRoot });
+  await hooksHydration.registerHooksBridge(pi, { cwd: factoryRoot });
   const liveSessionStart = registeredHandler(registrations, "session_start", 1);
   const readsAfterRegistration = [...readRoots];
 
@@ -1738,14 +1737,14 @@ test(
     const hydration = createHooksHydration(runtime, reader);
     const { pi, registrations, messages } = makeRecordingPi();
     const context = makeContext(projectRoot, root);
-    await hydration.registerHooksBridge(pi, { ctx: context, cwd: factoryRoot });
+    await hydration.registerHooksBridge(pi, { cwd: factoryRoot });
     const staleSessionStart = registeredHandler(registrations, "session_start");
     deferProjectRead = true;
     const staleCompletion = staleSessionStart(
       { type: "session_start", reason: "startup" },
       context,
     );
-    await hydration.registerHooksBridge(pi, { ctx: context, cwd: factoryRoot });
+    await hydration.registerHooksBridge(pi, { cwd: factoryRoot });
 
     // act
     releaseStaleState?.(staleState);
@@ -1795,7 +1794,7 @@ test(
       return releaseDispatch.promise.then(() => ({ kind: "noop" }));
     };
 
-    await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.factoryRoot, executor });
+    await hydration.registerHooksBridge(pi, { cwd: fixture.factoryRoot, executor });
     const currentSessionStart = registeredHandler(registrations, "session_start");
     deferDispatch = true;
     const staleAtDispatch = currentSessionStart(
@@ -1803,7 +1802,7 @@ test(
       context,
     );
     await dispatchStarted.promise;
-    await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.factoryRoot, executor });
+    await hydration.registerHooksBridge(pi, { cwd: fixture.factoryRoot, executor });
 
     // act
     releaseDispatch.resolve(undefined);
@@ -1840,7 +1839,6 @@ test("runtime hydration stops before mirroring when registration advances its ge
   await readStarted.promise;
   const { pi } = makeRecordingPi();
   await hydration.registerHooksBridge(pi, {
-    ctx: makeContext(fixture.factoryRoot, fixture.root),
     cwd: fixture.factoryRoot,
   });
 
@@ -1879,16 +1877,14 @@ test(
     const runtime = createHooksRuntime();
     const hydration = createHooksHydration(runtime, reader);
     const { pi, messages } = makeRecordingPi();
-    const context = makeContext(fixture.projectRoot, fixture.root);
     const staleRegistration = hydration.registerHooksBridge(pi, {
-      ctx: context,
       cwd: fixture.projectRoot,
     });
     await readStarted.promise;
     // The second registration reads from `factoryRoot`, where no state
     // declares a hooks plugin, so the only thing it contributes to the
     // assertions below is the generation advance.
-    await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.factoryRoot });
+    await hydration.registerHooksBridge(pi, { cwd: fixture.factoryRoot });
 
     // act
     releaseRead.resolve(undefined);
@@ -2023,7 +2019,7 @@ test(
       return Promise.resolve({ kind: "noop" });
     };
 
-    await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.projectRoot, executor });
+    await hydration.registerHooksBridge(pi, { cwd: fixture.projectRoot, executor });
     const sessionStart = registeredHandler(registrations, "session_start");
     advanceOnTheSessionStartRead = true;
 
@@ -2070,12 +2066,10 @@ test("separate runtimes keep their current callbacks live and route through thei
   const firstCwd = path.join(root, "first");
   const secondCwd = path.join(root, "second");
   await firstHydration.registerHooksBridge(firstPi.pi, {
-    ctx: makeContext(firstCwd, root),
     cwd: firstCwd,
     executor: firstExecutor,
   });
   await secondHydration.registerHooksBridge(secondPi.pi, {
-    ctx: makeContext(secondCwd, root),
     cwd: secondCwd,
     executor: secondExecutor,
   });
@@ -2135,11 +2129,9 @@ test(
     await writeFile(path.join(userLocations.extensionRoot, "state.json"), "{", "utf8");
     await writeFile(path.join(projectLocations.extensionRoot, "state.json"), "{", "utf8");
     const { pi, registrations, messages } = makeRecordingPi();
-    const context = makeContext(projectRoot, root);
 
     // act
     await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
-      ctx: context,
       cwd: projectRoot,
     });
     const sharedState = {
@@ -2197,11 +2189,9 @@ test(
       new Map(),
     );
     const { pi, registrations } = makeRecordingPi();
-    const context = makeContext(projectRoot, root);
 
     // act
     await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
-      ctx: context,
       cwd: projectRoot,
     });
     const userSharedBytes = await fs.promises.readFile(userSharedPath, "utf8");
@@ -2264,7 +2254,6 @@ test(
     };
 
     await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
-      ctx: context,
       cwd: factoryRoot,
       executor,
     });
@@ -2338,7 +2327,6 @@ test("session_start contains a lazy project cwd failure and still delegates safe
   };
 
   await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
-    ctx: context,
     cwd: projectRoot,
     executor,
   });
@@ -2445,11 +2433,11 @@ test(
     const defaultedCwd = path.join(root, "defaulted");
     await createHooksHydration(suppliedRuntime, EMPTY_STATE_READER).registerHooksBridge(
       suppliedPi.pi,
-      { ctx: makeContext(suppliedCwd, root), cwd: suppliedCwd, executor },
+      { cwd: suppliedCwd, executor },
     );
     await createHooksHydration(defaultedRuntime, EMPTY_STATE_READER).registerHooksBridge(
       defaultedPi.pi,
-      { ctx: makeContext(defaultedCwd, root), cwd: defaultedCwd },
+      { cwd: defaultedCwd },
     );
     suppliedRuntime.setRoutingBucket("PreToolUse", [
       preToolUseEntry("supplied-executor-plugin", suppliedCwd),
@@ -2496,7 +2484,6 @@ test("propagates a rejecting supplied executor out of the registered tool_call c
   // the registered callback surfaces the refusal instead of hiding it.
   const executor: HookExecutor = () => Promise.reject(new Error("supplied executor refused"));
   await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
-    ctx: makeContext(cwd, root),
     cwd,
     executor,
   });

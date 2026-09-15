@@ -38,10 +38,7 @@ import { REPO_ROOT } from "./source-scan.ts";
 
 import type { HooksHydrationDeps } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionAPI } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 // D-07-05: the four orchestrators this gate pins and the event-router where the
 // WR-01 prefix lives come from `HOOKS_LIFECYCLE_TARGETS`, so a literal-match
@@ -410,9 +407,8 @@ test("same-runtime reload makes every retained registration inert before argumen
   const hydration = createHooksHydration(runtime, reader);
   const factoryRoot = path.join(root, "factory");
   const projectRoot = path.join(root, "project");
-  const registrationContext = { cwd: factoryRoot } as ExtensionContext;
-  await hydration.registerHooksBridge(pi, { ctx: registrationContext, cwd: factoryRoot });
-  await hydration.registerHooksBridge(pi, { ctx: registrationContext, cwd: factoryRoot });
+  await hydration.registerHooksBridge(pi, { cwd: factoryRoot });
+  await hydration.registerHooksBridge(pi, { cwd: factoryRoot });
   const staleRegistrations = registrations.slice(0, 11);
   const liveRegistrations = registrations.slice(11);
   const registrationOrder = [

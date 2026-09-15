@@ -178,7 +178,6 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
       },
     } as unknown as ExtensionContext;
     await hooksHydration.registerHooksBridge(makeMockPi(), {
-      ctx: placeholderCtx,
       cwd: projectCwd,
     });
 

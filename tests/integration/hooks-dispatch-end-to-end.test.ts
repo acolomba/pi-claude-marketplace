@@ -206,7 +206,6 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
     // carry the real project cwd so the hydrate resolves the right scope root.
     const placeholderCtx = { cwd: projectCwd } as unknown as ExtensionContext;
     await hooksHydration.registerHooksBridge(pi, {
-      ctx: placeholderCtx,
       cwd: projectCwd,
       executor: injectedExecutor,
     });
@@ -285,7 +284,6 @@ test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_
     const { pi, registrations } = makeMockPi();
     const placeholderCtx = { cwd: projectCwd } as unknown as ExtensionContext;
     await hooksHydration.registerHooksBridge(pi, {
-      ctx: placeholderCtx,
       cwd: agentDir,
       executor: injectedExecutor,
     });
@@ -343,7 +341,6 @@ test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pr
     const { pi, registrations } = makeMockPi();
     const placeholderCtx = { cwd: projectCwd } as unknown as ExtensionContext;
     await hooksHydration.registerHooksBridge(pi, {
-      ctx: placeholderCtx,
       cwd: bootCwd,
       executor: injectedExecutor,
     });
@@ -386,7 +383,6 @@ test("HOOK-E2E-04: a throwing lazy project hydrate never blocks SessionStart dis
 
     const { pi, registrations } = makeMockPi();
     await hooksHydration.registerHooksBridge(pi, {
-      ctx: { cwd: projectCwd } as unknown as ExtensionContext,
       cwd: projectCwd,
       executor: injectedExecutor,
     });

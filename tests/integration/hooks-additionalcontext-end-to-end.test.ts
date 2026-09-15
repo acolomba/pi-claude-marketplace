@@ -198,7 +198,7 @@ JSON
         getSessionFile: () => undefined,
       },
     } as unknown as ExtensionContext;
-    await hooksHydration.registerHooksBridge(pi, { ctx: placeholderCtx, cwd: extensionRoot });
+    await hooksHydration.registerHooksBridge(pi, { cwd: extensionRoot });
 
     const sessionStartReg = registrations.find((r) => r.event === "session_start");
     assert.ok(sessionStartReg, "bridge must register session_start handler");
@@ -318,7 +318,6 @@ JSON
     // /reload's before submitting a prompt, leaving a stale buffer.
     const firstLoad = makeMockPi();
     await hooksHydration.registerHooksBridge(firstLoad.pi, {
-      ctx: placeholderCtx,
       cwd: extensionRoot,
     });
     const firstSessionStartReg = firstLoad.registrations.find((r) => r.event === "session_start");
@@ -336,7 +335,6 @@ JSON
     // not contaminate the new session's drain.
     const secondLoad = makeMockPi();
     await hooksHydration.registerHooksBridge(secondLoad.pi, {
-      ctx: placeholderCtx,
       cwd: extensionRoot,
     });
     assert.deepEqual(
