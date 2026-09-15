@@ -5,16 +5,16 @@ milestone_name: transitive-dependencies
 current_phase: 3
 current_phase_name: Dependency resolution
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-09-15T01:59:02.597Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-09-15T02:12:26.668Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 3 execution started
-state_head: aa333379b735de8ea7b985d074c33e33f03404d4
+state_head: 0c41e1e7c20bb1d78544d4eab754a021d7dd6807
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 13
-  completed_plans: 8
+  completed_plans: 9
   percent: 40
 ---
 
@@ -35,8 +35,26 @@ is archived under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 3 (Dependency resolution) — EXECUTING
-Plan: 3 of 7
-Status: Plan 03-01 complete; wave 2 unblocked
+Plan: 4 of 7
+Status: Plans 03-01, 03-02 and 03-03 complete; 03-04 next
+Plan 03-03 landed the phase's two documentation obligations before the
+network leaf that depends on them. The NFR-5 network policy now names the
+constrained-dependency tag query as a declared exception, in byte-identical
+wording in `.planning/PROJECT.md` and `CLAUDE.md` (D-03-03). A future reader
+meets it as a stated constraint rather than as a surprise from a failing
+architecture test. `docs/dependency-resolution.md` is RESV-03's written
+grammar: the two declared element shapes and their character rules, the
+constraint forms the evaluator handles, how several declarations intersect,
+both project-owned size caps, the plugin-release tag convention and why most
+third-party sources report no matching tag today, and a nine-cause failure
+list that the reason tokens plan 03-06 mints must agree with. It also states
+that nothing is added or cloned to satisfy a dependency, which is the
+user-facing form of the D-03-08 trust boundary. Both READMEs link it.
+Plan 03-02 made `semver` this package's own declared runtime dependency and
+added `domain/dependency-range.ts`, which folds the N ranges declared for one
+dependency name into one effective range or into `invalid`, `disjoint` or
+`too-complex`. Both denial-of-service caps are walked to completion before
+any work they bound is allocated.
 Plan 03-01 shipped the phase's tracer. `install foo@mp` now installs the
 plugins `foo` declares as dependencies: `domain/dependency-closure.ts` is a
 pure two-structure walk (a path stack that is the only cycle test, a separate
@@ -251,6 +269,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 02 P02 | 28min | 2 tasks | 6 files |
 | Phase 03 P01 | 89min | 3 tasks | 8 files |
 | Phase 03 P02 | 41min | 2 tasks | 4 files |
+| Phase 03 P03 | 4min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -477,6 +496,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: D-03-17: the intersected range is rejoined with a bare || and NOT re-validated; validRange renders a union exactly that way, so the result is canonical by construction and carries no second unreachable null arm
 - [Phase 03]: D-03-18: all three dependency-range caps (4096 input chars, 1024 conjuncts, 200 rendered chars) are documented PROJECT-OWNED; research assumption A1 records the upstream conjunct value as inferred, so only the guard-before-the-work mechanism claims parity
 - [Phase 03]: D-03-19: semver ships as a declared runtime dependency because resolution needs a real evaluator, not because one is already present -- the hoisted copy is from the ESLint dev chain and the nested copy from the pi-coding-agent peer, so neither survives a consumer's production install
+- [Phase 03]: D-03-20: the NFR-5 amendment names the constrained-dependency tag query in both files that carry the network policy, and the two bullets are now byte-identical — D-03-03 requires a visible constraint amendment rather than a fact a reader later discovers from a failing architecture test. PROJECT.md's em dash is normalized to the double hyphen CLAUDE.md already carried, because the fix-unicode-dashes pre-commit hook excludes .planning/ and would otherwise keep the two apart on every future edit.
+- [Phase 03]: D-03-21: docs/dependency-resolution.md is RESV-03's written grammar and the nine-cause failure list the later reason tokens must agree with — RESV-03's success criterion states the grammar in writing rather than leaving it implicit. The document also carries the two user-facing trust statements the syntax cannot imply: the plugin-release tag convention is not a git standard, so most third-party sources report no matching tag today, and nothing is added or cloned to satisfy a dependency, so a plugin cannot introduce a new source of code by declaring one.
 
 ### Pending Todos
 
@@ -563,13 +584,13 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 03-02-PLAN.md
+**Stopped at:** Completed 03-03-PLAN.md
 
 **Resume file:** None
 
 **Read beside it:** `.planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/02-VERIFICATION.md`
 
-Last session: 2026-09-15T01:58:49.468Z
+Last session: 2026-09-15T02:12:03.519Z
 closed out plan 02-01 task 3, executed plan 02-02, ran the full code-review
 fix cycle, then Nyquist and security gates, then verification and transition)
 
