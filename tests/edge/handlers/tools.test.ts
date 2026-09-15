@@ -397,13 +397,16 @@ describe("projectRowStatus", () => {
     "will disable",
   ] as const satisfies readonly PluginStatus[];
 
-  // A status neither table drives has no key here and makes this a compile
-  // error, so the two tables together stay total over the plugin status union.
+  // A status neither table drives leaves `UndrivenStatus` inhabited and makes
+  // this a compile error, so the two tables together stay total over the plugin
+  // status union. The tuple wrappers stop the naked-`never` conditional from
+  // distributing.
   type UndrivenStatus = Exclude<
     PluginStatus,
     (typeof projectedStatuses)[number]["status"] | (typeof refusedStatuses)[number]
   >;
-  void ({} satisfies Record<UndrivenStatus, never>);
+  type StatusTablesAreTotal = [UndrivenStatus] extends [never] ? true : false;
+  void (true satisfies StatusTablesAreTotal);
 
   for (const { status, bucket } of projectedStatuses) {
     test(`projects the ${status} list row onto the ${bucket} tool bucket`, () => {
