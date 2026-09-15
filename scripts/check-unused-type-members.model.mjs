@@ -390,34 +390,59 @@ export function collectCandidates({ program, checker, projectRoot }) {
   return collected;
 }
 
-function addCandidatesOfSymbol(checker, byDeclaration, symbol, found) {
-  if (symbol === undefined) {
-    return;
-  }
-
+/**
+ * The inventoried declarations one symbol stands for, resolved through the
+ * checker's merged and root symbols so an alias, a declaration merge and an
+ * instantiated property all land on the declarations that were inventoried.
+ */
+function resolveCandidates(checker, byDeclaration, symbol) {
   const merged = checker.getMergedSymbol(symbol);
+  const resolved = [];
 
   for (const root of [merged, ...checker.getRootSymbols(merged)]) {
     for (const declaration of root.declarations ?? []) {
       const candidate = byDeclaration.get(declaration);
 
-      if (candidate !== undefined && !found.includes(candidate)) {
-        found.push(candidate);
+      if (candidate !== undefined && !resolved.includes(candidate)) {
+        resolved.push(candidate);
       }
+    }
+  }
+
+  return resolved;
+}
+
+// Symbol identity is stable for the life of one program, and the same symbol is
+// reached from thousands of call sites, so each one is resolved once.
+function addCandidatesOfSymbol(context, symbol, found) {
+  if (symbol === undefined) {
+    return;
+  }
+
+  let resolved = context.symbolCache.get(symbol);
+
+  if (resolved === undefined) {
+    resolved = resolveCandidates(context.checker, context.byDeclaration, symbol);
+    context.symbolCache.set(symbol, resolved);
+  }
+
+  for (const candidate of resolved) {
+    if (!found.includes(candidate)) {
+      found.push(candidate);
     }
   }
 }
 
-function candidatesForName(checker, byDeclaration, nameNode) {
+function candidatesForName(context, nameNode) {
   const found = [];
-  addCandidatesOfSymbol(checker, byDeclaration, checker.getSymbolAtLocation(nameNode), found);
+  addCandidatesOfSymbol(context, context.checker.getSymbolAtLocation(nameNode), found);
   return found;
 }
 
-function candidatesForKey(checker, byDeclaration, receiverNode, key) {
-  const receiver = checker.getTypeAtLocation(receiverNode);
+function candidatesForKey(context, receiverNode, key) {
+  const receiver = context.checker.getTypeAtLocation(receiverNode);
   const found = [];
-  addCandidatesOfSymbol(checker, byDeclaration, checker.getPropertyOfType(receiver, key), found);
+  addCandidatesOfSymbol(context, context.checker.getPropertyOfType(receiver, key), found);
   return found;
 }
 
@@ -567,7 +592,7 @@ function observePropertyAccess(node, context) {
     return;
   }
 
-  const candidates = candidatesForName(context.checker, context.byDeclaration, node.name);
+  const candidates = candidatesForName(context, node.name);
   observeAll(context, candidates, node.name, "value-read", syntax);
 }
 
@@ -598,12 +623,12 @@ function boundedKeysOf(checker, argument) {
   return keys;
 }
 
-function receiverCandidates(checker, byDeclaration, receiverNode) {
-  const receiver = checker.getTypeAtLocation(receiverNode);
+function receiverCandidates(context, receiverNode) {
+  const receiver = context.checker.getTypeAtLocation(receiverNode);
   const found = [];
 
-  for (const property of checker.getPropertiesOfType(receiver)) {
-    addCandidatesOfSymbol(checker, byDeclaration, property, found);
+  for (const property of context.checker.getPropertiesOfType(receiver)) {
+    addCandidatesOfSymbol(context, property, found);
   }
 
   return found;
@@ -614,7 +639,7 @@ function observeElementAccess(node, context) {
   const keys = boundedKeysOf(context.checker, node.argumentExpression);
 
   if (keys === undefined) {
-    const reached = receiverCandidates(context.checker, context.byDeclaration, node.expression);
+    const reached = receiverCandidates(context, node.expression);
 
     for (const candidate of reached) {
       record(context.unsupported, candidate, "unbounded-computed-access");
@@ -628,12 +653,7 @@ function observeElementAccess(node, context) {
   }
 
   for (const key of keys) {
-    const candidates = candidatesForKey(
-      context.checker,
-      context.byDeclaration,
-      node.expression,
-      key,
-    );
+    const candidates = candidatesForKey(context, node.expression, key);
     observeAll(context, candidates, node.argumentExpression, "value-read", syntax);
   }
 }
@@ -648,7 +668,7 @@ function observeBindingElement(node, context) {
   const key = identifierTextOf(keyNode);
 
   if (key === undefined) {
-    const reached = receiverCandidates(context.checker, context.byDeclaration, node.parent);
+    const reached = receiverCandidates(context, node.parent);
 
     for (const candidate of reached) {
       record(context.unsupported, candidate, "unresolved-binding-key");
@@ -657,7 +677,7 @@ function observeBindingElement(node, context) {
     return;
   }
 
-  const candidates = candidatesForKey(context.checker, context.byDeclaration, node.parent, key);
+  const candidates = candidatesForKey(context, node.parent, key);
   observeAll(context, candidates, keyNode, "value-read", "binding-destructuring");
 }
 
@@ -675,7 +695,7 @@ function observeAssignmentPattern(node, context) {
 
     const found = [];
     const symbol = context.checker.getPropertySymbolOfDestructuringAssignment(nameNode);
-    addCandidatesOfSymbol(context.checker, context.byDeclaration, symbol, found);
+    addCandidatesOfSymbol(context, symbol, found);
     observeAll(context, found, nameNode, "value-read", "assignment-destructuring");
   }
 }
@@ -689,12 +709,7 @@ function observeInOperator(node, context) {
     return;
   }
 
-  const candidates = candidatesForKey(
-    context.checker,
-    context.byDeclaration,
-    node.right,
-    node.left.text,
-  );
+  const candidates = candidatesForKey(context, node.right, node.left.text);
   observeAll(context, candidates, node.left, "presence", "presence-test");
 }
 
@@ -736,15 +751,43 @@ function isDeclarationKey(node) {
   return ts.isPropertySignature(node.parent) || ts.isMethodSignature(node.parent);
 }
 
-function visitNode(node, context) {
-  if (ts.isTypeNode(node) || isDeclarationKey(node)) {
-    return;
+/**
+ * Walks one source file with an explicit worklist and an explicit budget, and
+ * reports whether it finished. A syntax tree has exactly one parent per node, so
+ * the walk cannot revisit a node and needs no seen-set; the budget is what bounds
+ * it, and running out is a refusal to answer rather than a partial answer.
+ *
+ * Children are pushed in reverse so they pop in source order, which is what makes
+ * the recorded witnesses deterministic.
+ */
+function walkSourceFile(sourceFile, context) {
+  const stack = [sourceFile];
+  const children = [];
+
+  while (stack.length > 0) {
+    if (context.budget.remaining <= 0) {
+      return false;
+    }
+
+    const node = stack.pop();
+    context.budget.remaining -= 1;
+
+    if (ts.isTypeNode(node) || isDeclarationKey(node)) {
+      continue;
+    }
+
+    observeNode(node, context);
+    children.length = 0;
+    ts.forEachChild(node, (child) => {
+      children.push(child);
+    });
+
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      stack.push(children[index]);
+    }
   }
 
-  observeNode(node, context);
-  ts.forEachChild(node, (child) => {
-    visitNode(child, context);
-  });
+  return true;
 }
 
 /**
@@ -754,10 +797,18 @@ function visitNode(node, context) {
  * query all mention a member without reading one at run time. What remains is
  * classified by its syntax before any symbol is consulted, because the same
  * property access is a read in one position and a destination in another.
+ *
+ * Returns witnesses keyed by candidate id -- each carrying its own source site
+ * and production or test origin -- analysis gaps keyed the same way, and the
+ * budget exhaustion that stopped the walk, if one did. Later stages read exactly
+ * these three, so a gap is always attributable and a cut-off walk is always
+ * distinguishable from a finished one.
  */
-export function collectObservations({ program, checker, projectRoot, byDeclaration }) {
+export function collectObservations({ program, checker, projectRoot, byDeclaration, budget }) {
   const witnesses = new Map();
   const unsupported = new Map();
+  const symbolCache = new Map();
+  const remaining = { remaining: budget };
 
   for (const sourceFile of program.getSourceFiles()) {
     const projectPath = toProjectPath(projectRoot, sourceFile.fileName);
@@ -767,17 +818,23 @@ export function collectObservations({ program, checker, projectRoot, byDeclarati
       continue;
     }
 
-    visitNode(sourceFile, {
+    const finished = walkSourceFile(sourceFile, {
       checker,
       byDeclaration,
       witnesses,
       unsupported,
       projectPath,
       origin,
+      symbolCache,
+      budget: remaining,
     });
+
+    if (!finished) {
+      return { witnesses, unsupported, exhausted: { path: projectPath, budget } };
+    }
   }
 
-  return { witnesses, unsupported };
+  return { witnesses, unsupported, exhausted: undefined };
 }
 
 export function productionFileCount({ program, projectRoot }) {

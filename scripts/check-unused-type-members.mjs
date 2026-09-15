@@ -22,11 +22,25 @@ const helpText = `Usage: node scripts/check-unused-type-members.mjs [options]
   --overlay <path>   JSON file mapping existing project-relative TypeScript paths to
                      replacement source text. Applied as a compiler read override; no
                      file on disk is modified.
+  --budget <count>   Maximum syntax nodes the walk may visit. Running out fails the
+                     run; it never reports a clean tree.
   --json             Write the full report to stdout as JSON.
   --help             Print this text.
 
 Exit status: 0 no findings, 1 unread or unsupported members, 2 setup failure.
+
+Scope: this is a bounded may-observe analysis. It reports that some run-time
+syntax could read a declared member: property and optional-chain access, element
+access under a literal or finite literal-union key, binding and assignment
+destructuring, compound and update expressions, and exact \`in\` presence tests.
+
+It does not claim the reading branch ever executes, that the value influences
+behaviour, or that an asserting test is a useful one. Coverage, dead-code
+analysis and test review remain necessary. Declarations, type-only references
+and key enumeration are not reads.
 `;
+
+const valueOptionNames = new Set(["--root", "--overlay", "--budget"]);
 
 function applySwitch(options, name) {
   if (name === "--json") {
@@ -42,18 +56,48 @@ function applySwitch(options, name) {
   return false;
 }
 
-function readPathValue(args, index, name) {
+function readValue(args, index, name) {
   const value = args[index + 1];
 
   if (value === undefined || value.startsWith("--")) {
-    throw new AnalysisSetupError(`Option ${name} needs a path`);
+    throw new AnalysisSetupError(`Option ${name} needs a value`);
   }
 
-  return path.resolve(value);
+  return value;
+}
+
+function readBudget(value) {
+  const budget = Number(value);
+
+  if (!Number.isInteger(budget) || budget <= 0) {
+    throw new AnalysisSetupError(`Option --budget needs a positive whole number, not ${value}`);
+  }
+
+  return budget;
+}
+
+function applyValueOption(options, name, value) {
+  if (name === "--root") {
+    options.root = path.resolve(value);
+    return;
+  }
+
+  if (name === "--overlay") {
+    options.overlay = path.resolve(value);
+    return;
+  }
+
+  options.budget = readBudget(value);
 }
 
 function parseOptions(args) {
-  const options = { root: defaultProjectRoot, json: false, help: false, overlay: undefined };
+  const options = {
+    root: defaultProjectRoot,
+    json: false,
+    help: false,
+    overlay: undefined,
+    budget: undefined,
+  };
   let index = 0;
 
   while (index < args.length) {
@@ -64,18 +108,11 @@ function parseOptions(args) {
       continue;
     }
 
-    if (name !== "--root" && name !== "--overlay") {
+    if (!valueOptionNames.has(name)) {
       throw new AnalysisSetupError(`Unknown option: ${name}`);
     }
 
-    const value = readPathValue(args, index, name);
-
-    if (name === "--root") {
-      options.root = value;
-    } else {
-      options.overlay = value;
-    }
-
+    applyValueOption(options, name, readValue(args, index, name));
     index += 2;
   }
 

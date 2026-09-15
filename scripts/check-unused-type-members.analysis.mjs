@@ -14,8 +14,33 @@ import {
  * versioned report and decides which statuses fail the run.
  */
 
+/**
+ * The analysis contract later stages read.
+ *
+ * - A candidate record is keyed by `id`, the stable declaration identity
+ *   `path:line:column` of the member's own declaration, and carries its owner,
+ *   key, key kind, optionality and category.
+ * - A witness carries its own source site and its `production` or `test` origin,
+ *   plus the `kind` it proves -- a `value-read` or a `presence` check -- and the
+ *   `syntax` that proved it.
+ * - An analysis gap is a reason string recorded against the candidates the
+ *   opaque expression could have reached, and against no others.
+ * - A contract decision is an `{ id, reason }` pair naming a candidate the
+ *   inventory already holds.
+ * - `transfers` is the directed value-transfer graph. It is part of the context
+ *   handed to the contract evaluator and is empty until directed flow lands.
+ *
+ * `runtime-observed`, `test-only-observed` and `explicit-contract` pass;
+ * `unread` and `unsupported-analysis` fail. A setup or internal analysis failure
+ * is neither: it refuses to produce a report at all.
+ */
 const schemaVersion = 1;
 const productionRoot = "extensions/pi-claude-marketplace";
+
+// Measured against this repository: the walk visits 969,975 syntax nodes. The
+// default leaves room for the tree to grow many times over while still bounding
+// a runaway walk, and running out is a refusal rather than a partial answer.
+const defaultNodeBudget = 20_000_000;
 
 function assertContractShape(evaluated) {
   const decisions = evaluated?.decisions;
@@ -137,7 +162,7 @@ function buildMembers(candidates, witnesses, unsupported, contractReasons) {
  * model and the observation graph, and returns validated decisions plus its own
  * diagnostics. It can only ever excuse declarations the inventory already knows.
  */
-export function analyzeProject({ root, overlay, contractEvaluator }) {
+export function analyzeProject({ root, overlay, contractEvaluator, budget }) {
   const { program, checker, projectRoot } = createProjectProgram({ root, overlayPath: overlay });
   const productionFiles = productionFileCount({ program, projectRoot });
 
@@ -151,12 +176,20 @@ export function analyzeProject({ root, overlay, contractEvaluator }) {
     throw new AnalysisSetupError(`No member declarations found under ${productionRoot}`);
   }
 
-  const { witnesses, unsupported } = collectObservations({
+  const { witnesses, unsupported, exhausted } = collectObservations({
     program,
     checker,
     projectRoot,
     byDeclaration,
+    budget: budget ?? defaultNodeBudget,
   });
+
+  if (exhausted !== undefined) {
+    throw new AnalysisSetupError(
+      `Analysis budget of ${exhausted.budget} nodes exhausted while walking ${exhausted.path}`,
+    );
+  }
+
   const { reasons, diagnostics } = evaluateContracts(contractEvaluator, {
     program,
     checker,
