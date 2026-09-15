@@ -5,8 +5,8 @@ milestone_name: transitive-dependencies
 current_phase: 4
 current_phase_name: Install provenance
 status: planning
-stopped_at: Phase 4 discuss closed, CONTEXT.md written, ready to plan Phase 4
-last_updated: "2026-09-15T21:30:00.000Z"
+stopped_at: Session resumed, routed to planning Phase 4
+last_updated: "2026-09-15T21:45:00.000Z"
 last_activity: 2026-09-15
 last_activity_desc: Phase 4 discuss closed - both open questions answered, CONTEXT.md written
 state_head: d76e1e0199cdac438ec27d1fe18967609afe68ee
@@ -764,7 +764,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 4 discuss closed, CONTEXT.md written, ready to plan
+**Stopped at:** Session resumed 2026-09-15, routed to planning Phase 4
 
 **Resume file:** None — the mid-discussion `.continue-here.md` and
 `HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
@@ -867,10 +867,11 @@ The workstream archive removed the old routing blocker.
 - Plan Phase 4 (Install provenance, PROV-01..04) via `/gsd-plan-phase 4`.
   `04-CONTEXT.md` exists and carries six decisions plus a fixed three-step
   ordering contract the plan must honor.
-- Decide whether `.planning/config.json` should be committed. It carries an
-  agent-made `git.branching_strategy: milestone → none` alongside the
-  operator's own `model_profile_overrides.codex` edit, and was left
-  uncommitted so the operator's edit is not bundled in.
+- **Decided 2026-09-15: `.planning/config.json` stays uncommitted.** It carries
+  an agent-made `git.branching_strategy: milestone → none` alongside the
+  operator's own `model_profile_overrides.codex` edit. The setting reads from
+  disk, so Phases 4-5 honor it either way. Do not re-raise this, and do not
+  revert the file.
 - Optional, non-blocking: provide a genuinely private repository on github.com
   or gitlab.com to close UAT 2's last sub-item — a SUCCESSFUL credential
   challenge is still unexercised. The 401 arm was verified end to end.
