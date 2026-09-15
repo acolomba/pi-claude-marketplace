@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
 status: executing
-stopped_at: Completed 06-05-PLAN.md
-last_updated: "2026-09-15T16:26:36.966Z"
+stopped_at: Completed 06-06-PLAN.md
+last_updated: "2026-09-15T18:21:06.974Z"
 last_activity: 2026-09-15
-last_activity_desc: Plan 06-05 complete (closure audit and the stable live population record)
-state_head: 1d72168a7bb354f51104367f26fb83bd32bf0ede
+last_activity_desc: Plan 06-06 complete (live reconciliation, 81 validated contracts, 261 unread down to 138)
+state_head: 6c61b8448e8d3a2d33f7e4085bfa0bdc702e586f
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 54
-  completed_plans: 43
+  completed_plans: 44
   percent: 63
 milestone_name: test-backlog
 ---
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 06 (Unused Type Member Gate) — EXECUTING
-Plan: 6 of 8
+Plan: 7 of 8
 Status: Ready to execute
-Last activity: 2026-09-15 — Plan 06-05 complete (closure audit and the stable live population record)
+Last activity: 2026-09-15 — Plan 06-06 complete (live reconciliation, 81 validated contracts, 261 unread down to 138)
 
 Plan 06-01 landed the member gate's compiler tracer: `node
 scripts/check-unused-type-members.mjs` compiles the project once, inventories
@@ -128,6 +128,58 @@ selection filter, which is the contract engine's `type-selection` category.
 `npm run check`.
 
 All five analyzer suites pass together at 134/134 (06-03's 101 plus 33 new).
+
+Plan 06-06 reconciled the live population. Two directed-flow corrections came
+first, both found by reading diagnostics against source. An async body that
+hands back another promise hands back what that promise fulfils, so its value
+sits where its own awaited value does; placing it one await deeper consumed the
+reader's await twice and dropped the rest of the chain. And a key exactly one
+arm of a union declares can only have come from that arm, so it now resolves
+there -- the checker answers a union only when every arm has the key, which left
+the success-beside-failure relay shape unanswered. Two arms spelling one key
+stay unsettled and resolve to nothing. Together they moved 42 rows out of unread
+and upgraded 10 test-only rows to runtime-observed, with nothing moving the
+other way.
+
+The contract engine gained two proofs. A selection resolves a type-parameter
+source through its bound, because the bound is the set the filter selects
+within. `type-refinement` is a fifth category, separate from `type-selection`: a
+member earns it by sitting in an operand of the named intersection, naming a
+slot the rest of the intersection already declares, and writing a type there
+that admits strictly less -- including a refinement nested one level inside a
+refined slot, and including insisting on a slot the rest lets a value omit. An
+intersection that adds a slot, or restates one unchanged, is refused by name. A
+discriminant proof now needs two spellings to differ rather than every spelling
+to be unique, and a filter site descends through a node that shares its start.
+
+`scripts/check-unused-type-members.contracts.json` now carries 81 live entries --
+62 selections, 17 refinements, 2 brands -- each accepted by the engine against
+this tree before being written. Of 88 drafted, 7 were refused and all 7 stayed
+findings.
+
+Live run now 3,464 candidates, 3,009 runtime-observed, 236 test-only, 81
+explicit-contract, 138 unread, 0 unsupported. 82.1 s at 2.05 GiB, spending
+3,001,672 of a 12,000,000-step transfer budget -- four times the measured cost,
+recorded with its rationale beside the constant. `06-LIVE-TRIAGE.md` is bound to
+digest `ba06bb95` over 603 hashed files at revision `77629eb2`, and all 455 rows
+that need a reader to agree with them carry recorded evidence. `--check` exits 1
+with exactly 138 problems, all `unread`: zero stale, missing, duplicate,
+incomplete or invalid.
+
+The 138 are named findings with owners, not an unexplained baseline. Six bounded
+repair plans are required before 06-08 can activate the gate: 06-09
+(`bridges/hooks`, 26 rows, the `AsyncRewakeEntry` duplicate), 06-10
+(`bridges/{agents,commands,skills}` plus `shared/fs-utils.ts`, 13 rows, the
+`renamed[].from` dead field), 06-11 (`edge`, 17), 06-12 (`orchestrators`, 49),
+06-13 (`domain`, `persistence`, `platform`, 23, including the locally asserted
+Pi mirrors) and 06-14 (`shared`, 10). Closure then has to be re-run and reach
+zero.
+
+06-06 also repaired an inherited break: `tests/architecture/partial-vocabulary-guard.test.ts`
+had been red since 06-05's audit test spelled the retired `"unsupported"` status
+literal as the name of one of the audit's own refusal categories. A fourth
+`homonym` waiver, the guard's designed mechanism, brings `npm run check` back to
+exit 0. No production source under `extensions/` was touched by this plan.
 Typecheck, lint, format, all four fallow links and both corresponding-test gates
 are green. No production source under `extensions/` changed in 06-02, 06-03 or
 06-04, so the wave's aggregate production unit coverage snapshot still holds.
@@ -226,7 +278,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-15T16:25:53.673Z
+**Last session:** 2026-09-15T18:21:06.728Z
 **Resume file:** None
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–5 are complete.
@@ -246,7 +298,7 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 
 ### Phase 6 Plan 1 complete
 
-Stopped at: Completed 06-05-PLAN.md
+Stopped at: Completed 06-06-PLAN.md
 (directed value transfers) and 06-03 (validated contracts), which the plan
 graph runs together in Wave 2 over disjoint files.
 
@@ -526,6 +578,7 @@ target of 42 → 32 is already reached; 05-24 should leave the total at 32 while
 | Phase 06 P03 | 2h 0m | 2 tasks | 5 files |
 | Phase 06 P04 | 2h 20m | 3 tasks | 6 files |
 | Phase 06 P05 | 50 min | 2 tasks | 4 files |
+| Phase 06 P06 | 3h 10m | 2 tasks | 8 files |
 
 ## Decisions
 
@@ -539,3 +592,7 @@ target of 42 → 32 is already reached; 05-24 should leave the total at 32 while
 - [Phase 06]: A member settled by a production witness needs no recorded disposition; only the 483 rows resting on judgment do, of 3,464 candidates.
 - [Phase 06]: The audit fingerprint covers analysed source only, because an analyzer change is caught more precisely by per-row status reconciliation than by a digest.
 - [Phase 06]: A carried explanation is dropped when its row status moves, since the prose was written about a row that no longer exists.
+- [Phase 06]: An async body that hands back another promise hands back what that promise fulfils, so its value sits where its own awaited value does rather than one await deeper
+- [Phase 06]: A key exactly one arm of a union declares can only have come from that arm; two arms spelling one key stay unsettled and resolve to nothing
+- [Phase 06]: type-refinement is a fifth contract category, separate from type-selection, because narrowing a slot an intersection already declares is different evidence from selecting a variant
+- [Phase 06]: The live closure is honest rather than complete: 138 members really are unread, each recorded with its evidence and an owner repair plan, rather than excused by a widened proof
