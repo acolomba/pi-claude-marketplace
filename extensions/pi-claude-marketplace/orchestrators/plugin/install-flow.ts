@@ -960,6 +960,18 @@ async function installPluginWithTransaction(
           // pending a widen of the helper's return that would route it to a
           // (failed) row.
           pluginPatch: { ...(disabledInstall.landed && { enabled: false }) },
+          // RESV-01's reload clause: declare every member the cascade newly
+          // installed, in the SAME batched patch and therefore the same
+          // physical file. A record with no declaration is exactly what
+          // `buildUninstallBucket` sweeps on the next `resources_discover`, so
+          // an undeclared dependency would be uninstalled by the very next
+          // reload. D-03-05 / D-03-06 follow from the ONE selection above: the
+          // members ride the requesting plugin's own write target, not a
+          // per-member one. The requesting plugin's key appears in both records
+          // and its own patch wins, because this one is spread UNDER it.
+          dependencyPluginPatches: Object.fromEntries(
+            installed.members.map((member) => [member.key, {}]),
+          ),
         });
       } else if (disabledInstall.landed) {
         // DFEN-04 / D-102-04: the orchestrated-mode stamp. An orchestrated

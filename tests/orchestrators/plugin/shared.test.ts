@@ -1029,6 +1029,98 @@ describe("writeAdoptingConfigEntries", () => {
       );
     });
   });
+
+  test("RESV-01 declares every cascade dependency in the requesting plugin's own file", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      const current: ScopeConfig = { schemaVersion: 1 };
+      const state = makeState({ mp: { scope: "project", plugins: {} } });
+
+      // act
+      await writeAdoptingConfigEntries({
+        current,
+        sibling: undefined,
+        state,
+        marketplace: "mp",
+        plugin: "alpha",
+        targetConfigPath: locations.configJsonPath,
+        scopeRoot: locations.scopeRoot,
+        pluginPatch: {},
+        dependencyPluginPatches: { "helper@mp": {}, "alpha@mp": {} },
+      });
+
+      // assert: one file, one write, dependency declared before its parent.
+      assert.equal(
+        await readFile(locations.configJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {\n    "helper@mp": {},\n    "alpha@mp": {}\n  }\n}\n',
+      );
+    });
+  });
+
+  test("RESV-01 omitting the dependency patches writes the same bytes as an empty record", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      const current: ScopeConfig = { schemaVersion: 1 };
+      const state = makeState({ mp: { scope: "project", plugins: {} } });
+      const shared = {
+        current,
+        sibling: undefined,
+        state,
+        marketplace: "mp",
+        plugin: "alpha",
+        scopeRoot: locations.scopeRoot,
+        pluginPatch: { enabled: true },
+      } as const;
+
+      // act
+      await writeAdoptingConfigEntries({ ...shared, targetConfigPath: locations.configJsonPath });
+      await writeAdoptingConfigEntries({
+        ...shared,
+        targetConfigPath: locations.configLocalJsonPath,
+        dependencyPluginPatches: {},
+      });
+
+      // assert
+      assert.equal(
+        await readFile(locations.configJsonPath, "utf8"),
+        await readFile(locations.configLocalJsonPath, "utf8"),
+      );
+      assert.equal(
+        await readFile(locations.configJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {\n    "alpha@mp": {\n      "enabled": true\n    }\n  }\n}\n',
+      );
+    });
+  });
+
+  test("RESV-01 a key in both records resolves in the requesting plugin's favour", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      const current: ScopeConfig = { schemaVersion: 1 };
+      const state = makeState({ mp: { scope: "project", plugins: {} } });
+
+      // act
+      await writeAdoptingConfigEntries({
+        current,
+        sibling: undefined,
+        state,
+        marketplace: "mp",
+        plugin: "alpha",
+        targetConfigPath: locations.configJsonPath,
+        scopeRoot: locations.scopeRoot,
+        pluginPatch: { enabled: false },
+        dependencyPluginPatches: { "alpha@mp": { enabled: true } },
+      });
+
+      // assert
+      assert.equal(
+        await readFile(locations.configJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {\n    "alpha@mp": {\n      "enabled": false\n    }\n  }\n}\n',
+      );
+    });
+  });
 });
 
 describe("resolveInstalledPluginTarget", () => {

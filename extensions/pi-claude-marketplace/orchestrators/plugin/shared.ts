@@ -749,6 +749,21 @@ function synthesizeAdoptedMarketplaceSource(opts: {
  * `pluginPatch` is the caller's own field set: `enable`/`disable` writes an
  * explicit `enabled`, while `install` writes `enabled: false` only when the
  * install actually landed disabled and otherwise writes an empty patch.
+ *
+ * `dependencyPluginPatches` carries the keys a dependency cascade newly
+ * installed alongside the requesting plugin (RESV-01's reload clause: an
+ * undeclared record is swept by the reconcile uninstall bucket on the next
+ * `resources_discover`). It is spread UNDER the requesting plugin's own entry,
+ * so a key appearing in both resolves in the requesting plugin's favour.
+ *
+ * D-03-06 is satisfied by construction and needs no per-member logic here: the
+ * caller passes the ONE `selectDeclaringConfigWriteTarget` result it already
+ * made for the requesting plugin, so every member lands in the same physical
+ * file as its parent, and the transitive case follows because a
+ * dependency-of-a-dependency inherits that same single selection. A second
+ * selection per member would re-read the config inside the lock and could
+ * disagree with the first; N single writes would be N full-file rewrites and N
+ * chances to tear, which is why every patch rides the one batched write.
  */
 export async function writeAdoptingConfigEntries(opts: {
   readonly current: ScopeConfig;
@@ -759,6 +774,7 @@ export async function writeAdoptingConfigEntries(opts: {
   readonly targetConfigPath: string;
   readonly scopeRoot: string;
   readonly pluginPatch: Partial<PluginConfigEntry>;
+  readonly dependencyPluginPatches?: Record<string, Partial<PluginConfigEntry>>;
 }): Promise<void> {
   const adoptedSource = synthesizeAdoptedMarketplaceSource({
     current: opts.current,
@@ -771,7 +787,10 @@ export async function writeAdoptingConfigEntries(opts: {
     ...(adoptedSource !== undefined && {
       marketplaces: { [opts.marketplace]: { source: adoptedSource } },
     }),
-    plugins: { [`${opts.plugin}@${opts.marketplace}`]: opts.pluginPatch },
+    plugins: {
+      ...opts.dependencyPluginPatches,
+      [`${opts.plugin}@${opts.marketplace}`]: opts.pluginPatch,
+    },
   });
 }
 

@@ -4542,6 +4542,47 @@ test("WB-01: standalone install writes the plugin entry to claude-plugins.json",
   });
 });
 
+test("RESV-01 / D-03-06: a cascade dependency is declared in the parent's own file", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-declare-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert: the whole written document, so a stray key or a second file
+      // would show up here. Both declarations live in ONE file, which is what
+      // keeps `buildUninstallBucket` from planning the dependency's removal on
+      // the next `resources_discover`.
+      assert.equal(
+        await readFile(locations.configJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "some-other-plugin@mp": {},\n    "hello@mp": {}\n  }\n}\n',
+      );
+      await assert.rejects(stat(locations.configLocalJsonPath), /ENOENT/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("WB-01: --local routes the write to claude-plugins.local.json; base file untouched", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-local-"));
