@@ -38,6 +38,9 @@ const commonKeys = ["id", "owner", "key", "category", "purpose"];
  */
 const categoryKeys = {
   "external-output": ["origin", "boundary"],
+  "external-input": ["upstream", "necessity"],
+  "nominal-brand": ["symbol"],
+  "type-selection": ["filter"],
 };
 
 const projectPathOf = (projectRoot, fileName) =>
@@ -280,10 +283,29 @@ function insideAssertion(node) {
 }
 
 /**
+ * The signatures an installed declaration expects this expression to satisfy.
+ * The contextual type is what makes them a boundary: it is the shape an
+ * installed declaration asked for, and the compiler checked the value against it.
+ */
+function externalCallSignatures(node, context) {
+  const contextual = context.checker.getContextualType(node);
+
+  if (contextual === undefined) {
+    return [];
+  }
+
+  return context.checker
+    .getSignaturesOfType(contextual, ts.SignatureKind.Call)
+    .filter(
+      (signature) =>
+        signature.declaration !== undefined &&
+        isExternalSource(signature.declaration.getSourceFile(), context.projectRoot),
+    );
+}
+
+/**
  * The expression a return hands to an externally declared signature, or nothing
- * when no external declaration is expecting it. The contextual type is what
- * makes this a boundary: it is the shape an installed declaration asked for, and
- * the compiler checked the returned value against it.
+ * when no external declaration is expecting it.
  */
 function externalReturnExpression(node, context) {
   if (!ts.isReturnStatement(node) || node.expression === undefined) {
@@ -296,20 +318,7 @@ function externalReturnExpression(node, context) {
     return undefined;
   }
 
-  const contextual = context.checker.getContextualType(container);
-
-  if (contextual === undefined) {
-    return undefined;
-  }
-
-  const external = context.checker
-    .getSignaturesOfType(contextual, ts.SignatureKind.Call)
-    .some(
-      (signature) =>
-        signature.declaration !== undefined &&
-        isExternalSource(signature.declaration.getSourceFile(), context.projectRoot),
-    );
-  return external ? node.expression : undefined;
+  return externalCallSignatures(container, context).length > 0 ? node.expression : undefined;
 }
 
 function literalNameOf(node) {
@@ -420,8 +429,272 @@ function proveExternalOutput(entry, candidate, context) {
   return `(origin ${entry.origin} reaches boundary ${entry.boundary})`;
 }
 
+/**
+ * The declaration node the contract's identity resolves to, settled against the
+ * inventory's own declaration map. A coordinate that has drifted onto some other
+ * syntax is refused here rather than silently proved against the wrong member.
+ */
+function declarationOf(entry, candidate, context) {
+  const node = resolveNode(parseSite(entry.id, "id"), `${entry.id} declaration`, context);
+
+  if (context.byDeclaration.get(node) !== candidate) {
+    fail(`${entry.id} does not resolve to the declaration of ${candidate.owner}.${candidate.key}`);
+  }
+
+  return node;
+}
+
+function uniqueKeySymbol(node, context) {
+  if (!ts.isPropertySignature(node) || !ts.isComputedPropertyName(node.name)) {
+    return undefined;
+  }
+
+  const symbol = context.checker.getSymbolAtLocation(node.name.expression);
+
+  if (symbol === undefined) {
+    return undefined;
+  }
+
+  const type = context.checker.getTypeOfSymbolAtLocation(symbol, node.name.expression);
+  return (type.flags & ts.TypeFlags.UniqueESSymbol) === 0 ? undefined : symbol;
+}
+
+/**
+ * A brand slot may not carry a value an ordinary object could supply. `never` and
+ * the unit types are the shapes nothing outside the branding module can produce,
+ * which is what makes the marker a compile-time proof rather than a field.
+ */
+function assertMarkerType(entry, node, context) {
+  const declared =
+    node.type === undefined ? undefined : context.checker.getTypeFromTypeNode(node.type);
+
+  if (declared !== undefined && (declared.flags & (ts.TypeFlags.Never | ts.TypeFlags.Unit)) !== 0) {
+    return;
+  }
+
+  const described = declared === undefined ? "nothing" : context.checker.typeToString(declared);
+  fail(`${entry.id} declares type ${described}, which an ordinary value can supply`);
+}
+
+/**
+ * Proves a member is a nominal brand: a key spelled by a `unique symbol` that no
+ * other module can reach, carrying a type no ordinary value satisfies. An
+ * exported key symbol fails, because then the shape can be minted anywhere.
+ */
+function proveNominalBrand(entry, candidate, context) {
+  const node = declarationOf(entry, candidate, context);
+  const keySymbol = uniqueKeySymbol(node, context);
+
+  if (keySymbol === undefined) {
+    fail(`${entry.id} does not declare a computed unique-symbol key`);
+  }
+
+  const [declaration] = keySymbol.declarations ?? [];
+  const site = declaration === undefined ? "nowhere" : siteKeyOf(declaration, context.projectRoot);
+
+  if (site !== entry.symbol) {
+    fail(`${entry.id} key symbol is declared at ${site}, not ${entry.symbol}`);
+  }
+
+  if ((ts.getCombinedModifierFlags(declaration) & ts.ModifierFlags.Export) !== 0) {
+    fail(`${entry.id} key symbol ${candidate.key} is exported, so any module can mint this shape`);
+  }
+
+  assertMarkerType(entry, node, context);
+  return `(unique symbol ${entry.symbol} cannot be spelled outside its module)`;
+}
+
+/** The two-argument selection whose filter literal holds this member, if any. */
+function selectionOf(node) {
+  const literal = node.parent;
+  const reference = literal?.parent;
+  const holds =
+    literal !== undefined &&
+    ts.isTypeLiteralNode(literal) &&
+    reference !== undefined &&
+    ts.isTypeReferenceNode(reference) &&
+    reference.typeArguments?.length === 2 &&
+    reference.typeArguments[1] === literal;
+  return holds ? reference : undefined;
+}
+
+/**
+ * The unit types each constituent declares for one key, or nothing when the key
+ * does not tell the constituents apart. A key every variant spells the same way
+ * selects nothing, so no filter over it can be doing type-system work.
+ */
+function discriminantTypes(union, key, context) {
+  const seen = [];
+
+  for (const constituent of union.types) {
+    const property = context.checker.getPropertyOfType(constituent, key);
+    const declaration = property?.declarations?.[0];
+
+    if (declaration === undefined) {
+      return undefined;
+    }
+
+    const type = context.checker.getTypeOfSymbolAtLocation(property, declaration);
+
+    if ((type.flags & ts.TypeFlags.Unit) === 0 || seen.includes(type)) {
+      return undefined;
+    }
+
+    seen.push(type);
+  }
+
+  return seen;
+}
+
+function unionSize(type) {
+  return type.isUnion() ? type.types.length : 1;
+}
+
+/**
+ * Whether the checker left the selection unresolved because a type parameter is
+ * still open. A deferred selection cannot be counted, so the discriminant proof
+ * is the only evidence available for it.
+ */
+function isDeferred(type) {
+  const parts = type.isUnion() ? type.types : [type];
+  return parts.some((part) => (part.flags & ts.TypeFlags.Conditional) !== 0);
+}
+
+/**
+ * Proves a member exists to select a variant rather than to be read. The member
+ * has to sit in the filter position of the named selection, the source has to
+ * discriminate on its key, and a selection the checker already resolved has to
+ * come back narrower than it started.
+ */
+function proveTypeSelection(entry, candidate, context) {
+  const filterNode = resolveNode(
+    parseSite(entry.filter, `${entry.id} filter`),
+    `${entry.id} filter`,
+    context,
+  );
+
+  if (!ts.isTypeReferenceNode(filterNode) || filterNode.typeArguments?.length !== 2) {
+    fail(`${entry.id} filter ${entry.filter} is not a two-argument type selection`);
+  }
+
+  if (selectionOf(declarationOf(entry, candidate, context)) !== filterNode) {
+    fail(`${entry.id} is not a member of the filter at ${entry.filter}`);
+  }
+
+  const source = context.checker.getTypeFromTypeNode(filterNode.typeArguments[0]);
+
+  if (!source.isUnion() || discriminantTypes(source, candidate.key, context) === undefined) {
+    fail(
+      `${entry.id} filter ${entry.filter} selects over a type that does not discriminate on ${candidate.key}`,
+    );
+  }
+
+  const resolved = context.checker.getTypeFromTypeNode(filterNode);
+
+  if (!isDeferred(resolved) && unionSize(resolved) >= unionSize(source)) {
+    fail(`${entry.id} filter ${entry.filter} selects the whole union, so it refines nothing`);
+  }
+
+  return `(filter ${entry.filter} selects by ${candidate.key})`;
+}
+
+/**
+ * Whether the installed declaration insists on this key. An optional upstream
+ * slot compels no local mirror, which is the difference between a member the
+ * boundary needs and one it merely happens to have.
+ */
+function upstreamRequires(entry, candidate, node, context) {
+  const named =
+    (ts.isPropertySignature(node) || ts.isPropertyDeclaration(node)) &&
+    literalNameOf(node) === candidate.key &&
+    isExternalSource(node.getSourceFile(), context.projectRoot);
+
+  if (!named) {
+    fail(
+      `${entry.id} upstream ${entry.upstream} does not declare ${candidate.key} in an installed declaration`,
+    );
+  }
+
+  if (node.questionToken !== undefined) {
+    fail(
+      `${entry.id} upstream ${entry.upstream} declares ${candidate.key} as optional, so no local mirror is compelled`,
+    );
+  }
+}
+
+function signatureRequires(signature, key, context) {
+  return signature.parameters.some((parameter) => {
+    const type = context.checker.getTypeOfSymbolAtLocation(parameter, signature.declaration);
+    const property = context.checker.getPropertyOfType(type, key);
+    return property !== undefined && (property.flags & ts.SymbolFlags.Optional) === 0;
+  });
+}
+
+function suppliesCandidate(parameter, candidate, context) {
+  const type = context.checker.getTypeAtLocation(parameter);
+  const property = context.checker.getPropertyOfType(type, candidate.key);
+  return (
+    property !== undefined &&
+    resolveCandidates(context.checker, context.byDeclaration, property).includes(candidate)
+  );
+}
+
+/**
+ * Proves the local mirror carries its own weight: an installed declaration
+ * checks this callback, that declaration requires the key, and this callback's
+ * own parameter is the declaration the contract names.
+ */
+function assertLocalNecessity(entry, candidate, node, context) {
+  if (!ts.isFunctionLike(node)) {
+    fail(
+      `${entry.id} necessity ${entry.necessity} is not a callback an external declaration checks`,
+    );
+  }
+
+  if (insideAssertion(node)) {
+    fail(
+      `${entry.id} necessity ${entry.necessity} is reached only through an assertion, which checks nothing`,
+    );
+  }
+
+  const checked = externalCallSignatures(node, context).some((signature) =>
+    signatureRequires(signature, candidate.key, context),
+  );
+
+  if (!checked) {
+    fail(
+      `${entry.id} necessity ${entry.necessity} is not checked against an external declaration that requires ${candidate.key}`,
+    );
+  }
+
+  if (!node.parameters.some((parameter) => suppliesCandidate(parameter, candidate, context))) {
+    fail(
+      `${entry.id} necessity ${entry.necessity} does not receive ${candidate.owner}.${candidate.key}`,
+    );
+  }
+}
+
+function proveExternalInput(entry, candidate, context) {
+  const upstreamNode = resolveNode(
+    parseSite(entry.upstream, `${entry.id} upstream`),
+    `${entry.id} upstream`,
+    context,
+  );
+  const necessityNode = resolveNode(
+    parseSite(entry.necessity, `${entry.id} necessity`),
+    `${entry.id} necessity`,
+    context,
+  );
+  upstreamRequires(entry, candidate, upstreamNode, context);
+  assertLocalNecessity(entry, candidate, necessityNode, context);
+  return `(upstream ${entry.upstream} requires it at ${entry.necessity})`;
+}
+
 const provers = {
   "external-output": proveExternalOutput,
+  "external-input": proveExternalInput,
+  "nominal-brand": proveNominalBrand,
+  "type-selection": proveTypeSelection,
 };
 
 function decisionFor(entry, context) {
