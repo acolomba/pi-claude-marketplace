@@ -76,21 +76,30 @@ test("D-03-02.1 a union-bearing input multiplies the branch count and drops the 
 test("RESV-03 a disjoint pair fails as a conflict rather than as a range matching nothing", () => {
   // arrange
   const declared = [">=2.0.0", "<1.0.0"];
-  // The control: a range VALIDATOR accepts the conjunct this pair produces, so
-  // a filter written on validity alone would return it as a usable range. Only
-  // the minimum-version test refuses it.
-  assert.notEqual(validRange(">=2.0.0 <1.0.0"), null);
-  assert.equal(minVersion(">=2.0.0 <1.0.0"), null);
 
   // act
   const intersected = intersectDependencyRanges(declared);
 
-  // assert
-  assert.deepStrictEqual(intersected, {
-    ok: false,
-    reason: "disjoint",
-    detail: "no version satisfies all 2 declared ranges",
-  });
+  // assert: the control rides in the same whole value. A range VALIDATOR
+  // accepts the conjunct this pair produces, so a filter written on validity
+  // alone would hand it back as a usable range; only the minimum-version test
+  // refuses it.
+  assert.deepStrictEqual(
+    {
+      intersected,
+      validatorAccepts: validRange(">=2.0.0 <1.0.0"),
+      minimumVersion: minVersion(">=2.0.0 <1.0.0"),
+    },
+    {
+      intersected: {
+        ok: false,
+        reason: "disjoint",
+        detail: "no version satisfies all 2 declared ranges",
+      },
+      validatorAccepts: ">=2.0.0 <1.0.0",
+      minimumVersion: null,
+    },
+  );
 });
 
 test("RESV-03 an unparseable declared range names its position and no sibling's text", () => {
@@ -141,16 +150,21 @@ test("T-03-07 a cross-product over the conjunct cap fails before the product is 
   });
 });
 
-test("T-03-07 the conjunct cap admits a product that exactly reaches it", () => {
-  // arrange: five four-branch inputs project to 1024 conjuncts, which is the
-  // cap itself and therefore still admitted.
-  const declared = Array.from({ length: 5 }, () => "1.x || 2.x || 3.x || 4.x");
+test("D-03-02.1 a cross-product under the cap keeps every satisfiable cell and drops the rest", () => {
+  // arrange: seven two-branch inputs project to 128 conjuncts, of which only
+  // the two whose seven picks share a major admit any version.
+  const declared = Array.from({ length: 7 }, () => "1.x || 2.x");
+  const sameMajorThroughout = (major: number): string =>
+    Array.from({ length: 7 }, () => `>=${major}.0.0 <${major + 1}.0.0-0`).join(" ");
 
   // act
   const intersected = intersectDependencyRanges(declared);
 
   // assert
-  assert.equal(intersected.ok, true);
+  assert.deepStrictEqual(intersected, {
+    ok: true,
+    range: `${sameMajorThroughout(1)}||${sameMajorThroughout(2)}`,
+  });
 });
 
 for (const { label, recorded, range, expected } of [
@@ -226,13 +240,12 @@ for (const { form, recorded } of [
 test("T-03-08 a range at the rendering bound is carried whole", () => {
   // arrange
   const range = ">=1.0.0 ".repeat(25);
-  assert.equal(range.length, 200);
 
   // act
   const rendered = renderConstraintRange(range);
 
   // assert
-  assert.equal(rendered, range);
+  assert.deepStrictEqual({ length: range.length, rendered }, { length: 200, rendered: range });
 });
 
 test("T-03-08 a range past the rendering bound is truncated and names what it dropped", () => {
@@ -246,19 +259,24 @@ test("T-03-08 a range past the rendering bound is truncated and names what it dr
   assert.equal(rendered, `${"x".repeat(200)}... (+50 chars)`);
 });
 
-test("T-03-08 a maximally wide cross-product renders bounded", () => {
-  // arrange
-  const intersected = intersectDependencyRanges(
-    Array.from({ length: 5 }, () => "1.x || 2.x || 3.x || 4.x"),
-  );
-  assert.equal(intersected.ok, true);
-  const range = intersected.ok ? intersected.range : "";
+test("T-03-08 a range widened by intersection is bounded before it can reach a reason", () => {
+  // arrange: the range the sibling cross-product case pins, which runs 238
+  // characters -- far past what any single declared version may be, because a
+  // synthesized range inherits the declared allowlist's character set and not
+  // its length.
+  const sameMajorThroughout = (major: number): string =>
+    Array.from({ length: 7 }, () => `>=${major}.0.0 <${major + 1}.0.0-0`).join(" ");
+  const widened = `${sameMajorThroughout(1)}||${sameMajorThroughout(2)}`;
 
   // act
-  const rendered = renderConstraintRange(range);
+  const rendered = renderConstraintRange(widened);
 
   // assert
-  assert.ok(range.length > 200, "the fixture must exceed the bound to prove anything");
-  assert.equal(rendered.startsWith(range.slice(0, 200)), true);
-  assert.equal(rendered.endsWith(` chars)`), true);
+  assert.deepStrictEqual(
+    { widenedLength: widened.length, rendered },
+    {
+      widenedLength: 238,
+      rendered: `${widened.slice(0, 200)}... (+38 chars)`,
+    },
+  );
 });
