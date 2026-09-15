@@ -27,7 +27,8 @@ import {
  * - An analysis gap is a reason string recorded against the candidates the
  *   opaque expression could have reached, and against no others.
  * - A contract decision is an `{ id, reason }` pair naming a candidate the
- *   inventory already holds.
+ *   inventory already holds. `byDeclaration` travels with `candidates` so the
+ *   evaluator can settle a member from a declaration node rather than a name.
  * - `transfers` is the directed value-transfer graph: one record per actual
  *   transfer site, naming the source expression and the place it flows into. It
  *   is part of the context handed to the contract evaluator.
@@ -244,6 +245,7 @@ export function analyzeProject({ root, overlay, contractEvaluator, budget, flowB
     checker,
     projectRoot,
     candidates,
+    byDeclaration,
     witnesses,
     transfers: flow.transfers,
   });
