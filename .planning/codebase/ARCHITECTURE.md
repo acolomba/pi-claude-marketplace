@@ -117,7 +117,7 @@
 - Location: `extensions/pi-claude-marketplace/transaction/`
 - Contains: `phase-ledger.ts` (`runPhases<C>`, `Phase<C>`, `RollbackPartial`), `with-state-guard.ts` (`withLockedStateTransaction`, `proper-lockfile`-backed), `rollback.ts` (`formatRollbackError`)
 - Depends on: persistence/ (state-io), shared/errors.ts
-- Used by: `orchestrators/plugin/install-outcome.ts` (sole `runPhases` consumer), `orchestrators/plugin/enable-disable.ts` (via `runInstallLedger`), other orchestrators for `withLockedStateTransaction`
+- Used by: the two `runPhases` consumers -- `orchestrators/plugin/install-outcome.ts` (the inner per-plugin ledger, literal 6-phase array) and `orchestrators/plugin/install-cascade.ts` (the outer per-closure-member ledger, array derived from `domain/dependency-closure.ts`'s post-order) -- plus `orchestrators/plugin/enable-disable.ts` (via `runInstallLedger`), other orchestrators for `withLockedStateTransaction`
 
 **persistence/:**
 - Purpose: typed, scope-rooted, atomic reads/writes of every on-disk artifact the extension owns
