@@ -382,6 +382,56 @@ test("RESV-02 a filled-in marketplace that fails the token allowlist rejects the
   });
 });
 
+test("D-03-36 a declared sha is refused rather than resolved as no constraint", async () => {
+  // arrange: the element is otherwise perfectly valid -- `sha` passes the
+  // parser's own allowlist, so nothing upstream of the walk rejects it. Without
+  // the refusal the edge is built from `name` alone and the member installs
+  // whatever ref its marketplace entry names, which is the silent pin loss.
+  const { lookup, asked } = catalog({
+    "root@mp": [{ name: "leaf", sha: "abc1234" }],
+    "leaf@mp": [],
+  });
+
+  // act
+  const resolved = await resolveDependencyClosure({
+    rootKey: "root@mp",
+    lookup,
+    installedKeys: new Set(),
+    knownMarketplaces: new Set(["mp"]),
+  });
+
+  // assert
+  assert.deepStrictEqual(resolved, {
+    ok: false,
+    reason: "unusable-declaration",
+    key: "root@mp",
+    detail: "dependencies.0: sha pinning is not supported",
+  });
+  assert.deepStrictEqual(asked, ["root@mp"], "the refused edge is never walked");
+});
+
+test("D-03-36 a sha declared beside a version is refused on the sha, not resolved on the version", async () => {
+  // arrange: both constraint forms on one element. Honoring the version half
+  // and dropping the sha half would install a version the declaration asked
+  // for at a commit it did not.
+  const { lookup } = catalog({
+    "root@mp": [{ name: "leaf", version: "^1.0.0", sha: "abc1234" }],
+    "leaf@mp": [],
+  });
+
+  // act
+  const resolved = await resolveDependencyClosure({
+    rootKey: "root@mp",
+    lookup,
+    installedKeys: new Set(),
+    knownMarketplaces: new Set(["mp"]),
+  });
+
+  // assert
+  assert.strictEqual(resolved.ok, false);
+  assert.strictEqual(resolved.reason, "unusable-declaration");
+});
+
 test("RESV-02 keys match by exact string identity, so case is never folded", async () => {
   // arrange: "Helper" and "helper" are two members, not one. Unicode
   // normalization cannot arise at all -- the dependency token alphabet

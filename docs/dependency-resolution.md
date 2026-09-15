@@ -30,6 +30,8 @@ The string shape carries a caret range only, because `@^` is the marker that sep
 
 The object shape accepts four keys. Only `name` is required. `marketplace`, `version` and `sha` are optional. The `sha` field holds a git object name. The constraint rules below describe the `version` field.
 
+This extension resolves a dependency by version range only. It does not pin a dependency to a commit. So an element that carries a `sha` is refused, and the install fails with `{invalid manifest}` (D-03-36). It is not ignored. If the extension ignored it, the dependency would install at whatever commit its marketplace names while the plugin author believed it was pinned.
+
 Every field must match a character rule.
 
 | Field                 | Rule                                                                                                                                    |

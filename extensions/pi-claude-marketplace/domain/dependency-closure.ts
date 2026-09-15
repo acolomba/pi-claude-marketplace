@@ -303,6 +303,14 @@ function guardEdge(ctx: WalkContext, edge: WalkEdge, member: MutableMember): Gua
  * filled-in value is re-checked against the token allowlist before it becomes
  * part of a key, so a caller-supplied declaring marketplace cannot smuggle an
  * unrenderable token into a row through the fill-in path.
+ *
+ * D-03-36: a declared `sha` is REFUSED rather than ignored. RESV-03 resolves a
+ * dependency by version range only, so this walk has no way to honor a commit
+ * pin -- and carrying the element through as if it declared no constraint would
+ * install whatever ref the marketplace entry names while the declaring author
+ * believes the dependency is pinned. That is the failure `domain/dependencies.ts`
+ * refuses a half-parsed element to prevent: a constraint that disappears quietly
+ * is worse than a declaration that is refused.
  */
 function buildChildEdge(args: {
   readonly declaringKey: string;
@@ -310,6 +318,18 @@ function buildChildEdge(args: {
   readonly index: number;
   readonly dependency: DeclaredDependency;
 }): ChildEdge {
+  if (args.dependency.sha !== undefined) {
+    return {
+      kind: "failed",
+      failure: {
+        ok: false,
+        reason: "unusable-declaration",
+        key: args.declaringKey,
+        detail: `dependencies.${args.index}: sha pinning is not supported`,
+      },
+    };
+  }
+
   const marketplace = args.dependency.marketplace ?? args.declaringMarketplace;
   if (!isRenderableDependencyToken(marketplace)) {
     return {
