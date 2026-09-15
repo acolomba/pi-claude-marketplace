@@ -33,6 +33,15 @@ import type {
 // proceeds to emit any session-lifecycle event. The `void` fire-and-forget
 // alternative would race against the first session_start because the loader
 // does not see the un-awaited inner Promise.
+//
+// EXPORT-02: the only consumer of this default is the `pi.extensions` entry in
+// package.json, which Pi's loader reads at runtime. That edge lives in a
+// manifest, not in any import statement, so no static reachability analysis can
+// follow it -- the export is genuinely unreferenced in the source graph and
+// genuinely load-bearing. The one-line annotation below records exactly that,
+// for exactly this declaration: a sibling named export added to this file is
+// still reported, and an unrelated default elsewhere is still reported.
+// fallow-ignore-next-line unused-export -- package.json `pi.extensions` loads this default.
 export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Promise<void> {
   const hooksRuntime = createHooksRuntime();
   const hooksRouting = createHooksRouting(hooksRuntime, { readHooksJson });

@@ -1,6 +1,29 @@
-/** Calibrate production reachability against the installed Fallow analyzer. */
+/**
+ * Calibrate production reachability against the installed Fallow analyzer.
+ *
+ * D-05 / D-08: every control below runs the shipping `.fallowrc.json` with ONE
+ * field replaced -- the fixture entry -- and invokes the same no-production-flag
+ * `dead-code` command the `fallow` npm script does. Production reachability
+ * therefore arrives from the committed config, so a config that regressed off it
+ * fails these controls rather than being masked by a local override of the very
+ * setting under test.
+ *
+ * The two trailing cases are the other half of that claim: `deadCode` is the
+ * only analysis moved to production scope, and `health` and `dupes` prove they
+ * still discover the test tree from their own real reports, not from the config
+ * text that requests it.
+ */
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  closeSync,
+  mkdtempSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -186,12 +209,15 @@ for (const control of controls) {
       path.join(root, "package.json"),
       JSON.stringify({ name: "fallow-control", private: true, type: "module" }),
     );
+    // D-05 / D-08: the fixture entry is the ONLY field overridden. Production
+    // mode, the boundary matrix, the rule pack and every threshold arrive from
+    // the shipping config verbatim, so a regression in any of them lands in
+    // these controls instead of hiding behind a local restatement of them.
     writeFileSync(
       path.join(root, ".fallowrc.json"),
       JSON.stringify({
         ...parsedConfig,
         entry: [entry],
-        production: { deadCode: true, health: false, dupes: false },
       }),
     );
 
@@ -252,6 +278,110 @@ for (const control of [
     );
   });
 }
+
+/**
+ * One non-dead-code analysis report from the real repository.
+ *
+ * Child stdout goes to a real file rather than a pipe: under the test runner a
+ * nested pipe can drop the child's output entirely, and an empty read is
+ * indistinguishable from a clean report. The envelope is checked before any
+ * field is read, so a renamed analysis or a bumped schema fails here naming
+ * itself instead of scoring zero discovered files.
+ */
+function readScopeReport(
+  analysis: string,
+  kind: string,
+  schemaVersion: number,
+): Record<string, unknown> {
+  const outputRoot = mkdtempSync(path.join(tmpdir(), "fallow-scope-"));
+  try {
+    const reportPath = path.join(outputRoot, "report.json");
+    const descriptor = openSync(reportPath, "w");
+    try {
+      const execution = spawnSync(
+        process.execPath,
+        [ANALYZER, analysis, "--no-cache", "--format", "json"],
+        { cwd: REPO_ROOT, stdio: ["ignore", descriptor, "ignore"] },
+      );
+      assert.strictEqual(execution.error, undefined);
+      assert.strictEqual(execution.signal, null);
+    } finally {
+      closeSync(descriptor);
+    }
+
+    const parsed: unknown = JSON.parse(readFileSync(reportPath, "utf8"));
+    assert.ok(typeof parsed === "object" && parsed !== null && !Array.isArray(parsed));
+    const document = parsed as Record<string, unknown>;
+    assert.strictEqual(document.kind, kind);
+    assert.strictEqual(document.schema_version, schemaVersion);
+    return document;
+  } finally {
+    rmSync(outputRoot, { recursive: true, force: true });
+  }
+}
+
+/** Every repository-relative path a report lists under `field`, via `read`. */
+function reportedPaths(
+  document: Record<string, unknown>,
+  field: string,
+  read: (record: Record<string, unknown>) => string[],
+): string[] {
+  const rows = document[field];
+  assert.ok(Array.isArray(rows) && rows.length > 0, `The report listed no ${field} at all`);
+  return rows.flatMap((row: unknown) => {
+    assert.ok(typeof row === "object" && row !== null && !Array.isArray(row));
+    return read(row as Record<string, unknown>);
+  });
+}
+
+test("D-05: health analysis keeps its test-inclusive scope", () => {
+  // arrange
+  const document = readScopeReport("health", "health", 11);
+
+  // act
+  const scored = reportedPaths(document, "file_scores", (score) => {
+    const scoredPath = score.path;
+    assert.ok(typeof scoredPath === "string" && scoredPath.length > 0);
+    return [scoredPath];
+  });
+
+  // assert
+  assert.ok(
+    scored.some((scoredPath) => scoredPath.startsWith("tests/")),
+    "D-05: health scored no file under tests/, so its scope moved to production with dead code",
+  );
+  assert.ok(
+    scored.includes(entry),
+    "D-05: health scored no production entry module, so its scope is not the whole tree either",
+  );
+});
+
+test("D-05: duplication analysis keeps its test-inclusive scope", () => {
+  // arrange
+  const document = readScopeReport("dupes", "dupes", 9);
+
+  // act
+  const cloned = reportedPaths(document, "clone_groups", (group) => {
+    const instances = group.instances;
+    assert.ok(Array.isArray(instances) && instances.length > 1);
+    return instances.map((instance: unknown) => {
+      assert.ok(typeof instance === "object" && instance !== null);
+      const file = (instance as Record<string, unknown>).file;
+      assert.ok(typeof file === "string" && file.length > 0);
+      return file;
+    });
+  });
+
+  // assert
+  assert.ok(
+    cloned.some((clonedPath) => clonedPath.startsWith("tests/")),
+    "D-05: duplication reported no clone under tests/, so its scope moved to production",
+  );
+  assert.ok(
+    cloned.some((clonedPath) => clonedPath.startsWith("extensions/")),
+    "D-05: duplication reported no clone under extensions/, so its scope is not the whole tree",
+  );
+});
 
 test("The analyzer instrument rejects a missing launcher", (t) => {
   // arrange

@@ -571,10 +571,14 @@ export const FINDING_DISPOSITIONS_REL: (typeof EVIDENCE_RECORD_TARGETS)[number] 
  * this module is a list of paths that must resolve on disk, and a census entry
  * carries an export name as well as a path. Keying by path keeps every path a
  * bare string literal, which is what the literal-match scan over this file needs.
+ *
+ * The record is EMPTY, and an empty measurement is not a disabled one. The gate
+ * still runs the analyzer, still validates the report envelope, and still
+ * compares for exact equality -- so the first export that production stops
+ * reading fails here rather than landing unremarked. Emptiness is the strongest
+ * state this pin can be in, not the weakest.
  */
-export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> = {
-  "extensions/pi-claude-marketplace/index.ts": ["default"],
-};
+export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> = {};
 
 /** Real fixture targets use existing repository paths so the registry still resolves. */
 export const FALLOW_CONTROL_TARGETS = [
@@ -583,23 +587,22 @@ export const FALLOW_CONTROL_TARGETS = [
   "extensions/pi-claude-marketplace/shared/markers.ts",
 ] as const;
 
-/** Complete production finding identities; additions, removals, and swaps require review. */
+/**
+ * Complete production finding identities; additions, removals, and swaps require review.
+ *
+ * Every category is empty, which is the measured state of the tree and not a
+ * suppression of it. Two declarations production reachability cannot follow --
+ * the manifest-loaded entry default and the ring buffer's `read` -- carry an
+ * exact adjacent annotation naming their real loader and their real callers;
+ * both are calibrated by the offender and benign controls in
+ * `fallow-production-mode.test.ts`, which prove the same annotations do not
+ * cover a sibling export, an unrelated default, or the same member name on
+ * another class.
+ */
 export const PRODUCTION_FINDING_CENSUS = {
-  unused_exports: [
-    {
-      path: "extensions/pi-claude-marketplace/index.ts",
-      export_name: "default",
-    },
-  ],
+  unused_exports: [],
   unused_types: [],
   unused_files: [],
-  unused_class_members: [
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/ring-buffer.ts",
-      parent_name: "RingBuffer",
-      member_name: "read",
-      kind: "class_method",
-    },
-  ],
+  unused_class_members: [],
   duplicate_exports: [],
 } as const;

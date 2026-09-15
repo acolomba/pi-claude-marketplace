@@ -48,6 +48,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { It, when } from "strong-mock";
 
 import claudeMarketplaceExtension from "../extensions/pi-claude-marketplace/index.ts";
+import * as entryModule from "../extensions/pi-claude-marketplace/index.ts";
 import { EXTENSION_VERSION } from "../extensions/pi-claude-marketplace/shared/extension-version.ts";
 
 import { createNotificationBoundary } from "./edge/notification-boundary.ts";
@@ -747,6 +748,18 @@ async function seedInvalidConfig(cwd: string): Promise<void> {
     "utf8",
   );
 }
+
+test("EXPORT-02: the entry module publishes exactly its default and nothing else", () => {
+  // arrange
+  const published = Object.keys(entryModule);
+
+  // act
+  const exported = entryModule.default;
+
+  // assert
+  assert.deepStrictEqual(published, ["default"]);
+  assert.strictEqual(exported, claudeMarketplaceExtension);
+});
 
 test("registers the slash command and the two read-only tools alongside the bridge surface", async (t) => {
   // arrange
