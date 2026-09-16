@@ -869,8 +869,14 @@ async function executeScopedPlan(
       continue;
     }
 
+    // D-04-07: a record that arrived as another plugin's dependency is not a
+    // skip. The imported settings naming it IS the user asking for it by name,
+    // so it falls through to the install, whose orchestrated promotion arm
+    // flips the record to a direct install and returns `installed` with no
+    // resource change. Every other existing record is already what the
+    // settings ask for and is skipped here.
     const existingPlugin = state.marketplaces[plugin.ref.marketplace]?.plugins[plugin.ref.plugin];
-    if (existingPlugin !== undefined) {
+    if (existingPlugin !== undefined && existingPlugin.provenance !== "dependency") {
       result.skippedExistingPlugins.push({
         kind: "plugin-skip",
         scope: plugin.scope,

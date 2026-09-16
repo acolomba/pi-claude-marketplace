@@ -38,6 +38,7 @@ import {
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { importClaudeSettings as importClaudeSettingsWithCache } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   ConcurrentInstallError,
@@ -2421,6 +2422,102 @@ test("resolves every collaborator from production when the caller supplies no de
         "Import: 2 successes",
     },
   ]);
+  verifyBoundary();
+});
+
+test("D-04-07: promotes a recorded dependency the imported settings name instead of skipping it", async (t) => {
+  // arrange: the first import names `sample` alone, and the cascade records
+  // `dep` as its dependency. The second import names both, which is the user
+  // asking for `dep` by name -- so it reaches the install rather than the
+  // already-installed skip, and the install's promotion arm flips its record.
+  const { cwd, project } = await createHermeticScopes(t, "promotes-dependency");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 4);
+  const marketplaceRoot = path.join(cwd, "fixture-mp");
+  const dependency = { name: "dep", version: "*" };
+  await writeUnder(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "fixture-mp",
+      owner: { name: "import owner suite" },
+      plugins: [
+        {
+          name: "sample",
+          source: "./plugins/sample",
+          version: "1.0.0",
+          dependencies: [dependency],
+        },
+        { name: "dep", source: "./plugins/dep", version: "1.0.0" },
+      ],
+    }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "sample", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "sample", version: "1.0.0", dependencies: [dependency] }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "dep", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "dep", version: "1.0.0" }),
+  );
+  const settingsPath = path.join(cwd, ".claude", "settings.json");
+  const settingsNaming = (enabledPlugins: Record<string, boolean>): string =>
+    JSON.stringify({
+      enabledPlugins,
+      extraKnownMarketplaces: { "fixture-mp": { directory: marketplaceRoot } },
+    });
+  const expectedSecondResult: ClaudeImportExecutionResult = {
+    ...emptyImportResult(),
+    installedPlugins: [
+      installed("dep", "fixture-mp", "project", { agents: false, mcp: false }, false),
+    ],
+    skippedExistingMarketplaces: [skipped("fixture-mp", "project")],
+    skippedExistingPlugins: [skippedPlugin("sample", "fixture-mp", "project")],
+  };
+  const expectedBytes = configBytes({
+    marketplaces: { "fixture-mp": { source: marketplaceRoot } },
+    plugins: { "sample@fixture-mp": {}, "dep@fixture-mp": {} },
+  });
+  const importOptions = {
+    ctx,
+    cwd,
+    gitOps: createOfflineGitOps(),
+    pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"] as const,
+  };
+  await writeUnder(settingsPath, settingsNaming({ "sample@fixture-mp": true }));
+  await importClaudeSettings(importOptions);
+  const recordedAfterFirst = await loadState(project.extensionRoot);
+  assert.strictEqual(
+    recordedAfterFirst.marketplaces["fixture-mp"]?.plugins["dep"]?.provenance,
+    "dependency",
+    "the first import's cascade recorded the dependency as such",
+  );
+
+  // act
+  await writeUnder(
+    settingsPath,
+    settingsNaming({ "sample@fixture-mp": true, "dep@fixture-mp": true }),
+  );
+  const secondResult = await importClaudeSettings(importOptions);
+
+  // assert
+  assert.deepStrictEqual(secondResult, expectedSecondResult);
+  assert.strictEqual(
+    (await loadState(project.extensionRoot)).marketplaces["fixture-mp"]?.plugins["dep"]?.provenance,
+    "explicit",
+  );
+  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  // The import cascade renders every `installed` outcome through its one
+  // installed row, trailer included, so the promoted plugin reads as any
+  // other install the import made.
+  assert.deepStrictEqual(notifications[1], {
+    message:
+      "● fixture-mp [project] (updated)\n" +
+      "  ● dep (installed)\n" +
+      "  ⊘ sample (skipped) {already installed}\n\n" +
+      "Import: 3 successes\n\n" +
+      "/reload to pick up changes",
+  });
   verifyBoundary();
 });
 
