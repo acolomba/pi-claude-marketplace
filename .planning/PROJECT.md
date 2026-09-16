@@ -38,7 +38,10 @@ eight and two skills with no duplicate warnings. Uninstall data preservation
 is also verified: `--keep-data` preserves the data directory; omitting it
 still deletes without a prompt at both `uninstall` and the load-time reconcile
 path (D-02-04 reaffirmed after a code-review challenge — see Key Decisions).
-Dependency resolution (Phase 3) is next.
+Dependency resolution (Phase 3, verified 2026-09-15) installs a plugin's
+declared closure under one outer ledger. Install provenance (Phase 4, verified
+2026-09-16) records how every plugin got there and retires Phase 3's cascade
+config write; `--prune` (Phase 5) is next.
 
 ## Previous Milestone: refine-unit-tests -- Refine Unit Tests (branch: features/refine-unit-tests, shipped 2026-09-13, no npm release)
 
@@ -347,6 +350,22 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
   Key Decisions). `--keep-data` is documented in usage and completions;
   `--delete-data`/`-y` are rejected as unknown flags — v1.20 Phase 2, verified
   2026-09-14.
+- ✓ Every install record carries `provenance: "explicit" | "dependency"` at
+  `state.json` schemaVersion 3; a cascade marks its root explicit and each
+  member a dependency; a pre-milestone document loads, back-fills `"explicit"`
+  silently and persists as v3, and a wrong value is rejected with a JSON
+  pointer — v1.20 Phase 4 (PROV-01, PROV-04), verified 2026-09-16.
+- ✓ A direct install stays explicit when a later cascade declares it (whole
+  record unchanged); `install <plugin>` on a dependency record promotes it —
+  one field flips, its key is declared, and the row reads
+  `{already installed, dependency promoted}`; `import` naming the record
+  promotes it too; a disabled record is re-enabled on promotion — v1.20
+  Phase 4 (PROV-02, PROV-03), verified 2026-09-16.
+- ✓ The desired-state config names only what the user asked for: the cascade
+  no longer declares dependencies, reconcile keeps a dependency because its
+  record says so and retains an undeclared marketplace that holds one, and a
+  cascade-installed dependency survives `/reload` — v1.20 Phase 4 (D-04-02,
+  D-04-04, D-04-05), verified 2026-09-16.
 
 <!-- Shipped and confirmed valuable via this GSD project. -->
 
@@ -673,6 +692,8 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-106-04: workflows persist only as compatibility metadata** (workflows-detection, Phase 106): `compatibility.unsupported` may contain `workflows`; resources, install phases, reload discovery, and execution remain unchanged                                                                                                                                                                                                                                                                                                                                                                          | This keeps workflow detection aligned with other unsupported components and makes no future execution contract by accident.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | ✓ Good                                                                                                                                                                                                                                                                                                                                                             |
 | **D-106-05: `{workflows}` is one canonical tail reason** (workflows-detection, Phase 106): the shared typed-kind classifier owns mapping, order, and first-wins deduplication for every consumer                                                                                                                                                                                                                                                                                                                                                                                                           | One mapping prevents list, info, install, update, and autoupdate from drifting or emitting duplicate workflow reasons.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | ✓ Good                                                                                                                                                                                                                                                                                                                                                             |
 | **D-02-04 reaffirmed (v1.20, Phase 2 code review, 2026-09-14):** `orchestrators/reconcile/apply.ts` keeps calling `uninstallPlugin` with no `keepData`, so the load-time reconcile path (no command line, fires on every `/reload`) stays on the promptless-delete default -- same as an explicit `uninstall` with no flag. Phase 2's own code reviewer flagged this as a critical finding (data loss on an automatic path with no opt-out) and proposed forcing `keepData: true` there; the operator reviewed the tradeoff and explicitly kept the original decision.                                 | This is success criterion DATA-03, not an oversight: one behavior at both entry points is the phase's stated goal. A future phase should not "fix" this again without a fresh operator decision -- the tradeoff (silent automatic deletion vs. a reconcile pass gaining a way to say "keep") was surfaced and answered here.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | -- Locked                                                                                                                                                                                                                                                                                                                                                          |
+| **D-04-02 / D-04-04 (v1.20 Phase 4, 2026-09-15):** the desired-state config names only plugins the user asked for; a cascade-installed dependency is protected by its `provenance: "dependency"` record, not by a config declaration. Phase 3's cascade config write was retired in a fixed order — field, reconcile exemption, then the write. | Reconcile would otherwise sweep every dependency on the next `resources_discover`; `--prune` needs the asked-for / pulled-in distinction the write destroyed. The order is a correctness contract: 04-05 proved the exemption load-bearing by reverting it and watching the reload-survival case go red. | -- Locked |
+| **D-04-07 + review rulings (v1.20 Phase 4, 2026-09-16): a plugin asked for by name is enabled.** `install <dep>` on a dependency record promotes it and, if the record was disabled, re-materializes and enables it, stamping `{ enabled: true }` in whichever config file declares the key; `import` naming the record promotes it; a version pin refuses promotion, `--partial` is the consent gate for a partially-installed record, `--map-model` has no bearing. The planner (not the config) retains a CMP-3-adopted dependency marketplace. | Keeps D-04-02's config purity while closing the review's reproduced criticals (an undeclared adopted marketplace torn down on reload; a promoted-but-still-disabled record re-disabled by the reload its own row asked for). The cascade half of the same rule — enabling a disabled dependency during a cascade — reverses RESV-05 and is backlogged (ENBL-DEP-01), not shipped. | -- Locked |
 
 ## Evolution
 
@@ -776,4 +797,4 @@ _Earlier updates (pre-v1.3-close): see git history. Phase 1 (2026-05-09), Phase 
 
 ---
 
-_Last updated: 2026-09-13 after the refine-unit-tests milestone_
+_Last updated: 2026-09-16 after v1.20 Phase 4 (install provenance)_
