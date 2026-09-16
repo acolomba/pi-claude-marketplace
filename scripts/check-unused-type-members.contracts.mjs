@@ -47,6 +47,7 @@ const categoryKeys = {
   "type-selection": ["filter"],
   "type-refinement": ["refines"],
   "conditional-clause": ["clause"],
+  "satisfies-constraint": ["constraint"],
 };
 
 // A refinement is followed one slot at a time into the shape it narrows. A
@@ -1154,6 +1155,156 @@ function proveConditionalClause(entry, candidate, context) {
     : provesByNarrowing(entry, candidate, conditional, context);
 }
 
+/**
+ * The literal a constraint is applied to, with any assertion or parenthesis
+ * around it removed.
+ *
+ * An `as const` written INSIDE a `satisfies` is not a way around the check: the
+ * assertion fixes what the literal's type is, and the constraint is then applied
+ * to that. This is the opposite situation from `insideAssertion`, which asks
+ * whether an assertion stands between a value and the position that would have
+ * given it a type -- there the assertion replaces the check, here it is the
+ * thing being checked. The two rules do not contradict: the `satisfies` IS the
+ * evidence this category wants, and an assertion carrying no `satisfies` is
+ * refused by name.
+ */
+function constrainedLiteral(expression) {
+  let current = expression;
+
+  while (
+    current !== undefined &&
+    (ts.isAsExpression(current) ||
+      ts.isTypeAssertionExpression(current) ||
+      ts.isParenthesizedExpression(current))
+  ) {
+    current = current.expression;
+  }
+
+  return current !== undefined && ts.isObjectLiteralExpression(current) ? current : undefined;
+}
+
+function writesKey(literal, key) {
+  return (
+    literal !== undefined && literal.properties.some((property) => literalNameOf(property) === key)
+  );
+}
+
+/** The literals the entries of a constrained table are, one level down. */
+function entryLiteralsOf(literal) {
+  if (literal === undefined) {
+    return [];
+  }
+
+  return literal.properties
+    .map((property) => {
+      const part = objectLiteralPartOf(property);
+      return part === undefined ? undefined : constrainedLiteral(part);
+    })
+    .filter((entry) => entry !== undefined);
+}
+
+/**
+ * The shapes a constraint puts a written value under, each with how far down the
+ * literal the values it checks are written.
+ *
+ * `Record<string, Target>` declares nothing itself: what it constrains is every
+ * ENTRY of the literal, so the owner a member belongs to sits one indexing step
+ * in and the key is written one level down. A constraint that declares the key
+ * itself checks the literal directly.
+ */
+function constrainedShapes(constraint, context) {
+  const shapes = [{ type: constraint, depth: 0 }];
+
+  for (const kind of [ts.IndexKind.String, ts.IndexKind.Number]) {
+    const indexed = context.checker.getIndexTypeOfType(constraint, kind);
+
+    if (indexed !== undefined) {
+      shapes.push({ type: indexed, depth: 1 });
+    }
+  }
+
+  for (const property of context.checker.getPropertiesOfType(constraint)) {
+    const declaration = property.valueDeclaration ?? property.declarations?.[0];
+
+    if (declaration !== undefined) {
+      shapes.push({
+        type: context.checker.getTypeOfSymbolAtLocation(property, declaration),
+        depth: 1,
+      });
+    }
+  }
+
+  return shapes;
+}
+
+/**
+ * How far down the constrained literal this member's key is written, settled
+ * through the declaration map rather than by spelling: a same-spelled key on
+ * some other declaration reaches a different candidate and does not answer.
+ */
+function constrainedDepthOf(constraint, candidate, context) {
+  for (const shape of constrainedShapes(constraint, context)) {
+    const symbol = propertySymbolOf(shape.type, candidate.key, context.checker);
+    const resolved =
+      symbol === undefined ? [] : resolveCandidates(context.checker, context.byDeclaration, symbol);
+
+    if (resolved.includes(candidate)) {
+      return shape.depth;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Proves a member exists to constrain a literal rather than to be read. The
+ * interface is never read because nothing holds a value of it: it is written
+ * down so the literal beside it has a shape the compiler checks it against.
+ *
+ * Three things have to hold together, and each alone is worthless. The named
+ * node has to be a `satisfies` expression, because an asserted value is checked
+ * against nothing. The member has to be required, because an optional slot no
+ * value has to write is compelled by nothing. And the constrained literal has to
+ * really write the key, because an index-signature constraint is satisfied
+ * vacuously by an empty literal -- a category without that check would excuse
+ * every member of every constraint type in the tree.
+ */
+function proveSatisfiesConstraint(entry, candidate, context) {
+  declarationOf(entry, candidate, context);
+  const site = parseSite(entry.constraint, `${entry.id} constraint`);
+  const node = resolveNode(site, `${entry.id} constraint`, context);
+
+  if (!ts.isSatisfiesExpression(node)) {
+    fail(`${entry.id} constraint ${entry.constraint} is not a satisfies expression`);
+  }
+
+  if (candidate.optional) {
+    fail(
+      `${entry.id} declares ${candidate.key} as optional, so no constrained value has to write it`,
+    );
+  }
+
+  const constraint = context.checker.getTypeFromTypeNode(node.type);
+  const depth = constrainedDepthOf(constraint, candidate, context);
+
+  if (depth === undefined) {
+    fail(
+      `${entry.id} constraint ${entry.constraint} does not constrain ${candidate.owner}.${candidate.key}`,
+    );
+  }
+
+  const literal = constrainedLiteral(node.expression);
+  const written = depth === 0 ? [literal] : entryLiteralsOf(literal);
+
+  if (!written.some((part) => writesKey(part, candidate.key))) {
+    fail(
+      `${entry.id} constraint ${entry.constraint} is satisfied without writing ${candidate.key} anywhere`,
+    );
+  }
+
+  return `(satisfies ${entry.constraint} compels ${candidate.key})`;
+}
+
 const provers = {
   "external-output": proveExternalOutput,
   "external-input": proveExternalInput,
@@ -1161,6 +1312,7 @@ const provers = {
   "type-selection": proveTypeSelection,
   "type-refinement": proveTypeRefinement,
   "conditional-clause": proveConditionalClause,
+  "satisfies-constraint": proveSatisfiesConstraint,
 };
 
 function decisionFor(entry, context) {

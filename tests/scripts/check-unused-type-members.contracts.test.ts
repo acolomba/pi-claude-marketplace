@@ -1947,6 +1947,9 @@ test("an arrival chain longer than the hop bound is refused, not answered partia
 // to write it even though one does. `AbsentTarget.other` (line 34) is a key the
 // `DirectTarget` constraint never declares. The `as` at line 37, column 25 and
 // the bare literal at line 41, column 22 are checked against nothing at all.
+// `Twin` (line 45) spells `tag` exactly as `DirectTarget` does, so the
+// `satisfies` at line 49, column 21 is what a prover settling identity by
+// spelling rather than by declaration would wrongly accept.
 const satisfiesConstraintCases = `interface DirectTarget {
   readonly tag: string;
 }
@@ -1990,9 +1993,17 @@ export const asserted = {
 export const plain = {
   tag: "three",
 };
+
+interface Twin {
+  readonly tag: string;
+}
+
+export const twin = {
+  tag: "four",
+} satisfies Twin;
 `;
 
-// Adds an ordinary read of `DirectTarget.tag` at line 46, column 17.
+// Adds an ordinary read of `DirectTarget.tag` at line 54, column 17.
 const satisfiesReadCases = `${satisfiesConstraintCases}
 export function peek(target: DirectTarget): string {
   return target.tag;
@@ -2159,7 +2170,7 @@ test("a constraint entry a genuine read has made redundant is refused", async (t
   await assert.rejects(analyzeWith(t, satisfiesReadCases, documentWith(directConstraintContract)), {
     name: "AnalysisSetupError",
     message:
-      `Invalid contract: ${casesPath}:2:3 is already read at ${casesPath}:46:17; ` +
+      `Invalid contract: ${casesPath}:2:3 is already read at ${casesPath}:54:17; ` +
       "remove the contract",
   });
 });
@@ -2175,6 +2186,23 @@ test("a constraint entry carrying another category's key is refused", async (t) 
     {
       name: "AnalysisSetupError",
       message: `Invalid contract: ${casesPath}:2:3 carries unknown key clause`,
+    },
+  );
+});
+
+test("a constraint spelling the key on another declaration does not constrain it", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      satisfiesConstraintCases,
+      documentWith({ ...directConstraintContract, constraint: `${casesPath}:49:21` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:2:3 constraint ${casesPath}:49:21 ` +
+        "does not constrain DirectTarget.tag",
     },
   );
 });

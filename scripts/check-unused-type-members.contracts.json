@@ -816,6 +816,22 @@
       "purpose": "Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
       "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:114:68",
       "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:117:7"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:55:3",
+      "owner": "IfPrefixTarget",
+      "key": "piEvents",
+      "category": "satisfies-constraint",
+      "purpose": "The prefix table is checked against this interface, so every entry has to carry a Pi-event set; nothing in the project holds a value typed as the interface, so no read can land on this slot.",
+      "constraint": "extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:86:34"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:56:3",
+      "owner": "IfPrefixTarget",
+      "key": "extractTarget",
+      "category": "satisfies-constraint",
+      "purpose": "The prefix table is checked against this interface, so every entry has to name the runtime field its predicate consults; nothing in the project holds a value typed as the interface, so no read can land on this slot.",
+      "constraint": "extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:86:34"
     }
   ]
 }
