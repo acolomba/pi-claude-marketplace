@@ -329,7 +329,7 @@ function backfillOptionsWithRouting(
 }
 
 function readResultFor(state: ExtensionState, stateExisted: boolean): ScopeReadResult {
-  return { scope: "project", plan: undefined, invalidOutcomes: [], state, stateExisted };
+  return { plan: undefined, invalidOutcomes: [], state, stateExisted };
 }
 
 /** A seeded scope that has been read but not re-materialized. */
@@ -361,7 +361,6 @@ describe("applyBackfillForScopeIsolated", () => {
     const { ctx, pi, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const readResult: ScopeReadResult = {
-      scope: "project",
       plan: undefined,
       invalidOutcomes: [],
       stateExisted: false,

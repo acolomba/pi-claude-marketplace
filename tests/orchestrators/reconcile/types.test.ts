@@ -143,13 +143,11 @@ const extensionState = {
   marketplaces: {},
 } satisfies ExtensionState;
 void ({
-  scope: "user",
   plan: undefined,
   invalidOutcomes: [],
   stateExisted: false,
 } satisfies ScopeReadResult);
 void ({
-  scope: "project",
   plan: emptyReconcilePlan("project"),
   invalidOutcomes: [
     {
@@ -314,13 +312,11 @@ void ({
   // @ts-expect-error exact optional properties reject explicitly undefined Git operations
 } satisfies ApplyReconcileOptions);
 void ({
-  scope: "project",
   plan: undefined,
   invalidOutcomes: [],
   // @ts-expect-error scope reads always state whether state.json existed
 } satisfies ScopeReadResult);
 void ({
-  scope: "project",
   plan: undefined,
   invalidOutcomes: [
     {
@@ -334,7 +330,6 @@ void ({
   stateExisted: true,
 } satisfies ScopeReadResult);
 void ({
-  scope: "project",
   plan: undefined,
   invalidOutcomes: [],
   state: undefined,

@@ -58,6 +58,7 @@ import type {
   PlannedPluginEnable,
   PlannedPluginInstall,
   PlannedPluginUninstall,
+  PlannedSourceDetail,
   PlannedSourceMismatch,
   ReconcilePlan,
 } from "./types.ts";
@@ -108,10 +109,8 @@ interface PendingMarketplaceClaim {
   readonly candidateMarketplace: string;
 }
 
-interface MarketplaceClaimConflict {
+interface MarketplaceClaimConflict extends PlannedSourceDetail {
   readonly declaredMarketplace: string;
-  readonly declaredSource: string;
-  readonly recordedSource: string;
 }
 
 interface MarketplaceClaims {

@@ -124,7 +124,7 @@ async function readPassForScope(
   if (!stateExists && !configExists) {
     // Pristine scope: nothing recorded, nothing declared -- no-op without
     // touching the disk.
-    return { scope, plan: undefined, invalidOutcomes: [], stateExisted: false };
+    return { plan: undefined, invalidOutcomes: [], stateExisted: false };
   }
 
   return withLockedStateTransaction(
@@ -186,7 +186,7 @@ async function readPassForScope(
       }
 
       if (invalidOutcomes.length > 0) {
-        return { scope, plan: undefined, invalidOutcomes, stateExisted: stateExists };
+        return { plan: undefined, invalidOutcomes, stateExisted: stateExists };
       }
 
       // (4) Plan against the merged config + current state. Pure -- no I/O.
@@ -194,7 +194,7 @@ async function readPassForScope(
       // BFILL-02: carry the loaded state snapshot out so applyBackfillForScope can
       // read its stamp + scan its partially-installed plugins. planReconcile is pure,
       // so the snapshot is the unmutated read-pass state.
-      return { scope, plan, invalidOutcomes: [], state, stateExisted: stateExists };
+      return { plan, invalidOutcomes: [], state, stateExisted: stateExists };
     },
     { loadState: reader.loadState },
   );
