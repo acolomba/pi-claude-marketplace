@@ -1,6 +1,6 @@
 ---
 name: typescript-google-style-review
-description: Review TypeScript source against the Google Style Guide as this project adopts it — the rules the toolchain does not enforce. Use when reviewing or revising .ts files.
+description: Review TypeScript source against the Google Style Guide as this project adopts it -- the rules the toolchain does not enforce. Use when reviewing or revising .ts files.
 ---
 
 # Google style review
@@ -31,7 +31,7 @@ Grep the changed files for these tokens; every hit needs a stated justification 
 
 ## Files and modules
 
-- File order: copyright JSDoc, `@fileoverview` JSDoc, imports, implementation — each present section separated by exactly one blank line.
+- File order: copyright JSDoc, `@fileoverview` JSDoc, imports, implementation -- each present section separated by exactly one blank line.
 - File names are `kebab-case`: `atomic-json.ts`. *(project)*
 - Same-project imports are relative and carry the `.ts` extension, because Node runs the sources directly with no build step; flag long `../` chains. *(project)*
 - Import form matches usage: named imports for symbols used often or with clear names; a namespace import for many symbols from one large API or common names such as `defaultGit`; a rename only to avoid a collision, name a generated symbol, or clarify an unclear name.
@@ -50,7 +50,7 @@ Grep the changed files for these tokens; every hit needs a stated justification 
 - No mixing of computed or quoted keys with unquoted keys unless the computed key is a symbol.
 - No line continuations inside a string; number prefixes lowercase, no other leading zero.
 - Coercion via `String(value)`, `Boolean(value)`, `!!value`, or a template literal; parsing via `Number(text)` checked with `Number.isNaN()`/`Number.isFinite()` unless failure is impossible; no unary `+`; `parseInt`/`parseFloat` only for a non-decimal radix after validating digits.
-- No `!!value` inside an `if`/`for`/`while` condition; an enum value is never coerced to boolean — it is compared (`level !== SupportLevel.NONE`).
+- No `!!value` inside an `if`/`for`/`while` condition; an enum value is never coerced to boolean -- it is compared (`level !== SupportLevel.NONE`).
 
 ## Classes
 
@@ -63,7 +63,7 @@ Grep the changed files for these tokens; every hit needs a stated justification 
 - Getters are pure; no pass-through getter/setter pair over a field; no `Object.defineProperty` accessors.
 - Computed member names only for symbols; `[Symbol.iterator]()` only on logically iterable classes.
 - Module-local function over private static method; no `this` in a static context; statics called on the declaring class.
-- No arrow-function property to bind `this` — the call site wraps the method in an arrow function. Exception: an event handler that must later be removed. `.bind(this)` when installing a handler is always a finding; it cannot be removed.
+- No arrow-function property to bind `this` -- the call site wraps the method in an arrow function. Exception: an event handler that must later be removed. `.bind(this)` when installing a handler is always a finding; it cannot be removed.
 - Private helpers live as non-exported module functions. No prototype manipulation, mixins, or modification of built-ins or the global object.
 
 ## Functions
@@ -109,11 +109,11 @@ Grep the changed files for these tokens; every hit needs a stated justification 
 
 ## Naming
 
-| Style | Used for |
-| --- | --- |
-| `UpperCamelCase` | class, interface, type alias, enum, type parameter |
+| Style            | Used for                                                      |
+| ---------------- | ------------------------------------------------------------- |
+| `UpperCamelCase` | class, interface, type alias, enum, type parameter            |
 | `lowerCamelCase` | variable, parameter, function, method, property, module alias |
-| `CONSTANT_CASE` | module-level constant, `static readonly` field, enum member |
+| `CONSTANT_CASE`  | module-level constant, `static readonly` field, enum member   |
 
 - Names are descriptive to a new reader; no ambiguous or project-private abbreviations, no dropped letters; short names only in scopes of ten lines or fewer.
 - Acronyms read as words: `loadHttpUrl`, `deviceId`.
@@ -127,7 +127,7 @@ Grep the changed files for these tokens; every hit needs a stated justification 
 - Every top-level export is documented, plus any member whose purpose its name and type do not make obvious; a class comment says how and when to use it.
 - Method descriptions begin with a third-person verb phrase: `Registers the plugin ...`.
 - `@param`/`@return` only when they add information beyond the name and type; parameter properties documented with `@param` on the constructor; no types repeated in JSDoc; no `@private`/`@override`/`@implements`/`@enum` where the keyword is used.
-- A literal argument whose meaning is unclear carries a parameter-name comment (`/* delayMs= */ 5000`) — or the API should take an options object.
+- A literal argument whose meaning is unclear carries a parameter-name comment (`/* delayMs= */ 5000`) -- or the API should take an options object.
 - Deprecations carry `@deprecated` with directions for fixing call sites.
 - No decorators; the codebase defines none and `tsconfig.json` enables none. *(project)*
 
