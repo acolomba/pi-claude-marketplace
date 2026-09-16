@@ -11,10 +11,7 @@ import path from "node:path";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
-import {
-  writeBatchedConfigEntries,
-  writePluginConfigEntry,
-} from "../../persistence/config-write-back.ts";
+import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -378,83 +375,60 @@ async function hydrateInstalledHooks(args: {
 }
 
 /**
- * The declarations an ORCHESTRATED install owes its own config entry.
+ * The one declaration an ORCHESTRATED install owes its own config entry.
  *
  * WR-09 forbids an orchestrated caller the full write-back -- reconcile derives
  * desired state FROM the merged config, so rewriting it would clobber a
- * per-machine override. It does NOT forbid declaring the keys this install
- * itself created, and two of them must be declared or the very next
- * `resources_discover` undoes the install:
+ * per-machine override. It does NOT forbid the DFEN-04 / D-102-04 disabled
+ * stamp, and that stamp must be declared or the very next `resources_discover`
+ * undoes the install: without it the record lands disabled while the entry the
+ * reconcile planner reads says nothing about enablement; the next reload reads
+ * absent-as-enabled (D-04), finds the record disabled, and plans an enable,
+ * re-enabling a plugin whose author declared it off.
  *
- *   RESV-01's reload clause. `runInstallCascade` runs on EVERY install, so an
- *   orchestrated one records its dependencies exactly as a standalone one does.
- *   A recorded key that no config file declares is what `buildUninstallBucket`
- *   sweeps, so an undeclared dependency is uninstalled on the next reload while
- *   its parent stays installed and broken.
+ * D-04-02: the cascade's dependencies are declared nowhere. The desired-state
+ * config names only the plugins the user asked for by name; each dependency's
+ * record carries `provenance: "dependency"`, and D-04-05's exemption in
+ * `buildUninstallBucket` is what keeps that record out of the uninstall sweep
+ * on the next reload.
  *
- *   DFEN-04 / D-102-04's disabled stamp. Without it the record lands disabled
- *   while the entry the reconcile planner reads says nothing about enablement;
- *   the next reload reads absent-as-enabled (D-04), finds the record disabled,
- *   and plans an enable, re-enabling a plugin whose author declared it off.
+ * The stamp addresses `targetConfigPath` -- which for reconcile is the file the
+ * plugin's own declaration lives in (see `InstallPluginOptions.local`) -- and
+ * is spread over the existing entry, so no forward-compat key (D-09) and no
+ * sibling entry is disturbed.
  *
- * Both ride ONE batched patch and therefore one atomic save, addressing
- * `targetConfigPath` -- which for reconcile is the file the parent's own
- * declaration lives in (see `InstallPluginOptions.local`), so D-03-06 holds
- * without a per-member target. Each patch is spread over the existing entry, so
- * no forward-compat key (D-09) and no sibling entry is disturbed. A dependency's
- * patch is `{}`: the entry shape carries no install-time field, and D-04 keeps
- * the "enabled" default at consume time.
+ * The stamp's condition is the landed-disabled verdict and nothing else. That
+ * verdict already required the caller's opt-in (so `import` never reaches
+ * here, D-102-03) and an ABSENT `enabled` key (so a value the user wrote is
+ * never rewritten, D-102-04); re-testing either would be a second, drift-prone
+ * copy of the same gate.
  *
- * The disabled stamp's condition is the landed-disabled verdict and nothing
- * else. That verdict already required the caller's opt-in (so `import` never
- * reaches here, D-102-03) and an ABSENT `enabled` key (so a value the user
- * wrote is never rewritten, D-102-04); re-testing either would be a second,
- * drift-prone copy of the same gate.
+ * Nothing to declare writes nothing at all, which is the shape a plugin
+ * installed enabled produces -- RECON-05 byte stability.
  *
- * Nothing to declare writes nothing at all, which is the shape a plugin with no
- * dependencies installed enabled produces -- RECON-05 byte stability.
- *
- * The stamp ALONE goes through `writePluginConfigEntry`, SPLIT-02 / D-102-09's
- * sole sanctioned single-entry writer. It is not interchangeable with the
- * batched one here: the batched writer always emits a `marketplaces` key, so
- * routing the stamp through it would add `"marketplaces": {}` to a file that
- * declares none. The batched writer earns its place only when several keys must
- * land in ONE atomic save, which is the cascade case.
+ * The stamp goes through `writePluginConfigEntry`, SPLIT-02 / D-102-09's sole
+ * sanctioned single-entry writer. The batched writer is not interchangeable
+ * here: it always emits a `marketplaces` key, so routing the stamp through it
+ * would add `"marketplaces": {}` to a file that declares none.
  */
 async function writeOrchestratedDeclarations(args: {
-  readonly current: Parameters<typeof writeBatchedConfigEntries>[0];
+  readonly current: Parameters<typeof writePluginConfigEntry>[0];
   readonly targetConfigPath: string;
   readonly scopeRoot: string;
   readonly plugin: string;
   readonly marketplace: string;
-  readonly rootKey: string;
-  readonly dependencyKeys: readonly string[];
   readonly landedDisabled: boolean;
 }): Promise<void> {
-  if (args.dependencyKeys.length === 0) {
-    if (args.landedDisabled) {
-      await writePluginConfigEntry(
-        args.current,
-        args.targetConfigPath,
-        args.scopeRoot,
-        args.plugin,
-        args.marketplace,
-        { enabled: false },
-      );
-    }
-
-    return;
+  if (args.landedDisabled) {
+    await writePluginConfigEntry(
+      args.current,
+      args.targetConfigPath,
+      args.scopeRoot,
+      args.plugin,
+      args.marketplace,
+      { enabled: false },
+    );
   }
-
-  await writeBatchedConfigEntries(args.current, args.targetConfigPath, args.scopeRoot, {
-    plugins: {
-      ...Object.fromEntries(args.dependencyKeys.map((key) => [key, {}])),
-      // The requesting plugin's key can appear in both records, and its own
-      // patch wins because it is spread LAST -- the same precedence the
-      // standalone arm's `pluginPatch` has over `dependencyPluginPatches`.
-      ...(args.landedDisabled && { [args.rootKey]: { enabled: false } }),
-    },
-  });
 }
 
 /**
@@ -1333,6 +1307,9 @@ async function installPluginWithTransaction(
           scopeRoot: locations.scopeRoot,
           // DFEN-04: the plugin key alone unless the install actually landed
           // disabled, in which case the declaration carries it through.
+          // D-04-02: the cascade's dependencies are declared nowhere -- each
+          // record carries `provenance: "dependency"`, which D-04-05's
+          // reconcile exemption reads on the next reload.
           //
           // S4 (PR #51, CONTEXT.md S4): the helper's `adoptedSource === undefined`
           // arms collapse -- benign (already declared) and dangerous (no string
@@ -1341,18 +1318,6 @@ async function installPluginWithTransaction(
           // pending a widen of the helper's return that would route it to a
           // (failed) row.
           pluginPatch: { ...(disabledInstall.landed && { enabled: false }) },
-          // RESV-01's reload clause: declare every member the cascade newly
-          // installed, in the SAME batched patch and therefore the same
-          // physical file. A record with no declaration is exactly what
-          // `buildUninstallBucket` sweeps on the next `resources_discover`, so
-          // an undeclared dependency would be uninstalled by the very next
-          // reload. D-03-05 / D-03-06 follow from the ONE selection above: the
-          // members ride the requesting plugin's own write target, not a
-          // per-member one. The requesting plugin's key appears in both records
-          // and its own patch wins, because this one is spread UNDER it.
-          dependencyPluginPatches: Object.fromEntries(
-            installed.members.map((member) => [member.key, {}]),
-          ),
         });
       } else {
         await writeOrchestratedDeclarations({
@@ -1361,10 +1326,6 @@ async function installPluginWithTransaction(
           scopeRoot: locations.scopeRoot,
           plugin,
           marketplace,
-          rootKey,
-          dependencyKeys: installed.members
-            .map((member) => member.key)
-            .filter((key) => key !== rootKey),
           landedDisabled: disabledInstall.landed,
         });
       }

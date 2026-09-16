@@ -3486,15 +3486,15 @@ test("CMP-3 / PI-16: project-target install falls back to user-scope marketplace
   });
 });
 
-test("RESV-01 / WR-09: an orchestrated install declares its cascade dependencies, so the next reload keeps them", async () => {
+test("RESV-01 / D-04-04: an orchestrated install records its cascade dependency undeclared, and the next reload keeps it", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-orchestrated-"));
     try {
       // arrange: the reconcile shape. The user declares the parent only --
       // `hello@mp` -- and the cascade installs `some-other-plugin@mp` with it.
       // `runInstallCascade` runs on EVERY install, orchestrated or not, so the
-      // record is written either way; only the DECLARATION rode the standalone
-      // arm.
+      // record is written either way, and D-04-02 declares the dependency on
+      // neither arm.
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -3543,9 +3543,10 @@ test("RESV-01 / WR-09: an orchestrated install declares its cascade dependencies
       // act
       await reconcilePass();
 
-      // assert: both records exist, and the dependency is DECLARED. A recorded
-      // key no config file declares is exactly what `buildUninstallBucket`
-      // sweeps.
+      // assert: both records exist, and the dependency is NOT declared
+      // (D-04-02): the config names the user's own entry and nothing else. The
+      // dependency's record carries `provenance: "dependency"`, which is what
+      // keeps it out of `buildUninstallBucket`'s sweep (D-04-05).
       const installed = await loadState(locations.extensionRoot);
       assert.deepEqual(Object.keys(installed.marketplaces["mp"]?.plugins ?? {}).sort(), [
         "hello",
@@ -3554,11 +3555,10 @@ test("RESV-01 / WR-09: an orchestrated install declares its cascade dependencies
       const declared = await loadConfig(locations.configJsonPath);
       assert.equal(declared.status, "valid");
       if (declared.status === "valid") {
-        assert.deepEqual(declared.config.plugins?.["some-other-plugin@mp"], {});
         assert.deepEqual(
-          declared.config.plugins?.["hello@mp"],
-          { enabled: true },
-          "the user's own entry is untouched",
+          declared.config.plugins,
+          { "hello@mp": { enabled: true } },
+          "the user's own entry is untouched and no dependency key joins it",
         );
       }
 
@@ -3566,9 +3566,9 @@ test("RESV-01 / WR-09: an orchestrated install declares its cascade dependencies
       const { merged } = await loadMergedScopeConfig(locations);
       const planned = planReconcile(merged, installed, "project");
 
-      // assert: nothing is planned for removal. Without the declaration the
-      // planner tears the dependency down while its parent stays installed and
-      // broken.
+      // assert: nothing is planned for removal (CR-01). A planner that read
+      // the config alone would tear the dependency down while its parent stays
+      // installed and broken.
       assert.deepEqual(planned.pluginsToUninstall, []);
       await reconcilePass();
       const converged = await loadState(locations.extensionRoot);
@@ -3583,7 +3583,7 @@ test("RESV-01 / WR-09: an orchestrated install declares its cascade dependencies
   });
 });
 
-test("RESV-01 / DFEN-04: an orchestrated cascade whose root lands disabled declares the dependency and the disabled root in one write", async () => {
+test("DFEN-04 / D-04-02: an orchestrated cascade whose root lands disabled declares the disabled root and not the dependency", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-orchestrated-disabled-"));
     try {
@@ -3631,7 +3631,6 @@ test("RESV-01 / DFEN-04: an orchestrated cascade whose root lands disabled decla
       assert.strictEqual(declared.status, "valid");
       if (declared.status === "valid") {
         assert.deepStrictEqual(declared.config.plugins, {
-          "some-other-plugin@mp": {},
           "hello@mp": { enabled: false },
         });
       }
@@ -4895,12 +4894,13 @@ test("WB-01: standalone install writes the plugin entry to claude-plugins.json",
   });
 });
 
-test("RESV-01 / D-03-06: a cascade dependency is declared in the parent's own file", async () => {
+test("D-03-05 / D-04-02: a cascade dependency lands in the parent's scope and stays out of the parent's config file", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-declare-"));
     try {
       // arrange
       const locations = locationsFor("project", cwd);
+      const userLocations = locationsFor("user", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -4921,13 +4921,34 @@ test("RESV-01 / D-03-06: a cascade dependency is declared in the parent's own fi
         plugin: "hello",
       });
 
-      // assert: the whole written document, so a stray key or a second file
-      // would show up here. Both declarations live in ONE file, which is what
-      // keeps `buildUninstallBucket` from planning the dependency's removal on
-      // the next `resources_discover`.
+      // assert: D-03-05 -- the dependency's record lives in the requesting
+      // plugin's scope, as a dependency, and in no other scope.
+      const projectAfter = await loadState(locations.extensionRoot);
+      const userAfter = await loadState(userLocations.extensionRoot);
+      assert.deepStrictEqual(
+        {
+          projectScope: projectAfter.marketplaces["mp"]?.scope,
+          projectPlugins: Object.keys(projectAfter.marketplaces["mp"]?.plugins ?? {}).sort(),
+          dependencyProvenance:
+            projectAfter.marketplaces["mp"]?.plugins["some-other-plugin"]?.provenance,
+          userPlugins: Object.keys(userAfter.marketplaces["mp"]?.plugins ?? {}),
+        },
+        {
+          projectScope: "project",
+          projectPlugins: ["hello", "some-other-plugin"],
+          dependencyProvenance: "dependency",
+          userPlugins: [],
+        },
+      );
+
+      // assert: D-04-02 -- the whole written document, so a stray key or a
+      // second file would show up here. The config names the requesting
+      // plugin alone; the dependency's record, not a declaration, is what
+      // keeps `buildUninstallBucket` from planning its removal on the next
+      // `resources_discover`.
       assert.equal(
         await readFile(locations.configJsonPath, "utf8"),
-        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "some-other-plugin@mp": {},\n    "hello@mp": {}\n  }\n}\n',
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "hello@mp": {}\n  }\n}\n',
       );
       await assert.rejects(stat(locations.configLocalJsonPath), /ENOENT/);
     } finally {
@@ -5114,8 +5135,8 @@ test("RESV-01 / D-01-32: a dependency declared only in the plugin's own manifest
         plugin: "hello",
       });
 
-      // assert: both plugins recorded, and both keys declared in the parent's
-      // own config file -- whole values, never one filtered row.
+      // assert: both plugins recorded, and only the parent's key declared in
+      // its own config file (D-04-02) -- whole values, never one filtered row.
       const after = await loadState(locations.extensionRoot);
       assert.deepStrictEqual(Object.keys(after.marketplaces["mp"]?.plugins ?? {}).sort(), [
         "hello",
@@ -5123,7 +5144,7 @@ test("RESV-01 / D-01-32: a dependency declared only in the plugin's own manifest
       ]);
       assert.equal(
         await readFile(locations.configJsonPath, "utf8"),
-        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "some-other-plugin@mp": {},\n    "hello@mp": {}\n  }\n}\n',
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "hello@mp": {}\n  }\n}\n',
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
