@@ -83,6 +83,12 @@ const contractsPath = "scripts/check-unused-type-members.contracts.json";
 const fixtureTsconfig = `${JSON.stringify(
   {
     compilerOptions: {
+      // `exactOptionalPropertyTypes` is what the analysed tree compiles under,
+      // and the refinement prover reads slot types straight off the checker, so
+      // an optional slot pinned `never` reads as `never` here rather than
+      // collapsing to `undefined`. A fixture compiled without it would prove the
+      // engine under a weaker configuration than the entries it validates.
+      exactOptionalPropertyTypes: true,
       module: "NodeNext",
       moduleResolution: "NodeNext",
       noEmit: true,
@@ -1383,6 +1389,130 @@ test("an origin building a slot no arm of the contextual union declares is refus
       message:
         `Invalid contract: ${casesPath}:14:3 origin ${casesPath}:19:14 ` +
         "does not build Spare.payload",
+    },
+  );
+});
+
+// Absence markers: an operand writing `never` into a slot so the compiler
+// admits no value there at all. Line 10 holds the intersection at column 12 and
+// its three markers at columns 23, 38 and 57; line 16 the marker over a slot the
+// rest already declares `never`, at column 23; line 22 the marker for a key the
+// rest does not declare, also at column 23.
+//
+// `mode` is the one wider slot that is itself a union, which is the only shape a
+// `never` marker could be proved against before this: a set of two is strictly
+// larger than a set of one. `cause` and `toVersion` are the ordinary shapes.
+const absenceMarkerCases = `export interface Failed {
+  cause?: Error;
+  toVersion?: string;
+  mode?: "direct" | "phased";
+  gone?: never;
+  name: string;
+}
+
+export function direct(
+  outcome: Failed & { cause?: never; toVersion?: never; mode?: never },
+): string {
+  return outcome.name;
+}
+
+export function alreadyGone(
+  outcome: Failed & { gone?: never },
+): string {
+  return outcome.name;
+}
+
+export function addsAbsence(
+  outcome: Failed & { extra?: never },
+): string {
+  return outcome.name;
+}
+`;
+
+const absenceMarkerContract = {
+  id: `${casesPath}:10:23`,
+  owner: "direct.outcome",
+  key: "cause",
+  category: "type-refinement",
+  purpose: "Keeps a cause off a row this outcome is never built with.",
+  refines: `${casesPath}:10:12`,
+};
+
+test("an absence marker narrows the slot the rest of the intersection declares", async (t) => {
+  // arrange
+  const report = await analyzeWith(
+    t,
+    absenceMarkerCases,
+    documentWith(
+      absenceMarkerContract,
+      {
+        ...absenceMarkerContract,
+        id: `${casesPath}:10:38`,
+        key: "toVersion",
+        purpose: "Keeps a version arrow off a row this outcome is never built with.",
+      },
+      {
+        ...absenceMarkerContract,
+        id: `${casesPath}:10:57`,
+        key: "mode",
+        purpose: "Keeps a mode off a row this outcome is never built with.",
+      },
+    ),
+  );
+
+  // act & assert
+  for (const key of ["cause", "toVersion", "mode"]) {
+    assert.strictEqual(
+      memberFor(report, "direct.outcome", key).status,
+      "explicit-contract",
+      `direct.outcome.${key}`,
+    );
+  }
+
+  assert.deepStrictEqual(memberFor(report, "direct.outcome", "cause").reasons, [
+    "type-refinement: Keeps a cause off a row this outcome is never built with. " +
+      `(intersection ${casesPath}:10:12 narrows cause)`,
+  ]);
+});
+
+test("an absence marker over a slot the rest already closes narrows nothing", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      absenceMarkerCases,
+      documentWith({
+        ...absenceMarkerContract,
+        id: `${casesPath}:16:23`,
+        owner: "alreadyGone.outcome",
+        key: "gone",
+        refines: `${casesPath}:16:12`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:16:23 refines ${casesPath}:16:12 does not narrow gone`,
+    },
+  );
+});
+
+test("an absence marker for a slot the rest never declares is still an addition", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      absenceMarkerCases,
+      documentWith({
+        ...absenceMarkerContract,
+        id: `${casesPath}:22:23`,
+        owner: "addsAbsence.outcome",
+        key: "extra",
+        refines: `${casesPath}:22:12`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:22:23 refines ${casesPath}:22:12 adds extra, which the rest of the intersection does not declare`,
     },
   );
 });
