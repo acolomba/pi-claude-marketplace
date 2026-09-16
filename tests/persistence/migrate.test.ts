@@ -679,3 +679,180 @@ test("retains in-memory and disk state while warning on persistence failure", as
   assert.strictEqual(blockerBytes, "occupied");
   assert.deepStrictEqual(directoryEntries, ["blocker"]);
 });
+
+test("D-04-03: fills an absent provenance with explicit before validation", () => {
+  // arrange
+  const extensionRoot = path.join(path.sep, "extension-root");
+  const legacyState = {
+    schemaVersion: 2,
+    marketplaces: {
+      alpha: {
+        name: "alpha",
+        manifestPath: "/custom/alpha/marketplace.json",
+        marketplaceRoot: "/custom/alpha",
+        plugins: {
+          "plugin-one": {
+            version: "1.0.0",
+            enabled: true,
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+          },
+        },
+      },
+    },
+  };
+  const expectedMigration = {
+    marketplaces: {
+      alpha: {
+        name: "alpha",
+        manifestPath: "/custom/alpha/marketplace.json",
+        marketplaceRoot: "/custom/alpha",
+        plugins: {
+          "plugin-one": {
+            version: "1.0.0",
+            enabled: true,
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            provenance: "explicit",
+          },
+        },
+      },
+    },
+    mutated: true,
+  } satisfies MigrationResult;
+
+  // act
+  const migration = migrateLegacyMarketplaceRecords(legacyState, extensionRoot, true);
+
+  // assert
+  assert.deepStrictEqual(migration, expectedMigration);
+  assert.deepStrictEqual(legacyState, {
+    schemaVersion: 2,
+    marketplaces: expectedMigration.marketplaces,
+  });
+});
+
+test("D-04-03: leaves a present provenance untouched, including one the schema rejects", () => {
+  // arrange
+  const extensionRoot = path.join(path.sep, "extension-root");
+  const legacyState = {
+    schemaVersion: 3,
+    marketplaces: {
+      alpha: {
+        name: "alpha",
+        manifestPath: "/custom/alpha/marketplace.json",
+        marketplaceRoot: "/custom/alpha",
+        plugins: {
+          "plugin-one": {
+            version: "1.0.0",
+            enabled: true,
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            provenance: "dependency",
+          },
+          "plugin-two": {
+            version: "1.0.0",
+            enabled: true,
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            provenance: "not-a-mode",
+          },
+        },
+      },
+    },
+  };
+  const expectedMigration = {
+    marketplaces: {
+      alpha: {
+        name: "alpha",
+        manifestPath: "/custom/alpha/marketplace.json",
+        marketplaceRoot: "/custom/alpha",
+        plugins: {
+          "plugin-one": {
+            version: "1.0.0",
+            enabled: true,
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            provenance: "dependency",
+          },
+          "plugin-two": {
+            version: "1.0.0",
+            enabled: true,
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            provenance: "not-a-mode",
+          },
+        },
+      },
+    },
+    mutated: false,
+  } satisfies MigrationResult;
+
+  // act
+  const migration = migrateLegacyMarketplaceRecords(legacyState, extensionRoot, true);
+
+  // assert
+  assert.deepStrictEqual(migration, expectedMigration);
+  assert.deepStrictEqual(legacyState, {
+    schemaVersion: 3,
+    marketplaces: expectedMigration.marketplaces,
+  });
+});
+
+test("D-04-03: fills every provenance-less record across marketplaces independently", () => {
+  // arrange
+  const extensionRoot = path.join(path.sep, "extension-root");
+  const record = (): Record<string, unknown> => ({
+    version: "1.0.0",
+    enabled: true,
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+  });
+  const legacyState = {
+    schemaVersion: 2,
+    marketplaces: {
+      alpha: {
+        name: "alpha",
+        manifestPath: "/custom/alpha/marketplace.json",
+        marketplaceRoot: "/custom/alpha",
+        plugins: {
+          "plugin-one": record(),
+          "plugin-two": { ...record(), provenance: "dependency" },
+        },
+      },
+      beta: {
+        name: "beta",
+        manifestPath: "/custom/beta/marketplace.json",
+        marketplaceRoot: "/custom/beta",
+        plugins: {
+          "plugin-three": record(),
+        },
+      },
+    },
+  };
+  const expectedMigration = {
+    marketplaces: {
+      alpha: {
+        name: "alpha",
+        manifestPath: "/custom/alpha/marketplace.json",
+        marketplaceRoot: "/custom/alpha",
+        plugins: {
+          "plugin-one": { ...record(), provenance: "explicit" },
+          "plugin-two": { ...record(), provenance: "dependency" },
+        },
+      },
+      beta: {
+        name: "beta",
+        manifestPath: "/custom/beta/marketplace.json",
+        marketplaceRoot: "/custom/beta",
+        plugins: {
+          "plugin-three": { ...record(), provenance: "explicit" },
+        },
+      },
+    },
+    mutated: true,
+  } satisfies MigrationResult;
+
+  // act
+  const migration = migrateLegacyMarketplaceRecords(legacyState, extensionRoot, true);
+
+  // assert
+  assert.deepStrictEqual(migration, expectedMigration);
+  assert.deepStrictEqual(legacyState, {
+    schemaVersion: 2,
+    marketplaces: expectedMigration.marketplaces,
+  });
+});
