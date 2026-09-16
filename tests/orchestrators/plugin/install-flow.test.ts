@@ -568,6 +568,8 @@ async function seedSiblingPlugins(
       entryDefaultEnabled?: boolean;
       /** RESV-01: hooks on a DEPENDENCY, whose routing is the cascade's to hydrate. */
       hooksJson?: object;
+      /** D-64-06: unsupported kinds on a DEPENDENCY, so its record is partially installed. */
+      experimental?: object;
     }[];
   },
 ): Promise<Record<string, unknown>[]> {
@@ -577,7 +579,11 @@ async function seedSiblingPlugins(
     await mkdir(path.join(siblingRoot, ".claude-plugin"), { recursive: true });
     await writeFile(
       path.join(siblingRoot, ".claude-plugin", "plugin.json"),
-      JSON.stringify({ name: sibling.name, version: "0.0.1" }),
+      JSON.stringify({
+        name: sibling.name,
+        version: "0.0.1",
+        ...(sibling.experimental !== undefined && { experimental: sibling.experimental }),
+      }),
     );
     const siblingSkillDir = path.join(siblingRoot, "skills", "tool");
     await mkdir(siblingSkillDir, { recursive: true });
@@ -698,6 +704,8 @@ async function seedPathMarketplaceWithPlugin(opts: {
     entryDefaultEnabled?: boolean;
     /** RESV-01: hooks on a DEPENDENCY, whose routing is the cascade's to hydrate. */
     hooksJson?: object;
+    /** D-64-06: unsupported kinds on a DEPENDENCY, so its record is partially installed. */
+    experimental?: object;
   }[];
 }): Promise<SeededPlugin> {
   const { cwd, marketplaceRoot, marketplaceName, pluginName } = opts;
@@ -5232,6 +5240,13 @@ test("D-04-01: a direct install stays a direct install when a later plugin decla
 async function seedDependencyInstalled(
   cwd: string,
   installPlugin: InstallOperation,
+  /**
+   * D-04-07: seed the dependency with unsupported kinds and install the
+   * cascade under `--partial`, so its record is partially installed
+   * (`compatibility.installable: false`) -- the record whose promotion needs
+   * the same consent.
+   */
+  shape: { readonly partialDependency?: boolean } = {},
 ): Promise<{
   readonly before: ExtensionState;
   readonly ctx: NotificationContext;
@@ -5239,6 +5254,7 @@ async function seedDependencyInstalled(
   readonly notifications: NotifyRecord[];
 }> {
   const locations = locationsFor("project", cwd);
+  const partial = shape.partialDependency === true;
   await seedPathMarketplaceWithPlugin({
     cwd,
     marketplaceRoot: path.join(cwd, "mp-src"),
@@ -5246,15 +5262,34 @@ async function seedDependencyInstalled(
     pluginName: "hello",
     skills: [{ sourceName: "tool" }],
     declareDependencies: true,
-    siblingPlugins: [{ name: "some-other-plugin" }],
+    siblingPlugins: [
+      {
+        name: "some-other-plugin",
+        ...(partial && { experimental: { themes: "./themes" } }),
+      },
+    ],
   });
   const { ctx, pi, notifications } = makeCtx();
-  await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+  await installPlugin({
+    ctx,
+    pi,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "hello",
+    ...(partial && { partial: true }),
+  });
   const before = await loadState(locations.extensionRoot);
+  const dependency = before.marketplaces["mp"]?.plugins["some-other-plugin"];
   assert.equal(
-    before.marketplaces["mp"]?.plugins["some-other-plugin"]?.provenance,
+    dependency?.provenance,
     "dependency",
     "the cascade recorded the dependency as such, so the promotion has something to promote",
+  );
+  assert.equal(
+    dependency?.compatibility.installable,
+    !partial,
+    "the dependency's record carries the availability the case asked for",
   );
   notifications.length = 0;
   return { before, ctx, pi, notifications };
@@ -5393,6 +5428,143 @@ test("D-04-07: an orchestrated promotion flips the record, writes no declaration
           },
         },
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * D-04-07: the refusal a promotion falls back to, byte for byte, with neither
+ * document written -- the already-installed refusal the cascade raises for a
+ * plugin it finds recorded.
+ */
+async function assertPromotionRefused(args: {
+  readonly cwd: string;
+  readonly installPlugin: InstallOperation;
+  readonly seeded: {
+    readonly ctx: NotificationContext;
+    readonly pi: ToolInventory;
+    readonly notifications: NotifyRecord[];
+  };
+  readonly flags: { readonly pinVersionOverride?: string; readonly partial?: boolean };
+}): Promise<void> {
+  const { cwd, installPlugin, seeded, flags } = args;
+  const locations = locationsFor("project", cwd);
+  const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+  const configBefore = await readFile(locations.configJsonPath, "utf8");
+
+  const outcome = await installPlugin({
+    ctx: seeded.ctx,
+    pi: seeded.pi,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "some-other-plugin",
+    ...flags,
+  });
+
+  assert.deepStrictEqual(
+    {
+      notifications: seeded.notifications,
+      status: outcome.status,
+      state: await readFile(locations.stateJsonPath, "utf8"),
+      config: await readFile(locations.configJsonPath, "utf8"),
+    },
+    {
+      notifications: [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ some-other-plugin (failed) {already installed}\n" +
+            '    cause: Plugin "some-other-plugin" is already installed in marketplace "mp".',
+          severity: "error",
+        },
+      ],
+      status: "failed",
+      state: stateBefore,
+      config: configBefore,
+    },
+  );
+}
+
+test("D-04-07: a version pin refuses the promotion and the already-installed refusal stands", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-pin-"));
+    try {
+      // arrange
+      const seeded = await seedDependencyInstalled(cwd, installPlugin);
+
+      // act & assert: the pin asks for a version no promotion can deliver, so
+      // the record is left a dependency at its recorded version and the
+      // refusal names the remedy's precondition -- the plugin is installed.
+      await assertPromotionRefused({
+        cwd,
+        installPlugin,
+        seeded,
+        flags: { pinVersionOverride: "2.0.0" },
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-07: promoting a partially installed dependency by name refuses without --partial", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-partial-refused-"));
+    try {
+      // arrange
+      const seeded = await seedDependencyInstalled(cwd, installPlugin, {
+        partialDependency: true,
+      });
+
+      // act & assert
+      await assertPromotionRefused({ cwd, installPlugin, seeded, flags: {} });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-07: --partial is the consent that promotes a partially installed dependency by name", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-partial-consented-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { before, ctx, pi, notifications } = await seedDependencyInstalled(cwd, installPlugin, {
+        partialDependency: true,
+      });
+      const dependencyBefore = before.marketplaces["mp"]?.plugins["some-other-plugin"];
+      assert.ok(dependencyBefore !== undefined);
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+        partial: true,
+      });
+
+      // assert: the same one-field flip the fully-supported record gets, and
+      // the same row -- the record's degraded shape is what the flag accepted.
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["some-other-plugin"],
+        { ...dependencyBefore, provenance: "explicit" },
+      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ● some-other-plugin v0.0.1 (installed) {already installed, dependency promoted}",
+        },
+      ]);
+      assert.equal(outcome.status, "installed");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

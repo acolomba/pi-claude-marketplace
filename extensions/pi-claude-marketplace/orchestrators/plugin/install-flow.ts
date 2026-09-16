@@ -886,7 +886,7 @@ interface PromotionArgs {
 async function promoteDependencyRecord(args: PromotionArgs): Promise<PromotionOutcome | undefined> {
   const { marketplace, plugin } = args.opts;
   const record = args.state.marketplaces[marketplace]?.plugins[plugin];
-  if (record?.provenance !== "dependency") {
+  if (record?.provenance !== "dependency" || refusesPromotion(args.opts, record)) {
     return undefined;
   }
 
@@ -917,6 +917,24 @@ async function promoteDependencyRecord(args: PromotionArgs): Promise<PromotionOu
       },
     ],
   };
+}
+
+/**
+ * D-04-07: the install flags a promotion answers. A version pin asks for a
+ * version the promotion cannot deliver -- no ledger resolves one, and `update`
+ * and `reinstall` are the verbs that act on versions -- so it refuses, and the
+ * already-installed refusal the cascade then raises stands. `--partial` is the
+ * consent gate for a record that is only partially installed: promoting it by
+ * name means accepting its degraded shape, as any other partial install does,
+ * so without the flag the same refusal stands; on a fully-supported record the
+ * flag changes nothing. `--map-model` states how generated agents are written
+ * and a promotion generates none, so it has no bearing either way.
+ */
+function refusesPromotion(opts: InstallPluginOptions, record: PluginInstallRecord): boolean {
+  return (
+    opts.pinVersionOverride !== undefined ||
+    (!record.compatibility.installable && opts.partial !== true)
+  );
 }
 
 /**

@@ -117,6 +117,12 @@ The configuration file names only the plugins you asked for by name. This extens
 
 The same rule protects the dependency's marketplace. A dependency can come from a marketplace you added at user scope while the plugin that needs it installs at project scope. The project configuration then never names that marketplace, and this extension does not add it there. A reload keeps that marketplace record while a dependency is recorded under it. Any other plugin under it that the configuration does not name is still removed, as under any other marketplace.
 
+## Installing a dependency by name
+
+A version pin does not promote. The command refuses with `{already installed}`, and the record stays as it is. To move a dependency to another version, run `update` or `reinstall`.
+
+A dependency that was installed partially, with some of its component kinds unsupported, needs `--partial` again. This is the same consent every partial install needs. Without the flag the command refuses with `{already installed}`. With it the record changes only its provenance and keeps its partial shape. On a fully supported dependency `--partial` changes nothing. `--map-model` has no effect on this command: it changes how generated agents are written, and this command generates none.
+
 ## Why a dependency can fail
 
 Each cause shows as a reason in braces on the failing dependency's own row. This table names every reason the cascade can show.
