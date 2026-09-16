@@ -5,11 +5,11 @@ milestone_name: transitive-dependencies
 current_phase: 5
 current_phase_name: Prune on uninstall
 status: planning
-stopped_at: Phase 04 complete, ready to plan Phase 5
-last_updated: "2026-09-16T19:07:18.724Z"
+stopped_at: Phase 5 context gathered
+last_updated: "2026-09-16T20:01:54.442Z"
 last_activity: 2026-09-16
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: 06bb7097f5a72e64f9ceb042bbf3ceaae060e63c
+state_head: 189afc3d70f9d24e4a63fe08665a70fb5d21340a
 progress:
   total_phases: 5
   completed_phases: 4
@@ -782,9 +782,9 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 04 complete, ready to plan Phase 5
+**Stopped at:** Phase 5 context gathered
 
-**Resume file:** None — the mid-discussion `.continue-here.md` and
+**Resume file:** .planning/phases/05-prune-on-uninstall/05-CONTEXT.md
 `HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
 content was folded into `04-CONTEXT.md`: the supersession warning and the
 ordering constraint into `<decisions>`, and the operational anti-patterns
@@ -794,7 +794,7 @@ carried-notes block under `<specifics>`.
 
 **Read beside it:** `.planning/phases/04-install-provenance/04-CONTEXT.md`
 
-Last session: 2026-09-15
+Last session: 2026-09-16T20:01:54.268Z
 resumed a paused Phase 4 discussion, answered its two open questions (the
 config-write reversal lands entirely in Phase 4 in a fixed order; reconcile
 keeps sweeping genuine orphans with one exemption), wrote `04-CONTEXT.md` and
