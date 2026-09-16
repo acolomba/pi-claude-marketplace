@@ -76,9 +76,9 @@ New scope. Consumes PROV.
 
 - [ ] **PRUNE-01**: `uninstall --prune` also removes dependency-installed
   plugins that no remaining installed plugin declares.
-- [ ] **PRUNE-02**: `--prune` never removes a plugin the user installed
+- [x] **PRUNE-02**: `--prune` never removes a plugin the user installed
   directly.
-- [ ] **PRUNE-03**: `--prune` never removes a dependency that another installed
+- [x] **PRUNE-03**: `--prune` never removes a dependency that another installed
   plugin still declares.
 - [ ] **PRUNE-04**: The user learns which plugins `--prune` removed.
 - [ ] **PRUNE-05**: `uninstall` refuses to remove a plugin that another
@@ -152,8 +152,8 @@ this milestone.
 | PROV-03 | Phase 4 | Complete |
 | PROV-04 | Phase 4 | Complete |
 | PRUNE-01 | Phase 5 | Pending |
-| PRUNE-02 | Phase 5 | Pending |
-| PRUNE-03 | Phase 5 | Pending |
+| PRUNE-02 | Phase 5 | Complete |
+| PRUNE-03 | Phase 5 | Complete |
 | PRUNE-04 | Phase 5 | Pending |
 | PRUNE-05 | Phase 5 | Pending |
 | DATA-01 | Phase 2 | Complete |
