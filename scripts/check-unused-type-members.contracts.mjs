@@ -802,7 +802,20 @@ function slotAlongPath(type, path, context) {
   return { type: current, optional };
 }
 
+/**
+ * The set of values a type admits, as the constituents it is drawn from.
+ *
+ * `never` admits nothing, so its set is empty -- which is what makes an absence
+ * marker a narrowing: the empty set is strictly smaller than any non-empty one
+ * and is vacuously drawn from it. A marker over a slot the rest of the shape
+ * already closes compares an empty set against an empty set and still narrows
+ * nothing.
+ */
 function constituentsOf(type) {
+  if ((type.flags & ts.TypeFlags.Never) !== 0) {
+    return [];
+  }
+
   return type.isUnion() ? type.types : [type];
 }
 

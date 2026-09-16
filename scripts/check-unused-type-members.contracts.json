@@ -740,6 +740,30 @@
       "purpose": "The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back.",
       "origin": "extensions/pi-claude-marketplace/index.ts:162:11",
       "boundary": "extensions/pi-claude-marketplace/index.ts:160:9"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:195:3",
+      "owner": "DirectRenderableFailedOutcome",
+      "key": "cause",
+      "category": "type-refinement",
+      "purpose": "Closes the cause slot on a failure the caller renders directly, so an outcome carrying a phase-3 cause cannot satisfy this shape.",
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:193:45"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:198:3",
+      "owner": "DirectRenderableFailedOutcome",
+      "key": "toVersion",
+      "category": "type-refinement",
+      "purpose": "Closes the to-version slot on a failure the caller renders directly, so no version arrow can be rendered for an update that never swapped.",
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:193:45"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:327:63",
+      "owner": "StaticPreflightRowOptions",
+      "key": "fromVersion",
+      "category": "type-refinement",
+      "purpose": "Closes the from-version slot on the failed partition, whose plugin is absent from the manifest and has no install record to read a version from.",
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:327:6"
     }
   ]
 }
