@@ -4,13 +4,14 @@ import {
   createNodeInstallPlugin,
   type InstallPluginOptions,
 } from "../../orchestrators/plugin/install-flow.ts";
-import { loadConfig } from "../../persistence/config-io.ts";
+import { loadConfig, type PluginConfigEntry } from "../../persistence/config-io.ts";
 import {
   writeBatchedConfigEntries,
   type BatchedConfigPatch,
 } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import {
+  isRecordedButDisabled,
   loadState as defaultLoadState,
   type ExtensionState,
   type PluginInstallRecord,
@@ -91,6 +92,15 @@ export interface PluginInstalledOutcome {
    * fresh install's is unconditional. Omitted for a fresh install.
    */
   readonly promoted?: true;
+  /**
+   * D-04-07: the promoted record was disabled, so the promotion re-materialized
+   * it and enabled it, as the enable verb does. The post-pass then declares it
+   * with the enable path's own `enabled: true`: the disable verb left
+   * `{ enabled: false }` under the same key, and a bare key merged over that
+   * entry would keep the file asking the next reload to disable what this
+   * import enabled. Omitted otherwise.
+   */
+  readonly reenabled?: true;
 }
 
 export interface PluginSkipOutcome {
@@ -768,6 +778,7 @@ async function installOnePlannedPlugin(
         declaresAgents: outcome.declaresAgents,
         declaresMcp: outcome.declaresMcp,
         ...(promoting !== undefined && { promoted: true }),
+        ...(promoting !== undefined && isRecordedButDisabled(promoting) && { reenabled: true }),
       });
       result.changedResources ||= outcome.resourcesChanged;
       for (const w of outcome.postCommitWarnings ?? []) {
@@ -1051,14 +1062,16 @@ function buildBatchedPatchForScope(
     marketplaces[added.marketplace] = { source: rawSource };
   }
 
-  const plugins: Record<string, Record<string, never>> = {};
+  const plugins: Record<string, Partial<PluginConfigEntry>> = {};
   for (const installed of result.installedPlugins) {
     if (installed.scope !== scopePlan.scope) {
       continue;
     }
 
     const key = `${installed.plugin}@${installed.marketplace}`;
-    plugins[key] = {};
+    // D-04-07: a promotion that enabled a disabled record declares it the way
+    // the enable path does; every other install declares the bare key.
+    plugins[key] = installed.reenabled === true ? { enabled: true } : {};
   }
 
   return {
