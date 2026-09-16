@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { findDependents } from "../../extensions/pi-claude-marketplace/domain/dependency-orphans.ts";
+import {
+  findDependents,
+  pruneOrphans,
+} from "../../extensions/pi-claude-marketplace/domain/dependency-orphans.ts";
 
-import type { DeclarationIndex } from "../../extensions/pi-claude-marketplace/domain/dependency-orphans.ts";
+import type {
+  DeclarationIndex,
+  OrphanCandidate,
+} from "../../extensions/pi-claude-marketplace/domain/dependency-orphans.ts";
 
 /** A synthetic index: holder key -> the keys that holder declares. */
 type IndexShape = Readonly<Record<string, readonly string[]>>;
@@ -76,4 +82,137 @@ test("D-05-14: the input index is not mutated by the walk", () => {
   // assert
   const after = new Map([...index].map(([holder, declared]) => [holder, [...declared]]));
   assert.deepStrictEqual(after, before);
+});
+
+/** `key` as a dependency-provenance candidate. */
+function dependency(key: string): OrphanCandidate {
+  return { key, provenance: "dependency" };
+}
+
+/** `key` as an explicit-provenance candidate. */
+function explicit(key: string): OrphanCandidate {
+  return { key, provenance: "explicit" };
+}
+
+interface OrphanCase {
+  readonly title: string;
+  readonly records: readonly OrphanCandidate[];
+  readonly shape: IndexShape;
+  readonly removed: readonly string[];
+  readonly expected: readonly string[];
+}
+
+const ORPHAN_CASES: readonly OrphanCase[] = [
+  {
+    title: "D-05-01: an empty candidate list prunes nothing",
+    records: [],
+    shape: {},
+    removed: ["x@mp"],
+    expected: [],
+  },
+  {
+    title: "PRUNE-02: a candidate list holding no dependency-provenance record prunes nothing",
+    records: [explicit("e@mp"), explicit("f@mp")],
+    shape: { "e@mp": ["f@mp"] },
+    removed: ["x@mp"],
+    expected: [],
+  },
+  {
+    title: "D-05-01: a single dependency declared only by the removed plugin is pruned",
+    records: [dependency("d@mp")],
+    shape: { "x@mp": ["d@mp"] },
+    removed: ["x@mp"],
+    expected: ["d@mp"],
+  },
+  {
+    title: "D-05-02: a transitive chain is pruned dependents before dependencies",
+    records: [dependency("d2@mp"), dependency("d1@mp")],
+    shape: { "x@mp": ["d1@mp"], "d1@mp": ["d2@mp"] },
+    removed: ["x@mp"],
+    expected: ["d1@mp", "d2@mp"],
+  },
+  {
+    title: "PRUNE-03: a dependency a remaining holder still declares survives (diamond)",
+    records: [dependency("d@mp")],
+    shape: { "x@mp": ["d@mp"], "y@mp": ["d@mp"] },
+    removed: ["x@mp"],
+    expected: [],
+  },
+  {
+    title: "PRUNE-02: an explicit record nothing declares survives",
+    records: [explicit("e@mp")],
+    shape: {},
+    removed: ["x@mp"],
+    expected: [],
+  },
+  {
+    title: "PRUNE-02: an explicit record declared only by the removed plugin survives",
+    records: [explicit("e@mp")],
+    shape: { "x@mp": ["e@mp"] },
+    removed: ["x@mp"],
+    expected: [],
+  },
+  {
+    title: "PRUNE-03: a cyclic island of two dependency records holds itself (documented residue)",
+    records: [dependency("a@mp"), dependency("b@mp")],
+    shape: { "a@mp": ["b@mp"], "b@mp": ["a@mp"] },
+    removed: ["x@mp"],
+    expected: [],
+  },
+  {
+    title:
+      "D-05-01: a pre-existing orphan the removed set does not name is pruned (whole-scope sweep)",
+    records: [dependency("o@mp")],
+    shape: {},
+    removed: ["x@mp"],
+    expected: ["o@mp"],
+  },
+  {
+    title:
+      "D-05-02: a batch is emitted in sorted key order and a later pass follows every earlier pass",
+    records: [dependency("z@mp"), dependency("c@mp"), dependency("a@mp"), dependency("m@mp")],
+    shape: { "x@mp": ["z@mp", "c@mp"], "z@mp": ["m@mp"], "c@mp": ["a@mp"] },
+    removed: ["x@mp"],
+    expected: ["c@mp", "z@mp", "a@mp", "m@mp"],
+  },
+  {
+    title:
+      "PRUNE-03: a dependency the removed plugin's surviving sibling declares transitively survives",
+    records: [dependency("d1@mp"), dependency("d2@mp")],
+    shape: { "x@mp": ["d1@mp"], "d1@mp": ["d2@mp"], "y@mp": ["d2@mp"] },
+    removed: ["x@mp"],
+    expected: ["d1@mp"],
+  },
+];
+
+for (const { title, records, shape, removed, expected } of ORPHAN_CASES) {
+  test(title, () => {
+    // arrange
+    const index = indexOf(shape);
+
+    // act
+    const pruned = pruneOrphans(records, index, new Set(removed));
+
+    // assert
+    assert.deepStrictEqual(pruned, expected);
+  });
+}
+
+test("D-05-02: the candidate list, the index and the removed set are not mutated by the sweep", () => {
+  // arrange
+  const records = [dependency("d1@mp"), dependency("d2@mp"), explicit("e@mp")];
+  const index = indexOf({ "x@mp": ["d1@mp"], "d1@mp": ["d2@mp"] });
+  const removed = new Set(["x@mp"]);
+  const recordsBefore = structuredClone(records);
+  const indexBefore = new Map([...index].map(([holder, declared]) => [holder, [...declared]]));
+  const removedBefore = [...removed];
+
+  // act
+  pruneOrphans(records, index, removed);
+
+  // assert
+  const indexAfter = new Map([...index].map(([holder, declared]) => [holder, [...declared]]));
+  assert.deepStrictEqual(records, recordsBefore);
+  assert.deepStrictEqual(indexAfter, indexBefore);
+  assert.deepStrictEqual([...removed], removedBefore);
 });

@@ -1,13 +1,18 @@
 // domain/dependency-orphans.ts
 //
-// The dependents question: given a `plugin@marketplace` key and an index of
-// what every OTHER installed plugin in the scope declares, which of them still
-// declare it (D-05-14, PRUNE-05)?
+// Two questions over one declaration index:
 //
-// The question lives in `domain/` because it is pure: no I/O, no clock, no
+// - The dependents question: given a `plugin@marketplace` key and an index of
+//   what every OTHER installed plugin in the scope declares, which of them
+//   still declare it (D-05-14, PRUNE-05)?
+// - The orphans question: after some keys are gone, which dependency-provenance
+//   records does NO remaining record declare, iterated to a fixpoint (D-05-01,
+//   D-05-02, PRUNE-01..03)?
+//
+// Both live in `domain/` because they are pure: no I/O, no clock, no
 // filesystem and no network. The declaration index arrives as a PARAMETER, so
 // a caller decides where each plugin's declared `dependencies` come from (the
-// offline manifest read, D-05-06) and the test here stays trivially testable
+// offline manifest read, D-05-06) and the tests here stay trivially testable
 // against a synthetic map.
 //
 // D-05-04: a DISABLED installed plugin still holds what it declares. That
@@ -43,4 +48,75 @@ export function findDependents(target: string, index: DeclarationIndex): readonl
   }
 
   return dependents.sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * One installed record as the orphan sweep sees it: its `name@marketplace`
+ * key and the provenance the install recorded. Nothing else about the record
+ * -- `enabled`, its inventory, its version -- bears on whether it is an orphan.
+ */
+export interface OrphanCandidate {
+  readonly key: string;
+  readonly provenance: "explicit" | "dependency";
+}
+
+/** Whether any holder outside `gone` declares `key`. */
+function isHeldBy(index: DeclarationIndex, gone: ReadonlySet<string>, key: string): boolean {
+  for (const [holder, declared] of index) {
+    if (!gone.has(holder) && declared.has(key)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * The keys `--prune` removes, in removal order, given every record in the
+ * scope, the declaration index over those records, and the keys already
+ * removed (the named plugin).
+ *
+ * D-05-01: the sweep is whole-scope -- a candidate nothing declares is pruned
+ * whether or not `removed` names one of its former holders, so an orphan left
+ * by an earlier plain uninstall or a reload goes too.
+ *
+ * D-05-02: repeat until stable. Each pass collects the records that are not
+ * yet gone and that no holder still present declares, sorts them, and marks
+ * them gone; the next pass sees those holders as absent. A later pass can only
+ * contain keys the previous batch was holding, so the accumulated order is
+ * dependents before dependencies by construction. Every pass either marks at
+ * least one new key or ends the loop, so it runs at most `records.length + 1`
+ * times.
+ *
+ * PRUNE-02: the provenance filter runs BEFORE any declaration is consulted;
+ * an explicit record is never in a batch whatever the index says about it.
+ *
+ * PRUNE-03: a key any present holder declares is never in a batch, and the
+ * index does not distinguish an enabled holder from a disabled one (D-05-04),
+ * so a mutually-declaring island of dependency records holds itself.
+ *
+ * None of the inputs is mutated.
+ */
+export function pruneOrphans(
+  records: readonly OrphanCandidate[],
+  index: DeclarationIndex,
+  removed: ReadonlySet<string>,
+): readonly string[] {
+  const gone = new Set(removed);
+  const order: string[] = [];
+  for (;;) {
+    const batch = records
+      .filter((record) => record.provenance === "dependency" && !gone.has(record.key))
+      .filter((record) => !isHeldBy(index, gone, record.key))
+      .map((record) => record.key)
+      .sort((a, b) => a.localeCompare(b));
+    if (batch.length === 0) {
+      return order;
+    }
+
+    for (const key of batch) {
+      gone.add(key);
+      order.push(key);
+    }
+  }
 }
