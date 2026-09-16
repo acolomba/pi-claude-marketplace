@@ -90,14 +90,14 @@
 // diff grammar owned by tests/orchestrators/reconcile/pending.test.ts.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import https from "node:https";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
 import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makePendingHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts";
+import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 const PENDING_USAGE = "Usage: /claude:plugin pending [--scope user|project]";
@@ -124,30 +124,7 @@ interface HermeticWorkspace {
  * before the handler runs.
  */
 async function createHermeticWorkspace(t: TestContext, label: string): Promise<HermeticWorkspace> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `plugin-pending-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `plugin-pending-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(cwd, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
-  });
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
+  const { cwd, home, agentDir } = await createHermeticEnvironment(t, `plugin-pending-${label}-`);
   const requestSpy = t.mock.method(https, "request", (): never => {
     throw new Error("pending must not open a network connection");
   });
@@ -155,7 +132,7 @@ async function createHermeticWorkspace(t: TestContext, label: string): Promise<H
     cwd,
     home,
     projectRoot: path.join(cwd, ".pi"),
-    userRoot: path.join(home, ".pi", "agent"),
+    userRoot: agentDir,
     transportCalls: (): number => requestSpy.mock.callCount(),
   };
 }

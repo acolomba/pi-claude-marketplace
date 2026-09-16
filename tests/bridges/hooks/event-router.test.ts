@@ -44,6 +44,7 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
@@ -166,31 +167,15 @@ test(
     });
     const peerRuntime = createHooksRuntime();
     const peerChild = createRuntimeChild(43_108);
-    const root = await mkdtemp(path.join(tmpdir(), "hooks-router-reload-"));
-    const projectRoot = path.join(root, "project");
-    const userAgentRoot = path.join(root, "user-agent");
-    const originalHome = process.env.HOME;
-    const originalAgentRoot = process.env.PI_CODING_AGENT_DIR;
-    process.env.HOME = path.join(root, "home");
-    process.env.PI_CODING_AGENT_DIR = userAgentRoot;
-    t.after(async () => {
+    // Registered before the environment so the children are gone before its
+    // removal runs: after-hooks run in registration order.
+    t.after(() => {
       shutdownInMemoryChildren(runtime);
       shutdownInMemoryChildren(peerRuntime);
       peerChild.destroy();
-      if (originalHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = originalHome;
-      }
-
-      if (originalAgentRoot === undefined) {
-        delete process.env.PI_CODING_AGENT_DIR;
-      } else {
-        process.env.PI_CODING_AGENT_DIR = originalAgentRoot;
-      }
-
-      await rm(root, { recursive: true, force: true, maxRetries: 3 });
     });
+    const { root } = await createHermeticEnvironment(t, "hooks-router-reload-");
+    const projectRoot = path.join(root, "project");
     shutdownInMemoryChildren(runtime);
     const userLocations = locationsFor("user", projectRoot);
     const projectLocations = locationsFor("project", projectRoot);
@@ -862,18 +847,6 @@ function registeredHandler(
   return handler as (...args: unknown[]) => unknown;
 }
 
-function ownAgentRoot(t: TestContext, agentRoot: string): void {
-  const previousAgentRoot = process.env.PI_CODING_AGENT_DIR;
-  process.env.PI_CODING_AGENT_DIR = agentRoot;
-  t.after(() => {
-    if (previousAgentRoot === undefined) {
-      delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = previousAgentRoot;
-    }
-  });
-}
-
 function seedPluginConfig(
   runtime: HooksRuntime,
   scope: "project" | "user",
@@ -958,8 +931,7 @@ test("cache keys separate scope, marketplace, and plugin while mutations stay id
 test("readAndCachePluginHooks reads and parses one case-owned config", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
-  const root = await mkdtemp(path.join(tmpdir(), "hooks-router-read-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  const { root } = await createHermeticEnvironment(t, "hooks-router-read-");
   const hooksJsonPath = path.join(root, "hooks.json");
   await writeFile(
     hooksJsonPath,
@@ -1547,11 +1519,9 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    const root = await mkdtemp(path.join(tmpdir(), "hooks-router-reader-order-"));
-    t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+    const { root } = await createHermeticEnvironment(t, "hooks-router-reader-order-");
     const factoryRoot = path.join(root, "factory");
     const projectRoot = path.join(root, "project");
-    ownAgentRoot(t, path.join(root, "agent"));
     const userLocations = locationsFor("user", factoryRoot);
     const factoryProjectLocations = locationsFor("project", factoryRoot);
     const projectLocations = locationsFor("project", projectRoot);
@@ -1615,9 +1585,7 @@ test(
 
 test("same-runtime registration invalidates an earlier callback before lazy hydration", async (t) => {
   // arrange
-  const root = await mkdtemp(path.join(tmpdir(), "hooks-router-runtime-generation-"));
-  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
-  ownAgentRoot(t, path.join(root, "agent"));
+  const { root } = await createHermeticEnvironment(t, "hooks-router-runtime-generation-");
   const factoryRoot = path.join(root, "factory");
   const projectRoot = path.join(root, "project");
   const readRoots: string[] = [];
@@ -1664,9 +1632,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    const root = await mkdtemp(path.join(tmpdir(), "hooks-router-stale-hydration-"));
-    t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
-    ownAgentRoot(t, path.join(root, "agent"));
+    const { root } = await createHermeticEnvironment(t, "hooks-router-stale-hydration-");
     const factoryRoot = path.join(root, "factory");
     const projectRoot = path.join(root, "project");
     const projectLocations = locationsFor("project", projectRoot);
@@ -1755,7 +1721,6 @@ test(
   async (t) => {
     // arrange
     const fixture = await makeProjectHookFixture(t, "stale-session-effects", "SessionStart");
-    ownAgentRoot(t, path.join(fixture.root, "agent"));
     const reader: HooksHydrationDeps = {
       loadState(extensionRoot: string): Promise<ExtensionState> {
         return Promise.resolve(
@@ -1806,7 +1771,6 @@ test(
 test("runtime hydration stops before mirroring when registration advances its generation", async (t) => {
   // arrange
   const fixture = await makeProjectHookFixture(t, "stale-public-hydration", "PreToolUse");
-  ownAgentRoot(t, path.join(fixture.root, "agent"));
   const readStarted = createDeferred<undefined>();
   const releaseRead = createDeferred<undefined>();
   let deferProjectRead = true;
@@ -1848,7 +1812,6 @@ test(
   async (t) => {
     // arrange
     const fixture = await makeProjectHookFixture(t, "stale-factory-hydration", "PreToolUse");
-    ownAgentRoot(t, path.join(fixture.root, "agent"));
     const readStarted = createDeferred<undefined>();
     const releaseRead = createDeferred<undefined>();
     let deferProjectRead = true;
@@ -1893,7 +1856,6 @@ test(
 test("project hydration parses a plugin's hooks.json into the parsed-config cache", async (t) => {
   // arrange
   const fixture = await makeProjectHookFixture(t, "live-project-hydration", "PreToolUse");
-  ownAgentRoot(t, path.join(fixture.root, "agent"));
   const reader: HooksHydrationDeps = {
     loadState(extensionRoot: string): Promise<ExtensionState> {
       return Promise.resolve(
@@ -1929,7 +1891,6 @@ test("project hydration parses a plugin's hooks.json into the parsed-config cach
 test("project hydration stops before parsing a plugin's hooks.json read under a stale generation", async (t) => {
   // arrange
   const fixture = await makeProjectHookFixture(t, "stale-after-hooks-read", "PreToolUse");
-  ownAgentRoot(t, path.join(fixture.root, "agent"));
   const runtime = createHooksRuntime();
   // The trigger is named, not counted: the generation advances from inside the
   // injected hooks read, which runs at exactly the point this case is about, so
@@ -1973,7 +1934,6 @@ test(
   async (t) => {
     // arrange
     const fixture = await makeProjectHookFixture(t, "stale-session-shared-dir", "SessionStart");
-    ownAgentRoot(t, path.join(fixture.root, "agent"));
     const reader: HooksHydrationDeps = {
       loadState(extensionRoot: string): Promise<ExtensionState> {
         return Promise.resolve(
@@ -2028,9 +1988,7 @@ test(
 
 test("separate runtimes keep their current callbacks live and route through their own buckets", async (t) => {
   // arrange
-  const root = await mkdtemp(path.join(tmpdir(), "hooks-router-runtime-isolation-"));
-  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
-  ownAgentRoot(t, path.join(root, "agent"));
+  const { root } = await createHermeticEnvironment(t, "hooks-router-runtime-isolation-");
   const reader: HooksHydrationDeps = {
     loadState(): Promise<ExtensionState> {
       return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
@@ -2111,11 +2069,8 @@ test(
   async (t) => {
     // arrange
     const runtime = createHooksRuntime();
-    const root = await mkdtemp(path.join(tmpdir(), "hooks-router-corrupt-state-"));
-    t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+    const { root } = await createHermeticEnvironment(t, "hooks-router-corrupt-state-");
     const projectRoot = path.join(root, "project");
-    const agentRoot = path.join(root, "agent");
-    ownAgentRoot(t, agentRoot);
     const userLocations = locationsFor("user", projectRoot);
     const projectLocations = locationsFor("project", projectRoot);
     await mkdir(userLocations.extensionRoot, { recursive: true });
@@ -2164,11 +2119,8 @@ test(
   async (t) => {
     // arrange
     const runtime = createHooksRuntime();
-    const root = await mkdtemp(path.join(tmpdir(), "hooks-router-shared-dir-"));
-    t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+    const { root } = await createHermeticEnvironment(t, "hooks-router-shared-dir-");
     const projectRoot = path.join(root, "project");
-    const agentRoot = path.join(root, "agent");
-    ownAgentRoot(t, agentRoot);
     const userLocations = locationsFor("user", projectRoot);
     const projectLocations = locationsFor("project", projectRoot);
     await mkdir(userLocations.dataRoot, { recursive: true });
@@ -2208,12 +2160,9 @@ test(
   async (t) => {
     // arrange
     const runtime = createHooksRuntime();
-    const root = await mkdtemp(path.join(tmpdir(), "hooks-router-lazy-project-"));
-    t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+    const { root } = await createHermeticEnvironment(t, "hooks-router-lazy-project-");
     const factoryRoot = path.join(root, "factory-cwd");
     const projectRoot = path.join(root, "actual-project");
-    const agentRoot = path.join(root, "agent");
-    ownAgentRoot(t, agentRoot);
     const projectLocations = locationsFor("project", projectRoot);
     const projectState = makeScopeState({
       scope: "project",
@@ -2313,10 +2262,8 @@ test(
 test("session_start contains a lazy project cwd failure and still delegates safely", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
-  const root = await mkdtemp(path.join(tmpdir(), "hooks-router-lazy-failure-"));
-  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+  const { root } = await createHermeticEnvironment(t, "hooks-router-lazy-failure-");
   const projectRoot = path.join(root, "project");
-  ownAgentRoot(t, path.join(root, "agent"));
   const context = makeContext(projectRoot, root);
   const { pi, registrations, messages } = makeRecordingPi();
   const dispatches: string[] = [];
@@ -2415,9 +2362,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    const root = await mkdtemp(path.join(tmpdir(), "hooks-router-executor-seam-"));
-    t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
-    ownAgentRoot(t, path.join(root, "agent"));
+    const { root } = await createHermeticEnvironment(t, "hooks-router-executor-seam-");
     const readDiagnostics = observeRouterDebug(t);
     const suppliedRuntime = createHooksRuntime();
     const defaultedRuntime = createHooksRuntime();
@@ -2473,9 +2418,7 @@ test(
 
 test("propagates a rejecting supplied executor out of the registered tool_call callback", async (t) => {
   // arrange
-  const root = await mkdtemp(path.join(tmpdir(), "hooks-router-executor-refusal-"));
-  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
-  ownAgentRoot(t, path.join(root, "agent"));
+  const { root } = await createHermeticEnvironment(t, "hooks-router-executor-refusal-");
   const runtime = createHooksRuntime();
   const { pi, registrations, messages } = makeRecordingPi();
   const cwd = path.join(root, "project");

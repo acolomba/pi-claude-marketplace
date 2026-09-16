@@ -16,14 +16,14 @@
 // no-mutation assertions from racing a fire-and-forget write.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
 import { pendingReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -40,32 +40,7 @@ interface HermeticScopes {
  * environment restore in a single hook registered before the act phase.
  */
 async function createHermeticScopes(t: TestContext, label: string): Promise<HermeticScopes> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `pending-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `pending-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(cwd, { force: true, recursive: true });
-    await rm(home, { force: true, recursive: true });
-  });
-  process.env.HOME = home;
-  // SC-1: getAgentDir() reads PI_CODING_AGENT_DIR before homedir(), so an
-  // environment that sets it would defeat the hermetic HOME above.
-  delete process.env.PI_CODING_AGENT_DIR;
+  const { cwd } = await createHermeticEnvironment(t, `pending-${label}-`);
   return { cwd, project: locationsFor("project", cwd), user: locationsFor("user", cwd) };
 }
 

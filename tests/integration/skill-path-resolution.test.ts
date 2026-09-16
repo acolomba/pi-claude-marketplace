@@ -28,14 +28,14 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 
 import { emitGeneratedAgentFile } from "../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 interface ResolvedSkillLike {
   readonly name: string;
@@ -122,9 +122,8 @@ async function loadPiSubagentsSkillsModule(
 }
 
 test("SC-2 / AGSK-06: emitted skillPath resolves the staged skill via pi-subagents' resolveSkillsWithFallback and stays out of the global catalog", async (t) => {
-  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
   const originalOffline = process.env.PI_OFFLINE;
-  const tmpRoot = await mkdtemp(path.join(tmpdir(), "skillpath-sc2-"));
+  const { root: tmpRoot } = await createHermeticEnvironment(t, "skillpath-sc2-");
   const runtimeCwd = path.join(tmpRoot, "runtime-cwd");
   const generatedName = `skillpath-sc2-${randomUUID().slice(0, 8)}`;
 
@@ -139,13 +138,11 @@ test("SC-2 / AGSK-06: emitted skillPath resolves the staged skill via pi-subagen
 
     await mkdir(runtimeCwd, { recursive: true });
 
-    // Hermetic PI_CODING_AGENT_DIR so both this extension's locationsFor and
-    // pi-subagents' own getAgentDir() resolve inside the temp fixture,
-    // mirroring the pattern in hooks-spawn-end-to-end.test.ts. PI_OFFLINE
-    // skips pi-subagents' global-npm-package skill scan so the global
-    // catalog assertion below is not influenced by unrelated installed
+    // The hermetic PI_CODING_AGENT_DIR makes both this extension's locationsFor
+    // and pi-subagents' own getAgentDir() resolve inside the temp fixture.
+    // PI_OFFLINE skips pi-subagents' global-npm-package skill scan so the
+    // global catalog assertion below is not influenced by unrelated installed
     // packages.
-    process.env.PI_CODING_AGENT_DIR = path.join(tmpRoot, "agent");
     process.env.PI_OFFLINE = "1";
 
     const locations = locationsFor("user", runtimeCwd);
@@ -223,18 +220,10 @@ test("SC-2 / AGSK-06: emitted skillPath resolves the staged skill via pi-subagen
       "the resolved skill must stay invocation-private and never enter the global catalog",
     );
   } finally {
-    if (originalAgentDir === undefined) {
-      delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
-    }
-
     if (originalOffline === undefined) {
       delete process.env.PI_OFFLINE;
     } else {
       process.env.PI_OFFLINE = originalOffline;
     }
-
-    await rm(tmpRoot, { recursive: true, force: true });
   }
 });

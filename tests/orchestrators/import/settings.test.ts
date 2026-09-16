@@ -9,6 +9,7 @@ import {
   mergeClaudeSettings,
   resolveClaudeSettingsPaths,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/import/settings.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { TestContext } from "node:test";
 
@@ -53,19 +54,16 @@ async function writeSettings(
 
 test("resolves default user paths from the private home root when the config variable is absent", async (t) => {
   // arrange
-  const root = await makeTempRoot(t, "import-settings-default-user-");
+  const { home: root } = await createHermeticEnvironment(t, "import-settings-default-user-");
   const originalConfigDirectory = captureEnvironmentProperty("CLAUDE_CONFIG_DIR");
-  const originalHome = captureEnvironmentProperty("HOME");
   let paths;
 
   // act
   try {
     delete process.env.CLAUDE_CONFIG_DIR;
-    process.env.HOME = root;
     paths = resolveClaudeSettingsPaths("user");
   } finally {
     restoreEnvironmentProperty("CLAUDE_CONFIG_DIR", originalConfigDirectory);
-    restoreEnvironmentProperty("HOME", originalHome);
   }
 
   // assert
@@ -78,8 +76,7 @@ test("resolves default user paths from the private home root when the config var
     originalConfigDirectory.exists,
   );
   assert.strictEqual(process.env.CLAUDE_CONFIG_DIR, originalConfigDirectory.value);
-  assert.strictEqual(Object.hasOwn(process.env, "HOME"), originalHome.exists);
-  assert.strictEqual(process.env.HOME, originalHome.value);
+  assert.strictEqual(process.env.HOME, root);
 });
 
 test("resolves explicit user paths ahead of an absolute config environment value", async (t) => {
@@ -460,12 +457,11 @@ test("reports non-ENOENT base and local read failures in exact order", async (t)
 
 test("reports invalid environment, malformed base, and unreadable local diagnostics in order", async (t) => {
   // arrange
-  const root = await makeTempRoot(t, "import-settings-diagnostic-order-");
+  const { home: root } = await createHermeticEnvironment(t, "import-settings-diagnostic-order-");
   const configRoot = path.join(root, ".claude");
   const basePath = path.join(configRoot, "settings.json");
   const localPath = path.join(configRoot, "settings.local.json");
   const originalConfigDirectory = captureEnvironmentProperty("CLAUDE_CONFIG_DIR");
-  const originalHome = captureEnvironmentProperty("HOME");
   await mkdir(localPath, { recursive: true });
   // Read back the runtime's own errno wording: later majors append the offending path to it.
   // The failure's IDENTITY is not runtime-owned, so it is pinned here rather than left to the
@@ -486,11 +482,9 @@ test("reports invalid environment, malformed base, and unreadable local diagnost
   // act
   try {
     process.env.CLAUDE_CONFIG_DIR = "relative/config";
-    process.env.HOME = root;
     result = await loadMergedClaudeSettingsForScope("user", {});
   } finally {
     restoreEnvironmentProperty("CLAUDE_CONFIG_DIR", originalConfigDirectory);
-    restoreEnvironmentProperty("HOME", originalHome);
   }
 
   // assert
@@ -530,8 +524,7 @@ test("reports invalid environment, malformed base, and unreadable local diagnost
     originalConfigDirectory.exists,
   );
   assert.strictEqual(process.env.CLAUDE_CONFIG_DIR, originalConfigDirectory.value);
-  assert.strictEqual(Object.hasOwn(process.env, "HOME"), originalHome.exists);
-  assert.strictEqual(process.env.HOME, originalHome.value);
+  assert.strictEqual(process.env.HOME, root);
 });
 
 test("suppresses the invalid-environment warning when an explicit user root is supplied", async (t) => {

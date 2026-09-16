@@ -16,6 +16,7 @@ import { createNodeUninstallPlugin } from "../../extensions/pi-claude-marketplac
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -49,20 +50,7 @@ function makeCtx(): {
 }
 
 async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
-  const hermeticHome = await mkdtemp(path.join(tmpdir(), "lifecycle-cascade-home-"));
-  const prevHome = process.env.HOME;
-  process.env.HOME = hermeticHome;
-  try {
-    return await fn();
-  } finally {
-    if (prevHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = prevHome;
-    }
-
-    await rm(hermeticHome, { recursive: true, force: true });
-  }
+  return withHermeticEnvironment("lifecycle-cascade-home-", fn);
 }
 
 async function seedHooksPlugin(opts: {
