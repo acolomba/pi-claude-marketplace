@@ -29,7 +29,10 @@ import {
 } from "../../browser/plugin-browser.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
-import type { PluginNotificationMessage } from "../../../shared/notification-types.ts";
+import type {
+  PluginFailedMessage,
+  PluginNotificationMessage,
+} from "../../../shared/notification-types.ts";
 
 const USAGE = "Usage: /claude:plugin browse";
 
@@ -144,15 +147,21 @@ export function makeBrowseHandler(
     let marketplaces;
     try {
       marketplaces = await loadMarketplaceEntries(ctx.cwd);
-    } catch {
+    } catch (err) {
+      const failedRow: PluginFailedMessage = {
+        status: "failed",
+        name: "(browse)",
+        reasons: [],
+        cause: err as Error,
+        severity: "error",
+        needsReload: false,
+      };
       notify(ctx, pi, {
         marketplaces: [
           {
             name: "(browse)",
             scope: "user",
-            status: "failed",
-            severity: "error",
-            plugins: [],
+            plugins: [failedRow],
           },
         ],
       });

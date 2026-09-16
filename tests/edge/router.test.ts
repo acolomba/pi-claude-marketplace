@@ -52,6 +52,7 @@ type HandlerName = keyof SubcommandHandlers;
 interface DispatchRow {
   readonly subcommand: string;
   readonly handler: HandlerName;
+  readonly expectedArgs?: string;
 }
 
 // The accepted top-level vocabulary, minus the one token that opens the second
@@ -85,6 +86,7 @@ const MARKETPLACE_DISPATCH: readonly DispatchRow[] = [
   { subcommand: "update", handler: "marketplaceUpdate" },
   { subcommand: "autoupdate", handler: "marketplaceAutoupdate" },
   { subcommand: "noautoupdate", handler: "marketplaceNoautoupdate" },
+  { subcommand: "help", handler: "help", expectedArgs: "marketplace" },
 ];
 
 const EXPECTED_TOP_LEVEL_USAGE =
@@ -132,12 +134,13 @@ for (const { subcommand, handler } of TOP_LEVEL_DISPATCH) {
   });
 }
 
-for (const { subcommand, handler } of MARKETPLACE_DISPATCH) {
+for (const { subcommand, handler, expectedArgs } of MARKETPLACE_DISPATCH) {
   test(`dispatches the marketplace ${subcommand} subcommand to the ${handler} handler with the remaining argument text (AP-3)`, async () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
     const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
-    when(() => handlers[handler]("official --scope user", ctx)).thenResolve(undefined);
+    const forwardArg = expectedArgs ?? "official --scope user";
+    when(() => handlers[handler](forwardArg, ctx)).thenResolve(undefined);
 
     // act
     await routeClaudePlugin(`marketplace ${subcommand} official --scope user`, handlers, ctx);

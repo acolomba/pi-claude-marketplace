@@ -92,6 +92,7 @@ export const MARKETPLACE_SUBCOMMANDS = [
   "update",
   "autoupdate",
   "noautoupdate",
+  "help",
 ] as const;
 
 export const TOP_LEVEL_USAGE =

@@ -320,8 +320,9 @@ test("TUI mode when loadMarketplaceEntries throws emits structured failure notif
   when(() => pi.getAllTools())
     .thenReturn([])
     .times(2);
+  const capturedNotify = It.willCapture<string>();
   when(() => {
-    ui.notify(It.isString(), "error");
+    ui.notify(capturedNotify, "error");
   })
     .thenReturn()
     .times(1);
@@ -332,6 +333,8 @@ test("TUI mode when loadMarketplaceEntries throws emits structured failure notif
   await browseHandler("", ctx);
 
   // assert
+  assert.ok(capturedNotify.value?.includes("(browse)"));
+  assert.ok(capturedNotify.value?.includes("cause:"));
   verify(ctx);
   verify(pi);
   verify(ui);
