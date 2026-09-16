@@ -1048,3 +1048,155 @@ export function write(branded: Branded): string {
   assert.deepStrictEqual(shapesFor(report, "Branded", "BRAND"), []);
   assert.strictEqual(statusFor(report, "Branded", "BRAND"), "unread");
 });
+
+// ---------------------------------------------------------------------------
+// A whole-object comparison over a union, attributed by the discriminant value.
+// ---------------------------------------------------------------------------
+
+/**
+ * Reduced from `orchestrators/marketplace/remove.ts`, whose outcome union
+ * declares `name` on two of its three arms, and from
+ * `persistence/migrate-config.ts`, whose three non-migrating arms are told apart
+ * by the very key that is ambiguous across them.
+ *
+ * A key exactly one arm spells resolves there. A key two or more arms spell is
+ * left unsettled, which is what keeps a member a finding rather than excusing it
+ * by its neighbour -- and it is also why a comparison that names the arm has
+ * nothing to say today. `name` and `at` are spelled by the `removed` and
+ * `partial` arms, `note` by `failed` and `partial`, and `cascade` carries the
+ * same unit value on two arms so it settles nothing on its own.
+ */
+const unionOutcomeCases = `export type Outcome =
+  | {
+      readonly status: "removed";
+      readonly cascade: "yes";
+      readonly name: string;
+      readonly at: string;
+      readonly unstaged: readonly string[];
+    }
+  | {
+      readonly status: "failed";
+      readonly note: string;
+      readonly reason: string;
+    }
+  | {
+      readonly status: "partial";
+      readonly cascade: "yes";
+      readonly name: string;
+      readonly at: string;
+      readonly note: string;
+    };
+
+export function remove(ok: boolean): Outcome {
+  return ok
+    ? { status: "removed", cascade: "yes", name: "shared", at: "user", unstaged: [] }
+    : { status: "failed", note: "absent here", reason: "absent" };
+}
+`;
+
+const comparisonSpec = (expected: string): string =>
+  `import assert from "node:assert/strict";
+
+import { remove } from "../extensions/pi-claude-marketplace/cases.ts";
+
+const outcome = remove(true);
+assert.deepStrictEqual(outcome, ${expected});
+`;
+
+test("a discriminant value in the expected literal settles which arm supplied a key", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(
+    t,
+    unionOutcomeCases,
+    comparisonSpec(`{ status: "removed", name: "shared", unstaged: [] }`),
+  );
+
+  // act & assert
+  // The operand's type is walked once per arm, so a key two arms spell is read
+  // twice and settled twice on the same arm -- the same shape `status` already
+  // carries three of here.
+  assert.deepStrictEqual(shapesFor(report, "Outcome", "name"), [
+    "value-read/deep-comparison/test",
+    "value-read/deep-comparison/test",
+  ]);
+  assert.strictEqual(statusFor(report, "Outcome", "name"), "test-only-observed");
+  // The arm was settled, not the union: the same key on the arm the value did
+  // not come from is still a finding.
+  assert.deepStrictEqual(
+    findingNames(report).filter((name) => name === "Outcome.name"),
+    ["Outcome.name"],
+  );
+});
+
+test("a sibling of the settled arm the comparison does not spell gains nothing", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(
+    t,
+    unionOutcomeCases,
+    comparisonSpec(`{ status: "removed", name: "shared", unstaged: [] }`),
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Outcome", "at"), []);
+  assert.strictEqual(statusFor(report, "Outcome", "at"), "unread");
+});
+
+test("a key the settled arm does not declare gains nothing", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(
+    t,
+    unionOutcomeCases,
+    comparisonSpec(`{ status: "removed", name: "shared", unstaged: [] }`),
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Outcome", "note"), []);
+  assert.strictEqual(statusFor(report, "Outcome", "note"), "unread");
+});
+
+test("an expected literal carrying no discriminant settles nothing", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(t, unionOutcomeCases, comparisonSpec(`{ name: "shared" }`));
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Outcome", "name"), []);
+  assert.strictEqual(statusFor(report, "Outcome", "name"), "unread");
+});
+
+test("a discriminant value two arms carry settles nothing", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(
+    t,
+    unionOutcomeCases,
+    comparisonSpec(`{ cascade: "yes", name: "shared" }`),
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Outcome", "name"), []);
+  assert.strictEqual(statusFor(report, "Outcome", "name"), "unread");
+});
+
+test("a comparison of two test-built values settles nothing, however it is typed", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(
+    t,
+    unionOutcomeCases,
+    `import assert from "node:assert/strict";
+
+import type { Outcome } from "../extensions/pi-claude-marketplace/cases.ts";
+
+const made: Outcome = {
+  status: "removed",
+  cascade: "yes",
+  name: "made",
+  at: "user",
+  unstaged: [],
+};
+assert.deepStrictEqual(made, { status: "removed", name: "made", unstaged: [] });
+`,
+  );
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Outcome", "name"), []);
+  assert.strictEqual(statusFor(report, "Outcome", "name"), "unread");
+});
