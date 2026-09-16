@@ -60,13 +60,13 @@ retired by this milestone rather than worked around.
 
 New scope. The record `--prune` reads.
 
-- [ ] **PROV-01**: Each install record states whether the user asked for the
+- [x] **PROV-01**: Each install record states whether the user asked for the
   plugin directly or it arrived as another plugin's dependency.
-- [ ] **PROV-02**: A plugin the user installed directly stays marked as such
+- [x] **PROV-02**: A plugin the user installed directly stays marked as such
   even when a later install declares it as a dependency.
-- [ ] **PROV-03**: A plugin first installed as a dependency becomes
+- [x] **PROV-03**: A plugin first installed as a dependency becomes
   directly-installed when the user installs it by name.
-- [ ] **PROV-04**: An install record written before this milestone is upgraded
+- [x] **PROV-04**: An install record written before this milestone is upgraded
   to the current schema with a truthful default, and no record is misreported
   as a dependency.
 
@@ -144,10 +144,10 @@ this milestone.
 | RESV-04 | Phase 3 | Complete |
 | RESV-05 | Phase 3 | Complete |
 | RESV-06 | Phase 3 | Complete |
-| PROV-01 | Phase 4 | Pending |
-| PROV-02 | Phase 4 | Pending |
-| PROV-03 | Phase 4 | Pending |
-| PROV-04 | Phase 4 | Pending |
+| PROV-01 | Phase 4 | Complete |
+| PROV-02 | Phase 4 | Complete |
+| PROV-03 | Phase 4 | Complete |
+| PROV-04 | Phase 4 | Complete |
 | PRUNE-01 | Phase 5 | Pending |
 | PRUNE-02 | Phase 5 | Pending |
 | PRUNE-03 | Phase 5 | Pending |

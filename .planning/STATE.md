@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v1.20
 milestone_name: transitive-dependencies
-current_phase: 04
-current_phase_name: Install provenance
-status: executing
-stopped_at: Phase 4 planned - 6 plans across 6 sequential waves, ready to execute
-last_updated: "2026-09-16T01:56:10.760Z"
-last_activity: 2026-09-15
-last_activity_desc: Phase 04 execution started
-state_head: 500b195efb694cecbb13b8546612c36c1a272ab0
+current_phase: 5
+current_phase_name: Prune on uninstall
+status: planning
+stopped_at: Phase 04 complete, ready to plan Phase 5
+last_updated: "2026-09-16T19:07:18.724Z"
+last_activity: 2026-09-16
+last_activity_desc: Phase 04 complete, transitioned to Phase 5
+state_head: 06bb7097f5a72e64f9ceb042bbf3ceaae060e63c
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 19
-  completed_plans: 13
-  percent: 60
+  completed_plans: 19
+  percent: 80
 ---
 
 # Project State
@@ -34,53 +34,50 @@ is archived under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 04 (Install provenance) — EXECUTING
-Plan: 1 of 6
-Status: Executing Phase 04
+Phase: 5 — Prune on uninstall
+Plan: Not started
+Status: Ready to plan
 
-**Phase 4 was planned 2026-09-15.** Eight decisions in `04-CONTEXT.md`
-(D-04-01..08), alternatives preserved in `04-DISCUSSION-LOG.md`, a
-probe-measured `04-RESEARCH.md`, a `04-PATTERNS.md` analog map, and
-`04-VALIDATION.md`. The plan checker returned no blockers and one advisory
-(plan 04-03 sweeps 34 fixture files in one coherent pass — splitting it would
-fragment the sweep rather than reduce per-file complexity).
+**Phase 4 closed 2026-09-16**, verified 9/9 must-haves; the one human item
+(the promoted row's legibility in a live session) was accepted on the pinned
+bytes. Six plans ran in six sequential waves on this checkout (worktree
+isolation degraded per #683). Every install record now carries
+`provenance: "explicit" | "dependency"` at `state.json` schemaVersion 3,
+back-filled `"explicit"` silently for older documents; reconcile keeps a
+`"dependency"` record out of its uninstall bucket AND retains a
+recorded-but-undeclared marketplace that holds one; Phase 3's cascade config
+write is retired, proven load-bearing both ways (reverting the exemption
+turned the reload-survival case red); and `install <plugin>` on a
+`"dependency"` record promotes it, reporting the new closed-set
+`{already installed, dependency promoted}` on an `installed` row.
 
-**Waves 4 and 5 carry the phase's one hard ordering constraint.** Wave 4 is
-`buildUninstallBucket`'s dependency exemption; wave 5 retires the config
-write. Wave 5 declares `depends_on: ["04-04"]`, so step 3 structurally cannot
-precede step 2, and 04-05's own task 2 proves it by reverting the wave-4
-exemption and observing the reload-survival case go red. Plans 04-01 (the
-schemaVersion bump) and 04-06 (the catalog row) are `autonomous: false` —
-both are one-way decisions.
+**The code review took four fix passes to converge** (16 fix commits;
+`04-REVIEW-FIX.md`). Three operator rulings shaped them and are recorded in
+`04-REVIEW.md` § Operator Decisions: the planner, not the config, keeps a
+CMP-3-adopted dependency marketplace alive (D-04-02 stays pure); `import`
+naming a dependency record promotes it; and **a plugin asked for by name is
+enabled** — promoting a disabled record re-materializes it through the enable
+path and stamps `{ enabled: true }` in whichever config file declares its key
+(base or local), so the reload its row asks for cannot disable it again. A
+version pin refuses promotion, `--partial` is the consent gate for a
+partially-installed record, `--map-model` has no bearing.
 
-Two findings from research and pattern mapping changed the phase's shape:
-PROV-03 had no implementation path at all (`install <already-installed>`
-throws on the non-mutating arm), so D-04-07 adds a promotion plus a new
-outcome row across nine catalog surfaces; and `PROV-01..07` already means
-*git auth provider* in this codebase with 48 citations, so D-04-08 anchors
-source comments on `D-04-NN` instead.
+**Two rulings were deliberately backlogged, not shipped** (`BACKLOG.md`
+ENBL-DEP-01, DEPS-STATUS-01): the cascade should ENABLE a disabled,
+already-installed dependency (upstream parity; reverses RESV-05's warning
+skip), and a plugin whose dependency is partially installed is itself partial
+with reasons. Phase 5 must not read either as done.
 
-The original discussion closed earlier the same day. The phase turned out to be larger than "add a field."
-Phase 3's CR-01 fix writes every cascade-installed dependency into
-`claude-plugins.json` — the desired-state config — which conflates what the
-user asked for with what was pulled in to satisfy it, and destroys the very
-distinction `--prune` needs in Phase 5. The operator ruled it wrong from a
-single observation no test could have raised. Phase 4 therefore both
-introduces provenance and retires that write, **in a fixed order that is part
-of the contract**: provenance field → `buildUninstallBucket` skips
-`provenance: "dependency"` → remove the config write. Removing it any earlier
-re-opens CR-01, a blocker-severity data-loss defect. Phase 3 stays closed and
-verified; its artifacts describe the config write as correct and are
-superseded on that point only.
-
-Also settled: provenance is mode-only (`"explicit" | "dependency"`, no
-declarer list — `--prune` re-derives instead); schemaVersion bumps 2 → 3 with
-the field required and back-filled `"explicit"` silently via the `enabled` /
-ENBL-02 precedent in `migrate.ts`; reconcile keeps sweeping genuine orphans
-with exactly one new exemption; and PROV-04 is reworded, which drops this
-phase's borrow from MIGR-01 entirely. REQUIREMENTS.md and ROADMAP.md were
-updated to match — two ROADMAP Phase 4 notes are now marked SUPERSEDED, and a
-fifth success criterion was added for the config-write reversal.
+**What Phase 5 inherits.** `--prune` reads `provenance` and re-derives the
+declarer set; nothing remembers who declared what. `plan.ts` sits at
+`diffMarketplaces` 14 / `buildUninstallBucket` 13 cognitive after the
+`isRetainedRecorded` extraction — one point of headroom less than it had. The
+operator's dev tree carries inert pre-milestone residue (04-05-SUMMARY,
+Pitfall H) — a `--prune` surprise there is not a prune defect. Executor
+commit-shape note for the planner: the `npm-typecheck` and
+`npm-coverage-direct` pre-commit hooks reject a red-test or half-swept commit,
+so a plan that pairs a production change with its covering tests must expect
+them to land as one commit.
 
 **Phase 3 closed 2026-09-15**, verified 5/5 must-haves with both human
 verification items run against running systems. A code review found 16 issues
@@ -278,7 +275,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-15 — Phase 04 execution started
+Last activity: 2026-09-16 — Phase 04 complete, transitioned to Phase 5
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 3 of 5 phases complete (60%).
@@ -305,7 +302,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 
 **Velocity:**
 
-- Total plans completed: 164
+- Total plans completed: 170
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -322,6 +319,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | 1 | 4 | - | - |
 | 02 | 2 | - | - |
 | 3 | 7 | - | - |
+| 04 | 6 | - | - |
 
 **Recent Trend:** 35 Phase 113 plans completed with all direct owner, review, validation, verification, security, and clean-repository gates green.
 **Per-Plan Metrics:**
@@ -784,7 +782,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Session resumed 2026-09-15, routed to planning Phase 4
+**Stopped at:** Phase 04 complete, ready to plan Phase 5
 
 **Resume file:** None — the mid-discussion `.continue-here.md` and
 `HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
