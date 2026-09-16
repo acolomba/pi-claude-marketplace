@@ -53,6 +53,7 @@ import { classifyGitTransportFailure } from "../../shared/git-failure-classifier
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
+  type MarketplaceDetails,
   type NotificationMessage,
   type PluginInfoMessage,
   type PluginInfoRow,
@@ -2206,7 +2207,7 @@ async function buildAvailableRow(opts: {
  * closed-set change to the list-arm header would.
  */
 function autoupdateDetails(autoupdate: boolean): {
-  readonly details?: { autoupdate: boolean };
+  readonly details?: Pick<MarketplaceDetails, "autoupdate">;
 } {
   return autoupdate ? { details: { autoupdate: true } } : {};
 }

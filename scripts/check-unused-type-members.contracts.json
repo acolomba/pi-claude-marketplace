@@ -394,12 +394,12 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts:62:52"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1244:49",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1245:49",
       "owner": "composeStateOnlyComponents.components",
       "key": "componentsResolved",
       "category": "type-selection",
       "purpose": "Selects within PluginInfoRow by componentsResolved, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1244:24"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1245:24"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:59:3",
@@ -410,12 +410,12 @@
       "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:58:29"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1004:3",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1003:3",
       "owner": "FailedRunPhasesResult",
       "key": "ok",
       "category": "type-refinement",
       "purpose": "Narrows ok at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1003:30"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1002:30"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:108:78",
@@ -426,20 +426,20 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:108:56"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:615:56",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:619:56",
       "owner": "loadPluginListPayload",
       "key": "status",
       "category": "type-selection",
       "purpose": "Excludes from ListMsg by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:615:37"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:619:37"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:83:42",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:86:42",
       "owner": "PayloadListMsg",
       "key": "status",
       "category": "type-selection",
       "purpose": "Excludes from ListMsg by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:83:23"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:86:23"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts:101:69",
@@ -466,36 +466,36 @@
       "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:64:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:107:45",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:110:45",
       "owner": "resolvePluginMarketplaceScope.target",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within ReinstallPluginsTarget by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:107:11"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:110:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:141:45",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:144:45",
       "owner": "resolveExplicitPluginScope.target",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within ReinstallPluginsTarget by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:141:11"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:144:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:77:45",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:80:45",
       "owner": "selectMarketplaceTargets.target",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within ReinstallPluginsTarget by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:77:11"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:80:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:95:45",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:98:45",
       "owner": "resolveMarketplaceScope.target",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within ReinstallPluginsTarget by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:95:11"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:98:11"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts:210:42",

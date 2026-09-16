@@ -389,7 +389,7 @@ function foldPartialCascadeFailure(
  */
 function commitPluginRemoval(
   mp: { plugins: Record<string, unknown> },
-  ids: { readonly scope: Scope; readonly marketplace: string; readonly plugin: string },
+  ids: { readonly plugin: string },
 ): void {
   // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- mp.plugins is a dynamic-key Record<string, ...>.
   delete mp.plugins[ids.plugin];
@@ -725,7 +725,7 @@ async function uninstallPluginWithTransaction(
         return;
       }
 
-      transaction.commitPluginRemoval(mp, { scope, marketplace, plugin });
+      transaction.commitPluginRemoval(mp, { plugin });
 
       if (!orchestrated) {
         await transaction.sweepConfigLayers(locations, plugin, marketplace);

@@ -58,7 +58,10 @@ import { loadMergedScopeConfig, type MergedConfig } from "../../persistence/conf
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { type PluginFailedMessage } from "../../shared/notification-types.ts";
+import {
+  type MarketplaceDetails,
+  type PluginFailedMessage,
+} from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -385,11 +388,12 @@ async function enumerateMarketplacePlugins(args: {
  * "loaded" and "could not be read" are a single state rather than a manifest
  * plus a separate flag that can drift out of agreement (BOUND-03 / D-95-04).
  * `ok: false` is the ONLY state in which an absence claim is unsupported, so
- * the enumerator tests it once.
+ * the enumerator tests it once. The failure arm carries no message: BOUND-03 /
+ * D-95-05 keeps the bare `(installed)` row and suppresses only the unverified
+ * claim, so nothing on this surface renders a read failure's text.
  */
 type ScopedManifest =
-  | { readonly ok: true; readonly manifest: MarketplaceManifest }
-  | { readonly ok: false; readonly loadError: string };
+  { readonly ok: true; readonly manifest: MarketplaceManifest } | { readonly ok: false };
 
 /**
  * Resolve one installed record against its marketplace's manifest read.
@@ -434,8 +438,8 @@ async function loadMarketplaceManifestSoftly(
   try {
     const manifest = await loadManifestSoftly(mpRecord.manifestPath);
     return { ok: true, manifest };
-  } catch (err) {
-    return { ok: false, loadError: errorMessage(err) };
+  } catch {
+    return { ok: false };
   }
 }
 
@@ -589,7 +593,7 @@ async function buildMarketplaceMessage(args: {
   // reference: every `/claude:plugin list` fixture at
   // docs/output-catalog.md:139-263 has `details: { autoupdate: true }` --
   // no `lastUpdatedAt` field.
-  const detailsField: { readonly details?: { autoupdate: boolean } } = autoupdate
+  const detailsField: { readonly details?: Pick<MarketplaceDetails, "autoupdate"> } = autoupdate
     ? { details: { autoupdate: true } }
     : {};
 

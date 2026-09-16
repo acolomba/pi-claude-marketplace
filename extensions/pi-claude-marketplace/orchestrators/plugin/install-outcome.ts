@@ -134,6 +134,7 @@ import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
+import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -297,9 +298,7 @@ interface InstallLedgerContext {
  * the path-source marketplace's manifest. Either way the bytes are on disk
  * before install runs.
  */
-async function loadCachedMarketplaceManifest(
-  manifestPath: string,
-): Promise<{ name: string; plugins: readonly PluginEntry[] }> {
+async function loadCachedMarketplaceManifest(manifestPath: string): Promise<MarketplaceManifest> {
   return loadMarketplaceManifest(manifestPath);
 }
 
