@@ -214,13 +214,13 @@ Plans:
 4. An install record written before this milestone is upgraded to the current schema with a truthful default, no record is misreported as a dependency, and none is silently read as a request to uninstall. (PROV-04)
 5. A cascade-installed dependency survives `/reload` without being declared in `claude-plugins.json` — the desired-state config names only plugins the user asked for, and reconcile keeps a dependency because its record says so. (D-04-02, D-04-04, D-04-05)
 
-**Plans**: 4/6 plans executed
+**Plans**: 5/6 plans executed
 
 - [x] 04-01-PLAN.md
 - [x] 04-02-PLAN.md
 - [x] 04-03-PLAN.md
 - [x] 04-04-PLAN.md
-- [ ] 04-05-PLAN.md
+- [x] 04-05-PLAN.md
 - [ ] 04-06-PLAN.md
 
 Six waves, strictly sequential: every plan touches files an earlier one changed, and D-04-04's three-step order is a correctness contract rather than a preference. Step 2 is wave 4 and step 3 is wave 5; the ordering lives in `depends_on`, not only in prose.
@@ -286,7 +286,7 @@ plugin names — so plan these phases with the UI gate skipped.
 | 1. Manifest read fidelity | v1.20 | 4/4 | Complete   | 2026-09-14 |
 | 2. Uninstall data disposition and the uninstall option seam | v1.20 | 2/2 | Complete    | 2026-09-14 |
 | 3. Dependency resolution | v1.20 | 7/7 | Complete    | 2026-09-15 |
-| 4. Install provenance | v1.20 | 4/6 | In Progress|  |
+| 4. Install provenance | v1.20 | 5/6 | In Progress|  |
 | 5. Prune on uninstall | v1.20 | 0/— | Not started | — |
 
 ## Carried Forward
