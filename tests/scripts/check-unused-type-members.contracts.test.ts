@@ -1930,3 +1930,251 @@ test("an arrival chain longer than the hop bound is refused, not answered partia
     },
   );
 });
+
+// A `satisfies` constraint is the fourth place a member can exist purely to make
+// the compiler check something. The interface is never read: it is written down
+// so a literal beside it has a shape to be checked against.
+//
+// Two acceptance shapes. `DirectTarget.tag` (line 2, column 3) is reached from
+// the constraint of the `satisfies` at line 5, column 23 directly.
+// `EntryTarget.piEvents` (line 10) and `.extract` (line 11) are reached one
+// indexing step in, as the value type of the `Record` at line 14, column 24 --
+// the shape every ENTRY of the constrained literal is checked against.
+//
+// The rest must stay refused. `VacuousTarget.wanted` (line 20) is constrained by
+// the `Record` at line 23, column 24 that an EMPTY literal satisfies, so nothing
+// compels the key. `OptionalTarget.maybe` (line 26) is optional, so no entry has
+// to write it even though one does. `AbsentTarget.other` (line 34) is a key the
+// `DirectTarget` constraint never declares. The `as` at line 37, column 25 and
+// the bare literal at line 41, column 22 are checked against nothing at all.
+const satisfiesConstraintCases = `interface DirectTarget {
+  readonly tag: string;
+}
+
+export const direct = {
+  tag: "one",
+} satisfies DirectTarget;
+
+interface EntryTarget {
+  readonly piEvents: string;
+  readonly extract: string;
+}
+
+export const entries = {
+  Bash: { piEvents: "bash", extract: "command" },
+  Read: { piEvents: "read", extract: "path" },
+} as const satisfies Record<string, EntryTarget>;
+
+interface VacuousTarget {
+  readonly wanted: string;
+}
+
+export const vacuous = {} satisfies Record<string, VacuousTarget>;
+
+interface OptionalTarget {
+  readonly maybe?: string;
+}
+
+export const optional = {
+  only: { maybe: "yes" },
+} satisfies Record<string, OptionalTarget>;
+
+interface AbsentTarget {
+  readonly other: string;
+}
+
+export const asserted = {
+  tag: "two",
+} as DirectTarget;
+
+export const plain = {
+  tag: "three",
+};
+`;
+
+// Adds an ordinary read of `DirectTarget.tag` at line 46, column 17.
+const satisfiesReadCases = `${satisfiesConstraintCases}
+export function peek(target: DirectTarget): string {
+  return target.tag;
+}
+`;
+
+const directConstraintContract = {
+  id: `${casesPath}:2:3`,
+  owner: "DirectTarget",
+  key: "tag",
+  category: "satisfies-constraint",
+  purpose: "Gives the literal beside it a shape the compiler checks.",
+  constraint: `${casesPath}:5:23`,
+};
+
+const entryConstraintContract = {
+  id: `${casesPath}:10:3`,
+  owner: "EntryTarget",
+  key: "piEvents",
+  category: "satisfies-constraint",
+  purpose: "Pins what every entry of the constrained table must carry.",
+  constraint: `${casesPath}:14:24`,
+};
+
+test("a member the constraint of a satisfies expression compels keeps its role", async (t) => {
+  // arrange
+  const report = await analyzeWith(
+    t,
+    satisfiesConstraintCases,
+    documentWith(directConstraintContract),
+  );
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "DirectTarget", "tag").status, "explicit-contract");
+  assert.deepStrictEqual(memberFor(report, "DirectTarget", "tag").reasons, [
+    `satisfies-constraint: ${directConstraintContract.purpose} ` +
+      `(satisfies ${casesPath}:5:23 compels tag)`,
+  ]);
+});
+
+test("a constraint reaching the owner one indexing step in compels its members", async (t) => {
+  // arrange
+  const report = await analyzeWith(
+    t,
+    satisfiesConstraintCases,
+    documentWith(entryConstraintContract, {
+      ...entryConstraintContract,
+      id: `${casesPath}:11:3`,
+      key: "extract",
+    }),
+  );
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "EntryTarget", "piEvents").status, "explicit-contract");
+  assert.strictEqual(memberFor(report, "EntryTarget", "extract").status, "explicit-contract");
+  // The neighbouring interfaces are not covered by it.
+  assert.strictEqual(memberFor(report, "VacuousTarget", "wanted").status, "unread");
+});
+
+test("a constraint no constrained entry writes the key for compels nothing", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      satisfiesConstraintCases,
+      documentWith({
+        ...entryConstraintContract,
+        id: `${casesPath}:20:3`,
+        owner: "VacuousTarget",
+        key: "wanted",
+        constraint: `${casesPath}:23:24`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:20:3 constraint ${casesPath}:23:24 ` +
+        "is satisfied without writing wanted anywhere",
+    },
+  );
+});
+
+test("an optional member of a constraint is compelled by nothing", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      satisfiesConstraintCases,
+      documentWith({
+        ...entryConstraintContract,
+        id: `${casesPath}:26:3`,
+        owner: "OptionalTarget",
+        key: "maybe",
+        constraint: `${casesPath}:29:25`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:26:3 declares maybe as optional, ` +
+        "so no constrained value has to write it",
+    },
+  );
+});
+
+test("a constraint that does not declare the member's key is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      satisfiesConstraintCases,
+      documentWith({
+        ...directConstraintContract,
+        id: `${casesPath}:34:3`,
+        owner: "AbsentTarget",
+        key: "other",
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:34:3 constraint ${casesPath}:5:23 ` +
+        "does not constrain AbsentTarget.other",
+    },
+  );
+});
+
+test("a type assertion carrying no satisfies checks nothing", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      satisfiesConstraintCases,
+      documentWith({ ...directConstraintContract, constraint: `${casesPath}:37:25` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:2:3 constraint ${casesPath}:37:25 ` +
+        "is not a satisfies expression",
+    },
+  );
+});
+
+test("a named node that is not a satisfies expression is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      satisfiesConstraintCases,
+      documentWith({ ...directConstraintContract, constraint: `${casesPath}:41:22` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:2:3 constraint ${casesPath}:41:22 ` +
+        "is not a satisfies expression",
+    },
+  );
+});
+
+test("a constraint entry a genuine read has made redundant is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(analyzeWith(t, satisfiesReadCases, documentWith(directConstraintContract)), {
+    name: "AnalysisSetupError",
+    message:
+      `Invalid contract: ${casesPath}:2:3 is already read at ${casesPath}:46:17; ` +
+      "remove the contract",
+  });
+});
+
+test("a constraint entry carrying another category's key is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      satisfiesConstraintCases,
+      documentWith({ ...directConstraintContract, clause: `${casesPath}:5:23` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:2:3 carries unknown key clause`,
+    },
+  );
+});
