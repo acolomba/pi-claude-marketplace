@@ -2468,7 +2468,10 @@ test("D-04-07: promotes a recorded dependency the imported settings name instead
   const expectedSecondResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     installedPlugins: [
-      installed("dep", "fixture-mp", "project", { agents: false, mcp: false }, false),
+      {
+        ...installed("dep", "fixture-mp", "project", { agents: false, mcp: false }, false),
+        promoted: true,
+      },
     ],
     skippedExistingMarketplaces: [skipped("fixture-mp", "project")],
     skippedExistingPlugins: [skippedPlugin("sample", "fixture-mp", "project")],
@@ -2508,16 +2511,14 @@ test("D-04-07: promotes a recorded dependency the imported settings name instead
     "explicit",
   );
   assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
-  // The import cascade renders every `installed` outcome through its one
-  // installed row, trailer included, so the promoted plugin reads as any
-  // other install the import made.
+  // The promotion moved nothing on disk, so the promoted row carries no reload
+  // hint where a fresh install's row always does.
   assert.deepStrictEqual(notifications[1], {
     message:
       "● fixture-mp [project] (updated)\n" +
       "  ● dep (installed)\n" +
       "  ⊘ sample (skipped) {already installed}\n\n" +
-      "Import: 3 successes\n\n" +
-      "/reload to pick up changes",
+      "Import: 3 successes",
   });
   verifyBoundary();
 });
@@ -2574,7 +2575,10 @@ test("D-04-07: promotes a partially installed dependency the imported settings n
   const expectedSecondResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     installedPlugins: [
-      installed("dep", "fixture-mp", "project", { agents: false, mcp: false }, false),
+      {
+        ...installed("dep", "fixture-mp", "project", { agents: false, mcp: false }, false),
+        promoted: true,
+      },
     ],
     skippedExistingMarketplaces: [skipped("fixture-mp", "project")],
     skippedExistingPlugins: [
@@ -2636,8 +2640,7 @@ test("D-04-07: promotes a partially installed dependency the imported settings n
       "  ● dep (installed)\n" +
       "  ⊘ base (skipped) {already installed}\n" +
       "  ⊘ sample (skipped) {already installed}\n\n" +
-      "Import: 4 successes\n\n" +
-      "/reload to pick up changes",
+      "Import: 4 successes",
   });
   verifyBoundary();
 });

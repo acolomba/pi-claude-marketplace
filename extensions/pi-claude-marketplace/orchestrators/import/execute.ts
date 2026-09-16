@@ -10,7 +10,11 @@ import {
   type BatchedConfigPatch,
 } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
+import {
+  loadState as defaultLoadState,
+  type ExtensionState,
+  type PluginInstallRecord,
+} from "../../persistence/state-io.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -79,6 +83,14 @@ export interface PluginInstalledOutcome {
    */
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
+  /**
+   * D-04-07: the entry named a record that arrived as another plugin's
+   * dependency, and the install promoted it rather than installing anew. A
+   * promotion moves nothing on disk unless it re-materialized a disabled
+   * record, so this row's reload hint follows `resourcesChanged` where a
+   * fresh install's is unconditional. Omitted for a fresh install.
+   */
+  readonly promoted?: true;
 }
 
 export interface PluginSkipOutcome {
@@ -433,8 +445,9 @@ function buildImportNotificationMarketplaces(
       name: o.plugin,
       dependencies: dependenciesFromInstalled(o),
       // D-03/D-06: realized install transition -> info, reloads Pi resources.
+      // A promotion (D-04-07) reloads only when it re-materialized the record.
       severity: "info",
-      needsReload: true,
+      needsReload: o.promoted !== true || o.resourcesChanged,
     };
     pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
   }
@@ -690,7 +703,15 @@ async function installOnePlannedPlugin(
   opts: ImportClaudeSettingsOptions,
   result: MutableImportResult,
   plugin: PlannedPlugin,
-  consent: { readonly partial: boolean },
+  /**
+   * D-04-07: the recorded dependency this entry promotes, when the plugin is
+   * already recorded as one. ENBL-07: a partially installed record was
+   * accepted in that shape when the cascade wrote it, so the settings that
+   * name it consent to the record as it stands, not to a new degradation;
+   * the promotion's `--partial` gate reads that consent here. Import never
+   * installs a fresh plugin partially, so the flag is set for no other entry.
+   */
+  promoting?: PluginInstallRecord,
 ): Promise<PlannedPluginBucket> {
   const installPlugin = installPluginFn(opts.deps, opts.hooksRouting, opts.completionCache);
   let outcome: InstallPluginOutcome;
@@ -703,7 +724,7 @@ async function installOnePlannedPlugin(
       marketplace: plugin.ref.marketplace,
       plugin: plugin.ref.plugin,
       notifications: { mode: "orchestrated" },
-      ...(consent.partial && { partial: true }),
+      ...(promoting !== undefined && !promoting.compatibility.installable && { partial: true }),
     });
   } catch (err) {
     result.unexpectedPluginFailures.push({
@@ -746,6 +767,7 @@ async function installOnePlannedPlugin(
         resourcesChanged: outcome.resourcesChanged,
         declaresAgents: outcome.declaresAgents,
         declaresMcp: outcome.declaresMcp,
+        ...(promoting !== undefined && { promoted: true }),
       });
       result.changedResources ||= outcome.resourcesChanged;
       for (const w of outcome.postCommitWarnings ?? []) {
@@ -890,14 +912,7 @@ async function executeScopedPlan(
       continue;
     }
 
-    // ENBL-07 / D-04-07: a partially installed dependency record was accepted
-    // in that shape when the cascade wrote it, so the settings that name it
-    // consent to the record as it stands, not to a new degradation. The
-    // promotion's `--partial` gate reads that consent here; import never
-    // installs a fresh plugin partially, so the flag is set for no other entry.
-    await installOnePlannedPlugin(opts, result, plugin, {
-      partial: existingPlugin !== undefined && !existingPlugin.compatibility.installable,
-    });
+    await installOnePlannedPlugin(opts, result, plugin, existingPlugin);
   }
 
   // WB-03: after all per-entry orchestrated-mode addMarketplace
