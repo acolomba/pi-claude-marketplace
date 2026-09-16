@@ -22,6 +22,45 @@ interface ToolDeclaration {
 
 type Same<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
 
+/**
+ * The peer's root `exports` map publishes only `.`, and its `dist/index.d.ts`
+ * re-export list omits `ResourcesDiscoverEvent` and `ResourcesDiscoverResult`.
+ * That omission is why `platform/pi-api.ts` mirrors both by hand, and it is why
+ * the two pins below reach the installed declarations by a route rather than by
+ * name -- deep-importing `dist/core/extensions/` would name a path the peer does
+ * not publish.
+ *
+ * The event IS reachable exactly: it is one arm of the root-exported
+ * `ExtensionEvent` union, so `Same<>` states mutual assignability against the
+ * upstream declaration itself and fails if the local mirror widens, narrows,
+ * drops or gains a member.
+ */
+type UpstreamResourcesDiscoverEvent = Extract<Peer.ExtensionEvent, { type: "resources_discover" }>;
+
+/**
+ * No root-exported name reaches `ResourcesDiscoverResult`: type-level selection
+ * of one overload is not something the compiler offers, so a conditional type
+ * that tries to `infer` through `ExtensionAPI["on"]` matches nothing. Plain
+ * assignability against the overloaded method type does resolve, so this is the
+ * strongest available statement -- the peer's own `resources_discover` overload
+ * accepts a handler that takes the local event mirror and returns the local
+ * result mirror, which is the same check `index.ts`'s registration makes.
+ *
+ * It holds every member of both mirrors to the upstream member's type. It does
+ * NOT catch a member dropped from the result mirror, because every upstream
+ * result slot is optional and a handler returning fewer optional slots stays
+ * assignable; `Same<>` on the event covers that direction for the event.
+ */
+type PeerChecksLocalResourcesDiscoverHandler = Peer.ExtensionAPI["on"] extends (
+  event: "resources_discover",
+  handler: (
+    event: PiBoundary.ResourcesDiscoverEvent,
+    ctx: PiBoundary.ExtensionContext,
+  ) => Promise<PiBoundary.ResourcesDiscoverResult>,
+) => void
+  ? true
+  : false;
+
 function toolInventory(tools: ToolDeclaration[]): PiBoundary.ToolInventory {
   return { getAllTools: () => tools };
 }
@@ -51,6 +90,8 @@ void ({
   details: { command: "build" },
   isError: false,
 } satisfies PiBoundary.ToolResultEventResult);
+void (true satisfies Same<PiBoundary.ResourcesDiscoverEvent, UpstreamResourcesDiscoverEvent>);
+void (true satisfies PeerChecksLocalResourcesDiscoverHandler);
 void ({
   type: "resources_discover",
   cwd: "/project",

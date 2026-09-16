@@ -5,7 +5,7 @@ Regenerating rewrites this prose and carries every recorded disposition and note
 forward; nothing written outside the ledger block survives.
 
 This is an inventory, not a clean-gate verdict. It records 3403
-candidates, of which 80 are still unresolved and
+candidates, of which 78 are still unresolved and
 401 need a recorded disposition. Closure is
 `--check`, which fails every one of them until its evidence is recorded.
 
@@ -13,19 +13,19 @@ candidates, of which 80 are still unresolved and
 
 | Measurement | Value |
 | --- | --- |
-| Recorded | 2026-09-16T02:17:36.746Z |
-| Revision | 0b00df9e8605338a4bc4f1394ea631552301c4c3 |
-| Source digest | `219319ca5bd4cf72e582deafcd4db788f6a5bbd55f4db61c3c06821658a9427f` |
+| Recorded | 2026-09-16T03:17:59.654Z |
+| Revision | 02fb4bda29b411ccd2ab07af73dce1707e76c1de |
+| Source digest | `66fc0a6e0b33138ce71b3842ff7315b512d623b016cf305ae26cd2ffb6026805` |
 | Source files hashed | 605 |
 | Production files analysed | 236 |
 | Candidates | 3403 |
 | Runtime-observed | 3002 |
 | Test-only-observed | 236 |
-| Explicit-contract | 85 |
-| Unread | 80 |
+| Explicit-contract | 87 |
+| Unread | 78 |
 | Unsupported analysis | 0 |
-| Transfer steps | 3003149 |
-| Transfer walk milliseconds | 50873 |
+| Transfer steps | 3003184 |
+| Transfer walk milliseconds | 51084 |
 
 ## Population by owner
 
@@ -40,7 +40,7 @@ candidates, of which 80 are still unresolved and
 | edge | 121 | 111 | 3 | 0 | 7 | 0 |
 | orchestrators | 1811 | 1624 | 94 | 44 | 49 | 0 |
 | persistence | 80 | 58 | 15 | 1 | 6 | 0 |
-| platform | 84 | 67 | 9 | 1 | 7 | 0 |
+| platform | 84 | 67 | 9 | 3 | 5 | 0 |
 | shared | 337 | 324 | 5 | 8 | 0 | 0 |
 | transaction | 17 | 15 | 2 | 0 | 0 | 0 |
 
@@ -148,13 +148,11 @@ candidates, of which 80 are still unresolved and
 
 | Declaration | Owner | Member | Status | Reasons | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:41:39 | AuthAttemptResult | authAttempted | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (platform). |
-| extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:42:34 | AuthAttemptResult | authAttempted | unread | - | Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (platform). |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:91:3 | ResourcesDiscoverEvent | type | unread | - | Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. The handler builds this slot, and a build is a write, not a read. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform). |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:93:3 | ResourcesDiscoverEvent | reason | unread | - | Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. The handler builds this slot, and a build is a write, not a read. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform). |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:97:3 | ResourcesDiscoverResult | skillPaths | unread | - | Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. The handler builds this slot, and a build is a write, not a read. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform). |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:98:3 | ResourcesDiscoverResult | promptPaths | unread | - | Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. The handler builds this slot, and a build is a write, not a read. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform). |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:99:3 | ResourcesDiscoverResult | themePaths | unread | - | Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. This slot is never even built. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform). |
+| extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:41:39 | AuthAttemptResult | authAttempted | unread | - | Analyzer-independent, and no source is touched. A recorded decision (D-32-05) put this marker on BOTH arms as reference-only, and the declaration own comment states the implementation never branches on it: `onAuthFailure(url, cred)` never receives the value. This plan has no authority to revoke a recorded decision. Its structural twin `DeviceFlowResult.authAttempted` (`extensions/pi-claude-marketplace/domain/github-auth.ts:145:39`) is `test-only-observed` with 36 deep-comparison witnesses, first at `tests/domain/github-auth.test.ts:1205:28`; the platform copy exists only because `platform/README.md` forbids a platform -> domain import, so it has no witness of its own. Next owner: revisiting D-32-05, not a source repair. |
+| extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:42:34 | AuthAttemptResult | authAttempted | unread | - | Analyzer-independent, and no source is touched. Same recorded decision as the sibling arm at `:41:39`: D-32-05 puts `authAttempted: true` on both arms as a reference-only marker the implementation never branches on. Its structural twin `DeviceFlowResult.authAttempted` (`extensions/pi-claude-marketplace/domain/github-auth.ts:146:34`) is `test-only-observed` with 36 deep-comparison witnesses, first at `tests/domain/github-auth.test.ts:1205:28`. Next owner: revisiting D-32-05, not a source repair. |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:97:3 | ResourcesDiscoverResult | skillPaths | unread | - | Load-bearing mirror of a peer shape the root `exports` map does not publish; NOT removed. `index.ts:85` registers the discovery handler through the peer own `ExtensionAPI.on("resources_discover", ...)` overload, so the compiler checks this member type against the installed `ResourcesDiscoverResult`: widening it to `number[]` fails `npm run typecheck` at `extensions/pi-claude-marketplace/index.ts(86,5): error TS2769: No overload matches this call.` (measured). An `external-output` draft naming origin `extensions/pi-claude-marketplace/index.ts:161:11` and boundary `extensions/pi-claude-marketplace/index.ts:160:9` was submitted to the real engine and REFUSED by name: `Invalid contract: extensions/pi-claude-marketplace/platform/pi-api.ts:97:3 origin extensions/pi-claude-marketplace/index.ts:161:11 does not build ResourcesDiscoverResult.skillPaths`. Measured cause, not inferred: the returned literal contextual type is the union `ResourcesDiscoverResult | PromiseLike<ResourcesDiscoverResult>` (an async handler may return either), and `originCandidates` (scripts/check-unused-type-members.contracts.mjs:348) asks `checker.getPropertyOfType` directly, which answers a union only when EVERY arm declares the key, so the property resolves to undefined. Next owner: a bounded engine plan giving `originCandidates` the single-arm-union resolution `propertySymbolOf` (scripts/check-unused-type-members.flow.mjs:782) already performs, with its own two-arm-ambiguity control -- not a widening of the existing rule. No production source was reshaped to fit the prover. |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:98:3 | ResourcesDiscoverResult | promptPaths | unread | - | Load-bearing mirror of a peer shape the root `exports` map does not publish; NOT removed. `index.ts:85` registers the discovery handler through the peer own `ExtensionAPI.on("resources_discover", ...)` overload, so the compiler checks this member type against the installed `ResourcesDiscoverResult`: widening it to `number[]` fails `npm run typecheck` at `extensions/pi-claude-marketplace/index.ts(86,5): error TS2769: No overload matches this call.` (measured). An `external-output` draft naming origin `extensions/pi-claude-marketplace/index.ts:162:11` and boundary `extensions/pi-claude-marketplace/index.ts:160:9` was submitted to the real engine and REFUSED by name: `Invalid contract: extensions/pi-claude-marketplace/platform/pi-api.ts:98:3 origin extensions/pi-claude-marketplace/index.ts:162:11 does not build ResourcesDiscoverResult.promptPaths`. Measured cause, not inferred: the returned literal contextual type is the union `ResourcesDiscoverResult | PromiseLike<ResourcesDiscoverResult>` (an async handler may return either), and `originCandidates` (scripts/check-unused-type-members.contracts.mjs:348) asks `checker.getPropertyOfType` directly, which answers a union only when EVERY arm declares the key, so the property resolves to undefined. Next owner: a bounded engine plan giving `originCandidates` the single-arm-union resolution `propertySymbolOf` (scripts/check-unused-type-members.flow.mjs:782) already performs, with its own two-arm-ambiguity control -- not a widening of the existing rule. No production source was reshaped to fit the prover. |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:99:3 | ResourcesDiscoverResult | themePaths | unread | - | Load-bearing mirror member; NOT removed. The peer declares `themePaths?: string[]` at node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:413:5, so this slot is what makes the local mirror a complete statement of the upstream shape. The handler never builds it, so no `external-output` origin exists and no contract category fits. Positive evidence it is not surplus, measured: widening it to `number[]` fails `npm run typecheck` at `extensions/pi-claude-marketplace/index.ts(86,5): error TS2769: No overload matches this call.` -- the peer own overload constrains this member even though nothing in this tree builds or reads it. Recorded limit: removing it entirely is caught only by the `satisfies` literal in `tests/platform/pi-api.test.ts`, not by an upstream-checked pin, because every upstream result slot is optional and a handler returning fewer of them stays assignable. Next owner: a category for a member that exists to mirror an external declaration complete shape; the `originCandidates` repair named on the two sibling rows does NOT reach this one, because it is never built at all. |
 
 ## Members only tests read
 
@@ -576,6 +574,8 @@ candidates, of which 80 are still unresolved and
 
 | Declaration | Owner | Member | Contract reason | Disposition |
 | --- | --- | --- | --- | --- |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:91:3 | ResourcesDiscoverEvent | type | external-input: The installed resources_discover event declaration requires this discriminant, and the registered handler is checked against that declaration, so the local mirror has to spell it. (upstream node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:405:5 requires it at extensions/pi-claude-marketplace/index.ts:87:5) | Validated `external-input` contract. The installed declaration at node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:405:5 requires `type`, and `extensions/pi-claude-marketplace/index.ts:87:5` is a callback the peer own `ExtensionAPI.on("resources_discover", ...)` overload checks, with its parameter annotated as this mirror. The registration is no longer reached through an assertion, which is what the engine `insideAssertion` rule refused before. `tests/platform/pi-api.test.ts` additionally pins the whole mirror mutually assignable with `Extract<ExtensionEvent, { type: "resources_discover" }>`, the one root-exported route that reaches the upstream declaration; widening `type` to `string` fails `npm run typecheck` at `tests/platform/pi-api.test.ts(93,12): error TS1360` (measured). |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:93:3 | ResourcesDiscoverEvent | reason | external-input: The installed resources_discover event declaration requires this slot, and the registered handler is checked against that declaration, so the local mirror has to spell it. (upstream node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:407:5 requires it at extensions/pi-claude-marketplace/index.ts:87:5) | Validated `external-input` contract. The installed declaration at node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:407:5 requires `reason`, and `extensions/pi-claude-marketplace/index.ts:87:5` is a callback the peer own `ExtensionAPI.on("resources_discover", ...)` overload checks, with its parameter annotated as this mirror. `tests/platform/pi-api.test.ts` additionally pins the whole mirror mutually assignable with `Extract<ExtensionEvent, { type: "resources_discover" }>`; deleting `reason` from the mirror fails `npm run typecheck` at `tests/platform/pi-api.test.ts(93,12): error TS1360` (measured). |
 | extensions/pi-claude-marketplace/platform/pi-api.ts:117:56 | AssistantMessage | role | type-selection: Selects within AgentMessage by role, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/platform/pi-api.ts:117:32 selects by role) | Validated contract. type-selection: Selects within AgentMessage by role, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/platform/pi-api.ts:117:32 selects by role) |
 
 ### shared
@@ -600,28 +600,28 @@ and writing the evidence into its `note`.
 ```json
 {
   "schemaVersion": 1,
-  "generated": "2026-09-16T02:17:36.746Z",
-  "revision": "0b00df9e8605338a4bc4f1394ea631552301c4c3",
+  "generated": "2026-09-16T03:17:59.654Z",
+  "revision": "02fb4bda29b411ccd2ab07af73dce1707e76c1de",
   "fingerprint": {
     "algorithm": "sha256",
     "files": 605,
-    "digest": "219319ca5bd4cf72e582deafcd4db788f6a5bbd55f4db61c3c06821658a9427f"
+    "digest": "66fc0a6e0b33138ce71b3842ff7315b512d623b016cf305ae26cd2ffb6026805"
   },
   "counts": {
     "productionFiles": 236,
     "candidates": 3403,
     "runtimeObserved": 3002,
     "testOnlyObserved": 236,
-    "explicitContract": 85,
-    "unread": 80,
+    "explicitContract": 87,
+    "unread": 78,
     "unsupportedAnalysis": 0
   },
   "work": {
-    "transferSteps": 3003149,
-    "transferEdges": 217182,
-    "transferReads": 82960,
+    "transferSteps": 3003184,
+    "transferEdges": 217179,
+    "transferReads": 82959,
     "operationReads": 986023,
-    "transferMs": 50873
+    "transferMs": 51084
   },
   "owners": [
     {
@@ -710,8 +710,8 @@ and writing the evidence into its `note`.
       "candidates": 84,
       "runtimeObserved": 67,
       "testOnlyObserved": 9,
-      "explicitContract": 1,
-      "unread": 7,
+      "explicitContract": 3,
+      "unread": 5,
       "unsupportedAnalysis": 0
     },
     {
@@ -4062,7 +4062,7 @@ and writing the evidence into its `note`.
       "key": "authAttempted",
       "status": "unread",
       "disposition": "explained",
-      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (platform)."
+      "note": "Analyzer-independent, and no source is touched. A recorded decision (D-32-05) put this marker on BOTH arms as reference-only, and the declaration own comment states the implementation never branches on it: `onAuthFailure(url, cred)` never receives the value. This plan has no authority to revoke a recorded decision. Its structural twin `DeviceFlowResult.authAttempted` (`extensions/pi-claude-marketplace/domain/github-auth.ts:145:39`) is `test-only-observed` with 36 deep-comparison witnesses, first at `tests/domain/github-auth.test.ts:1205:28`; the platform copy exists only because `platform/README.md` forbids a platform -> domain import, so it has no witness of its own. Next owner: revisiting D-32-05, not a source repair."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:42:34",
@@ -4071,7 +4071,7 @@ and writing the evidence into its `note`.
       "key": "authAttempted",
       "status": "unread",
       "disposition": "explained",
-      "note": "Unread slot on a locally declared shape. The value is written at its build site and nothing reads it back through this declaration; the analyzer records no witness of any kind, in production or in tests. Needs the owner to confirm the slot is genuinely surplus and remove it, or to name the reader the analysis is missing so a further bounded analyzer plan can model it. Owner plan 06-13 (platform)."
+      "note": "Analyzer-independent, and no source is touched. Same recorded decision as the sibling arm at `:41:39`: D-32-05 puts `authAttempted: true` on both arms as a reference-only marker the implementation never branches on. Its structural twin `DeviceFlowResult.authAttempted` (`extensions/pi-claude-marketplace/domain/github-auth.ts:146:34`) is `test-only-observed` with 36 deep-comparison witnesses, first at `tests/domain/github-auth.test.ts:1205:28`. Next owner: revisiting D-32-05, not a source repair."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/git-credential.ts:88:3",
@@ -4159,18 +4159,18 @@ and writing the evidence into its `note`.
       "path": "extensions/pi-claude-marketplace/platform/pi-api.ts",
       "owner": "ResourcesDiscoverEvent",
       "key": "type",
-      "status": "unread",
+      "status": "explicit-contract",
       "disposition": "explained",
-      "note": "Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. The handler builds this slot, and a build is a write, not a read. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform)."
+      "note": "Validated `external-input` contract. The installed declaration at node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:405:5 requires `type`, and `extensions/pi-claude-marketplace/index.ts:87:5` is a callback the peer own `ExtensionAPI.on(\"resources_discover\", ...)` overload checks, with its parameter annotated as this mirror. The registration is no longer reached through an assertion, which is what the engine `insideAssertion` rule refused before. `tests/platform/pi-api.test.ts` additionally pins the whole mirror mutually assignable with `Extract<ExtensionEvent, { type: \"resources_discover\" }>`, the one root-exported route that reaches the upstream declaration; widening `type` to `string` fails `npm run typecheck` at `tests/platform/pi-api.test.ts(93,12): error TS1360` (measured)."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:93:3",
       "path": "extensions/pi-claude-marketplace/platform/pi-api.ts",
       "owner": "ResourcesDiscoverEvent",
       "key": "reason",
-      "status": "unread",
+      "status": "explicit-contract",
       "disposition": "explained",
-      "note": "Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. The handler builds this slot, and a build is a write, not a read. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform)."
+      "note": "Validated `external-input` contract. The installed declaration at node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:407:5 requires `reason`, and `extensions/pi-claude-marketplace/index.ts:87:5` is a callback the peer own `ExtensionAPI.on(\"resources_discover\", ...)` overload checks, with its parameter annotated as this mirror. `tests/platform/pi-api.test.ts` additionally pins the whole mirror mutually assignable with `Extract<ExtensionEvent, { type: \"resources_discover\" }>`; deleting `reason` from the mirror fails `npm run typecheck` at `tests/platform/pi-api.test.ts(93,12): error TS1360` (measured)."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:97:3",
@@ -4179,7 +4179,7 @@ and writing the evidence into its `note`.
       "key": "skillPaths",
       "status": "unread",
       "disposition": "explained",
-      "note": "Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. The handler builds this slot, and a build is a write, not a read. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform)."
+      "note": "Load-bearing mirror of a peer shape the root `exports` map does not publish; NOT removed. `index.ts:85` registers the discovery handler through the peer own `ExtensionAPI.on(\"resources_discover\", ...)` overload, so the compiler checks this member type against the installed `ResourcesDiscoverResult`: widening it to `number[]` fails `npm run typecheck` at `extensions/pi-claude-marketplace/index.ts(86,5): error TS2769: No overload matches this call.` (measured). An `external-output` draft naming origin `extensions/pi-claude-marketplace/index.ts:161:11` and boundary `extensions/pi-claude-marketplace/index.ts:160:9` was submitted to the real engine and REFUSED by name: `Invalid contract: extensions/pi-claude-marketplace/platform/pi-api.ts:97:3 origin extensions/pi-claude-marketplace/index.ts:161:11 does not build ResourcesDiscoverResult.skillPaths`. Measured cause, not inferred: the returned literal contextual type is the union `ResourcesDiscoverResult | PromiseLike<ResourcesDiscoverResult>` (an async handler may return either), and `originCandidates` (scripts/check-unused-type-members.contracts.mjs:348) asks `checker.getPropertyOfType` directly, which answers a union only when EVERY arm declares the key, so the property resolves to undefined. Next owner: a bounded engine plan giving `originCandidates` the single-arm-union resolution `propertySymbolOf` (scripts/check-unused-type-members.flow.mjs:782) already performs, with its own two-arm-ambiguity control -- not a widening of the existing rule. No production source was reshaped to fit the prover."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:98:3",
@@ -4188,7 +4188,7 @@ and writing the evidence into its `note`.
       "key": "promptPaths",
       "status": "unread",
       "disposition": "explained",
-      "note": "Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. The handler builds this slot, and a build is a write, not a read. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform)."
+      "note": "Load-bearing mirror of a peer shape the root `exports` map does not publish; NOT removed. `index.ts:85` registers the discovery handler through the peer own `ExtensionAPI.on(\"resources_discover\", ...)` overload, so the compiler checks this member type against the installed `ResourcesDiscoverResult`: widening it to `number[]` fails `npm run typecheck` at `extensions/pi-claude-marketplace/index.ts(86,5): error TS2769: No overload matches this call.` (measured). An `external-output` draft naming origin `extensions/pi-claude-marketplace/index.ts:162:11` and boundary `extensions/pi-claude-marketplace/index.ts:160:9` was submitted to the real engine and REFUSED by name: `Invalid contract: extensions/pi-claude-marketplace/platform/pi-api.ts:98:3 origin extensions/pi-claude-marketplace/index.ts:162:11 does not build ResourcesDiscoverResult.promptPaths`. Measured cause, not inferred: the returned literal contextual type is the union `ResourcesDiscoverResult | PromiseLike<ResourcesDiscoverResult>` (an async handler may return either), and `originCandidates` (scripts/check-unused-type-members.contracts.mjs:348) asks `checker.getPropertyOfType` directly, which answers a union only when EVERY arm declares the key, so the property resolves to undefined. Next owner: a bounded engine plan giving `originCandidates` the single-arm-union resolution `propertySymbolOf` (scripts/check-unused-type-members.flow.mjs:782) already performs, with its own two-arm-ambiguity control -- not a widening of the existing rule. No production source was reshaped to fit the prover."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:99:3",
@@ -4197,7 +4197,7 @@ and writing the evidence into its `note`.
       "key": "themePaths",
       "status": "unread",
       "disposition": "explained",
-      "note": "Locally asserted mirror of a Pi shape the peer dependency does not export. `index.ts:56` casts `pi.on` with `as unknown as`, so no installed declaration ever checks this member: there is no upstream site an `external-input` contract could name and no external return an `external-output` contract could reach. This slot is never even built. Source repair: keep only the members the handler needs, or state the upstream contract somewhere the compiler can check it. Owner plan 06-13 (platform)."
+      "note": "Load-bearing mirror member; NOT removed. The peer declares `themePaths?: string[]` at node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:413:5, so this slot is what makes the local mirror a complete statement of the upstream shape. The handler never builds it, so no `external-output` origin exists and no contract category fits. Positive evidence it is not surplus, measured: widening it to `number[]` fails `npm run typecheck` at `extensions/pi-claude-marketplace/index.ts(86,5): error TS2769: No overload matches this call.` -- the peer own overload constrains this member even though nothing in this tree builds or reads it. Recorded limit: removing it entirely is caught only by the `satisfies` literal in `tests/platform/pi-api.test.ts`, not by an upstream-checked pin, because every upstream result slot is optional and a handler returning fewer of them stays assignable. Next owner: a category for a member that exists to mirror an external declaration complete shape; the `originCandidates` repair named on the two sibling rows does NOT reach this one, because it is never built at all."
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:117:56",
