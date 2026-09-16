@@ -32,20 +32,24 @@ import type {
 } from "../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block 1: ENBL-02 -- STATE_SCHEMA.schemaVersion is Union(Literal(1), Literal(2))
+// Block 1: ENBL-02 / D-04-03 -- STATE_SCHEMA.schemaVersion is
+// Union(Literal(1), Literal(2), Literal(3))
 // ──────────────────────────────────────────────────────────────────────────
 
-test("ENBL-02: STATE_SCHEMA.schemaVersion is Type.Union([Literal(1), Literal(2)])", () => {
+test("ENBL-02 / D-04-03: STATE_SCHEMA.schemaVersion is Type.Union([Literal(1), Literal(2), Literal(3)])", () => {
   const versionSchema = STATE_SCHEMA.properties.schemaVersion as unknown as Record<string, unknown>;
 
-  // Type.Union([Type.Literal(1), Type.Literal(2)]) compiles to
-  // { anyOf: [{ const: 1 }, { const: 2 }] }.
-  // Asserting the anyOf structure pins the ENBL-02 migration contract:
-  // both v1 (pre-enabled) and v2 (enabled) on-disk formats are accepted,
-  // and any future widening to v3 requires this test to be updated.
+  // Type.Union([Type.Literal(1), Type.Literal(2), Type.Literal(3)]) compiles to
+  // { anyOf: [{ const: 1 }, { const: 2 }, { const: 3 }] }.
+  // Asserting the anyOf structure pins the migration contract: v1
+  // (pre-enabled), v2 (enabled, ENBL-02) and v3 (provenance, D-04-03) on-disk
+  // formats are all accepted. The widening to v3 is the D-04-03 provenance
+  // migration -- a required field filled with "explicit" before validation --
+  // and this test was updated with it; any future widening to v4 requires
+  // this test to be updated again.
   assert.ok(Array.isArray(versionSchema.anyOf), "schemaVersion must be a union (anyOf present)");
   const anyOf = versionSchema.anyOf as Array<Record<string, unknown>>;
-  assert.equal(anyOf.length, 2, "schemaVersion union must have exactly two members (1 and 2)");
+  assert.equal(anyOf.length, 3, "schemaVersion union must have exactly three members (1, 2 and 3)");
   assert.ok(
     anyOf.some((m) => m.const === 1),
     "schemaVersion union must include Literal(1)",
@@ -53,6 +57,10 @@ test("ENBL-02: STATE_SCHEMA.schemaVersion is Type.Union([Literal(1), Literal(2)]
   assert.ok(
     anyOf.some((m) => m.const === 2),
     "schemaVersion union must include Literal(2)",
+  );
+  assert.ok(
+    anyOf.some((m) => m.const === 3),
+    "schemaVersion union must include Literal(3)",
   );
 });
 
