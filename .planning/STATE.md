@@ -5,16 +5,16 @@ milestone_name: transitive-dependencies
 current_phase: 5
 current_phase_name: Prune on uninstall
 status: executing
-stopped_at: Phase 5 planned (3 plans, 3 waves), ready to execute
-last_updated: "2026-09-16T21:45:55.161Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-09-16T22:44:41.540Z"
 last_activity: 2026-09-16
-last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: aceb54c7f07610f419033f9ed3b6bef770b6cf3a
+last_activity_desc: Phase 05 execution started
+state_head: af0a8467efd632b4fbd46a2e3b7d79a231ad653d
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 22
-  completed_plans: 19
+  completed_plans: 20
   percent: 80
 ---
 
@@ -27,15 +27,15 @@ See: `.planning/PROJECT.md` (updated 2026-09-14 after manifest verification)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 04 — Install provenance
+**Current focus:** Phase 05 — Prune on uninstall
 Installing a plugin that declares dependencies should install what it needs.
 25 requirements across 5 phases. v1.19 Unit Test Refactor closed 2026-09-04 and
 is archived under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 05 (Prune on uninstall) — READY TO EXECUTE
-Plan: Not started
+Phase: 05 (Prune on uninstall) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
 
 **Phase 4 closed 2026-09-16**, verified 9/9 must-haves; the one human item
@@ -275,7 +275,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-16 — Phase 04 complete, transitioned to Phase 5
+Last activity: 2026-09-16 — Phase 05 execution started
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 3 of 5 phases complete (60%).
@@ -457,6 +457,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 03 P07 | 43min | 2 tasks | 6 files |
 | Phase 03 P04 | 7h 5m | 3 tasks | 5 files |
 | Phase 03 P06 | 72 min | 2 tasks | 16 files |
+| Phase 05 P01 | 47 min | 3 tasks | 26 files |
 
 ## Accumulated Context
 
@@ -696,6 +697,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: D-03-31: dependency marketplace not added is a ContentReason on the marketplace in user scope precedent; the three structural markers are Excluded from ContentReason and cannot type-check into a plugin row
 - [Phase 03]: D-03-32/33: the cascade emits cardinality single and always routes through CASCADE_CONTEXT, so a no-dependency install's bytes stay frozen with no branch
 - [Phase 03]: D-03-34/35: a root-keyed member failure stays on the single-plugin path, and the cascade error is derived from the subject rather than the caught value, which removed an uncoverable branch instead of pinning it
+- [Phase 05]: The uninstall dependents guard is a typed UninstallRefusedError thrown inside the lock closure and rendered by the existing failure channel; uninstallPluginWithTransaction gained no condition (fallow 15/14 unchanged)
+- [Phase 05]: readDependencyDeclaration is typed DeclarationLookupResult (ClosureLookupResult minus the absent arm it can never produce) so the direct-coverage gate carries no unreachable branch
 
 ### Pending Todos
 
@@ -782,9 +785,9 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 5 context gathered
+**Stopped at:** Completed 05-01-PLAN.md
 
-**Resume file:** .planning/phases/05-prune-on-uninstall/05-CONTEXT.md
+**Resume file:** None
 `HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
 content was folded into `04-CONTEXT.md`: the supersession warning and the
 ordering constraint into `<decisions>`, and the operational anti-patterns
@@ -794,7 +797,7 @@ carried-notes block under `<specifics>`.
 
 **Read beside it:** `.planning/phases/04-install-provenance/04-CONTEXT.md`
 
-Last session: 2026-09-16T20:01:54.268Z
+Last session: 2026-09-16T22:44:41.353Z
 resumed a paused Phase 4 discussion, answered its two open questions (the
 config-write reversal lands entirely in Phase 4 in a fixed order; reconcile
 keeps sweeping genuine orphans with one exemption), wrote `04-CONTEXT.md` and

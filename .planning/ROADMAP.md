@@ -260,12 +260,12 @@ Six waves, strictly sequential: every plan touches files an earlier one changed,
 5. `uninstall` accepts exactly `--keep-data` and `--prune` as its extra flags — the shared `--local` and the global `--scope` unchanged — and the flag-catalog drift guard (`tests/architecture/flag-catalog-drift.test.ts`) pins that set, so a later flag cannot be added silently. (FLAG-01)
 6. `uninstall <plugin>` refuses to remove a plugin that another installed plugin in the same scope still declares — a disabled declarer included — and names the dependents; nothing is removed, and the load-time reconcile path refuses the same way. (PRUNE-05, folded in during the Phase 5 discussion — D-05-14..16)
 
-**Plans**: 3 plans
+**Plans**: 1/3 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — The dependents guard on both entry points (PRUNE-05): declaration index leaf, refusal inside the lock, `dependents remain` landed in full, reconcile cause line
+- [x] 05-01-PLAN.md — The dependents guard on both entry points (PRUNE-05): declaration index leaf, refusal inside the lock, `dependents remain` landed in full, reconcile cause line
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -304,7 +304,7 @@ plugin names — so plan these phases with the UI gate skipped.
 | 2. Uninstall data disposition and the uninstall option seam | v1.20 | 2/2 | Complete    | 2026-09-14 |
 | 3. Dependency resolution | v1.20 | 7/7 | Complete    | 2026-09-15 |
 | 4. Install provenance | v1.20 | 6/6 | Complete    | 2026-09-16 |
-| 5. Prune on uninstall | v1.20 | 0/— | Not started | — |
+| 5. Prune on uninstall | v1.20 | 1/3 | In Progress|  |
 
 ## Carried Forward
 
