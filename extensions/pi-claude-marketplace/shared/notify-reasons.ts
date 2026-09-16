@@ -5,14 +5,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 54-entry
+ * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 55-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 54-entry set.
+ * 55-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
@@ -35,7 +35,10 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * dependency off the benign-skip default (52 to 53). D-04-07 added
  * `dependency promoted`, install's marker for a recorded dependency the user
  * then asked for by name -- a state change, which the refusal `already
- * installed` cannot report on its own (53 to 54).
+ * installed` cannot report on its own (53 to 54). D-05-14 added `dependents
+ * remain`, uninstall's refusal marker for a plugin another installed plugin in
+ * the scope still declares -- an error, not a benign skip, so it joins the
+ * command-private reasons and not the idempotent group (54 to 55).
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -286,6 +289,14 @@ type CommandPrivateReason =
   // promotion mutates state, which is why it is not an idempotent reason.
   | "dependency promoted"
   | "plugins remain"
+  // D-05-14 / D-05-15: uninstall's refusal marker, owned by
+  // `orchestrators/plugin/uninstall.messaging.ts`. The named plugin is still
+  // declared by another installed plugin in the scope, so nothing was removed;
+  // the dependents are named on the cause line. It sits beside `plugins
+  // remain` because the two are the same shape of refusal about different
+  // subjects -- and it is NOT idempotent: the operation was refused, not
+  // already done.
+  | "dependents remain"
   | "stale clone"
   | "duplicate name"
   | "marketplace not added"

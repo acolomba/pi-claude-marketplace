@@ -219,6 +219,10 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
     // record's provenance changed and nothing was materialized, so it rides an
     // `installed` row beside `already installed`.
     "dependency promoted",
+    // D-05-14 / D-05-15: uninstall's refusal marker for a plugin another
+    // installed plugin in the scope still declares. Nothing is removed; the
+    // dependents ride the cause line, never the token.
+    "dependents remain",
   ];
 
   // act

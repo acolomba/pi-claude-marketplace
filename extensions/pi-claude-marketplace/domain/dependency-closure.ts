@@ -66,6 +66,14 @@ export type ClosureLookupResult =
   | { readonly kind: "unusable"; readonly detail: string };
 
 /**
+ * A catalog read over a declaration already in hand. The `absent` arm names a
+ * plugin its marketplace does not declare, which a reader that starts from the
+ * plugin's own entry can never observe, so the arm is excluded from its type
+ * rather than carried as a branch no test can reach.
+ */
+export type DeclarationLookupResult = Exclude<ClosureLookupResult, { readonly kind: "absent" }>;
+
+/**
  * The plugin a catalog read is about.
  *
  * The two halves arrive already split and already allowlist-checked. A lookup
@@ -90,7 +98,7 @@ export type ClosureLookup = (subject: ClosureSubject) => Promise<ClosureLookupRe
  */
 export function toClosureLookupResult(
   parsed: ReturnType<typeof parseDeclaredDependencies>,
-): ClosureLookupResult {
+): DeclarationLookupResult {
   return parsed.ok
     ? { kind: "found", dependencies: parsed.dependencies }
     : { kind: "unusable", detail: parsed.reason };

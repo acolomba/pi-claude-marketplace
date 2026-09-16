@@ -1004,7 +1004,7 @@ ______________________________________________________________________
 
 Single-plugin command in v2 still renders the always-marketplace-header form; the marketplace appears as a bare header and the plugin row indents underneath.
 
-The command takes `[--scope user|project] [--keep-data] [--local]`. `--keep-data` preserves the plugin's persistent data directory (DATA-01 / D-02-03); the plugin's artifacts and its installation record are removed either way. The flag adds the `data kept` reason to the row and changes nothing else -- there is no retained-data report and no retained-path trailer (D-02-01). Omitting `--keep-data` deletes that data directory with no confirmation prompt (DATA-02 / D-02-04), and the load-time reconcile that uninstalls a plugin dropped from `claude-plugins.json` takes the same deletion default, because it has no command line to carry the flag (DATA-03). `--delete-data`, `-y` and `--yes` are rejected as unknown flags before any state changes (D-02-05): there is no prompt to answer, and the default needs no second spelling. `--local` keeps its shared write-target meaning, selecting `claude-plugins.local.json` for the config write.
+The command takes `[--scope user|project] [--keep-data] [--local]`. `--keep-data` preserves the plugin's persistent data directory (DATA-01 / D-02-03); the plugin's artifacts and its installation record are removed either way. The flag adds the `data kept` reason to the row and changes nothing else -- there is no retained-data report and no retained-path trailer (D-02-01). Omitting `--keep-data` deletes that data directory with no confirmation prompt (DATA-02 / D-02-04), and the load-time reconcile that uninstalls a plugin dropped from `claude-plugins.json` takes the same deletion default, because it has no command line to carry the flag (DATA-03). `--delete-data`, `-y` and `--yes` are rejected as unknown flags before any state changes (D-02-05): there is no prompt to answer, and the default needs no second spelling. `--local` keeps its shared write-target meaning, selecting `claude-plugins.local.json` for the config write. An uninstall is refused while another installed plugin in the same scope still declares the target as a dependency (PRUNE-05 / D-05-14): nothing is removed and the row names the dependents.
 
 ### Success
 
@@ -1097,6 +1097,34 @@ A plugin operation has failed.
 
 ● official [user]
   ⊘ helper (failed) {not installed, marketplace in project scope}
+```
+
+### Failure -- refused, dependents remain (PRUNE-05 / D-05-14 / D-05-15)
+
+Triggered when `uninstall <plugin>@<marketplace>` names a plugin that another installed plugin in the SAME scope still declares as a dependency. The uninstall is refused inside the locked state transaction, before any artifact leaves disk: no artifact, no installation record and no data directory is removed, and `state.json` is not rewritten. The row carries the `dependents remain` reason and the 4-space-indent `cause:` trailer names every dependent as a `name@marketplace` key, sorted, on the `dependency cycle` precedent -- the names ride the cause line and never the token. A DISABLED dependent still holds the target (D-05-04): installed is installed. Only the target scope's own `state.json` is consulted (D-05-05), and every declaration is read offline from the dependent's own manifest, with its marketplace entry as the fallback (D-05-06). The remedy is to uninstall the dependent first, or to run `uninstall <dependent> --prune`, which then sweeps the target as an orphan. The load-time reconcile refuses a config-driven uninstall the same way and reports the same row on every pass until the config is fixed (D-05-16; catalogued under `reconcile-applied-cascade`). Severity: `error`. No reload-hint -- nothing changed.
+
+<!-- catalog-state: refused-dependents-remain -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ helper v1.0.0 (failed) {dependents remain}
+    cause: required by deploy-kit@official
+```
+
+### Failure -- refused, a declarer could not be read (D-05-07)
+
+Triggered when some OTHER installed record in the scope has declarations the guard cannot establish: its marketplace manifest fails to load, that manifest does not list it, or its declaration parses as unusable. The rule is fail-closed -- an unreadable record is never read as "declares nothing", because deleting on incomplete information is the one outcome the guard must never produce -- so the uninstall is refused rather than risked. The brace carries the DECLARER's read-failure token (`not in manifest` here; `invalid manifest` for an unusable declaration; `source missing`, `unparseable`, `permission denied` or `unreadable` for a manifest that failed to load), and the `cause:` trailer names which record could not be read, never an absolute path. The remedy is to repair that record's marketplace (`marketplace update`) or to remove it (`marketplace remove`). Severity: `error`. No reload-hint.
+
+<!-- catalog-state: refused-declarer-unreadable -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ helper v1.0.0 (failed) {not in manifest}
+    cause: cannot read the dependencies of other@official: not declared by its marketplace
 ```
 
 ______________________________________________________________________

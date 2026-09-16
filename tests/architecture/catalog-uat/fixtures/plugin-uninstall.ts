@@ -160,5 +160,61 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // D-05-14 / D-05-15 / PRUNE-05: another installed plugin in the scope
+    // still declares the target, so the uninstall is refused and nothing is
+    // removed. The dependents ride the cause line, never the token.
+    "refused-dependents-remain": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["dependents remain"],
+                cause: new Error("required by deploy-kit@official"),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-05-07: some OTHER record's declarations could not be established, so
+    // the uninstall is refused rather than risked. The brace carries the
+    // declarer's read-failure token and the cause names which record it was.
+    "refused-declarer-unreadable": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["not in manifest"],
+                cause: new Error(
+                  "cannot read the dependencies of other@official: not declared by its marketplace",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };

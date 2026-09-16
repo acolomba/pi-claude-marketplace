@@ -34,6 +34,7 @@ import {
 import {
   createNodeUninstallPlugin,
   createUninstallPlugin,
+  UninstallRefusedError,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { loadAgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -312,8 +313,9 @@ async function seedFullPlugin(
         source: pathSource("./src"),
         addedFromCwd: cwd,
         // LIFE-04: nothing writes a marketplace.json under this cwd, so the
-        // recorded manifest path never exists. Uninstall reads no manifest and
-        // no resolver -- the installation record alone drives the cascade.
+        // recorded manifest path never exists. A single record has no sibling
+        // whose declarations the dependents guard would read (D-05-14), so the
+        // installation record alone drives the cascade.
         manifestPath: path.join(cwd, "marketplace.json"),
         marketplaceRoot: cwd,
         plugins: {
@@ -2418,6 +2420,18 @@ async function seedGitPlugin(
     await mkdir(path.join(locations.pluginClonesDir, cloneKey), { recursive: true });
   }
 
+  // D-05-14: with two records under one marketplace, uninstalling either one
+  // reads the OTHER's declarations, so the recorded manifest must exist and
+  // list both. Neither entry declares a dependency, so neither holds the other.
+  const manifestPath = path.join(cwd, "marketplace.json");
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: marketplace,
+      plugins: Object.keys(plugins).map((name) => ({ name, source: `./plugins/${name}` })),
+    }),
+  );
+
   await seedState(locations.extensionRoot, {
     schemaVersion: 3,
     marketplaces: {
@@ -2426,7 +2440,7 @@ async function seedGitPlugin(
         scope: locations.scope,
         source: pathSource("./src"),
         addedFromCwd: cwd,
-        manifestPath: path.join(cwd, "marketplace.json"),
+        manifestPath,
         marketplaceRoot: cwd,
         plugins: pluginRecords,
       },
@@ -4382,6 +4396,19 @@ test("retry proof: uninstall: a hooks refusal on a shared clone retries without 
         return record;
       };
 
+      // D-05-14: uninstalling `alpha` reads `beta`'s declarations, so the
+      // recorded manifest must exist and list both; neither declares the other.
+      await writeFile(
+        path.join(cwd, "marketplace.json"),
+        JSON.stringify({
+          name: "mp",
+          plugins: [
+            { name: "alpha", source: "./plugins/alpha" },
+            { name: "beta", source: "./plugins/beta" },
+          ],
+        }),
+      );
+
       await seedState(locations.extensionRoot, {
         schemaVersion: 3,
         marketplaces: {
@@ -4772,6 +4799,253 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
       restoreSchedule?.();
       await rm(escape, { force: true, recursive: true });
       await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D-05-14 / D-05-15 / PRUNE-05: the dependents guard.
+//
+// `uninstall X` in a scope where any other installed record declares X is
+// REFUSED inside the locked transaction: nothing is removed, the row carries
+// `{dependents remain}` at error severity with no reload hint, and the cause
+// line names the dependents as sorted `name@marketplace` keys. A disabled
+// declarer holds (D-05-04), only the target scope's own state is consulted
+// (D-05-05), every declaration is read offline (D-05-06), and an unreadable
+// declarer refuses rather than risks (D-05-07).
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface DeclaringSeed {
+  /** Bare `name` / `name@marketplace` tokens, written to the entry AND the plugin's own manifest. */
+  readonly dependencies?: readonly string[];
+  readonly enabled?: boolean;
+  readonly provenance?: PluginRecord["provenance"];
+  /** `false` records the plugin in state while its marketplace manifest omits it (D-05-07). */
+  readonly listed?: boolean;
+}
+
+/**
+ * Seed one marketplace whose on-disk `marketplace.json` and per-plugin
+ * `plugin.json` carry the declared dependencies, plus the state records, with
+ * the marketplace record's `manifestPath` / `marketplaceRoot` pointing at that
+ * tree so the guard can read every declaration offline (D-05-06).
+ */
+async function seedDeclaringMarketplace(
+  locations: ReturnType<typeof locationsFor>,
+  marketplace: string,
+  plugins: Readonly<Record<string, DeclaringSeed>>,
+  cwd: string,
+): Promise<void> {
+  const marketplaceRoot = path.join(cwd, marketplace);
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  const entries: object[] = [];
+  const pluginRecords: Record<string, PluginRecord> = {};
+  for (const [plugin, seed] of Object.entries(plugins)) {
+    const declared = seed.dependencies === undefined ? {} : { dependencies: seed.dependencies };
+    if (seed.listed !== false) {
+      entries.push({ name: plugin, version: "1.0.0", source: `./plugins/${plugin}`, ...declared });
+    }
+
+    const ownManifest = path.join(
+      marketplaceRoot,
+      "plugins",
+      plugin,
+      ".claude-plugin",
+      "plugin.json",
+    );
+    await mkdir(path.dirname(ownManifest), { recursive: true });
+    await writeFile(ownManifest, JSON.stringify({ name: plugin, version: "1.0.0", ...declared }));
+    const record = makePluginRecord({}, seed.provenance ?? "explicit");
+    record.enabled = seed.enabled ?? true;
+    pluginRecords[plugin] = record;
+  }
+
+  await writeFile(manifestPath, JSON.stringify({ name: marketplace, plugins: entries }));
+  await seedState(locations.extensionRoot, {
+    schemaVersion: 3,
+    marketplaces: {
+      [marketplace]: {
+        name: marketplace,
+        scope: locations.scope,
+        source: pathSource(`./${marketplace}`),
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins: pluginRecords,
+      },
+    },
+  });
+}
+
+interface RefusalCase {
+  readonly title: string;
+  readonly plugins: Readonly<Record<string, DeclaringSeed>>;
+  readonly expectedRow: string;
+  readonly expectedCause: string;
+}
+
+const REFUSAL_CASES: readonly RefusalCase[] = [
+  {
+    title: "D-05-14: uninstall is refused while one installed plugin declares the target",
+    plugins: { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
+    expectedRow: "⊘ helper v0.0.1 (failed) {dependents remain}",
+    expectedCause: "required by app@mp",
+  },
+  {
+    title: "D-05-15: two dependents are named on the cause line in sorted key order",
+    plugins: {
+      helper: {},
+      zeta: { dependencies: ["helper@mp"] },
+      alpha: { dependencies: ["helper"] },
+    },
+    expectedRow: "⊘ helper v0.0.1 (failed) {dependents remain}",
+    expectedCause: "required by alpha@mp, zeta@mp",
+  },
+  {
+    title: "D-05-04: a DISABLED installed plugin still holds the target",
+    plugins: { helper: {}, app: { dependencies: ["helper"], enabled: false } },
+    expectedRow: "⊘ helper v0.0.1 (failed) {dependents remain}",
+    expectedCause: "required by app@mp",
+  },
+  {
+    title: "D-05-07: a record its marketplace manifest does not list refuses the uninstall",
+    plugins: { helper: {}, other: { listed: false } },
+    expectedRow: "⊘ helper v0.0.1 (failed) {not in manifest}",
+    expectedCause: "cannot read the dependencies of other@mp: not declared by its marketplace",
+  },
+];
+
+for (const { title, plugins, expectedRow, expectedCause } of REFUSAL_CASES) {
+  test(title, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-dependents-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedDeclaringMarketplace(locations, "mp", plugins, cwd);
+        const dataDir = await locations.pluginDataDir("mp", "helper");
+        await mkdir(dataDir, { recursive: true });
+        await writeFile(path.join(dataDir, "session"), "kept\n");
+        const stateBefore = await readFile(locations.stateJsonPath);
+        const mtimeBefore = (await stat(locations.stateJsonPath)).mtimeMs;
+        const { ctx, pi, notifications } = makeCtx();
+
+        // act
+        const outcome = await uninstallWithFreshOwner({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "helper",
+        });
+
+        // assert
+        assert.equal(outcome, undefined);
+        assert.deepStrictEqual(notifications, [
+          {
+            message:
+              `A plugin operation has failed.\n\n● mp [project]\n` +
+              `  ${expectedRow}\n` +
+              `    cause: ${expectedCause}`,
+            severity: "error",
+          },
+        ]);
+        assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
+        assert.equal((await stat(locations.stateJsonPath)).mtimeMs, mtimeBefore);
+        assert.equal(await readFile(path.join(dataDir, "session"), "utf8"), "kept\n");
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("D-05-05: a declarer installed only in the OTHER scope is not consulted", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-dependents-other-scope-"));
+    try {
+      // arrange
+      const userLocations = locationsFor("user", cwd);
+      await seedDeclaringMarketplace(
+        userLocations,
+        "mp",
+        { app: { dependencies: ["helper"] } },
+        cwd,
+      );
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(locations, "mp", { helper: {} }, cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "helper",
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ○ helper v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+        },
+      ]);
+      const state = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(Object.keys(state.marketplaces["mp"]?.plugins ?? {}), []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-05-14: the orchestrated refusal returns the typed failed outcome and emits nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-dependents-orchestrated-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { helper: {}, app: { dependencies: ["helper"] } },
+        cwd,
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "helper",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.equal(outcome.status, "failed");
+      const error = outcome.status === "failed" ? outcome.error : undefined;
+      assert.ok(error instanceof UninstallRefusedError);
+      assert.deepStrictEqual(
+        { ...outcome, error: { reason: error.reason, message: error.message } },
+        {
+          status: "failed",
+          reason: "dependents remain",
+          error: { reason: "dependents remain", message: "required by app@mp" },
+          cause: "required by app@mp",
+        },
+      );
+      assert.deepStrictEqual(notifications, []);
+      const state = await loadState(locations.extensionRoot);
+      assert.ok(state.marketplaces["mp"]?.plugins["helper"] !== undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
     }
   });
 });

@@ -48,8 +48,12 @@ const EXPECTED_SECTION_COUNT = 20;
 // installed by name -- the `installed` row carrying `{already installed,
 // dependency promoted}`, the one install outcome that changes a record
 // without materializing anything (205 -> 206).
-const EXPECTED_STATE_COUNT = 206;
-const EXPECTED_UTF8_BYTES = 27_385;
+// PRUNE-05 / D-05-14 / D-05-07: +2 states for uninstall's refusals -- the
+// `{dependents remain}` row whose cause line names who still needs the plugin,
+// and the fail-closed row that carries a declarer's read-failure token when
+// some other record's declarations could not be established (206 -> 208).
+const EXPECTED_STATE_COUNT = 208;
+const EXPECTED_UTF8_BYTES = 27_717;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -338,7 +342,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 206 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 208 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

@@ -5,6 +5,9 @@
 // Composition (D-09):
 //   withLockedStateTransaction(locations, async (tx) => {
 //     PU-5 silent converge: if record absent, set alreadyGone=true and return (NO save)
+//     D-05-14 dependents guard: throw UninstallRefusedError if any OTHER record
+//       in this scope declares the target, or if some record's declarations
+//       cannot be read (D-05-07) -- BEFORE the cascade, so nothing leaves disk
 //     outcome = await cascadeUnstagePlugin(plugin, marketplace, locations, installed)
 //     if (!outcome.ok) throw outcome.cause  // PU-7 propagation; state record retained
 //     delete state.marketplaces[mp].plugins[plugin]
@@ -26,8 +29,10 @@
 // orchestrators/marketplace/shared.ts ONLY (NOT from add.ts/remove.ts/etc).
 //
 // NFR-5 (no network): this file MUST NOT import platform/git or DEFAULT_GIT_OPS.
-// The architectural source-grep test gates both install owners + list.ts;
-// uninstall.ts is implicitly clean by construction (no git surface).
+// The architectural source-grep test gates this file by name: the D-05-14
+// guard composes an offline manifest read through `dependency-index.ts`
+// (memoized manifest cache + warm clone cache only, D-05-06), and that leaf is
+// gated beside it.
 //
 // PU-6 (legacy state migration): handled by persistence/migrate.ts at load
 // time (ST-4/ST-5). No new code needed here -- a state record missing
@@ -44,6 +49,7 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 
+import { findDependents } from "../../domain/dependency-orphans.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -59,6 +65,7 @@ import { withLockedStateTransaction } from "../../transaction/with-state-guard.t
 import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
+import { buildScopeDeclarationIndex } from "./dependency-index.ts";
 import {
   absentTargetReasons,
   applyPartialCascadeFold,
@@ -69,7 +76,9 @@ import {
 import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
 
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
+import type { DeclarationIndex } from "../../domain/dependency-orphans.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -176,6 +185,58 @@ export type UninstallHooksRouting = Pick<
   "rebuildRoutingTables" | "removePluginConfigFromCache"
 >;
 
+/**
+ * D-05-14 / D-05-07: the uninstall was REFUSED inside the locked transaction
+ * before anything left disk -- either another installed plugin in the scope
+ * still declares the target (`dependents remain`) or some other record's
+ * declarations could not be established, in which case `reason` is that
+ * declarer's read-failure token.
+ *
+ * `message` IS the rendered cause line, so it carries only `name@marketplace`
+ * keys, field paths or already-redacted text -- never an absolute path -- and
+ * no `{ cause }` is chained behind it. Exported because the reconcile path
+ * narrows on it with `instanceof` to decide which failed rows carry a cause
+ * (D-05-16).
+ */
+export class UninstallRefusedError extends Error {
+  readonly reason: ContentReason;
+  constructor(reason: ContentReason, message: string) {
+    super(message);
+    this.name = "UninstallRefusedError";
+    this.reason = reason;
+  }
+}
+
+/**
+ * D-05-14 / PRUNE-05: refuse to remove `key` while any other record in this
+ * scope's state declares it, and refuse (D-05-07) while any other record's
+ * declarations cannot be established. Runs INSIDE the locked transaction over
+ * `tx.state`, so the declarer set and the removal decision share one snapshot
+ * under one cross-process lock (T-05-03). Returns the index on the way
+ * through, because the orphan sweep that follows the removal consumes it.
+ */
+async function assertNoDependents(args: {
+  readonly state: ExtensionState;
+  readonly locations: ScopedLocations;
+  readonly key: string;
+}): Promise<DeclarationIndex> {
+  const result = await buildScopeDeclarationIndex({
+    state: args.state,
+    locations: args.locations,
+    exclude: args.key,
+  });
+  if (!result.ok) {
+    throw new UninstallRefusedError(result.reason, result.cause.message);
+  }
+
+  const dependents = findDependents(args.key, result.index);
+  if (dependents.length > 0) {
+    throw new UninstallRefusedError("dependents remain", `required by ${dependents.join(", ")}`);
+  }
+
+  return result.index;
+}
+
 const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
   cascadeUnstagePlugin,
   commitPluginRemoval,
@@ -186,14 +247,21 @@ const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
 };
 
 /**
- * Narrow an Error thrown out of `cascadeUnstagePlugin` (PU-7 propagation
- * path) to a closed-set Reason for `PluginFailedMessage.reasons`. Mirrors
- * the typed-cause dispatch in `orchestrators/marketplace/remove.ts`:
- * instanceof `AgentsUnstageFailureError` first,
- * `NodeJS.ErrnoException.code` second, permissive fallback last. Closed-set
- * Reasons live in `shared/notification-types.ts::REASONS`.
+ * Narrow an Error thrown out of the locked transaction -- a D-05-14 refusal,
+ * a lock already held, or a `cascadeUnstagePlugin` failure (PU-7 propagation
+ * path) -- to a closed-set Reason for `PluginFailedMessage.reasons`. Mirrors
+ * the typed-cause dispatch in `orchestrators/marketplace/remove.ts`: the
+ * refusal carries its own token and is classified FIRST (before the errno
+ * fallthrough could read it as `unreadable`), then instanceof
+ * `AgentsUnstageFailureError`, `NodeJS.ErrnoException.code` second,
+ * permissive fallback last. Closed-set Reasons live in
+ * `shared/notification-types.ts::REASONS`.
  */
 function narrowCascadeFailure(cause: Error): ContentReason {
+  if (cause instanceof UninstallRefusedError) {
+    return cause.reason;
+  }
+
   if (cause instanceof StateLockHeldError) {
     return "lock held";
   }
@@ -225,9 +293,13 @@ function narrowCascadeFailure(cause: Error): ContentReason {
 }
 
 /**
- * RECON-03: route a cascade-failure cause to either the typed orchestrated
- * outcome or the standalone notify() row. Extracted from `uninstallPlugin`
- * to keep cognitive complexity inside the SonarJS lint budget.
+ * RECON-03: route a transaction-failure cause -- a cascade failure, a held
+ * lock, or a D-05-14 refusal -- to either the typed orchestrated outcome or
+ * the standalone notify() row. The refusal renders through this one channel
+ * on purpose: the version, the cause line (the error's message), error
+ * severity and the absent reload hint are already what a refused row needs.
+ * Extracted from `uninstallPlugin` to keep cognitive complexity inside the
+ * SonarJS lint budget.
  */
 function emitCascadeFailure(args: {
   ctx: NotificationContext;
@@ -744,6 +816,12 @@ async function uninstallPluginWithTransaction(
 
       removedVersion = installed.version;
 
+      // D-05-14 / D-05-07: the dependents guard runs AFTER the two converge
+      // arms (a target that is not installed is `{not installed}`, never a
+      // refusal -- D-05-03) and BEFORE the cascade, so a refusal throws out of
+      // the guard with nothing removed and NO save.
+      await assertNoDependents({ state, locations, key: `${plugin}@${marketplace}` });
+
       // PU-1 ordering enforced INSIDE cascadeUnstagePlugin (D-03:
       // skills -> commands -> agents -> mcp).
       const localOutcome = await cascade(plugin, marketplace, locations, installed);
@@ -788,8 +866,9 @@ async function uninstallPluginWithTransaction(
       routeEffect.removeAfterSave = true;
     });
   } catch (err) {
-    // PU-7 propagation: AG-5 (or any other cascade failure). State was NOT
-    // saved (guard contract); the plugin record stays intact for retry.
+    // PU-7 propagation: AG-5 (or any other cascade failure), a held lock, or
+    // the D-05-14 refusal thrown by the dependents guard. State was NOT saved
+    // (guard contract); the plugin record stays intact for retry.
     const cause = err as Error;
     return emitCascadeFailure({
       ctx,

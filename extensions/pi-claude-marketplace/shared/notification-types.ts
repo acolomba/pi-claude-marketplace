@@ -108,6 +108,16 @@ export const REASONS = [
   // materialized, and the pair says which of those two facts this command
   // is responsible for.
   "dependency promoted",
+  // D-05-14 / D-05-15 / PRUNE-05: the plugin the user named is still declared
+  // as a dependency by another installed plugin in the scope, so the uninstall
+  // was refused and nothing was removed. `plugins remain` cannot carry it: that
+  // token's documented subject is a marketplace that still records plugins,
+  // and this row's subject is a plugin that other plugins still need. The
+  // dependents ride the row's cause line (`required by <key>, <key>`) rather
+  // than the token, on the `dependency cycle` precedent -- a token names one
+  // fact about one plugin, and the list of who needs it is a fact about
+  // several.
+  "dependents remain",
 ] as const;
 
 /** Literal union derived from the closed reason vocabulary. */

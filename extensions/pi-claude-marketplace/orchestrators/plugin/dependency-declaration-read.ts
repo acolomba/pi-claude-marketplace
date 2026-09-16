@@ -54,7 +54,7 @@ import { assertPathInside } from "../../shared/path-safety.ts";
 
 import { makePresenceProbe } from "./git-source-probe.ts";
 
-import type { ClosureLookupResult } from "../../domain/dependency-closure.ts";
+import type { DeclarationLookupResult } from "../../domain/dependency-closure.ts";
 import type { ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
 import type { GitPluginRootResult } from "../../domain/resolver-types.ts";
 import type { GitBackedSource, PathSource } from "../../domain/source.ts";
@@ -255,7 +255,7 @@ async function readOwnManifest(
  */
 export async function readDependencyDeclaration(
   options: DependencyDeclarationReadOptions,
-): Promise<ClosureLookupResult> {
+): Promise<DeclarationLookupResult> {
   const reader = options.reader ?? REAL_DEPENDENCY_DECLARATION_READER;
   const pluginRoot = await resolvePluginRootFsOnly(reader, options);
   const own = pluginRoot === undefined ? NOT_READABLE : await readOwnManifest(reader, pluginRoot);

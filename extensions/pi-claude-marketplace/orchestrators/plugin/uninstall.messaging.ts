@@ -6,6 +6,7 @@ import {
 import {
   type PluginFailedMessage,
   type PluginUninstalledMessage,
+  type Reason,
 } from "../../shared/notification-types.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
@@ -18,6 +19,21 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * `renderPluginRow` arm bodies VERBATIM. Shared presentation vocabulary stays
  * central in `shared/notification-grammar.ts` (D-11) and is CALLED here, never duplicated.
  */
+
+/**
+ * D-05-14 / D-05-15: the command-private reason owned by `uninstall`.
+ * `dependents remain` is meaningful only to the uninstall flow (a plugin that
+ * cannot be removed because another installed plugin in the scope still
+ * declares it). It is a member of the closed `Reason` set; the pin below
+ * rejects a typo at compile time.
+ */
+// `_ReasonInSet<R extends Reason> = R` pins the private reason to the closed
+// `Reason` set as it derives `UninstallPrivateReason`: an out-of-set literal
+// violates the `extends Reason` constraint -- a TS2344 compile error here, with
+// no runtime footprint.
+type _ReasonInSet<R extends Reason> = R;
+// fallow-ignore-next-line private-type-leak -- `_ReasonInSet` is the compile-time membership guard; exporting that helper would widen the command's public reason vocabulary.
+export type UninstallPrivateReason = _ReasonInSet<"dependents remain">;
 
 /**
  * uninstall's private status set: a success `uninstalled` row or a `failed`
