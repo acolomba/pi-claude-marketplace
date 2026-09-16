@@ -690,6 +690,7 @@ async function installOnePlannedPlugin(
   opts: ImportClaudeSettingsOptions,
   result: MutableImportResult,
   plugin: PlannedPlugin,
+  consent: { readonly partial: boolean },
 ): Promise<PlannedPluginBucket> {
   const installPlugin = installPluginFn(opts.deps, opts.hooksRouting, opts.completionCache);
   let outcome: InstallPluginOutcome;
@@ -702,6 +703,7 @@ async function installOnePlannedPlugin(
       marketplace: plugin.ref.marketplace,
       plugin: plugin.ref.plugin,
       notifications: { mode: "orchestrated" },
+      ...(consent.partial && { partial: true }),
     });
   } catch (err) {
     result.unexpectedPluginFailures.push({
@@ -888,7 +890,14 @@ async function executeScopedPlan(
       continue;
     }
 
-    await installOnePlannedPlugin(opts, result, plugin);
+    // ENBL-07 / D-04-07: a partially installed dependency record was accepted
+    // in that shape when the cascade wrote it, so the settings that name it
+    // consent to the record as it stands, not to a new degradation. The
+    // promotion's `--partial` gate reads that consent here; import never
+    // installs a fresh plugin partially, so the flag is set for no other entry.
+    await installOnePlannedPlugin(opts, result, plugin, {
+      partial: existingPlugin !== undefined && !existingPlugin.compatibility.installable,
+    });
   }
 
   // WB-03: after all per-entry orchestrated-mode addMarketplace

@@ -37,6 +37,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { importClaudeSettings as importClaudeSettingsWithCache } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
+import { createNodeInstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -2516,6 +2517,126 @@ test("D-04-07: promotes a recorded dependency the imported settings name instead
       "  ● dep (installed)\n" +
       "  ⊘ sample (skipped) {already installed}\n\n" +
       "Import: 3 successes\n\n" +
+      "/reload to pick up changes",
+  });
+  verifyBoundary();
+});
+
+test("D-04-07: promotes a partially installed dependency the imported settings name with the record's own consent", async (t) => {
+  // arrange: the first import adds the marketplace through `base`; a standalone
+  // `--partial` install of `sample` then records `dep`, whose unsupported kind
+  // makes it partially available, as a partially installed dependency. The
+  // second import names all three. Import carries no `--partial` of its own,
+  // so the promotion consents on the record's recorded availability and the
+  // name in the settings.
+  const { cwd, project } = await createHermeticScopes(t, "promotes-partial-dependency");
+  // Two imports and one standalone install: the standalone install takes one
+  // companion probe for its block before `notify()` takes its own, so that
+  // emission reads `getAllTools()` four times where an import's reads twice.
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 8);
+  const marketplaceRoot = path.join(cwd, "fixture-mp");
+  const dependency = { name: "dep", version: "*" };
+  await writeUnder(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "fixture-mp",
+      owner: { name: "import owner suite" },
+      plugins: [
+        { name: "base", source: "./plugins/base", version: "1.0.0" },
+        {
+          name: "sample",
+          source: "./plugins/sample",
+          version: "1.0.0",
+          dependencies: [dependency],
+        },
+        { name: "dep", source: "./plugins/dep", version: "1.0.0" },
+      ],
+    }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "base", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "base", version: "1.0.0" }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "sample", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "sample", version: "1.0.0", dependencies: [dependency] }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "dep", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "dep", version: "1.0.0", experimental: { themes: "./themes" } }),
+  );
+  const settingsPath = path.join(cwd, ".claude", "settings.json");
+  const settingsNaming = (enabledPlugins: Record<string, boolean>): string =>
+    JSON.stringify({
+      enabledPlugins,
+      extraKnownMarketplaces: { "fixture-mp": { directory: marketplaceRoot } },
+    });
+  const expectedSecondResult: ClaudeImportExecutionResult = {
+    ...emptyImportResult(),
+    installedPlugins: [
+      installed("dep", "fixture-mp", "project", { agents: false, mcp: false }, false),
+    ],
+    skippedExistingMarketplaces: [skipped("fixture-mp", "project")],
+    skippedExistingPlugins: [
+      skippedPlugin("base", "fixture-mp", "project"),
+      skippedPlugin("sample", "fixture-mp", "project"),
+    ],
+  };
+  const expectedBytes = configBytes({
+    marketplaces: { "fixture-mp": { source: marketplaceRoot } },
+    plugins: { "base@fixture-mp": {}, "sample@fixture-mp": {}, "dep@fixture-mp": {} },
+  });
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+  const importOptions = {
+    ctx,
+    cwd,
+    gitOps: createOfflineGitOps(),
+    pi,
+    hooksRouting,
+    selectedScopes: ["project"] as const,
+  };
+  await writeUnder(settingsPath, settingsNaming({ "base@fixture-mp": true }));
+  await importClaudeSettings(importOptions);
+  const installPlugin = createNodeInstallPlugin(hooksRouting, completionCacheFor(hooksRouting));
+  await installPlugin({
+    ctx,
+    pi,
+    scope: "project",
+    cwd,
+    marketplace: "fixture-mp",
+    plugin: "sample",
+    partial: true,
+  });
+  const dependencyBefore = (await loadState(project.extensionRoot)).marketplaces["fixture-mp"]
+    ?.plugins["dep"];
+  assert.strictEqual(dependencyBefore?.provenance, "dependency");
+  assert.strictEqual(
+    dependencyBefore.compatibility.installable,
+    false,
+    "the cascade recorded the dependency as partially installed",
+  );
+
+  // act
+  await writeUnder(
+    settingsPath,
+    settingsNaming({ "base@fixture-mp": true, "sample@fixture-mp": true, "dep@fixture-mp": true }),
+  );
+  const secondResult = await importClaudeSettings(importOptions);
+
+  // assert: the same one-field flip the fully-supported record gets
+  assert.deepStrictEqual(secondResult, expectedSecondResult);
+  assert.deepStrictEqual(
+    (await loadState(project.extensionRoot)).marketplaces["fixture-mp"]?.plugins["dep"],
+    { ...dependencyBefore, provenance: "explicit" },
+  );
+  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  assert.deepStrictEqual(notifications[2], {
+    message:
+      "● fixture-mp [project] (updated)\n" +
+      "  ● dep (installed)\n" +
+      "  ⊘ base (skipped) {already installed}\n" +
+      "  ⊘ sample (skipped) {already installed}\n\n" +
+      "Import: 4 successes\n\n" +
       "/reload to pick up changes",
   });
   verifyBoundary();
