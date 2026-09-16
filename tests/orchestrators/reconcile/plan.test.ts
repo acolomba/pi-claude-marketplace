@@ -95,7 +95,7 @@ function pluginRecord(
 }
 
 function stateWith(marketplaces: Record<string, MarketplaceRecord> = {}): ExtensionState {
-  return { schemaVersion: 2, marketplaces: { ...marketplaces } };
+  return { schemaVersion: 3, marketplaces: { ...marketplaces } };
 }
 
 // D-04-05: one retained marketplace holding a dependency-provenance record and
