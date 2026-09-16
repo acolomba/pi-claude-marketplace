@@ -1516,3 +1516,200 @@ test("an absence marker for a slot the rest never declares is still an addition"
     },
   );
 });
+
+// A conditional type's `extends` clause is the third place a member can exist
+// purely to make the compiler decide. Two forms reach it: the clause writes a
+// type the check type already allows less of (line 7, column 73, over the
+// conditional at column 57), or it writes an inference placeholder the branch
+// then reads (line 12, column 46, over the conditional at column 30).
+//
+// The rest are the shapes that must stay refused: a conditional whose branches
+// are the same type (line 14), a clause testing a key the check type does not
+// declare (line 16), a second clause member that restates what the check type
+// already says (line 18, column 77, beside the one that does narrow at column
+// 60), a literal in no clause position at all (line 22), and an inference the
+// branches never read (line 24).
+const conditionalClauseCases = `export interface Spec {
+  readonly name: string;
+  readonly required?: boolean;
+}
+
+export type Parsed<Entries extends readonly Spec[]> = {
+  readonly [Entry in Entries[number] as Entry["name"]]: Entry extends { required: false }
+    ? string | undefined
+    : string;
+};
+
+export type Carried<Event> = Event extends { payload: infer Value } ? Value : never;
+
+export type Undecided<Entry extends Spec> = Entry extends { required: false } ? string : string;
+
+export type Missing<Entry extends Spec> = Entry extends { absent: false } ? string : never;
+
+export type Restated<Entry extends Spec> = Entry extends { required: false; name: string }
+  ? string
+  : never;
+
+export type Plain = { readonly required: false };
+
+export type Dropped<Event> = Event extends { payload: infer Value } ? string : never;
+`;
+
+const clauseContract = {
+  id: `${casesPath}:7:73`,
+  owner: "Parsed",
+  key: "required",
+  category: "conditional-clause",
+  purpose: "Decides which entries this mapped key may be absent for.",
+  clause: `${casesPath}:7:57`,
+};
+
+const inferClauseContract = {
+  id: `${casesPath}:12:46`,
+  owner: "Carried",
+  key: "payload",
+  category: "conditional-clause",
+  purpose: "Names the slot this alias reads a payload type out of.",
+  clause: `${casesPath}:12:30`,
+};
+
+test("a clause member that narrows what the check type allows keeps its role", async (t) => {
+  // arrange
+  const report = await analyzeWith(t, conditionalClauseCases, documentWith(clauseContract));
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "Parsed", "required").status, "explicit-contract");
+  assert.deepStrictEqual(memberFor(report, "Parsed", "required").reasons, [
+    "conditional-clause: Decides which entries this mapped key may be absent for. " +
+      `(conditional ${casesPath}:7:57 decides on required)`,
+  ]);
+});
+
+test("a clause member that binds an inference the branch reads keeps its role", async (t) => {
+  // arrange
+  const report = await analyzeWith(t, conditionalClauseCases, documentWith(inferClauseContract));
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "Carried", "payload").status, "explicit-contract");
+  assert.deepStrictEqual(memberFor(report, "Carried", "payload").reasons, [
+    "conditional-clause: Names the slot this alias reads a payload type out of. " +
+      `(conditional ${casesPath}:12:30 extracts through payload)`,
+  ]);
+});
+
+test("a conditional whose branches are the same type decides nothing", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      conditionalClauseCases,
+      documentWith({
+        ...clauseContract,
+        id: `${casesPath}:14:61`,
+        owner: "Undecided",
+        clause: `${casesPath}:14:45`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:14:61 clause ${casesPath}:14:45 decides nothing, because both of its branches are the same type`,
+    },
+  );
+});
+
+test("a clause testing a key the check type does not declare is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      conditionalClauseCases,
+      documentWith({
+        ...clauseContract,
+        id: `${casesPath}:16:59`,
+        owner: "Missing",
+        key: "absent",
+        clause: `${casesPath}:16:43`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:16:59 clause ${casesPath}:16:43 tests absent, which the check type does not declare`,
+    },
+  );
+});
+
+test("a second clause member that restates the check type narrows nothing", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      conditionalClauseCases,
+      documentWith({
+        ...clauseContract,
+        id: `${casesPath}:18:77`,
+        owner: "Restated",
+        key: "name",
+        clause: `${casesPath}:18:44`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:18:77 clause ${casesPath}:18:44 does not decide on name`,
+    },
+  );
+});
+
+test("a type literal in no clause position is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      conditionalClauseCases,
+      documentWith({
+        ...clauseContract,
+        id: `${casesPath}:22:23`,
+        owner: "Plain",
+        clause: `${casesPath}:7:57`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:22:23 is not a member of the extends clause at ${casesPath}:7:57`,
+    },
+  );
+});
+
+test("a clause inference no branch reads is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      conditionalClauseCases,
+      documentWith({
+        ...inferClauseContract,
+        id: `${casesPath}:24:46`,
+        owner: "Dropped",
+        clause: `${casesPath}:24:30`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:24:46 clause ${casesPath}:24:30 infers through payload, which neither branch reads`,
+    },
+  );
+});
+
+test("a clause entry carrying another category's key is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      conditionalClauseCases,
+      documentWith({ ...clauseContract, filter: `${casesPath}:7:57` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:7:73 carries unknown key filter`,
+    },
+  );
+});
