@@ -129,6 +129,23 @@ export interface HostEvent {
 export declare function observe(handler: (event: HostEvent) => void): void;
 
 export declare function registerAsync(handler: () => Promise<HostResult>): void;
+
+export interface HostRow {
+  label?: string;
+  spare?: string;
+}
+
+export interface HostPayload {
+  rows?: HostRow[];
+}
+
+export interface HostTool {
+  execute(): HostPayload;
+}
+
+export declare function install(tool: HostTool): void;
+
+export declare function installLoose(tool: Record<string, unknown>): void;
 `;
 
 const hostTypesPath = "node_modules/external-host/index.d.ts";
@@ -1710,6 +1727,206 @@ test("a clause entry carrying another category's key is refused", async (t) => {
     {
       name: "AnalysisSetupError",
       message: `Invalid contract: ${casesPath}:7:73 carries unknown key filter`,
+    },
+  );
+});
+
+// An external boundary reached through a method written as a shorthand, with the
+// value built elsewhere and returned nested inside the payload literal.
+//
+// `Row.label` is at line 4, column 3 and `Row.spare` at line 5, column 3 in
+// every case below.
+const methodBoundaryTypes = `import { install, installLoose } from "external-host";
+
+export interface Row {
+  readonly label?: string;
+  readonly spare?: string;
+}
+`;
+
+// Built at line 12 column 19, collected into a local, returned at line 13
+// column 7 nested one level inside the payload literal.
+const methodBoundaryCases = `${methodBoundaryTypes}
+export function register(text: string): void {
+  install({
+    execute() {
+      const rows: Row[] = [];
+      rows.push({ label: text });
+      return { rows };
+    },
+  });
+}
+`;
+
+// The same shape on a literal no installed declaration checks. Built at line 11
+// column 17, returned at line 12 column 5.
+const localMethodCases = `${methodBoundaryTypes}
+const localTool = {
+  execute(): { rows: Row[] } {
+    const rows: Row[] = [];
+    rows.push({ label: "x" });
+    return { rows };
+  },
+};
+void localTool;
+`;
+
+// A method whose name the contextual type does not declare. Built at line 12
+// column 19, returned at line 13 column 7.
+const undeclaredMethodCases = `${methodBoundaryTypes}
+export function registerLoose(text: string): void {
+  installLoose({
+    run() {
+      const rows: Row[] = [];
+      rows.push({ spare: text });
+      return { rows };
+    },
+  });
+}
+`;
+
+// The value is built at line 10 column 15 into an outer local; the boundary at
+// line 14 column 7 returns a same-spelled inner local that never received it.
+const asideMethodCases = `${methodBoundaryTypes}
+export function aside(text: string): void {
+  const rows: Row[] = [];
+  rows.push({ spare: text });
+  install({
+    execute() {
+      const rows: Row[] = [];
+      return { rows };
+    },
+  });
+}
+`;
+
+// Ten aliases between the origin at line 10 column 15 and the boundary at line
+// 23 column 7 -- further than the arrival walk is allowed to follow.
+const deepChainCases = `${methodBoundaryTypes}
+export function deep(text: string): void {
+  const rows: Row[] = [];
+  rows.push({ spare: text });
+  const h1 = rows;
+  const h2 = h1;
+  const h3 = h2;
+  const h4 = h3;
+  const h5 = h4;
+  const h6 = h5;
+  const h7 = h6;
+  const h8 = h7;
+  const h9 = h8;
+  const h10 = h9;
+  install({
+    execute() {
+      return { rows: h10 };
+    },
+  });
+}
+`;
+
+const methodBoundaryContract = {
+  id: `${casesPath}:4:3`,
+  owner: "Row",
+  key: "label",
+  category: "external-output",
+  purpose: "Mirrors the host row slot the installed tool returns.",
+  origin: `${casesPath}:12:19`,
+  boundary: `${casesPath}:13:7`,
+};
+
+test("a method shorthand an installed declaration checks is a boundary", async (t) => {
+  // arrange
+  const report = await analyzeWith(t, methodBoundaryCases, documentWith(methodBoundaryContract));
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "Row", "label").status, "explicit-contract");
+  assert.deepStrictEqual(memberFor(report, "Row", "label").reasons, [
+    `external-output: ${methodBoundaryContract.purpose} ` +
+      `(origin ${casesPath}:12:19 reaches boundary ${casesPath}:13:7)`,
+  ]);
+  // The arrival descended into the payload literal; the sibling slot nothing
+  // built is still a finding.
+  assert.strictEqual(memberFor(report, "Row", "spare").status, "unread");
+});
+
+test("a method shorthand no installed declaration checks is not a boundary", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      localMethodCases,
+      documentWith({
+        ...methodBoundaryContract,
+        origin: `${casesPath}:11:17`,
+        boundary: `${casesPath}:12:5`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:4:3 boundary ${casesPath}:12:5 is not a return to an external declaration`,
+    },
+  );
+});
+
+test("a method shorthand the contextual type does not declare is not a boundary", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      undeclaredMethodCases,
+      documentWith({
+        ...methodBoundaryContract,
+        id: `${casesPath}:5:3`,
+        key: "spare",
+        origin: `${casesPath}:12:19`,
+        boundary: `${casesPath}:13:7`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:5:3 boundary ${casesPath}:13:7 is not a return to an external declaration`,
+    },
+  );
+});
+
+test("a same-spelled place with a different symbol does not carry an origin", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      asideMethodCases,
+      documentWith({
+        ...methodBoundaryContract,
+        id: `${casesPath}:5:3`,
+        key: "spare",
+        origin: `${casesPath}:10:15`,
+        boundary: `${casesPath}:14:7`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:5:3 origin ${casesPath}:10:15 never reaches boundary ${casesPath}:14:7`,
+    },
+  );
+});
+
+test("an arrival chain longer than the hop bound is refused, not answered partially", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      deepChainCases,
+      documentWith({
+        ...methodBoundaryContract,
+        id: `${casesPath}:5:3`,
+        key: "spare",
+        origin: `${casesPath}:10:15`,
+        boundary: `${casesPath}:23:7`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:5:3 origin ${casesPath}:10:15 never reaches boundary ${casesPath}:23:7`,
     },
   );
 });
