@@ -209,7 +209,16 @@ Plans:
 4. An install record written before this milestone is upgraded to the current schema with a truthful default, no record is misreported as a dependency, and none is silently read as a request to uninstall. (PROV-04)
 5. A cascade-installed dependency survives `/reload` without being declared in `claude-plugins.json` — the desired-state config names only plugins the user asked for, and reconcile keeps a dependency because its record says so. (D-04-02, D-04-04, D-04-05)
 
-**Plans**: TBD
+**Plans**: 6 plans
+
+Six waves, strictly sequential: every plan touches files an earlier one changed, and D-04-04's three-step order is a correctness contract rather than a preference. Step 2 is wave 4 and step 3 is wave 5; the ordering lives in `depends_on`, not only in prose.
+
+- [ ] `04-01-PLAN.md` — the provenance field end to end: schema, schemaVersion 3, every write site, the cascade decision site, and the silent migrate fill (wave 1; PROV-01, PROV-04)
+- [ ] `04-02-PLAN.md` — the four architecture pins amended by equality, and the persistence contracts re-established at schemaVersion 3 (wave 2; PROV-01, PROV-04)
+- [ ] `04-03-PLAN.md` — the fixture sweep back to a green gate, and PROV-02's whole-record ratchet proof (wave 3; PROV-01, PROV-02)
+- [ ] `04-04-PLAN.md` — step 2: `buildUninstallBucket`'s single dependency exemption, with its negative control (wave 4; PROV-01)
+- [ ] `04-05-PLAN.md` — step 3: both config-write arms retired, their parameters removed, the reload survival proven through `applyReconcile`, and the docs rewritten (wave 5; PROV-01, PROV-02)
+- [ ] `04-06-PLAN.md` — PROV-03's promotion on the mutating arm, plus the nine catalog surfaces D-04-07 amends (wave 6; PROV-03)
 
 **Notes.**
 
