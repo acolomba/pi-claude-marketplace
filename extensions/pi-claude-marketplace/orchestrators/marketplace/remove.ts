@@ -55,7 +55,7 @@ import path from "node:path";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deleteMarketplaceConfigEntryWithCascade } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { loadState } from "../../persistence/state-io.ts";
+import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
@@ -226,6 +226,17 @@ async function resolveScopeOrFailedOutcome(
 }
 
 /**
+ * One plugin whose unstage cascade failed, as accumulated by the remove flow
+ * and read by `emitPartialFailure`. Named once so the accumulator, the
+ * cascade bundle and the lock-body bundle all carry the declaration the
+ * composer reads rather than four structural spellings of it.
+ */
+interface FailedPluginCascade {
+  readonly name: string;
+  readonly cause: Error;
+}
+
+/**
  * RECON-03: route the partial-failure (≥1 plugin cascade failure) arm to
  * either a typed orchestrated outcome OR the standalone notify() row.
  * Extracted from `removeMarketplace` to keep its cognitive complexity
@@ -236,7 +247,7 @@ function emitPartialFailure(args: {
   orchestrated: boolean;
   resolvedScope: Scope;
   successfullyUnstaged: readonly string[];
-  failedPlugins: readonly { name: string; cause: Error }[];
+  failedPlugins: readonly FailedPluginCascade[];
 }): RemoveMarketplaceOutcome | undefined {
   const { opts, orchestrated, resolvedScope, successfullyUnstaged, failedPlugins } = args;
   if (orchestrated) {
@@ -307,7 +318,7 @@ async function cascadePluginsInPlace(args: {
   readonly locations: ScopedLocations;
   readonly cascade: typeof cascadeUnstagePlugin;
   readonly successfullyUnstaged: string[];
-  readonly failedPlugins: { name: string; cause: Error }[];
+  readonly failedPlugins: FailedPluginCascade[];
 }): Promise<void> {
   const { record, marketplace, locations, cascade, successfullyUnstaged, failedPlugins } = args;
   for (const [pluginName, plugin] of Object.entries(record.plugins)) {
@@ -436,7 +447,7 @@ async function runRemoveLockBody(args: {
   readonly orchestrated: boolean;
   readonly cascade: typeof cascadeUnstagePlugin;
   readonly successfullyUnstaged: string[];
-  readonly failedPlugins: { name: string; cause: Error }[];
+  readonly failedPlugins: FailedPluginCascade[];
   readonly cfgInvalidSentinel: Error;
 }): Promise<RecordedSourceKind | undefined> {
   const {
@@ -497,13 +508,11 @@ async function runRemoveLockBody(args: {
 }
 
 /**
- * Local alias for the in-state marketplace row -- the `record` shape passed
- * through the cascade and write-back helpers.
+ * The in-state marketplace row -- the `record` shape passed through the
+ * cascade and write-back helpers. Indexed off the persistence schema so the
+ * row cannot drift from what `state.json` actually holds.
  */
-interface ExtensionMarketplaceRow {
-  source: unknown;
-  plugins: Record<string, ExtensionPluginRow>;
-}
+type ExtensionMarketplaceRow = ExtensionState["marketplaces"][string];
 
 /**
  * Resolve the target scope/locations or surface the missing-marketplace
@@ -696,7 +705,7 @@ export async function removeMarketplace(
   const configBasename = path.basename(targetConfigPath);
 
   // Per-plugin tracking accumulators captured by the guard closure.
-  const failedPlugins: { name: string; cause: Error }[] = [];
+  const failedPlugins: FailedPluginCascade[] = [];
   const successfullyUnstaged: string[] = []; // plugins whose cascade returned ok:true
   let sourceKindAtRecord: RecordedSourceKind | undefined;
 
