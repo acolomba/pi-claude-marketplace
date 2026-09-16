@@ -113,7 +113,7 @@ Some plugins carry no real semantic version. This extension then records a conte
 
 A dependency installs into the same scope as the plugin that asked for it. `/claude:plugin install formatter --scope project` puts every plugin `formatter` needs into the project scope. It never writes into the user scope.
 
-Within that scope, a dependency's entry goes into the same file the asking plugin's entry is in: either `claude-plugins.json` or `claude-plugins.local.json`. This matters after a reload. Pi removes any recorded plugin the configuration does not name, so an undeclared dependency would disappear on the next `/reload`. Declaring each dependency in the parent's own file keeps it.
+The configuration file names only the plugins you asked for by name. This extension does not write a dependency into `claude-plugins.json` or `claude-plugins.local.json`. Instead, its install record says that it arrived through another plugin. A reload keeps the dependency because its record says so, not because the configuration names it.
 
 ## Why a dependency can fail
 
@@ -152,5 +152,5 @@ Nothing is left half-installed. After you fix the cause, run the same command ag
 ## Further reading
 
 - [`docs/plugin-enablement.md`](plugin-enablement.md) -- what decides whether an installed plugin is enabled, including why a plugin required by another one is not enabled on its behalf.
-- [`README.md` -- Configuration files](../README.md#configuration-files) -- the user-facing introduction to `claude-plugins.json` and `claude-plugins.local.json`, the files a dependency's entry lands in.
+- [`README.md` -- Configuration files](../README.md#configuration-files) -- the user-facing introduction to `claude-plugins.json` and `claude-plugins.local.json`, the files that name the plugins you asked for.
 - [Claude Code plugins reference](https://code.claude.com/docs/en/plugins-reference) -- the upstream field reference for `dependencies`.

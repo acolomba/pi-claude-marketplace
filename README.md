@@ -341,7 +341,7 @@ Install in the project scope instead of the user scope.
 /claude:plugin install context7-plugin@context7-marketplace --scope project
 ```
 
-A plugin can declare the other plugins it needs. The install adds them too, into the same scope and the same configuration file. For more information, see [Dependency resolution](docs/dependency-resolution.md).
+A plugin can declare the other plugins it needs. The install adds them too, into the same scope. For more information, see [Dependency resolution](docs/dependency-resolution.md).
 
 Update one installed plugin, every installed plugin from one marketplace, or all installed plugins.
 
