@@ -764,6 +764,22 @@
       "category": "type-refinement",
       "purpose": "Closes the from-version slot on the failed partition, whose plugin is absent from the manifest and has no install record to read a version from.",
       "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:327:6"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/edge/args-schema.ts:60:70",
+      "owner": "ParsedCommandArgs",
+      "key": "required",
+      "category": "conditional-clause",
+      "purpose": "Decides which parsed positional keys may be undefined, by testing the spec entry the mapped key came from.",
+      "clause": "extensions/pi-claude-marketplace/edge/args-schema.ts:60:54"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts:52:21",
+      "owner": "PiToolName",
+      "key": "toolName",
+      "category": "conditional-clause",
+      "purpose": "Names the slot each tool-call arm is walked through, so the literal tool names survive a property access that would collapse them to string.",
+      "clause": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts:52:5"
     }
   ]
 }

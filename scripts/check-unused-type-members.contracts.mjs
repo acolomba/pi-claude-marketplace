@@ -46,6 +46,7 @@ const categoryKeys = {
   "nominal-brand": ["symbol"],
   "type-selection": ["filter"],
   "type-refinement": ["refines"],
+  "conditional-clause": ["clause"],
 };
 
 // A refinement is followed one slot at a time into the shape it narrows. A
@@ -923,12 +924,132 @@ function proveTypeRefinement(entry, candidate, context) {
   return `(intersection ${entry.refines} narrows ${found.path.join(".")})`;
 }
 
+/**
+ * Whether any part of this type syntax reads the name an `infer` bound.
+ *
+ * An inference that no branch reads binds nothing a reader could use, so the
+ * clause member spelling it is not doing the work the category is about.
+ */
+function readsInferredName(node, name) {
+  let found = false;
+
+  const visit = (child) => {
+    if (found) {
+      return;
+    }
+
+    if (ts.isTypeReferenceNode(child) && ts.isIdentifier(child.typeName)) {
+      found = child.typeName.text === name;
+    }
+
+    if (!found) {
+      ts.forEachChild(child, visit);
+    }
+  };
+
+  visit(node);
+  return found;
+}
+
+/**
+ * The extracting form: the clause member writes an inference placeholder, and a
+ * branch reads the name it bound. The check type is not asked to declare the key
+ * here, because an `infer` clause is what discovers whether it does.
+ */
+function provesByExtraction(entry, candidate, conditional, written) {
+  const name = written.typeParameter.name.text;
+
+  if (
+    !readsInferredName(conditional.trueType, name) &&
+    !readsInferredName(conditional.falseType, name)
+  ) {
+    fail(
+      `${entry.id} clause ${entry.clause} infers through ${candidate.key}, which neither branch reads`,
+    );
+  }
+
+  return `(conditional ${entry.clause} extracts through ${candidate.key})`;
+}
+
+/**
+ * The narrowing form: the clause member writes a type the check type already
+ * allows more of, so the conditional sorts values by what stands in that slot.
+ *
+ * The check type resolves through its constraint when it is a type parameter,
+ * the way a selection source already resolves through a bound: a mapped key or a
+ * generic parameter names the set the clause selects within.
+ */
+function provesByNarrowing(entry, candidate, conditional, context) {
+  const checkType = context.checker.getTypeFromTypeNode(conditional.checkType);
+  const within = context.checker.getBaseConstraintOfType(checkType) ?? checkType;
+  const wider = slotAlongPath(within, [candidate.key], context);
+
+  if (wider === undefined) {
+    fail(
+      `${entry.id} clause ${entry.clause} tests ${candidate.key}, which the check type does not declare`,
+    );
+  }
+
+  const clause = context.checker.getTypeFromTypeNode(conditional.extendsType);
+  const refined = slotAlongPath(clause, [candidate.key], context);
+
+  if (refined === undefined || !narrowsSlot(refined, wider, context, deepestRefinement)) {
+    fail(`${entry.id} clause ${entry.clause} does not decide on ${candidate.key}`);
+  }
+
+  return `(conditional ${entry.clause} decides on ${candidate.key})`;
+}
+
+/**
+ * Proves a member exists to make a conditional type decide rather than to be
+ * read. The member has to sit in the type literal of the named conditional's
+ * `extends` clause, that conditional has to really branch, and the member has to
+ * be the one doing the work -- either narrowing what the check type allows in
+ * that slot, or binding an inference a branch reads.
+ *
+ * A clause member that is neither is refused by name. A category admitting any
+ * member of any `extends` clause literal would be a standing hole in the gate:
+ * an ordinary slot restated unchanged beside a real narrowing is exactly the
+ * shape that must not pass.
+ */
+function proveConditionalClause(entry, candidate, context) {
+  const node = declarationOf(entry, candidate, context);
+  const site = parseSite(entry.clause, `${entry.id} clause`);
+  const conditional = resolveNode(site, `${entry.id} clause`, context);
+
+  if (!ts.isConditionalTypeNode(conditional)) {
+    fail(`${entry.id} clause ${entry.clause} is not a conditional type`);
+  }
+
+  if (!ts.isTypeLiteralNode(conditional.extendsType) || node.parent !== conditional.extendsType) {
+    fail(`${entry.id} is not a member of the extends clause at ${entry.clause}`);
+  }
+
+  const checker = context.checker;
+
+  if (
+    checker.getTypeFromTypeNode(conditional.trueType) ===
+    checker.getTypeFromTypeNode(conditional.falseType)
+  ) {
+    fail(
+      `${entry.id} clause ${entry.clause} decides nothing, because both of its branches are the same type`,
+    );
+  }
+
+  const written = ts.isPropertySignature(node) ? node.type : undefined;
+
+  return written !== undefined && ts.isInferTypeNode(written)
+    ? provesByExtraction(entry, candidate, conditional, written)
+    : provesByNarrowing(entry, candidate, conditional, context);
+}
+
 const provers = {
   "external-output": proveExternalOutput,
   "external-input": proveExternalInput,
   "nominal-brand": proveNominalBrand,
   "type-selection": proveTypeSelection,
   "type-refinement": proveTypeRefinement,
+  "conditional-clause": proveConditionalClause,
 };
 
 function decisionFor(entry, context) {
