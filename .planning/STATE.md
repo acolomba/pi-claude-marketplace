@@ -4,17 +4,17 @@ milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
 status: executing
-stopped_at: Completed 06-13-PLAN.md
-last_updated: "2026-09-16T13:29:04.149Z"
+stopped_at: Completed 06-12-PLAN.md
+last_updated: "2026-09-16T17:05:00.000Z"
 last_activity: 2026-09-16
-last_activity_desc: Plan 06-13 complete (domain/persistence/platform: 23 rows -> 6 repaired, 2 contracted, 15 outstanding; 80 -> 72 unread measured, zero findings gained; the five Pi mirrors kept and made compiler-checked)
-state_head: e45d316d9d3f8db062b9c16f8a752cf2e36982d9
+last_activity_desc: Plan 06-12 complete, closing the six-plan repair wave (orchestrators: 49 rows -> 36 repaired, 3 contracted, 10 outstanding; 72 -> 33 unread measured, zero findings gained; the phase residual is 33 and 06-08 stays blocked)
+state_head: 2a2f1bf7
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 60
-  completed_plans: 50
-  percent: 63
+  completed_plans: 51
+  percent: 64
 milestone_name: test-backlog
 ---
 
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 06 (Unused Type Member Gate) — EXECUTING
-Plan: 13 of 14
-Status: Executing the six bounded repair plans (06-09 ✅ -> 06-14 ✅ -> 06-10 ✅ -> 06-11 ✅ -> 06-13 ✅ -> 06-12)
-Last activity: 2026-09-16 — Plan 06-13 complete (domain 10->7, persistence 6->3, platform 7->5: 6 rows repaired, 2 contracted via the first two external-input entries, 15 outstanding with measured reasons; 80 -> 72 unread, zero findings gained; the five Pi mirrors kept and now held to the peer's own overload)
+Plan: 14 of 14
+Status: The six bounded repair plans are COMPLETE (06-09 ✅ -> 06-14 ✅ -> 06-10 ✅ -> 06-11 ✅ -> 06-13 ✅ -> 06-12 ✅). 06-08 remains blocked on a measured residual of 33 unread members.
+Last activity: 2026-09-16 — Plan 06-12 complete (orchestrators 49->10: 36 rows repaired at source, 3 contracted, 10 outstanding with a written mechanism each; 72 -> 33 unread, zero findings gained; two restatements the engine refused were reverted rather than shipped)
 
 Plan 06-01 landed the member gate's compiler tracer: `node
 scripts/check-unused-type-members.mjs` compiles the project once, inventories
@@ -371,6 +371,67 @@ physical type-only lines the diff removed. `--check` reports 80 problems that ar
 ALL `unread`, at digest `219319ca`. No contract coordinate needed re-anchoring —
 none of the 85 entries names an edge file or any test this plan touched.
 
+Plan 06-12 closed the repair wave on the largest owner group. The 49
+`orchestrators` rows end as 36 source repairs, 3 validated contracts and 10
+outstanding with a written mechanism each; the live population moved 72 -> 33
+with zero findings gained at all six measurement points. The repairs are the
+familiar three: name a shape once where it was spelled at four sites (the
+marketplace cascade-failure pair, the four reinstall scope resolvers, the
+reconcile source-disagreement detail), point a seam at the type its own
+implementation reads (`ClaudeSettingsReadOptions`, `MarketplaceManifest`,
+`Partial<MarketplaceConfigEntry>`, `ImportConfigPatch["marketplaces"]`), and
+delete eleven slots with no reader anywhere. 06-11's stranded resolver twin was
+resolved by removing the accessor, its implementation and its two witnesses
+together — `marketplaceNamesCacheFile` is reached directly by `marketplace/add.ts`
+and `marketplace/remove.ts`, so the method wrapped a capability every consumer
+already had.
+
+Three contract entries were accepted and one retired by name: `RemoveDataDirFn`
+now narrows Node's own `RmOptions`, and `PartialableUpdateShapeError` selects the
+single shape-error arm its marker targets, which turns the hand-written `kind`
+pin into the arm's own literal.
+
+Three drafts were refused and recorded rather than accommodated. One is a filter
+over `PluginInfoCascadeMsg`, a single-variant type that discriminates nothing.
+The other two are a SECOND prover limit, measured past the one 06-06 recorded:
+the R4 restatements got the `never` markers past `widerSlotFor`, and `narrows`
+then refused them because `constituentsOf` returns a one-element array for a
+non-union, so `never` counts as one constituent against `string`'s one. Both
+restatements were REVERTED rather than shipped — `update-swap.ts` is
+byte-identical to its pre-plan state — because reshaping production source to
+satisfy a refused proof is what this phase forbids. `enableRowDependencies`'s
+`{ partition?: never }` was not touched: no left operand declares the slot, so
+no restatement can reach the prover at all.
+
+`RemoveMarketplaceOutcome.name` was kept after answering the sibling-symmetry
+question in writing. The symmetry is NOT what keeps it: `AddMarketplaceOutcome.name`
+is read for a documented CR-01 reason (the add outcome's name is manifest-derived)
+that remove has no analogue for. It stays because three `deepStrictEqual`
+assertions observe it, and at `remove.test.ts:596` the compared name IS the case's
+whole claim — the same whole-object under-credit 06-09 and 06-13 measured.
+
+The record was regenerated at digest `feb875b4` and reconciles with 33 problems
+that are ALL `unread`. Fifty-four re-keyed dispositions were restored from the
+fresh report, never transcribed, with the `witnesses[0]` convention established
+empirically (188 of 196 surviving notes match it). A further nine notes that
+survived re-keying were corrected because the same derivation showed them stale —
+this closes 06-10's hand-off, and both `reasons` coordinates on the
+`install-outcome.ts` direct pin were among them, one already stale by three lines
+before this plan ran. `npm run check` is exit 0, the seven negative controls
+pass, both direct pins matched exactly, and aggregate production unit coverage
+holds at 100% on all three axes with zero modules below it (functions
+1,833/1,833, branches 9,049/9,049, lines 62,922/62,922); the one retired function
+is the single production callable the plan removed.
+
+**The six-plan repair wave is complete and 06-08 is still blocked.** The residual
+is 33 unread, 0 unsupported, 90 validated contracts, 3,352 candidates —
+`orchestrators` 10, `domain` 7, `edge` 7, `platform` 5, `persistence` 3,
+`bridges/hooks` 1. Every row carries a measured reason, and they sort into four
+bounded engine gaps (the `narrows` `never` limit; whole-object `deepStrictEqual`
+under-credit; conditional-clause filters; `external-output` origin and boundary)
+plus one product decision (`enableRowDependencies`'s marker). The operator now
+has the full picture 06-08's fate depends on.
+
 Phase 05 closed: all 28 plans landed and the production
 dead-code census drained from 111 to 0 with zero net additions at every step.
 Independent verification re-measured the start population from a clean archive
@@ -485,7 +546,7 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 
 ### Phase 6 Plan 1 complete
 
-Stopped at: Completed 06-13-PLAN.md
+Stopped at: Completed 06-12-PLAN.md
 (directed value transfers) and 06-03 (validated contracts), which the plan
 graph runs together in Wave 2 over disjoint files.
 
@@ -804,6 +865,7 @@ together with its three bridge declaration sites. Next is 06-10.
 | Phase 06 P14 | 1h 37m | 4 tasks | 11 files |
 | Phase 06 P11 | 1h 16m | 3 tasks | 7 files |
 | Phase 06 P13 | 78 min | 3 tasks | 7 files |
+| Phase 06 P12 | 2h 54m | 7 tasks | 28 files |
 
 ## Decisions
 
@@ -831,3 +893,8 @@ together with its three bridge declaration sites. Next is 06-10.
 - [Phase 06]: The `external-output` contract category cannot prove a payload returned from a Pi tool `execute` written as a method shorthand — `getContextualType` answers `undefined` for a `MethodDeclaration`, so the prover finds no external signature even though the enclosing object literal resolves to `ToolDefinition` — Measured against the real engine on all six tool payload slots: the origin half passed for every one, the boundary half for none. Widening the prover or converting `execute` to an arrow-function property would change working code to suit the analyzer, so the rows stay findings
 - [Phase 06]: A conditional-type `extends` clause is not the two-argument selection `type-selection` proves, so `ParsedCommandArgs.required` and `PiToolName.toolName` both stay findings rather than being restated as `Extract` selections — `selectionOf` requires the filter literal parent to be a `TypeReferenceNode` with two type arguments; rewriting a public generic every command handler argument parse flows through, purely to fit the analyzer, is the failure mode this phase exists to prevent
 - [Phase 06]: An interface slot with no calling syntax anywhere is dead surface even when a structural twin implements it — the twin keeps its own verdict and no finding is gained — Removing `LocationsResolver.marketplaceNamesCachePath` left `LocationsResolverLike.marketplaceNamesCachePath` `test-only-observed`, not unread, so the edge repair cost the orchestrators group nothing and the twin is a recorded hand-off rather than a silent deletion
+- [Phase 06]: `narrows()` cannot prove a `never` pin over a non-union slot — `constituentsOf` returns `[type]` for a non-union, so `never` counts as ONE constituent against `string`'s one and the `chosen.length < allowed.length` test fails — Measured against the real engine on three markers after the R4 restatements got them past the `widerSlotFor` refusal 06-06 recorded; `true` over `boolean` passes because `boolean` genuinely has two constituents, which is why the sibling `partialable` pin was accepted
+- [Phase 06]: A restatement the engine refuses is REVERTED, not shipped — reshaping production source to satisfy a proof the prover would not accept is the failure this phase exists to prevent, and a churned exported type that cleared no row is worse than leaving working code alone
+- [Phase 06]: `RemoveMarketplaceOutcome.name` stays because three `deepStrictEqual` assertions observe it, NOT because its sibling keeps one — `AddMarketplaceOutcome.name` is read at `reconcile/apply.ts:332` for a documented CR-01 reason (the add outcome's name is manifest-derived and need not match the declared key) that remove has no analogue for, so the production symmetry was measured and found not load-bearing before the row was recorded
+- [Phase 06]: A slot a rollback path populates is behaviour even with no reader today — `UpdatePhaseFailure.msg` is unread by every survey, but the phase-3 aggregation is its only writer and the surface's own header states its contract, so it is recorded rather than deleted
+- [Phase 06]: A ledger note that survives re-keying is still verified against the fresh report — nine notes named a witness coordinate, a witness count or a contract category the tree no longer held, and `--check` certifies such a note as `explained` without ever checking it
