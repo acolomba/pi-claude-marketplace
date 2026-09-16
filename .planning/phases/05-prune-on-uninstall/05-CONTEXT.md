@@ -36,8 +36,8 @@ scope.
 
 ### Orphan scan breadth
 
-- **D-05-01: The prune step is a WHOLE-SCOPE sweep, not a walk of the removed
-  plugin's own closure.** After the named plugin is removed, every record in
+- **D-05-01: The prune step is a WHOLE-SCOPE sweep, not a walk of the removed plugin's own closure.**
+  After the named plugin is removed, every record in
   the target scope with `provenance: "dependency"` that no remaining installed
   plugin in that scope declares is removed — including orphans left behind by
   earlier plain uninstalls or by config-driven (reconcile) removals. This is
@@ -60,8 +60,8 @@ scope.
 
 ### Who still counts as a declarer
 
-- **D-05-04: A DISABLED installed plugin still holds its declared
-  dependencies.** Installed is installed: a disabled record keeps its
+- **D-05-04: A DISABLED installed plugin still holds its declared dependencies.**
+  Installed is installed: a disabled record keeps its
   inventory and reservations (ENBL-18/19), and re-enabling it must find its
   dependencies still there. The orphan test is "no installed plugin declares
   it", never "no enabled plugin".
@@ -69,8 +69,8 @@ scope.
   `state.json`; a plugin installed in the other scope never holds a record
   here and is never consulted. D-03-05 installs a dependency beside its root,
   and upstream prunes per `--scope`. Prune reads one state document.
-- **D-05-06: Declarations are read OFFLINE from each remaining installed
-  plugin's manifest at its on-disk root**, through the existing
+- **D-05-06: Declarations are read OFFLINE from each remaining installed plugin's manifest at its on-disk root**
+  , through the existing
   `orchestrators/plugin/dependency-declaration-read.ts::readDependencyDeclaration`
   (own manifest outranks the marketplace entry; entry answers only where the
   manifest is unreadable; fs + warm clone cache only, NFR-5). No stored
@@ -119,8 +119,7 @@ scope.
 
 ### Reporting shape (PRUNE-04)
 
-- **D-05-11: Each pruned plugin renders an ORDINARY uninstall row under its
-  own marketplace header carrying a new closed-set reason `dependency pruned`**
+- **D-05-11: Each pruned plugin renders an ORDINARY uninstall row under its own marketplace header carrying a new closed-set reason `dependency pruned`**
   — in the register of `dependency promoted` / `dependency disabled`:
   `○ dep v1.0.0 (uninstalled) {dependency pruned}`, or
   `{dependency pruned, data kept}` under `--keep-data`. Same status, glyph,
@@ -139,8 +138,8 @@ scope.
   passed and no record qualified, the block is the primary row alone; no
   second token, no marker. Matches how `--keep-data` renders only where it
   changed something.
-- **D-05-13: A pruned plugin that fails to remove renders its own
-  `(failed) {reason}` row beside the successful ones**; the block computes
+- **D-05-13: A pruned plugin that fails to remove renders its own `(failed) {reason}` row beside the successful ones**
+  ; the block computes
   `warning` (carried out but short); the named plugin's removal and the
   other prunes are NOT rolled back — each removal is its own committed step,
   as the cascade install reports per member. Uninstall has no ledger today
@@ -153,8 +152,8 @@ scope.
 
 ### Dependents guard (PRUNE-05 — folded in by the operator)
 
-- **D-05-14: `uninstall X` REFUSES when any remaining installed plugin in the
-  same scope declares X, and names the dependents.** Nothing is removed. The
+- **D-05-14: `uninstall X` REFUSES when any remaining installed plugin in the same scope declares X, and names the dependents.**
+  Nothing is removed. The
   remedy is to uninstall the dependents first (or `uninstall Y --prune`,
   which then sweeps X as an orphan). Upstream's `disable` shape ("X is still
   required by Y. Disable that plugin first…"); cascade-removing dependents
@@ -166,8 +165,8 @@ scope.
   — **Reversibility:** costly — once users rely on the refusal, relaxing it
   silently breaks dependents again; adding a cascade-remove later needs a
   confirmation story the flag surface forbids.
-- **D-05-15: Rendered as `⊘ X v1.0.0 (failed) {dependents remain}` with a
-  cause line naming them: `cause: required by Y@mp, Z@mp`.** One new
+- **D-05-15: Rendered as `⊘ X v1.0.0 (failed) {dependents remain}` with a cause line naming them.**
+  The cause line reads `cause: required by Y@mp, Z@mp`. One new
   closed-set reason in the `plugins remain` register (that token's documented
   subject is a marketplace and is not borrowed); the names ride the cause
   line, never the token, on the `dependency cycle` precedent. `error`
@@ -182,7 +181,7 @@ scope.
   behavior at both entry points (the DATA-02 / DATA-03 principle).
   — **Reversibility:** reversible — the reconcile arm can be relaxed to
   "config wins" later without touching persisted state.
-- **D-05-17: PRUNE-05 is the requirement ID**, added to the PRUNE family in
+- **D-05-17 [informational]: PRUNE-05 is the requirement ID**, added to the PRUNE family in
   `REQUIREMENTS.md`, and ROADMAP Phase 5 gains success criterion 6 for it.
 
 ### Flag surface (carried forward, not re-asked)

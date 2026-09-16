@@ -263,8 +263,16 @@ Six waves, strictly sequential: every plan touches files an earlier one changed,
 **Plans**: 3 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 05-01-PLAN.md — The dependents guard on both entry points (PRUNE-05): declaration index leaf, refusal inside the lock, `dependents remain` landed in full, reconcile cause line
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 05-02-PLAN.md — `--prune` on the catalog-owned flag surface (FLAG-01), the pure orphan fixpoint, the whole-scope sweep in the one transaction, `dependency pruned` landed in full (PRUNE-01..04)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 05-03-PLAN.md — Edge-to-sweep end-to-end proof, user docs for prune and the guard, backlog entry for `marketplace remove`, phase gate
 
 **Notes.** `uninstall`'s handler hard-rejects unknown long flags inline rather than consuming `edge/flag-catalog.ts`, so FLAG-01 has two sides to reconcile: the handler's accepted set and the catalog entry the completions are derived from. Today the catalog lists only the shared write-target flag for `uninstall`. The reconcile path is the other obligation here: `applyPluginUninstalls()` runs from `resources_discover` / `session_start` with no command line and therefore takes `--prune`'s default, whatever open decision 4 settles it to be — and that default must hold there as firmly as DATA-02's does, or the operation acquires two behaviors depending on which entry point reached it.

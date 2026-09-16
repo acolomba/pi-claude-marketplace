@@ -4,16 +4,16 @@ milestone: v1.20
 milestone_name: transitive-dependencies
 current_phase: 5
 current_phase_name: Prune on uninstall
-status: planning
-stopped_at: Phase 5 context gathered
-last_updated: "2026-09-16T20:01:54.442Z"
+status: executing
+stopped_at: Phase 5 planned (3 plans, 3 waves), ready to execute
+last_updated: "2026-09-16T21:45:55.161Z"
 last_activity: 2026-09-16
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: 189afc3d70f9d24e4a63fe08665a70fb5d21340a
+state_head: aceb54c7f07610f419033f9ed3b6bef770b6cf3a
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 19
+  total_plans: 22
   completed_plans: 19
   percent: 80
 ---
@@ -34,9 +34,9 @@ is archived under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 5 — Prune on uninstall
+Phase: 05 (Prune on uninstall) — READY TO EXECUTE
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 
 **Phase 4 closed 2026-09-16**, verified 9/9 must-haves; the one human item
 (the promoted row's legibility in a live session) was accepted on the pinned
