@@ -2965,3 +2965,33 @@ Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
   (dedicated `marketplace-not-added` kind in shared/notify.ts; placeholder/sole-reason
   renderer carve-out removed).
 -->
+
+## ENBL-DEP-01: a cascade enables a disabled, already-installed dependency
+
+Surfaced by the v1.20 Phase 4 code review (2026-09-16). Operator rule stated
+during that review: a plugin that is asked for -- by name, or by another
+plugin's dependency declaration -- becomes enabled; nothing needs to remember
+that it happened. Phase 4 applied the by-name half (`install <dep>` on a
+`"dependency"` record promotes AND enables it). The cascade half is still the
+Phase 3 policy: RESV-05 checks an already-installed, disabled dependency and
+leaves it as it was, reporting `{already installed, dependency disabled}` at
+`warning` (`docs/plugin-enablement.md` § "Where the two differ"). Upstream
+Claude Code writes `enabled: true` for a required dependency at install time.
+
+Scope when picked up: the cascade's RESV-05 arm enables the disabled member
+through the existing enable branch instead of skipping it; retire the
+`dependency disabled` skip row (a catalog removal: fixture, both contract
+constants, length lock, both enumeration pins); rewrite the
+`plugin-enablement.md` divergence paragraph; a decision record superseding
+the Phase 3 policy.
+
+## DEPS-STATUS-01: dependency status propagates to the dependent
+
+Surfaced in the same review. Operator statement: a fully supported plugin
+that depends on a partially supported plugin is itself partially supported
+because of its dependency, and that extends to its status token and reasons
+on `list` / `info` / install rows. Today a plugin's status is computed from
+its own record alone. Needs: a walk from a record to its declared
+dependencies' records at render time (network-free, NFR-5), a reason naming
+which dependency degrades it, and the catalog rows that follow. Interacts
+with `--partial` consent on the promotion arm (WR-03 in `04-REVIEW.md`).
