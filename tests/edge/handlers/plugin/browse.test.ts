@@ -8,8 +8,7 @@
 //     info, enable, disable
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
@@ -20,6 +19,7 @@ import {
   type BrowseActionHandlers,
 } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/browse.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { PickerResult } from "../../../../extensions/pi-claude-marketplace/edge/browser/plugin-browser.ts";
@@ -36,12 +36,8 @@ interface HermeticScope {
 }
 
 async function createHermeticScope(t: TestContext, name: string): Promise<HermeticScope> {
-  const root = await mkdtemp(path.join(tmpdir(), `browse-test-${name}-`));
-  t.after(async () => {
-    await rm(root, { recursive: true, force: true });
-  });
-
-  return { cwd: root };
+  const environment = await createHermeticEnvironment(t, `browse-test-${name}-`);
+  return { cwd: environment.cwd };
 }
 
 function marketplaceRecordIn(
