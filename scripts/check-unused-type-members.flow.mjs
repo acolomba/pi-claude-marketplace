@@ -1522,6 +1522,150 @@ function isProductionDerived(node, state) {
   return found;
 }
 
+// A type that admits exactly one value. Comparing what an expected literal
+// writes against what an arm declares is only meaningful when both sides name a
+// single value, so anything wider is not asked about.
+const unitTypeFlags =
+  ts.TypeFlags.StringLiteral | ts.TypeFlags.NumberLiteral | ts.TypeFlags.BooleanLiteral;
+
+function unitValueOf(type, checker) {
+  return (type.flags & unitTypeFlags) === 0 ? undefined : checker.typeToString(type);
+}
+
+function propertyKeyOf(name) {
+  return name !== undefined && (ts.isIdentifier(name) || ts.isStringLiteral(name))
+    ? name.text
+    : undefined;
+}
+
+/**
+ * What an expected literal says about the value it is held up against: every key
+ * it spells, and the subset of those it pins to a single value.
+ *
+ * The two are different questions. The pinned keys are what can settle which arm
+ * of a union the value came from; the spelled keys are what the comparison
+ * actually names, and a member it never names is not settled by it.
+ */
+function expectationOf(literal, checker) {
+  const spelled = new Set();
+  const pinned = new Map();
+
+  for (const property of literal.properties) {
+    const key = propertyKeyOf(property.name);
+
+    if (key === undefined) {
+      continue;
+    }
+
+    spelled.add(key);
+    const value = ts.isPropertyAssignment(property)
+      ? unitValueOf(checker.getTypeAtLocation(property.initializer), checker)
+      : undefined;
+
+    if (value !== undefined) {
+      pinned.set(key, value);
+    }
+  }
+
+  return { spelled, pinned };
+}
+
+/** Whether an arm could have held this value at this key. */
+function armAdmits(arm, key, value, checker) {
+  const slot = propertyTypeOf(arm, key, checker);
+
+  if (slot === undefined) {
+    return false;
+  }
+
+  return (slot.isUnion() ? slot.types : [slot]).some((part) => {
+    const unit = unitValueOf(part, checker);
+    return unit === undefined || unit === value;
+  });
+}
+
+/**
+ * The one arm of a union an expected literal settles on, or nothing when the
+ * values it pins leave two or more arms standing.
+ *
+ * A key two or more arms spell is deliberately left unsettled by the place rule,
+ * because which arm supplied the value is unknown from the place alone. A
+ * comparison that pins a discriminant says which arm it was, and that is the
+ * only thing settled here: two arms still standing settle nothing, exactly as
+ * before.
+ */
+function armSettledBy(type, pinned, checker) {
+  if (!type.isUnion() || pinned.size === 0) {
+    return undefined;
+  }
+
+  let arms = type.types;
+
+  for (const [key, value] of pinned) {
+    arms = arms.filter((arm) => armAdmits(arm, key, value, checker));
+  }
+
+  return arms.length === 1 ? arms[0] : undefined;
+}
+
+/** The literal a deep comparison holds this operand up against. */
+function expectedLiteralFor(summary, operand) {
+  if (summary.syntax !== "deep-comparison") {
+    return undefined;
+  }
+
+  return summary.operands.find(
+    (other) => other !== operand && ts.isObjectLiteralExpression(other.node),
+  )?.node;
+}
+
+/**
+ * The arm a comparison settles this operand on, computed at most once per
+ * operand and only when something was left unsettled without it.
+ */
+function settlementFor(summary, operand, state) {
+  if (state.settled.has(operand)) {
+    return state.settled.get(operand);
+  }
+
+  const literal = expectedLiteralFor(summary, operand);
+  const expectation = literal === undefined ? undefined : expectationOf(literal, state.checker);
+  const arm =
+    expectation === undefined
+      ? undefined
+      : armSettledBy(
+          state.checker.getTypeAtLocation(operand.node),
+          expectation.pinned,
+          state.checker,
+        );
+  const found = arm === undefined ? undefined : { arm, spelled: expectation.spelled };
+  state.settled.set(operand, found);
+  return found;
+}
+
+/**
+ * The members this read reaches on this operand. The place rule answers first
+ * and is unchanged; only a key it left unsettled is put to the comparison, and
+ * only at the operand's own level, because an expected literal describes the
+ * shape it is held up against rather than anything nested below it.
+ */
+function candidatesForRead(summary, operand, place, state) {
+  const direct = candidatesAt(operand.node, place.path, place.key, state);
+
+  if (direct.length > 0 || place.path.length > 0) {
+    return direct;
+  }
+
+  const settlement = settlementFor(summary, operand, state);
+
+  if (settlement === undefined || !settlement.spelled.has(place.key)) {
+    return direct;
+  }
+
+  const symbol = state.checker.getPropertyOfType(settlement.arm, place.key);
+  return symbol === undefined ? [] : resolveCandidates(state.checker, state.byDeclaration, symbol);
+}
+
 function pushOperationWitness(state, candidate, site, origin, syntax) {
   const witness = { ...site, kind: "value-read", origin, syntax };
   const existing = state.witnesses.get(candidate.id);
@@ -1578,7 +1722,7 @@ function addOperationOperand(summary, operand, state, reads) {
       return;
     }
 
-    const direct = candidatesAt(operand.node, place.path, place.key, state);
+    const direct = candidatesForRead(summary, operand, place, state);
 
     for (const candidate of direct) {
       pushOperationWitness(state, candidate, site, origin, summary.syntax);
@@ -1626,6 +1770,7 @@ function createState({ checker, projectRoot, byDeclaration, budget }) {
     resolved: new Map(),
     expansions: new Map(),
     lineage: new Map(),
+    settled: new Map(),
     transfers: [],
     witnesses: new Map(),
     unsupported: new Map(),
