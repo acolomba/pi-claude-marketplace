@@ -98,6 +98,20 @@ function stateWith(marketplaces: Record<string, MarketplaceRecord> = {}): Extens
   return { schemaVersion: 2, marketplaces: { ...marketplaces } };
 }
 
+// D-04-05: one retained marketplace holding a dependency-provenance record and
+// a direct-install record side by side. Both D-04-05 cases plan over this same
+// state, so an exemption wide enough to keep every undeclared record shows up
+// as the missing `orphan` uninstall in either whole-plan assertion.
+function provenanceState(): ExtensionState {
+  return stateWith({
+    keep: marketplaceRecord("keep", githubSource("acme/keep"), {
+      steady: pluginRecord(true),
+      dependency: pluginRecord(true, { provenance: "dependency" }),
+      orphan: pluginRecord(true),
+    }),
+  });
+}
+
 describe("planReconcile", () => {
   test("resolves a declared alias to the canonical recorded plugin target", () => {
     // arrange
@@ -753,6 +767,30 @@ describe("planReconcile", () => {
         { scope: "project", plugin: "zeta", marketplace: "marketplace" },
         { scope: "project", plugin: "alpha", marketplace: "marketplace" },
       ],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      sourceMismatches: [],
+    });
+  });
+
+  test("D-04-05: still sweeps an undeclared direct install beside a declared dependency", () => {
+    // arrange
+    const merged = mergedConfig(
+      { keep: { source: "acme/keep" } },
+      { "steady@keep": {}, "dependency@keep": {} },
+    );
+    const state = provenanceState();
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [{ scope: "project", plugin: "orphan", marketplace: "keep" }],
       pluginsToEnable: [],
       pluginsToDisable: [],
       sourceMismatches: [],
