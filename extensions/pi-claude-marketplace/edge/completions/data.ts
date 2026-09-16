@@ -128,8 +128,6 @@ export type PluginRefCompletionMode =
  * other thrown error propagates verbatim (TC-9: state.json errors surface).
  */
 export interface LocationsResolver {
-  /** Cache file path for the marketplace-names cache of a scope. */
-  marketplaceNamesCachePath(scope: Scope): string;
   /** Cache file path for a scoped marketplace's plugin index. */
   pluginCachePath(scope: Scope, marketplace: string): Promise<string>;
   /** Loads state.json for a scope (cache-miss rebuild path). */
@@ -140,9 +138,11 @@ export interface LocationsResolver {
   loadManifestForMarketplace(scope: Scope, marketplace: string): Promise<readonly PluginIndexRow[]>;
 }
 
-/** Minimal shape consumed by `rebuildNamesForScope`; full state record lives in persistence. */
+/**
+ * Minimal shape the completion reads need from a state record: the installed
+ * plugin names, and nothing else. The full state record lives in persistence.
+ */
 export interface MarketplaceStateRecord {
-  readonly manifestPath?: string;
   readonly plugins?: Record<string, unknown>;
 }
 
