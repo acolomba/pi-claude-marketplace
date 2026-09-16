@@ -117,12 +117,12 @@ option.
 
 ### What reconcile does with everything else
 
-- **D-04-05: `buildUninstallBucket` keeps sweeping genuine orphans. Exactly
-  one exemption is added: `provenance: "dependency"`.** A recorded plugin
-  that is neither named in the merged config nor marked as a dependency is
-  still uninstalled, exactly as today. This is the smallest change that makes
-  the model work, and it leaves established reconcile behavior otherwise
-  untouched.
+- **D-04-05 — `buildUninstallBucket` keeps sweeping genuine orphans, gaining
+  exactly one exemption for a record marked as a dependency.** The exempting
+  value is `provenance: "dependency"`. A recorded plugin that is neither named
+  in the merged config nor marked as a dependency is still uninstalled, exactly
+  as today. This is the smallest change that makes the model work, and it
+  leaves established reconcile behavior otherwise untouched.
 
   The alternative — keep an orphan and report it instead — is safer against
   an accidental hand-edit of `claude-plugins.json`, but it changes reconcile

@@ -5,15 +5,15 @@ milestone_name: transitive-dependencies
 current_phase: 4
 current_phase_name: Install provenance
 status: planning
-stopped_at: Session resumed, routed to planning Phase 4
-last_updated: "2026-09-15T21:45:00.000Z"
+stopped_at: Phase 4 planned - 6 plans across 6 sequential waves, ready to execute
+last_updated: "2026-09-16T01:37:42.448Z"
 last_activity: 2026-09-15
-last_activity_desc: Phase 4 discuss closed - both open questions answered, CONTEXT.md written
-state_head: d76e1e0199cdac438ec27d1fe18967609afe68ee
+last_activity_desc: Phase 4 planned - research, patterns, 6 plans, checker passed with no blockers
+state_head: 0f2638d92b54ec41f39ffd5559c0416dacd2b8f9
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 13
+  total_plans: 19
   completed_plans: 13
   percent: 60
 ---
@@ -35,12 +35,32 @@ is archived under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 4 — Install provenance
-Plan: Not started
-Status: Discuss closed, ready to plan
+Plan: 0 of 6 — 6 plans across 6 strictly sequential waves
+Status: READY TO EXECUTE
 
-**Phase 4's discussion closed 2026-09-15** with six decisions in
-`04-CONTEXT.md` (D-04-01..06) and the alternatives preserved in
-`04-DISCUSSION-LOG.md`. The phase turned out to be larger than "add a field."
+**Phase 4 was planned 2026-09-15.** Eight decisions in `04-CONTEXT.md`
+(D-04-01..08), alternatives preserved in `04-DISCUSSION-LOG.md`, a
+probe-measured `04-RESEARCH.md`, a `04-PATTERNS.md` analog map, and
+`04-VALIDATION.md`. The plan checker returned no blockers and one advisory
+(plan 04-03 sweeps 34 fixture files in one coherent pass — splitting it would
+fragment the sweep rather than reduce per-file complexity).
+
+**Waves 4 and 5 carry the phase's one hard ordering constraint.** Wave 4 is
+`buildUninstallBucket`'s dependency exemption; wave 5 retires the config
+write. Wave 5 declares `depends_on: ["04-04"]`, so step 3 structurally cannot
+precede step 2, and 04-05's own task 2 proves it by reverting the wave-4
+exemption and observing the reload-survival case go red. Plans 04-01 (the
+schemaVersion bump) and 04-06 (the catalog row) are `autonomous: false` —
+both are one-way decisions.
+
+Two findings from research and pattern mapping changed the phase's shape:
+PROV-03 had no implementation path at all (`install <already-installed>`
+throws on the non-mutating arm), so D-04-07 adds a promotion plus a new
+outcome row across nine catalog surfaces; and `PROV-01..07` already means
+*git auth provider* in this codebase with 48 citations, so D-04-08 anchors
+source comments on `D-04-NN` instead.
+
+The original discussion closed earlier the same day. The phase turned out to be larger than "add a field."
 Phase 3's CR-01 fix writes every cascade-installed dependency into
 `claude-plugins.json` — the desired-state config — which conflates what the
 user asked for with what was pulled in to satisfy it, and destroys the very
