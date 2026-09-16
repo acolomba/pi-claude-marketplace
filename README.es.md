@@ -297,6 +297,13 @@ Activa o desactiva las actualizaciones automáticas de complementos del mercado.
 
 ### Complemento
 
+Explora complementos de forma interactiva en los mercados configurados. En modo interactivo, ejecutar `/claude:plugin` sin argumentos también abre el explorador.
+
+```text
+/claude:plugin browse
+/claude:plugin
+```
+
 Lista los complementos disponibles para instalar. Omite el nombre del mercado para listar en todos los mercados configurados.
 
 ```text

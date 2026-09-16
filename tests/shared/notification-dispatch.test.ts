@@ -12,6 +12,7 @@ import {
   notifyDiagnostic,
   notifyStopHookOverrideCap,
   notifyUsageError,
+  notifyUsageInfo,
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 
 import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -5811,6 +5812,20 @@ test("stop override dispatch preserves exact warning bytes", (t) => {
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     "Stop hook override cap reached.\n\n`official:guard`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.",
     "warning",
+  ]);
+});
+
+test("usage info dispatch preserves usage message at info severity", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyUsageInfo(ctx as never, "Usage: /claude:plugin ...");
+
+  // assert
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "Usage: /claude:plugin ...",
+    "info",
   ]);
 });
 

@@ -39,8 +39,11 @@ import { sourceLogical } from "../../domain/source.ts";
 import { loadVisibleMarketplaces } from "../../orchestrators/marketplace/shared.ts";
 import { loadPluginListPayload } from "../../orchestrators/plugin/list-flow.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { isScopeBearingListRow } from "../../shared/notification-types.ts";
-import { type PluginNotificationMessage } from "../../shared/notification-types.ts";
+import {
+  pluginScopeOrFallback,
+  pluginVersion,
+  type PluginNotificationMessage,
+} from "../../shared/notification-types.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -350,28 +353,6 @@ async function loadToolPluginPayload(
 }
 
 /**
- * Read `p.scope` defensively from the PluginNotificationMessage union.
- * The `available` / `unavailable` variants OMIT the `scope` field by
- * construction (SNM-11); the other list-surface variants carry an OPTIONAL
- * `scope` that is present only when the plugin's install scope differs
- * from the marketplace block's scope (orphan-fold rule, D-13-18). When
- * absent, fall back to the marketplace scope so the structured tool
- * surface always carries a stable `scope` field for the agent.
- *
- * The list-surface variant subset for this projection is narrowed by
- * `projectRowStatus` (the only callers come from inside the rendering
- * loop after the status switch). For `installed` / `upgradable` the
- * `scope` field exists structurally; for `available` / `unavailable`
- * it does not -- the `status`-narrowed switch handles both arms.
- */
-function pluginScopeOrFallback(
-  p: PluginNotificationMessage,
-  marketplaceScope: "user" | "project",
-): "user" | "project" {
-  return isScopeBearingListRow(p) ? (p.scope ?? marketplaceScope) : marketplaceScope;
-}
-
-/**
  * Read `p.reasons` defensively. Only a subset of plugin variants carry the
  * field (D-15-01). INV-05 / D-95-06: every one of the nine list-surface
  * variants `projectRowStatus` admits forwards its typed reasons here, and the
@@ -421,39 +402,6 @@ function pluginReasons(p: ToolPluginRow): readonly string[] | undefined {
  * instead of silent drift.
  */
 type ToolPluginRow = Awaited<ReturnType<typeof loadPluginListPayload>>[number]["plugins"][number];
-
-/**
- * Read `p.version` off a list-surface row. D-15-04: every list-surface variant
- * carries the same optional `version?` slot, so every arm returns the same field
- * and the switch computes nothing.
- *
- * D-116-14: the switch stays anyway, and must not be collapsed into a single
- * expression. Its job is the missing-arm gate -- `noImplicitReturns` makes the
- * end of this function reachable the moment a list-surface status goes unnamed,
- * so a status added to the row union is a compile error here rather than a row
- * that silently loses its version.
- *
- * `failed` is named here and refused by `projectRowStatus`, which is one answer
- * rather than two: the arm exists because `ToolPluginRow` declares the status
- * and the gate must stay total over that union, while the payload this tool
- * loads never carries such a row (see `projectRowStatus`). The render loop
- * calls the projection first, so no `failed` row reaches this function.
- */
-function pluginVersion(p: ToolPluginRow): string | undefined {
-  switch (p.status) {
-    case "installed":
-    case "upgradable":
-    case "available":
-    case "remote":
-    case "unavailable":
-    case "partially-available":
-    case "failed":
-    case "disabled":
-    case "partially-installed":
-    case "partially-upgradable":
-      return p.version;
-  }
-}
 
 function renderPluginPayload(
   payload: Awaited<ReturnType<typeof loadPluginListPayload>>,
