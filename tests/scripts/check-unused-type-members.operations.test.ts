@@ -1200,3 +1200,147 @@ assert.deepStrictEqual(made, { status: "removed", name: "made", unstaged: [] });
   assert.deepStrictEqual(shapesFor(report, "Outcome", "name"), []);
   assert.strictEqual(statusFor(report, "Outcome", "name"), "unread");
 });
+
+// ---------------------------------------------------------------------------
+// Production lineage carried through a factory-returned closure.
+// ---------------------------------------------------------------------------
+
+/**
+ * Reduced from `bridges/hooks/stage.ts`, whose write helper is the closure
+ * `createWriteHookConfig` returns and whose removal helper beside it is a
+ * directly declared exported function. Both results are deep-compared the same
+ * way in the same suite, and only the directly declared one is credited: the
+ * backward search that settles production lineage stops at a call whose callee
+ * is a const holding what a factory handed back.
+ *
+ * Each result carries its own type so one comparison cannot answer for another.
+ * `Held` is the neighbouring shape -- a production factory whose return is a
+ * name rather than a function written there.
+ */
+const factoryClosureCases = `export interface Written {
+  readonly written: true;
+  readonly path: string;
+}
+
+export interface Removed {
+  readonly removed: true;
+  readonly path: string;
+}
+
+export interface Held {
+  readonly held: true;
+  readonly path: string;
+}
+
+export interface Local {
+  readonly local: true;
+  readonly path: string;
+}
+
+export interface Cycled {
+  readonly cycled: true;
+  readonly path: string;
+}
+
+export interface Inspector {
+  readonly probe: (at: string) => string;
+}
+
+export function createWrite(inspector: Inspector): (at: string) => Written {
+  return function writeAt(at: string): Written {
+    return { written: true, path: inspector.probe(at) };
+  };
+}
+
+export function removeAt(at: string): Removed {
+  return { removed: true, path: at };
+}
+
+const heldWriter = (at: string): Held => ({ held: true, path: at });
+
+export function createHeld(): (at: string) => Held {
+  return heldWriter;
+}
+
+export const write = createWrite({ probe: (at) => at });
+
+export const held = createHeld();
+`;
+
+const factoryClosureSpec = `import assert from "node:assert/strict";
+
+import { held, removeAt, write } from "../extensions/pi-claude-marketplace/cases.ts";
+
+import type { Cycled, Local } from "../extensions/pi-claude-marketplace/cases.ts";
+
+assert.deepStrictEqual(write("p"), { written: true, path: "p" });
+assert.deepStrictEqual(removeAt("p"), { removed: true, path: "p" });
+assert.deepStrictEqual(held("p"), { held: true, path: "p" });
+
+function createLocalWriter(): (at: string) => Local {
+  return function localWriter(at: string): Local {
+    return { local: true, path: at };
+  };
+}
+
+const local = createLocalWriter();
+assert.deepStrictEqual(local("p"), { local: true, path: "p" });
+
+function loopA(at: string): Cycled {
+  return loopB(at);
+}
+
+function loopB(at: string): Cycled {
+  return loopA(at);
+}
+
+assert.deepStrictEqual(loopA("p"), { cycled: true, path: "p" });
+`;
+
+test("a result a factory-returned closure produced carries production lineage", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(t, factoryClosureCases, factoryClosureSpec);
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Written", "written"), [
+    "value-read/deep-comparison/test",
+  ]);
+  assert.strictEqual(statusFor(report, "Written", "written"), "test-only-observed");
+});
+
+test("the directly declared sibling keeps exactly the observation it had", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(t, factoryClosureCases, factoryClosureSpec);
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Removed", "removed"), [
+    "value-read/deep-comparison/test",
+  ]);
+});
+
+test("a factory whose return is a name rather than a body adds no lineage", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(t, factoryClosureCases, factoryClosureSpec);
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Held", "held"), []);
+  assert.strictEqual(statusFor(report, "Held", "held"), "unread");
+});
+
+test("a closure a test's own factory returned reaches no production body", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(t, factoryClosureCases, factoryClosureSpec);
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Local", "local"), []);
+  assert.strictEqual(statusFor(report, "Local", "local"), "unread");
+});
+
+test("a cycle in the backward search terminates and credits nothing", async (t) => {
+  // arrange
+  const report = await analyzeWithSpec(t, factoryClosureCases, factoryClosureSpec);
+
+  // act & assert
+  assert.deepStrictEqual(shapesFor(report, "Cycled", "cycled"), []);
+  assert.strictEqual(statusFor(report, "Cycled", "cycled"), "unread");
+});
