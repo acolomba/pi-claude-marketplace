@@ -5,9 +5,6 @@ export interface HookHandlerEntry {
   type: string;
   command?: string;
   readonly if?: string;
-  statusMessage?: unknown;
-  once?: unknown;
-  async?: unknown;
   shell?: unknown;
   args?: unknown;
   timeout?: unknown;
