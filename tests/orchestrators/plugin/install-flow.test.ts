@@ -4866,6 +4866,101 @@ test("RESV-01 / D-03-06: a cascade dependency is declared in the parent's own fi
   });
 });
 
+/**
+ * D-04-01: the persisted document, read back as raw JSON rather than through
+ * `loadState`, so the assertion sees the bytes a later build will load -- the
+ * loader would silently rebuild `schemaVersion` on the way in.
+ */
+async function readPersistedProvenance(
+  stateJsonPath: string,
+  marketplace: string,
+): Promise<{ schemaVersion: unknown; provenance: Record<string, unknown> }> {
+  const persisted = JSON.parse(await readFile(stateJsonPath, "utf8")) as {
+    schemaVersion: unknown;
+    marketplaces: Record<string, { plugins: Record<string, { provenance?: unknown }> }>;
+  };
+  const plugins = persisted.marketplaces[marketplace]?.plugins ?? {};
+  return {
+    schemaVersion: persisted.schemaVersion,
+    provenance: Object.fromEntries(
+      Object.entries(plugins).map(([name, record]) => [name, record.provenance]),
+    ),
+  };
+}
+
+test("D-04-01: a cascade records its root as explicit and its dependency as a dependency", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0401-cascade-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.deepStrictEqual(await readPersistedProvenance(locations.stateJsonPath, "mp"), {
+        schemaVersion: 3,
+        provenance: { hello: "explicit", "some-other-plugin": "dependency" },
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-01: a plugin declaring no dependencies records its single member as explicit", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0401-standalone-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.deepStrictEqual(await readPersistedProvenance(locations.stateJsonPath, "mp"), {
+        schemaVersion: 3,
+        provenance: { hello: "explicit" },
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("RESV-01 / D-01-32: a dependency declared only in the plugin's own manifest installs", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-ownmanifest-"));
