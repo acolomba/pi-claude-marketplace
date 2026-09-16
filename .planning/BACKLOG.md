@@ -2995,3 +2995,15 @@ its own record alone. Needs: a walk from a record to its declared
 dependencies' records at render time (network-free, NFR-5), a reason naming
 which dependency degrades it, and the catalog rows that follow. Interacts
 with `--partial` consent on the promotion arm (WR-03 in `04-REVIEW.md`).
+
+## PRUNE-CMD-01: standalone `/claude:plugin prune` with `--dry-run`
+
+Surfaced during the v1.20 Phase 5 discussion (2026-09-16). Upstream has
+`claude plugin prune` (alias `autoremove`, `--dry-run`, `-y`) as the way to
+list and remove orphaned auto-installed dependencies without uninstalling
+anything, and `list`/`info` show no orphan marker either. Phase 5 ships only
+`uninstall --prune`; a user cannot see what would be pruned without running
+it. Scope when picked up: the standalone verb (no `-y`: D-02-05), a
+`--dry-run` that renders the would-be-pruned rows without removing them, and
+an `{orphaned}` inventory marker on `list`/`info` rows — a new closed-set
+token with the full catalog amendment.

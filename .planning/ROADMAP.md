@@ -71,12 +71,15 @@ v1.20 phase. Decimal phases (2.1, 3.1) are urgent insertions only, marked
    "stale state, absent config" wording returns to MIGR-01 in the backlog intact,
    alongside the `persistence/migrate.ts` deletion; this milestone borrows nothing
    from it.
-4. **`--prune`'s value on the reconcile path — Phase 5 discuss.**
-   `applyPluginUninstalls()` (`orchestrators/reconcile/apply.ts`) runs from
-   `resources_discover` / `session_start` with no command line, so it takes the
-   default. State that default and hold it there. The alternative is one operation
-   with two behaviors depending on which entry point reached it — the same trap
-   DATA-02 and DATA-03 agree in order to avoid.
+4. ~~**`--prune`'s value on the reconcile path — Phase 5 discuss.**~~ **SETTLED.**
+   D-05-08: reconcile NEVER prunes. The flag's absent value is "no prune" and
+   `applyPluginUninstalls()` takes it exactly as it takes DATA-03's delete
+   default — one behavior at both entry points. Orphaned `"dependency"` records
+   survive `/reload` (D-04-05 stays unconditional) and are removed only by an
+   explicit `uninstall … --prune`. The operator first chose a standing sweep
+   and reversed it once the two-behaviors, wider-promptless-deletion, and
+   fail-closed-on-every-reload consequences were laid out (see
+   `.planning/phases/05-prune-on-uninstall/05-CONTEXT.md`).
 
 <details>
 <summary>✅ v1.19 Unit Test Refactor (Phases 108-117) — completed 2026-09-04</summary>
@@ -246,7 +249,7 @@ Six waves, strictly sequential: every plan touches files an earlier one changed,
 
 **Depends on**: Phase 4 (it reads the provenance field) and Phase 2 (it joins the uninstall option seam rather than opening a second one). FLAG-01 can only be satisfied once both flags exist, which is why it lands here and not earlier.
 
-**Requirements**: PRUNE-01, PRUNE-02, PRUNE-03, PRUNE-04, FLAG-01
+**Requirements**: PRUNE-01, PRUNE-02, PRUNE-03, PRUNE-04, PRUNE-05, FLAG-01
 
 **Success Criteria** (what must be TRUE):
 
@@ -255,6 +258,7 @@ Six waves, strictly sequential: every plan touches files an earlier one changed,
 3. `--prune` never removes a dependency while any remaining installed plugin still declares it. (PRUNE-03)
 4. The user is told which plugins `--prune` removed. (PRUNE-04)
 5. `uninstall` accepts exactly `--keep-data` and `--prune` as its extra flags — the shared `--local` and the global `--scope` unchanged — and the flag-catalog drift guard (`tests/architecture/flag-catalog-drift.test.ts`) pins that set, so a later flag cannot be added silently. (FLAG-01)
+6. `uninstall <plugin>` refuses to remove a plugin that another installed plugin in the same scope still declares — a disabled declarer included — and names the dependents; nothing is removed, and the load-time reconcile path refuses the same way. (PRUNE-05, folded in during the Phase 5 discussion — D-05-14..16)
 
 **Plans**: TBD
 

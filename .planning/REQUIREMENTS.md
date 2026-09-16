@@ -81,6 +81,9 @@ New scope. Consumes PROV.
 - [ ] **PRUNE-03**: `--prune` never removes a dependency that another installed
   plugin still declares.
 - [ ] **PRUNE-04**: The user learns which plugins `--prune` removed.
+- [ ] **PRUNE-05**: `uninstall` refuses to remove a plugin that another
+  installed plugin in the same scope still declares, and names the dependents.
+  (Folded into Phase 5 by the operator on 2026-09-16; D-05-14..16.)
 
 ### Uninstall data disposition (DATA)
 
@@ -152,6 +155,7 @@ this milestone.
 | PRUNE-02 | Phase 5 | Pending |
 | PRUNE-03 | Phase 5 | Pending |
 | PRUNE-04 | Phase 5 | Pending |
+| PRUNE-05 | Phase 5 | Pending |
 | DATA-01 | Phase 2 | Complete |
 | DATA-02 | Phase 2 | Complete |
 | DATA-03 | Phase 2 | Complete |
