@@ -780,6 +780,42 @@
       "category": "conditional-clause",
       "purpose": "Names the slot each tool-call arm is walked through, so the literal tool names survive a property access that would collapse them to string.",
       "clause": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts:52:5"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:100:9",
+      "owner": "marketplaces",
+      "key": "name",
+      "category": "external-output",
+      "purpose": "Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
+      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:114:29",
+      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:117:7"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:101:9",
+      "owner": "marketplaces",
+      "key": "scope",
+      "category": "external-output",
+      "purpose": "Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
+      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:114:48",
+      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:117:7"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:102:9",
+      "owner": "marketplaces",
+      "key": "pluginCount",
+      "category": "external-output",
+      "purpose": "Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
+      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:114:55",
+      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:117:7"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:103:9",
+      "owner": "marketplaces",
+      "key": "source",
+      "category": "external-output",
+      "purpose": "Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
+      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:114:68",
+      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:117:7"
     }
   ]
 }

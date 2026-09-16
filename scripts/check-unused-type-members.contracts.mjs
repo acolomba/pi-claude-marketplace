@@ -212,6 +212,41 @@ function nodeAt(sourceFile, site) {
   return found;
 }
 
+/**
+ * The INNERMOST node that begins exactly at this position.
+ *
+ * `nodeAt` answers the outermost one, which is what a contract coordinate wants:
+ * an entry names a declaration, and the declaration is the node a reader sees
+ * there. A recorded transfer destination is the opposite -- `rows` in
+ * `rows.push(row)` shares its start with the property access, the call and the
+ * statement around it, and only the innermost one carries the place's symbol.
+ */
+function innermostNodeAt(sourceFile, site) {
+  let position;
+
+  try {
+    position = sourceFile.getPositionOfLineAndCharacter(site.line - 1, site.column - 1);
+  } catch {
+    return undefined;
+  }
+
+  let found;
+  const visit = (node) => {
+    if (node.getStart() > position || node.getEnd() <= position) {
+      return;
+    }
+
+    if (node.getStart() === position) {
+      found = node;
+    }
+
+    ts.forEachChild(node, visit);
+  };
+
+  ts.forEachChild(sourceFile, visit);
+  return found;
+}
+
 function nodeAtSite(site, context) {
   const sourceFile = context.sourceFiles.get(site.path);
   return sourceFile === undefined ? undefined : nodeAt(sourceFile, site);
@@ -298,8 +333,30 @@ function insideAssertion(node) {
  * The contextual type is what makes them a boundary: it is the shape an
  * installed declaration asked for, and the compiler checked the value against it.
  */
+function enclosingLiteralPropertyType(node, context) {
+  const parent = node.parent;
+
+  if (
+    !ts.isMethodDeclaration(node) ||
+    parent === undefined ||
+    !ts.isObjectLiteralExpression(parent)
+  ) {
+    return undefined;
+  }
+
+  const key = literalNameOf(node);
+  const enclosing = key === undefined ? undefined : context.checker.getContextualType(parent);
+  const property =
+    enclosing === undefined ? undefined : propertySymbolOf(enclosing, key, context.checker);
+  const declaration = property?.valueDeclaration ?? property?.declarations?.[0];
+  return property === undefined || declaration === undefined
+    ? undefined
+    : context.checker.getTypeOfSymbolAtLocation(property, declaration);
+}
+
 function externalCallSignatures(node, context) {
-  const contextual = context.checker.getContextualType(node);
+  const contextual =
+    context.checker.getContextualType(node) ?? enclosingLiteralPropertyType(node, context);
 
   if (contextual === undefined) {
     return [];
@@ -377,31 +434,86 @@ function siteKeyOf(node, projectRoot) {
 }
 
 /**
+ * The place an expression stands for. A shorthand property names its own
+ * property symbol at that position, and the value it hands over is the variable
+ * the shorthand abbreviates, so that is the place the transfers are about.
+ */
+function placeSymbolOf(expression, context) {
+  const parent = expression.parent;
+
+  return parent !== undefined && ts.isShorthandPropertyAssignment(parent)
+    ? context.checker.getShorthandAssignmentValueSymbol(parent)
+    : context.checker.getSymbolAtLocation(expression);
+}
+
+function transfersInto(symbol, context) {
+  const found = [];
+
+  for (const declaration of symbol.declarations ?? []) {
+    if (declaration.name === undefined) {
+      continue;
+    }
+
+    found.push(
+      ...(context.transfersTo.get(siteKeyOf(declaration.name, context.projectRoot)) ?? []),
+    );
+  }
+
+  found.push(...(context.transfersToSymbol.get(symbol) ?? []));
+  return found;
+}
+
+/**
  * The expressions a named place was actually given its value from, taken from
  * the directed transfers the flow walk recorded. Structural compatibility is not
  * one of them: only a site where a value really moved appears here.
  */
 function sourcesOf(expression, context) {
-  const symbol = context.checker.getSymbolAtLocation(expression);
+  const symbol = placeSymbolOf(expression, context);
   const sources = [];
 
-  for (const declaration of symbol?.declarations ?? []) {
-    if (declaration.name === undefined) {
-      continue;
-    }
+  for (const transfer of symbol === undefined ? [] : transfersInto(symbol, context)) {
+    const node = nodeAtSite(transfer.from, context);
 
-    const destination = siteKeyOf(declaration.name, context.projectRoot);
-
-    for (const transfer of context.transfersTo.get(destination) ?? []) {
-      const node = nodeAtSite(transfer.from, context);
-
-      if (node !== undefined) {
-        sources.push(node);
-      }
+    if (node !== undefined) {
+      sources.push(node);
     }
   }
 
   return sources;
+}
+
+function objectLiteralPartOf(property) {
+  if (ts.isPropertyAssignment(property)) {
+    return property.initializer;
+  }
+
+  if (ts.isShorthandPropertyAssignment(property)) {
+    return property.name;
+  }
+
+  return ts.isSpreadAssignment(property) ? property.expression : undefined;
+}
+
+/**
+ * The expressions a literal is built out of.
+ *
+ * What crosses a boundary is often a shape built around the value rather than
+ * the value itself, so arrival looks one level in at a time. Each level costs a
+ * hop, so the bound still means the same distance it meant before.
+ */
+function partsOf(expression) {
+  if (ts.isObjectLiteralExpression(expression)) {
+    return expression.properties
+      .map((property) => objectLiteralPartOf(property))
+      .filter((part) => part !== undefined);
+  }
+
+  return ts.isArrayLiteralExpression(expression)
+    ? expression.elements.map((element) =>
+        ts.isSpreadElement(element) ? element.expression : element,
+      )
+    : [];
 }
 
 function reaches(origin, expression, context, hops) {
@@ -409,13 +521,12 @@ function reaches(origin, expression, context, hops) {
     return true;
   }
 
-  if (hops === 0 || !ts.isIdentifier(expression)) {
+  if (hops === 0) {
     return false;
   }
 
-  return sourcesOf(expression, context).some((source) =>
-    reaches(origin, source, context, hops - 1),
-  );
+  const next = ts.isIdentifier(expression) ? sourcesOf(expression, context) : partsOf(expression);
+  return next.some((part) => reaches(origin, part, context, hops - 1));
 }
 
 /**
@@ -1076,6 +1187,51 @@ function indexTransfers(transfers) {
   return byDestination;
 }
 
+// The transfer kinds the flow walk records at a receiver or assignment-target
+// EXPRESSION rather than at a declaration name. A walk that asks for a
+// declaration's own site cannot see these: `rows.push(row)` records its
+// destination at the `rows` of the call, not at the `rows` of `const rows = []`.
+const expressionDestinations = new Set(["container-write", "map-value", "assignment"]);
+
+function symbolAtSite(site, context) {
+  const sourceFile = context.sourceFiles.get(site.path);
+  const node = sourceFile === undefined ? undefined : innermostNodeAt(sourceFile, site);
+  return node === undefined ? undefined : context.checker.getSymbolAtLocation(node);
+}
+
+/**
+ * The same transfers, keyed by the symbol their destination expression stands
+ * for, so a backward walk can ask about a place rather than about a coordinate.
+ *
+ * This is directed, not structural: only a site where a value really moved is
+ * here, and a same-spelled place with a different symbol resolves elsewhere and
+ * does not connect. Built once over the recorded edges that need it -- roughly
+ * one in ninety of them -- so no graph is traversed a second time.
+ */
+function indexTransfersBySymbol(transfers, context) {
+  const bySymbol = new Map();
+
+  for (const transfer of transfers) {
+    const symbol = expressionDestinations.has(transfer.kind)
+      ? symbolAtSite(transfer.to, context)
+      : undefined;
+
+    if (symbol === undefined) {
+      continue;
+    }
+
+    const existing = bySymbol.get(symbol);
+
+    if (existing === undefined) {
+      bySymbol.set(symbol, [transfer]);
+    } else {
+      existing.push(transfer);
+    }
+  }
+
+  return bySymbol;
+}
+
 function sourceFilesByPath(program, projectRoot) {
   const byPath = new Map();
 
@@ -1086,7 +1242,7 @@ function sourceFilesByPath(program, projectRoot) {
   return byPath;
 }
 
-function contextFrom(given) {
+function baseContextFrom(given) {
   return {
     checker: given.checker,
     projectRoot: given.projectRoot,
@@ -1096,6 +1252,11 @@ function contextFrom(given) {
     sourceFiles: sourceFilesByPath(given.program, given.projectRoot),
     transfersTo: indexTransfers(given.transfers),
   };
+}
+
+function contextFrom(given) {
+  const context = baseContextFrom(given);
+  return { ...context, transfersToSymbol: indexTransfersBySymbol(given.transfers, context) };
 }
 
 /**
