@@ -174,6 +174,7 @@ async function seedPlugin(
                   },
                   resources: { skills: [], prompts: [], agents: [], hooks: [], mcpServers: [] },
                   enabled: false,
+                  provenance: "explicit",
                   installedAt: "2026-01-01T00:00:00.000Z",
                   updatedAt: "2026-01-01T00:00:00.000Z",
                 },
@@ -316,6 +317,7 @@ test("captures the resolved version when a concurrent record aborts state commit
   const racedRecord: ExtensionState["marketplaces"][string]["plugins"][string] = {
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     resolvedSource: "/raced/plugin",
     resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
@@ -425,6 +427,7 @@ test("preserves installedAt while replacing an existing disabled record", async 
   assert.deepStrictEqual(seeded.state.marketplaces.marketplace?.plugins.empty, {
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     resolvedSource: seeded.pluginRoot,
     resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },

@@ -601,7 +601,7 @@ test("classifies an invalid manifest through a staging-cleanup leak and preserve
       state.cloneCalls[0]?.dir === undefined ? "" : path.basename(state.cloneCalls[0].dir),
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });
@@ -686,7 +686,7 @@ for (const source of [
         resolveRefCalls: [],
       });
       assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-        schemaVersion: 2,
+        schemaVersion: 3,
         marketplaces: {},
       });
     });
@@ -803,7 +803,7 @@ test("normalizes a non-Error config-write throw after a path mutation", async (t
       resolveRefCalls: [],
     });
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });
@@ -969,7 +969,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
     assert.deepStrictEqual(
       { ...persisted, marketplaces: { "valid-marketplace": stableRecord } },
       {
-        schemaVersion: 2,
+        schemaVersion: 3,
         marketplaces: {
           "valid-marketplace": {
             name: "valid-marketplace",
@@ -1165,7 +1165,7 @@ test("does not invalidate when source validation fails before commit", async () 
 
     assert.deepStrictEqual(recorder.calls, []);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
     assert.deepStrictEqual(await loadConfig(locations.configJsonPath), {
@@ -1818,7 +1818,7 @@ test("orchestrated mode normalizes a non-Error opaque failure without mutation",
       resolveRefCalls: [],
     });
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });
@@ -1872,7 +1872,7 @@ test("normalizes a structurally classified exotic throw in orchestrated mode", a
       resolveRefCalls: [],
     });
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });
@@ -1939,7 +1939,7 @@ test("cleans the final clone when state-record construction fails after rename",
       false,
     );
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
   });

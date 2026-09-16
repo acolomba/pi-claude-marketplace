@@ -3222,6 +3222,7 @@ test("plugin reinstall authentication: a bulk cold-cache sweep shares one host m
         installedAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
         enabled: true,
+        provenance: "explicit" as const,
         compatibility: {
           installable: true,
           notes: [] as string[],
@@ -3563,6 +3564,7 @@ async function seedUnpinnedGitRecord(opts: {
             compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
             resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
             enabled: true,
+            provenance: "explicit",
             installedAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
           },

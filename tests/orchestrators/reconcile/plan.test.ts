@@ -64,6 +64,7 @@ function pluginRecord(
     readonly installable?: boolean;
     readonly skills?: readonly string[];
     readonly unsupported?: readonly string[];
+    readonly provenance?: PluginRecord["provenance"];
   } = {},
 ): PluginRecord {
   const installable = options.installable ?? true;
@@ -86,6 +87,8 @@ function pluginRecord(
       hooks: [],
     },
     enabled,
+    // D-04-01: a direct install unless the case asks for a dependency.
+    provenance: options.provenance ?? "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };

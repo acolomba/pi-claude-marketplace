@@ -184,7 +184,10 @@ function makeCtx(piOverrides?: { getAllTools?: () => unknown[] }): {
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 
-function makePluginRecord(resources: Partial<PluginRecord["resources"]> = {}): PluginRecord {
+function makePluginRecord(
+  resources: Partial<PluginRecord["resources"]> = {},
+  provenance: PluginRecord["provenance"] = "explicit",
+): PluginRecord {
   return {
     version: "0.0.1",
     resolvedSource: "/tmp",
@@ -197,6 +200,7 @@ function makePluginRecord(resources: Partial<PluginRecord["resources"]> = {}): P
       hooks: resources.hooks ?? [],
     },
     enabled: true,
+    provenance,
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
@@ -415,7 +419,7 @@ for (const scope of ["user", "project"] as const) {
             Buffer.from([31, 65, 0]),
           );
           assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-            schemaVersion: 2,
+            schemaVersion: 3,
             marketplaces: {
               mp: {
                 name: "mp",
@@ -2415,7 +2419,7 @@ async function seedGitPlugin(
   }
 
   await seedState(locations.extensionRoot, {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {
       [marketplace]: {
         name: marketplace,
@@ -2485,7 +2489,7 @@ test("preservation bypasses the data path while retiring routes, caches and the 
       assert.strictEqual(outcome, undefined);
       assert.deepStrictEqual(repeatedOutcome, { status: "converged", name: "solo" });
       assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-        schemaVersion: 2,
+        schemaVersion: 3,
         marketplaces: {
           mp: {
             name: "mp",
@@ -4379,7 +4383,7 @@ test("retry proof: uninstall: a hooks refusal on a shared clone retries without 
       };
 
       await seedState(locations.extensionRoot, {
-        schemaVersion: 2,
+        schemaVersion: 3,
         marketplaces: {
           mp: {
             addedFromCwd: cwd,

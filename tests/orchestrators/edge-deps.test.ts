@@ -138,6 +138,7 @@ function pluginRecord(resolvedSource: string, installed: InstalledFixture): Plug
     },
     resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
     enabled: installed.enabled ?? true,
+    provenance: "explicit",
     installedAt: "2026-06-17T00:00:00.000Z",
     updatedAt: "2026-06-17T00:00:00.000Z",
   };

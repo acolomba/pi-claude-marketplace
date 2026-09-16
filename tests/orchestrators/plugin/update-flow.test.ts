@@ -405,6 +405,7 @@ async function seedGitUpdateMarketplace(opts: {
             installedAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
             enabled: true,
+            provenance: "explicit",
             compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
             resources: {
               skills: ["seeded-skill"],
@@ -426,9 +427,12 @@ type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 
 function makePluginRecord(
   version: string,
-  overrides: Partial<PluginRecord["resources"]> & { enabled?: boolean } = {},
+  overrides: Partial<PluginRecord["resources"]> & {
+    enabled?: boolean;
+    provenance?: PluginRecord["provenance"];
+  } = {},
 ): PluginRecord {
-  const { enabled = true, ...resources } = overrides;
+  const { enabled = true, provenance = "explicit", ...resources } = overrides;
   return {
     version,
     resolvedSource: "/tmp",
@@ -443,6 +447,7 @@ function makePluginRecord(
       hooks: resources.hooks ?? [],
     },
     enabled,
+    provenance,
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };

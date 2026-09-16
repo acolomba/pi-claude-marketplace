@@ -143,6 +143,7 @@ async function seedMarketplace(
               compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
               resources: { skills: [], prompts: [], agents: [], hooks: [], mcpServers: [] },
               enabled: true,
+              provenance: "explicit",
               installedAt: "2026-01-01T00:00:00.000Z",
               updatedAt: "2026-01-01T00:00:00.000Z",
             },

@@ -452,6 +452,7 @@ function conflictingMarketplaceRecord(
           hooks: [],
         },
         enabled: true,
+        provenance: "explicit",
         installedAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
@@ -702,7 +703,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
   await mkdir(locations.extensionRoot, { recursive: true });
 
   const state: ExtensionState = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {
       [marketplaceName]: {
         name: marketplaceName,
@@ -725,6 +726,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
                   },
                   resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
                   enabled: true,
+                  provenance: "explicit",
                   installedAt: "2026-01-01T00:00:00.000Z",
                   updatedAt: "2026-01-01T00:00:00.000Z",
                 },
@@ -8897,6 +8899,7 @@ test("install forwards explicit map-model and version-pin entrypoint options", a
         {
           compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
           enabled: true,
+          provenance: "explicit",
           installedAt: (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.mp
             ?.plugins.plain?.installedAt,
           resolvedSource: pluginRoot,
