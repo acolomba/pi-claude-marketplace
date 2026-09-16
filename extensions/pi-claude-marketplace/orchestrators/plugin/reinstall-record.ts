@@ -142,6 +142,9 @@ function recordReinstalledOutcome(
     enabled: true,
     // D-04-01: a reinstall replaces the artifacts, not the reason the plugin
     // is here -- the old record's provenance carries forward with installedAt.
+    // D-04-07 names `install` alone as the verb that promotes a dependency the
+    // user then asks for by name; `reinstall <dependency>` also names it and
+    // deliberately does NOT promote, so the ratchet's boundary is the verb.
     provenance: input.oldRecord.provenance,
     installedAt: input.oldRecord.installedAt,
     updatedAt: new Date().toISOString(),
