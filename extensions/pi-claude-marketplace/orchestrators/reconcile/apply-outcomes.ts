@@ -166,6 +166,20 @@ export interface PluginUninstalledOutcome extends PluginOutcomeBase {
 export interface PluginUninstallFailedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-uninstall-failed";
   readonly reason: Reason;
+  /**
+   * D-05-16: set ONLY for a REFUSED uninstall -- the target is still declared
+   * by another installed plugin in the scope (D-05-14), or some other record's
+   * declarations could not be established (D-05-07). The projection surfaces
+   * it as the row's cause-chain trailer, so a config-driven uninstall reports
+   * the same `cause: required by <key>` line the typed command does. Every
+   * other failed uninstall leaves it unset.
+   *
+   * No `redactAbsolutePaths` pass is applied here, on purpose: the refusal's
+   * message is composed from `name@marketplace` keys, field paths and text the
+   * declaration-index leaf already redacted, and it chains no `cause` behind
+   * it, so there is no path left for the depth-5 cause-chain walker to print.
+   */
+  readonly cause?: Error;
 }
 
 /**

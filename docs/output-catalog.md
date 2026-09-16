@@ -2636,6 +2636,22 @@ The load-time counterpart of the standalone install-disabled row: the user hand-
 Reconcile: 1 success
 ```
 
+### Load-time uninstall refused, dependents remain (PRUNE-05 / D-05-16)
+
+The load-time counterpart of the standalone `refused-dependents-remain` row. The user dropped `secrets-vault@mp` from `claude-plugins.json` and reloaded, but the still-declared `deploy-kit` depends on it, so the pass refuses the uninstall exactly as the typed command would (D-05-14): nothing is removed, `state.json` still records the plugin, and the row carries the `dependents remain` reason with the same `cause:` trailer naming the dependents. Every later pass reports the identical row until the config is fixed -- either by declaring the plugin again or by dropping the dependent too, after which the next pass removes both and the pass after it is silent. Reconcile never prunes (D-05-08), so an orphaned dependency record survives `/reload` and is removed only by an explicit `uninstall ... --prune`. Only a refused uninstall carries a cause onto this surface; a cascade-thrown uninstall failure (`{permission denied}`) keeps its bare row. The trailing tally counts the row as one failure. Severity: `error`; no reload-hint.
+
+<!-- catalog-state: reconcile-uninstall-refused-dependents -->
+
+```text
+A plugin operation has failed.
+
+● mp [project]
+  ⊘ secrets-vault (failed) {dependents remain}
+    cause: required by deploy-kit@mp
+
+Reconcile: 1 failure
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace remove <name>`

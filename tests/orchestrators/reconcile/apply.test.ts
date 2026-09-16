@@ -299,6 +299,12 @@ interface PluginTree {
   readonly lsp?: boolean;
   /** DFEN-04: stamp `defaultEnabled` on the plugin's MARKETPLACE ENTRY. */
   readonly entryDefaultEnabled?: boolean;
+  /**
+   * D-05-16: bare dependency tokens, written into BOTH the marketplace entry and
+   * the plugin's own manifest so the dependents guard reads the same answer
+   * whichever the offline read reaches first (D-05-06).
+   */
+  readonly dependencies?: readonly string[];
 }
 
 async function writePluginTree(
@@ -310,7 +316,11 @@ async function writePluginTree(
   await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
   await writeFile(
     path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: plugin, version: "1.0.0" }),
+    JSON.stringify({
+      name: plugin,
+      version: "1.0.0",
+      ...(tree.dependencies !== undefined && { dependencies: tree.dependencies }),
+    }),
   );
   if (tree.skill !== undefined) {
     await writeUnder(
@@ -391,6 +401,7 @@ async function writeMarketplaceSource(
         ...(tree.entryDefaultEnabled !== undefined && {
           defaultEnabled: tree.entryDefaultEnabled,
         }),
+        ...(tree.dependencies !== undefined && { dependencies: tree.dependencies }),
       })),
     }),
   );
@@ -1177,6 +1188,90 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(Object.keys((await loadState(project.extensionRoot)).marketplaces), [
       "mp",
     ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-05-16: a config-driven uninstall of a still-declared plugin is refused on every pass and converges once the dependent is gone", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "uninstall-refused");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      keeper: { skill: "clean", dependencies: ["orphan"] },
+      orphan: { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "keeper@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            keeper: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "keeper") }),
+            orphan: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "orphan") }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(3, 6);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const refusal = {
+      message:
+        "A plugin operation has failed.\n" +
+        "\n" +
+        "● mp [project]\n" +
+        "  ⊘ orphan (failed) {dependents remain}\n" +
+        "    cause: required by keeper@mp\n" +
+        "\n" +
+        "Reconcile: 1 failure",
+      severity: "error",
+    };
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+    const afterFirst = await loadState(project.extensionRoot);
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+    const afterSecond = await loadState(project.extensionRoot);
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({ marketplaces: { mp: { source: marketplaceRoot } }, plugins: {} }),
+    );
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      refusal,
+      refusal,
+      {
+        message:
+          "● mp [project]\n" +
+          "  ○ keeper v1.0.0 (uninstalled)\n" +
+          "  ○ orphan v1.0.0 (uninstalled)\n" +
+          "\n" +
+          "Reconcile: 2 successes",
+      },
+    ]);
+    assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["mp"]?.plugins ?? {}), [
+      "keeper",
+      "orphan",
+    ]);
+    assert.deepStrictEqual(afterSecond, afterFirst);
+    assert.deepStrictEqual(
+      Object.keys((await loadState(project.extensionRoot)).marketplaces["mp"]?.plugins ?? {}),
+      [],
+    );
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });

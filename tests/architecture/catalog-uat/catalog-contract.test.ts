@@ -52,8 +52,11 @@ const EXPECTED_SECTION_COUNT = 20;
 // `{dependents remain}` row whose cause line names who still needs the plugin,
 // and the fail-closed row that carries a declarer's read-failure token when
 // some other record's declarations could not be established (206 -> 208).
-const EXPECTED_STATE_COUNT = 208;
-const EXPECTED_UTF8_BYTES = 27_717;
+// D-05-16: +1 state for the load-time refusal -- the reconcile pass reports
+// the same `{dependents remain}` row, cause line included, on every pass
+// until the config is fixed (208 -> 209).
+const EXPECTED_STATE_COUNT = 209;
+const EXPECTED_UTF8_BYTES = 27_873;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -342,7 +345,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 208 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 209 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

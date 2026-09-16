@@ -677,13 +677,7 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts": [
     "outcomeToPluginMessage",
   ],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts": [
-    // D-05-16: the reconcile apply path narrows on this class to decide which
-    // failed uninstall rows carry a cause; until that consumer lands, its only
-    // readers are tests.
-    "UninstallRefusedError",
-    "createUninstallPlugin",
-  ],
+  "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts": ["createUninstallPlugin"],
   "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts": ["createApplyReconcile"],
   "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts": [
     "scanForceInstalledBackfills",

@@ -1187,6 +1187,81 @@ describe("buildReconcileAppliedCascade", () => {
     });
   });
 
+  test("D-05-16: carries the refusal cause on a plugin-uninstall-failed row that names one", () => {
+    // arrange
+    const cause = new Error("required by keeper@mp");
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-uninstall-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "orphan",
+        reason: "dependents remain",
+        cause,
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "failed",
+              name: "orphan",
+              reasons: ["dependents remain"],
+              cause,
+              severity: "error",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("D-05-16: renders no cause child on a plugin-install-failed row", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "cr",
+        reason: "permission denied",
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "failed",
+              name: "cr",
+              reasons: ["permission denied"],
+              severity: "error",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("omits the version slot from an uninstall row whose outcome carries no version", () => {
     // arrange
     const outcomes: readonly PerEntryOutcome[] = [

@@ -63,7 +63,7 @@ import { addMarketplace } from "../marketplace/add.ts";
 import { removeMarketplace } from "../marketplace/remove.ts";
 import { createNodeSetPluginEnabled } from "../plugin/enable-disable.ts";
 import { createNodeInstallPlugin } from "../plugin/install-flow.ts";
-import { createNodeUninstallPlugin } from "../plugin/uninstall.ts";
+import { createNodeUninstallPlugin, UninstallRefusedError } from "../plugin/uninstall.ts";
 
 import {
   classifyOrchestratorThrow,
@@ -378,6 +378,10 @@ async function applyPluginUninstalls(
           marketplace: op.marketplace,
           plugin: op.plugin,
           reason: result.reason,
+          // D-05-16: only a refusal carries its cause onto the reconcile row.
+          // Every other failed uninstall keeps the cause-less row, so no errno
+          // message ever reaches this surface.
+          ...(result.error instanceof UninstallRefusedError && { cause: result.error }),
         });
       }
     } catch (err) {
