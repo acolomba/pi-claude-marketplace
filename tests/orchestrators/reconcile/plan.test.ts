@@ -773,6 +773,27 @@ describe("planReconcile", () => {
     });
   });
 
+  test("D-04-05: keeps an undeclared record whose provenance is dependency", () => {
+    // arrange
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "steady@keep": {} });
+    const state = provenanceState();
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [{ scope: "project", plugin: "orphan", marketplace: "keep" }],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      sourceMismatches: [],
+    });
+  });
+
   test("D-04-05: still sweeps an undeclared direct install beside a declared dependency", () => {
     // arrange
     const merged = mergedConfig(

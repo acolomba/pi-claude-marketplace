@@ -498,7 +498,15 @@ function buildUninstallBucket(
       continue;
     }
 
-    for (const pluginName of Object.keys(mpRecord.plugins)) {
+    for (const [pluginName, record] of Object.entries(mpRecord.plugins)) {
+      // D-04-05 / D-04-02: a cascade-installed dependency is never named in
+      // the desired-state config, so its own record is the only thing that
+      // says it belongs. A recorded plugin that is neither declared nor
+      // marked as a dependency is an orphan and is still swept.
+      if (record.provenance === "dependency") {
+        continue;
+      }
+
       const key = `${pluginName}@${mpName}`;
       if (!declaredPluginKeys.has(key)) {
         uninstall.push({ scope, plugin: pluginName, marketplace: mpName });
