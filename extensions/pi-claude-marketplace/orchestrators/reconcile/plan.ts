@@ -259,6 +259,22 @@ function holdsDependencyRecord(mpRecord: ExtensionState["marketplaces"][string])
   return Object.values(mpRecord.plugins).some((record) => record.provenance === "dependency");
 }
 
+/**
+ * Whether the marketplace-removal path keeps a recorded marketplace: one a
+ * declaration claims (steady state), a conflict candidate (ambiguity is
+ * report-only and must fail closed), or one holding a dependency record
+ * (D-04-05). `diffMarketplaces` removes every other recorded marketplace and
+ * `buildUninstallBucket` sweeps the direct-install orphans under the kept ones.
+ */
+function isRetainedRecorded(
+  mpName: string,
+  mpRecord: ExtensionState["marketplaces"][string],
+  retained: ReadonlySet<string>,
+  conflicted: ReadonlySet<string>,
+): boolean {
+  return retained.has(mpName) || conflicted.has(mpName) || holdsDependencyRecord(mpRecord);
+}
+
 function diffMarketplaces(
   merged: MergedConfig,
   state: ExtensionState,
@@ -334,15 +350,7 @@ function diffMarketplaces(
   }
 
   for (const [mpName, mpRecord] of Object.entries(recorded)) {
-    // A claimed canonical record remains steady state. Conflict candidates
-    // also remain untouched: ambiguity is report-only and must fail closed.
-    // D-04-05: so does a marketplace holding a dependency record -- its
-    // direct-install orphans are `buildUninstallBucket`'s to sweep.
-    if (
-      !retainedRecorded.has(mpName) &&
-      !claims.conflictedRecorded.has(mpName) &&
-      !holdsDependencyRecord(mpRecord)
-    ) {
+    if (!isRetainedRecorded(mpName, mpRecord, retainedRecorded, claims.conflictedRecorded)) {
       // WILL-03 / D-65.1-03: carry the recorded plugin names so the PENDING
       // projection can synthesize per-plugin `will uninstall` rows. The apply
       // path cascades these internally; do NOT add them to `pluginsToUninstall`
@@ -513,11 +521,20 @@ function buildUninstallBucket(
   const uninstall: PlannedPluginUninstall[] = [];
   const retainedMarketplaces = new Set(marketplaceDiff.recordedByDeclared.values());
   for (const [mpName, mpRecord] of Object.entries(state.marketplaces)) {
+    // The removal path keeps a conflict candidate, but its plugins are not
+    // considered here either: ambiguity is report-only.
     if (marketplaceDiff.conflictedRecorded.has(mpName)) {
       continue;
     }
 
-    if (!retainedMarketplaces.has(mpName) && !holdsDependencyRecord(mpRecord)) {
+    if (
+      !isRetainedRecorded(
+        mpName,
+        mpRecord,
+        retainedMarketplaces,
+        marketplaceDiff.conflictedRecorded,
+      )
+    ) {
       continue;
     }
 
