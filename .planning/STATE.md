@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
 status: executing
-stopped_at: Completed 06-10-PLAN.md
-last_updated: "2026-09-16T01:25:00.000Z"
+stopped_at: Completed 06-11-PLAN.md
+last_updated: "2026-09-16T02:44:10.023Z"
 last_activity: 2026-09-16
-last_activity_desc: Plan 06-10 complete (three artifact bridges + fs-utils repaired, 103 -> 90 unread measured, zero findings gained)
-state_head: 9046b74f
+last_activity_desc: Plan 06-11 complete (edge group 17 rows -> 10 repaired, 0 contracted, 7 outstanding; 90 -> 80 unread measured, zero findings gained)
+state_head: e242e417bcce1f913b312a64baa73f161a8986cc
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 60
-  completed_plans: 48
+  completed_plans: 49
   percent: 63
 milestone_name: test-backlog
 ---
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 06 (Unused Type Member Gate) — EXECUTING
-Plan: 11 of 14
-Status: Executing the six bounded repair plans (06-09 ✅ -> 06-14 ✅ -> 06-10 ✅ -> 06-11 -> 06-13 -> 06-12)
-Last activity: 2026-09-16 — Plan 06-10 complete (three artifact bridges + fs-utils repaired, 103 -> 90 unread measured, zero findings gained)
+Plan: 12 of 14
+Status: Executing the six bounded repair plans (06-09 ✅ -> 06-14 ✅ -> 06-10 ✅ -> 06-11 ✅ -> 06-13 -> 06-12)
+Last activity: 2026-09-16 — Plan 06-11 complete (edge group: 10 rows repaired, 0 contracted, 7 outstanding with recorded refusals; 90 -> 80 unread measured, zero findings gained)
 
 Plan 06-01 landed the member gate's compiler tracer: `node
 scripts/check-unused-type-members.mjs` compiles the project once, inventories
@@ -326,6 +326,51 @@ ledger notes name a witness coordinate the fresh report no longer holds -- three
 by 4 and 2 lines from earlier repairs in this phase. `--check` does not compare
 note text against the report, so it is silent about them.
 
+Plan 06-11 is the fourth repair plan and closed the `edge` owner group, the one
+owner carrying zero validated contracts. Of its 17 rows, 10 were repaired, 0 were
+contracted and 7 stay findings with a recorded reason — 90 -> 80 unread, 10 lost,
+**0 gained**, measured as a `(path, owner, key)` difference at each task boundary.
+
+Two rows were deleted outright after the triage's recorded disposition was checked
+and found wrong: it filed `LocationsResolver.marketplaceNamesCachePath` and
+`MarketplaceStateRecord.manifestPath` as delegate mirrors, but neither has any
+production reader and the only calling syntax in the tree lands on the
+orchestrator-side twin. The other eight were genuine mirrors:
+`SingleNameMarketplaceRun` now names `GetMarketplaceInfoOptions`, the option bag
+its one implementation reads, and `loadToolPluginPayload`'s parameter declares only
+the two slots its body reads, with the filter decision left to `ToolFilterBuckets`
+where it already lives.
+
+This was the `external-output` category's first live use, and it refused all six
+drafts. The refusal is diagnostic, not merely negative: `proveExternalOutput`
+checks the origin first and accepted all six, so the engine agrees the named site
+builds each member; only the boundary half fails. A compiler probe measured why —
+a Pi tool's `execute` is a method shorthand, so `getContextualType` on the
+`MethodDeclaration` answers `undefined` even though the enclosing object literal
+resolves to `ToolDefinition` and its `execute` is declared in the installed
+package. A second limit stands behind it: `reaches` follows only an identifier
+chain or an origin textually inside the returned expression, and both returns here
+are object literals carrying the rows nested under `details`. Neither limit was
+worked around and no slot left either shipped payload.
+
+`ParsedCommandArgs.required` was submitted once as a `type-selection` entry and
+refused — a conditional-type `extends` clause is not a two-argument selection. The
+`Extract`-based rewrite that would satisfy the engine was deliberately not taken.
+
+Two hand-offs are recorded. To 06-12: the now-unreachable
+`LocationsResolverLike.marketplaceNamesCachePath` at `orchestrators/edge-deps.ts:63:3`
+(`test-only-observed`, so no finding was gained), its implementation at line 149,
+and its two witnesses at `tests/orchestrators/edge-deps.test.ts:235:32` and `:256:32`.
+Shared with 06-13: one bounded engine plan adding a conditional-clause proof clears
+`ParsedCommandArgs.required` and `PiToolName.toolName` together.
+
+`npm run check` is exit 0, the seven negative controls pass, and aggregate
+production unit coverage holds at 1,834/1,834 functions and 9,050/9,050 branches
+with zero modules below 100%; lines moved 62,910 -> 62,904, exactly the six
+physical type-only lines the diff removed. `--check` reports 80 problems that are
+ALL `unread`, at digest `219319ca`. No contract coordinate needed re-anchoring —
+none of the 85 entries names an edge file or any test this plan touched.
+
 Phase 05 closed: all 28 plans landed and the production
 dead-code census drained from 111 to 0 with zero net additions at every step.
 Independent verification re-measured the start population from a clean archive
@@ -420,7 +465,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-15T18:21:06.728Z
+**Last session:** 2026-09-16T02:43:38.154Z
 **Resume file:** None
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–5 are complete.
@@ -440,7 +485,7 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 
 ### Phase 6 Plan 1 complete
 
-Stopped at: Completed 06-06-PLAN.md
+Stopped at: Completed 06-11-PLAN.md
 (directed value transfers) and 06-03 (validated contracts), which the plan
 graph runs together in Wave 2 over disjoint files.
 
@@ -757,6 +802,7 @@ together with its three bridge declaration sites. Next is 06-10.
 | Phase 06 P06 | 3h 10m | 2 tasks | 8 files |
 | Phase 06 P09 | 1h 11m | 3 tasks | 12 files |
 | Phase 06 P14 | 1h 37m | 4 tasks | 11 files |
+| Phase 06 P11 | 1h 16m | 3 tasks | 7 files |
 
 ## Decisions
 
@@ -781,3 +827,6 @@ together with its three bridge declaration sites. Next is 06-10.
 - [Phase 06]: An `Extract` filter over an unbounded type parameter proves nothing, because the parameter stands for everything; bounding it by the union the filter selects within is what makes the selection contract available
 - [Phase 06]: A `type-refinement` proof cannot reach a slot typed by a type parameter — `narrows()` asks whether the refined constituents are a strict subset of the wider ones, and a type parameter is not one of the union's constituents; measured as an exit-2 refusal, and answered by re-expressing the bound as a selection rather than by dropping the constraint
 - [Phase 06]: `Phase3Failure.cause` is a genuine dead slot, not an analyzer under-credit — its three siblings carry production witnesses reaching them through `Omit<Phase3Failure, "cause">`, so the model demonstrably reaches the declaration, and `cause` is the one member the `Omit` removes
+- [Phase 06]: The `external-output` contract category cannot prove a payload returned from a Pi tool `execute` written as a method shorthand — `getContextualType` answers `undefined` for a `MethodDeclaration`, so the prover finds no external signature even though the enclosing object literal resolves to `ToolDefinition` — Measured against the real engine on all six tool payload slots: the origin half passed for every one, the boundary half for none. Widening the prover or converting `execute` to an arrow-function property would change working code to suit the analyzer, so the rows stay findings
+- [Phase 06]: A conditional-type `extends` clause is not the two-argument selection `type-selection` proves, so `ParsedCommandArgs.required` and `PiToolName.toolName` both stay findings rather than being restated as `Extract` selections — `selectionOf` requires the filter literal parent to be a `TypeReferenceNode` with two type arguments; rewriting a public generic every command handler argument parse flows through, purely to fit the analyzer, is the failure mode this phase exists to prevent
+- [Phase 06]: An interface slot with no calling syntax anywhere is dead surface even when a structural twin implements it — the twin keeps its own verdict and no finding is gained — Removing `LocationsResolver.marketplaceNamesCachePath` left `LocationsResolverLike.marketplaceNamesCachePath` `test-only-observed`, not unread, so the edge repair cost the orchestrators group nothing and the twin is a recorded hand-off rather than a silent deletion
