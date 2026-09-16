@@ -2515,12 +2515,13 @@ test("D-04-07: promotes a recorded dependency the imported settings name instead
     "explicit",
   );
   assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
-  // The promotion moved nothing on disk, so the promoted row carries no reload
-  // hint where a fresh install's row always does.
+  // The promoted row carries the standalone promotion row's brace. It moved
+  // nothing on disk, so it carries no reload hint where a fresh install's row
+  // always does.
   assert.deepStrictEqual(notifications[1], {
     message:
       "● fixture-mp [project] (updated)\n" +
-      "  ● dep (installed)\n" +
+      "  ● dep (installed) {already installed, dependency promoted}\n" +
       "  ⊘ sample (skipped) {already installed}\n\n" +
       "Import: 3 successes",
   });
@@ -2641,7 +2642,7 @@ test("D-04-07: promotes a partially installed dependency the imported settings n
   assert.deepStrictEqual(notifications[2], {
     message:
       "● fixture-mp [project] (updated)\n" +
-      "  ● dep (installed)\n" +
+      "  ● dep (installed) {already installed, dependency promoted}\n" +
       "  ⊘ base (skipped) {already installed}\n" +
       "  ⊘ sample (skipped) {already installed}\n\n" +
       "Import: 4 successes",
@@ -2773,7 +2774,7 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
   assert.deepStrictEqual(notifications[2], {
     message:
       "● fixture-mp [project] (updated)\n" +
-      "  ● dep (installed)\n" +
+      "  ● dep (installed) {already installed, dependency promoted}\n" +
       "  ⊘ sample (skipped) {already installed}\n\n" +
       "Import: 3 successes\n\n" +
       "/reload to pick up changes",

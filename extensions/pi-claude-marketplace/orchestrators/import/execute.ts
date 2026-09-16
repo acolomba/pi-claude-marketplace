@@ -454,6 +454,11 @@ function buildImportNotificationMarketplaces(
       status: "installed",
       name: o.plugin,
       dependencies: dependenciesFromInstalled(o),
+      // D-04-07: a promotion's brace names both facts the standalone row names
+      // -- the record was here before, and this command promoted it.
+      ...(o.promoted === true && {
+        reasons: ["already installed", "dependency promoted"] as const,
+      }),
       // D-03/D-06: realized install transition -> info, reloads Pi resources.
       // A promotion (D-04-07) reloads only when it re-materialized the record.
       severity: "info",
