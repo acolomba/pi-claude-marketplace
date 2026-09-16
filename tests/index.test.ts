@@ -638,6 +638,7 @@ async function seedBlockingHookPlugin(cwd: string): Promise<void> {
                 hooks: ["hook-owner"],
               },
               enabled: true,
+              provenance: "explicit",
               installedAt: "2026-09-08T00:00:00.000Z",
               updatedAt: "2026-09-08T00:00:00.000Z",
             },
@@ -703,6 +704,7 @@ async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<v
               compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
               resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
               enabled: true,
+              provenance: "explicit",
               installedAt: "2026-08-03T00:00:00.000Z",
               updatedAt: "2026-08-03T00:00:00.000Z",
             },
@@ -935,7 +937,7 @@ test(
     const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
     const configPath = path.join(scope.cwd, ".pi", "claude-plugins.json");
     const expectedState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {
         mp: {
           name: "mp",
@@ -955,6 +957,7 @@ test(
               compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
               resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
               enabled: true,
+              provenance: "explicit",
               installedAt: "2026-08-03T00:00:00.000Z",
               updatedAt: "2026-08-03T00:00:00.000Z",
             },

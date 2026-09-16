@@ -595,7 +595,7 @@ describe("registerClaudePluginCommand", () => {
       { message: "● claude-plugins-official [user] <autoupdate>" },
     ]);
     assert.deepStrictEqual(await loadState(userLocations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {
         "claude-plugins-official": {
           addedFromCwd: cwd,
@@ -636,7 +636,7 @@ describe("registerClaudePluginCommand", () => {
     ]);
     assert.deepStrictEqual(projectTree, []);
     assert.deepStrictEqual(await loadState(projectLocations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
     assert.deepStrictEqual(ownerRows, [{ name: "owner-fresh", status: "available" }]);

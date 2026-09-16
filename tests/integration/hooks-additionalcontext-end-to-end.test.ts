@@ -117,6 +117,7 @@ function buildStateWithHooksPlugin(sourcesPluginRoot: string): ExtensionState {
               hooks: ["test-plugin"],
             },
             enabled: true,
+            provenance: "explicit",
             installedAt: "2026-06-17T00:00:00Z",
             updatedAt: "2026-06-17T00:00:00Z",
           },

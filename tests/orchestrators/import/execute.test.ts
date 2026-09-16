@@ -197,6 +197,7 @@ function recordedPlugin(name: string): PluginRecord {
   return {
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     resolvedSource: `/marketplaces/plugins/${name}`,
     resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
