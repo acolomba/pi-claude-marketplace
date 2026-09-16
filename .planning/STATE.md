@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
 status: executing
-stopped_at: Completed 06-14-PLAN.md
-last_updated: "2026-09-16T03:45:00.000Z"
-last_activity: 2026-09-15
-last_activity_desc: Plan 06-14 complete (shared repaired, 113 -> 103 unread measured, zero findings gained)
+stopped_at: Completed 06-10-PLAN.md
+last_updated: "2026-09-16T01:25:00.000Z"
+last_activity: 2026-09-16
+last_activity_desc: Plan 06-10 complete (three artifact bridges + fs-utils repaired, 103 -> 90 unread measured, zero findings gained)
 state_head: 9046b74f
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 60
-  completed_plans: 47
+  completed_plans: 48
   percent: 63
 milestone_name: test-backlog
 ---
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 06 (Unused Type Member Gate) — EXECUTING
-Plan: 10 of 14
-Status: Executing the six bounded repair plans (06-09 ✅ -> 06-14 ✅ -> 06-10 -> 06-11 -> 06-13 -> 06-12)
-Last activity: 2026-09-15 — Plan 06-14 complete (shared repaired, 113 -> 103 unread measured, zero findings gained)
+Plan: 11 of 14
+Status: Executing the six bounded repair plans (06-09 ✅ -> 06-14 ✅ -> 06-10 ✅ -> 06-11 -> 06-13 -> 06-12)
+Last activity: 2026-09-16 — Plan 06-10 complete (three artifact bridges + fs-utils repaired, 103 -> 90 unread measured, zero findings gained)
 
 Plan 06-01 landed the member gate's compiler tracer: `node
 scripts/check-unused-type-members.mjs` compiles the project once, inventories
@@ -264,6 +264,67 @@ from the same file. The difference is that `writeHookConfig` is the closure
 search does not reach production through a factory-returned closure. That is an
 analyzer under-credit for its own bounded plan, not a source repair, and the row
 is recorded that way in `06-LIVE-TRIAGE.md`.
+
+Plan 06-10 is the third repair plan and cleared all 13 rows across the three
+artifact bridges and the rollback helper. Ten of them were one dead field --
+`renamed[].from` -- spread across four declaration sites: the input interface of
+`rollbackReplacementCommon` in `shared/fs-utils.ts`, and in each bridge the
+`*ReplacementInternals` handle, the local ledger array and the rollback-internal
+parameter. All four narrowed in ONE commit, because `{ from, to }[]` is
+assignable to `{ to }[]`: narrowing the helper alone compiles while leaving three
+bridges describing a value it no longer declares, and nothing fails. Each rename
+loop now pushes a fresh `{ to: pair.to }` rather than forwarding the wider
+iterated element, and that the boundary is still guarded was exercised --
+reinstating the source key is refused TS2353.
+
+The remaining three were surplus slots on the staging input bundles:
+`StageAgentsInput.resolved` and `marketplaceName` on both the commands and skills
+inputs. These are the rows the triage marked "needs the owner to confirm", so the
+confirmation is the load-bearing part. The decisive evidence is sibling
+comparison: every OTHER member of all three interfaces carries a production
+witness at its destructure site, so the model reaches these declarations and the
+empty witness list is an absence of readers, not an absence of reach. The check
+for 06-09's factory-closure under-credit came back negative. Excess-property
+checking then named 120 sites across nine files, every one fixed by deletion --
+no cast, no assertion, no widened parameter anywhere in the diff.
+
+`update-swap.ts:177`'s vestigial `Omit<Phase3Failure, "cause">`, handed off
+conditionally by 06-14, WAS simplified: the compiler-forced deletions put this
+plan in that file anyway. It landed as its own commit.
+
+Live population is a measured 103 -> 90 unread, taken as a `(path, owner, key)`
+set difference against a pre-edit baseline at two points: 13 lost, **0 gained**.
+Candidates 3,426 -> 3,413, runtime-observed held at 3,002, contracts held at 85.
+All four owner areas now read 0 unread. `--check` reports 90 problems that are
+ALL `unread`, none naming this plan's areas, with nothing stale, missing,
+duplicate, incomplete or invalid, at digest `59f0fa76`.
+
+Eight contract coordinate fields across four entries were re-anchored, and that a
+mis-anchor is loud rather than quiet was exercised: re-introducing one pre-repair
+coordinate makes the gate exit 2 with `names no declaration in this program`. The
+`install-outcome.ts` direct pin was re-measured to `branches 109/111, lines
+1040/1046` -- only the reading string, finding ids and reasons byte-identical, and
+the uncovered branch count held at 2. `npm run check` is exit 0 with all four
+fallow sub-gates, the seven negative controls pass, and aggregate production unit
+coverage is 1,834/1,834 functions and 9,050/9,050 branches with zero modules below
+100%; lines moved 62,919 -> 62,910, exactly the nine covered property lines
+deleted from the three orchestrator build sites.
+
+Sixteen disposition rows were re-keyed by the line shifts and restored from the
+fresh report rather than transcribed -- eight of them carry a witness coordinate
+that genuinely moved, so transcription would have written eight addresses nothing
+is at.
+
+Two measured defects were recorded in a new `deferred-items.md` rather than fixed,
+neither in a file this plan owns. `tests/orchestrators/marketplace/remove.test.ts`
+makes a `scope: "user"` call without a hermetic home and reads the operator's real
+`~/.pi/agent/` state; with `schemaVersion: 3` there it fails 1 of 24, and passes
+24 of 24 under an empty `HOME`. CI has no such directory, so it stays latent
+there, but every gate in this plan was run with a hermetic `HOME`. Separately, six
+ledger notes name a witness coordinate the fresh report no longer holds -- three
+`bridges/hooks/routing-state.ts` rows and three `orchestrators/types.ts` rows, off
+by 4 and 2 lines from earlier repairs in this phase. `--check` does not compare
+note text against the report, so it is silent about them.
 
 Phase 05 closed: all 28 plans landed and the production
 dead-code census drained from 111 to 0 with zero net additions at every step.
