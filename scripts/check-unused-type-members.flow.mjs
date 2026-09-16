@@ -1174,6 +1174,52 @@ function expandContainerCall(call, step, state) {
   return kind === "array" ? arrayResult(name, receiver, call, step, state) : undefined;
 }
 
+/**
+ * The bodies a call reaches when its callee is a name bound to what a factory
+ * handed back.
+ *
+ * A closure a factory returns has no declaration of its own for the call to
+ * resolve to: the callee's type is the factory's return annotation, which
+ * carries a signature and no body, and the name is bound to a call rather than
+ * to a function written there. Following the factory call to the function it
+ * returns is the one shape added here -- a name bound to anything else, and a
+ * factory returning anything but a function written in its own body, reach
+ * nothing, which under-credits rather than answering partially.
+ */
+function factoryCallOf(declaration) {
+  const initializer = ts.isVariableDeclaration(declaration) ? declaration.initializer : undefined;
+  return initializer !== undefined && ts.isCallExpression(initializer) ? initializer : undefined;
+}
+
+function bodiesReturnedBy(factoryCall, state) {
+  const bodies = [];
+
+  for (const factory of targetsOf(factoryCall, state)) {
+    for (const returned of returnsOf(factory, state)) {
+      if (hasBody(returned.node)) {
+        bodies.push(returned.node);
+      }
+    }
+  }
+
+  return bodies;
+}
+
+function factoryReturnedBodies(call, state) {
+  const symbol = calleeSymbolOf(call, state);
+  const bodies = [];
+
+  for (const declaration of symbol?.declarations ?? []) {
+    const factoryCall = factoryCallOf(declaration);
+
+    if (factoryCall !== undefined) {
+      bodies.push(...bodiesReturnedBy(factoryCall, state));
+    }
+  }
+
+  return bodies;
+}
+
 function expandCall(call, step, state) {
   const target = signatureTargetOf(call, state);
 
@@ -1191,6 +1237,12 @@ function expandCall(call, step, state) {
 
   for (const body of targetsOf(call, state)) {
     sources.push(...returnsOf(body, state));
+  }
+
+  if (sources.length === 0) {
+    for (const body of factoryReturnedBodies(call, state)) {
+      sources.push(...returnsOf(body, state));
+    }
   }
 
   return continuations(sources, step);
