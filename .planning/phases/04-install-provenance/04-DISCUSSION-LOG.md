@@ -89,6 +89,37 @@ Two consequences the operator accepted explicitly: PROV-04 no longer says what i
 
 ---
 
+## How PROV-03's promotion is reported
+
+*Raised by research, 2026-09-15, after the researcher established that no promotion path exists today: `install <already-installed>` throws at `install-outcome.ts:414`, on the non-mutating arm, so a promotion written there would be discarded.*
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Promote + report a distinct new outcome row | Amends the pinned output catalog: new `REASONS` member, `docs/output-catalog.md` row, `catalog-uat` fixture, documented-state count bump, closed-set locks test | ✓ |
+| Promote but reuse the existing `already installed` bytes | No vocabulary change, no catalog work — but the row would mutate state while rendering `(failed)` | |
+| Promote via reconcile instead of the command | Reads PROV-03 as "the user names it in config"; needs an apply-side bucket or fold | |
+| Defer PROV-03 to Phase 5 | Phase 4 ships 3 of 4 requirements; promotion lands with `--prune` | |
+
+**User's choice:** Promote and report a distinct new outcome row — the recommended option.
+**Notes:** This deliberately expands the phase into the pinned output catalog, which nothing in D-04-01..06 anticipated. It is what the ROADMAP's criterion 3 actually promises. Reusing the existing bytes was rejected on honesty grounds: it would be the one catalog row that lies, and it contradicts the tri-state model where `error` means not-carried-out. Promoting via reconcile was rejected because `plan.ts` is pure and gated, so it needs an apply-side action D-04-05 scoped out.
+
+---
+
+## How this phase's IDs are spelled in source
+
+*Raised by research: `PROV-01..07` already means git auth **prov**ider, with 48 citations including `PROV-05` and `PROV-07` that this milestone never defined.*
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Anchor source comments on `D-04-NN` | Zero cost; CONVENTIONS.md already blesses decision IDs as anchors; nothing existing moves | ✓ |
+| Qualify the new IDs in source (`INST-PROV-01`) | Unambiguous, but invents a spelling no planning document carries | |
+| Renumber the v1.20 PROV family | Cleanest end state; milestone-level churn mid-phase | |
+
+**User's choice:** Anchor source comments on `D-04-NN`.
+**Notes:** `REQUIREMENTS.md` keeps `PROV-01..04` as the requirement names. Only source comments avoid the ambiguous spelling. Phase 5's `PRUNE-NN` has no such collision, so the problem stays contained.
+
+---
+
 ## Claude's Discretion
 
 - Exact field name on the install record and how the two values are typed.

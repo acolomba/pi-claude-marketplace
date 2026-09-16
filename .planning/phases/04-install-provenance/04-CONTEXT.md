@@ -148,6 +148,54 @@ option.
   field is the staleness detector" note (a required field WITH a migrate fill
   is not a staleness detector — that is the whole point of D-04-03).
 
+### How PROV-03's promotion is reported
+
+- **D-04-07: `install <plugin>` on a dependency-installed plugin PROMOTES it and
+  reports a distinct new outcome row.** Operator decision, 2026-09-15, after
+  research established that no promotion path exists today.
+
+  Today that command throws `PluginShapeError({ kind: "already-installed" })` at
+  `orchestrators/plugin/install-outcome.ts:414` and renders `(failed)
+  {already installed}`. That throw is on the **non-mutating** arm, and
+  `install-flow.ts` saves only on its mutating arm (`WR-04`), so a promotion
+  written at the throw site would be silently discarded. There is exactly one
+  code path for PROV-03's scenario and it currently produces a failure.
+
+  The new behavior: promote `provenance` to `"explicit"`, write the plugin's
+  key into the config (consistent with D-04-02 — the user has now asked for it
+  by name, so it belongs in desired state), change no other record, and report
+  a distinct row.
+
+  **This expands the phase into the pinned output catalog, deliberately.** The
+  amendment is the project's sanctioned mechanism for exactly this and must
+  land in full: a new closed-set `REASONS` member (`shared/notification-types.ts`),
+  a `docs/output-catalog.md` row, a `catalog-uat` fixture, a bump of the
+  documented-state count the catalog contract test asserts, and
+  `notify-closed-set-locks.test.ts`.
+
+  Rejected alternatives: reusing the existing `already installed` bytes for a
+  row that MUTATES state — it would be the one row in the catalog that lies,
+  and it contradicts the notification tri-state model where `error` means
+  not-carried-out; and promoting via reconcile instead of the command, which
+  needs an apply-side bucket or fold that D-04-05 explicitly scoped out
+  (`plan.ts` is pure and gated by `reconcile-planner-purity.test.ts`).
+  — **Reversibility:** one-way — a published catalog row is a user-visible
+  contract.
+
+### How this phase's IDs are spelled in source
+
+- **D-04-08: source comments anchor on `D-04-NN`, never on `PROV-NN`.**
+  `PROV-01..07` ALREADY means *git auth **prov**ider* in this codebase — 48
+  citations across `extensions/`, `tests/` and `docs/`, including `PROV-05` and
+  `PROV-07`, which this milestone never defined. `install-flow.ts:252` cites
+  `PROV-03` today for the auth notify seam.
+
+  `REQUIREMENTS.md` keeps `PROV-01..04` as the requirement names; only source
+  comments avoid the ambiguous spelling. CONVENTIONS.md already blesses
+  decision IDs as first-class traceability anchors, so this costs nothing and
+  moves nothing existing. Renumbering the v1.20 family was considered and
+  declined as milestone-level churn mid-phase.
+
 ### Derived rule, not a separate decision
 
 - **Provenance is a one-way ratchet: `dependency` → `explicit`, never the
@@ -306,6 +354,17 @@ option.
   explicit things.
 - D-04-03 stays safe under D-04-02: a legacy record fills to `explicit`, so
   reconcile keeps it. Nothing is swept by the upgrade itself.
+- **The fill will mislabel the dependency records Phase 3 wrote on development
+  trees as `"explicit"`.** The ROADMAP accepted this in advance. The visible
+  consequence lands in Phase 5: `--prune` will decline to prune those specific
+  plugins on the operator's own machine. Say so in the phase summary and carry
+  a note into Phase 5's UAT — otherwise it reads as a `--prune` bug and someone
+  debugs the wrong thing. The remedy is to uninstall and reinstall the plugin,
+  not to touch `--prune`.
+- PROV-02 needs **no production code** — the cascade's already-installed branch
+  never touches the record, so an explicit install stays explicit by
+  construction. It is a test task, and the test must be written so it cannot
+  pass vacuously.
 
 ### Execution environment notes (carried from the discuss checkpoint)
 
