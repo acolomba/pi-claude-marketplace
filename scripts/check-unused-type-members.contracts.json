@@ -586,20 +586,20 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:552:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:662:7",
+      "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:660:7",
       "owner": "applyMarketplaceOutcomeToBlock.outcome",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within PerEntryOutcome by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:659:12"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:657:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:758:7",
+      "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:756:7",
       "owner": "applyPluginOutcomeToBlock.outcome",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within PerEntryOutcome by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:755:12"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:753:12"
     },
     {
       "id": "extensions/pi-claude-marketplace/persistence/locations.ts:39:3",
