@@ -33,7 +33,6 @@ import { createDelegatingRemovalOps } from "../../platform/removal-ops-fake.ts";
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-const MARKETPLACE_NAME = "catalog";
 const PLUGIN_NAME = "acme";
 
 async function createProjectLocations(t: TestContext, prefix: string): Promise<ScopedLocations> {
@@ -105,7 +104,6 @@ test("stages recursive commands with exact names, records, substitutions, and pr
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir,
@@ -181,7 +179,6 @@ test("stages a source led by a byte-order mark without the marker or a duplicate
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir,
@@ -219,7 +216,6 @@ test("returns a complete no-op and materializes no command directories", async (
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -265,7 +261,6 @@ test("refuses an outside previous command before changing its complete target tr
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot: path.join(locations.scopeRoot, "plugin"),
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -335,7 +330,6 @@ test("refuses an intermediate symlink before changing its complete target tree",
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot: path.join(locations.scopeRoot, "plugin"),
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -393,7 +387,6 @@ test("aborts staged commands without creating target prompts", async (t) => {
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -428,7 +421,6 @@ test("removes prior owned prompts and tolerates a missing prior prompt during co
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -467,7 +459,6 @@ test("neutralizes malformed frontmatter and preserves exact substituted body byt
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -511,7 +502,6 @@ test("substitutes project variables and retains command-inapplicable skill varia
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir,
@@ -554,7 +544,6 @@ test("retains the project variable for user scope and restores the user director
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir,
@@ -581,7 +570,6 @@ test("preserves first-wins discovery warnings on a staged result", async (t) => 
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -616,7 +604,6 @@ test("rolls a replacement back to exact prior prompt bytes", async (t) => {
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -655,7 +642,6 @@ test("reports one leak per failed stage in stage order and leaves only the block
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -722,7 +708,6 @@ test("finalizes a replacement with exact new bytes and no staging trees", async 
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -757,7 +742,6 @@ test("replaces when a declared prior prompt is already missing", async (t) => {
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -796,7 +780,6 @@ test("restores owned backups and preserves a foreign prompt when replacement fai
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -842,7 +825,6 @@ test("backs up an owned orphan and keeps its replacement after finalization", as
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -874,7 +856,6 @@ test("rolls back a partial command commit and removes the staging tree", async (
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -911,7 +892,6 @@ test("reports a commit rollback leak without promoting it to manual recovery", a
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -964,7 +944,6 @@ test("propagates a non-missing previous-prompt removal failure", async (t) => {
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -1002,7 +981,6 @@ test("names the plugin and generated command when an overlong target cannot be s
   const error = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -1057,7 +1035,6 @@ test("passes through a non-filesystem staging error and cleans staging", async (
   const error = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -1098,7 +1075,6 @@ test("normalizes lone-CR and repeated malformed blocks to exact body bytes", asy
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -1158,7 +1134,6 @@ test("cleans staging when a repeated malformed block reaches the no-opening safe
   const error = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -1216,7 +1191,6 @@ test("cleans staging when a repeated malformed block reaches the no-close safegu
   const error = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -1250,7 +1224,6 @@ test("reports manual recovery when a failed replacement cannot remove its new pr
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -1318,7 +1291,6 @@ test("rejects unknown replacement handles through both public cleanup operations
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
-    marketplaceName: MARKETPLACE_NAME,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),

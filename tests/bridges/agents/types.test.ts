@@ -59,7 +59,6 @@ const stageAgentsInput: StageAgentsInput = {
   pluginName: "acme",
   pluginRoot: "/plugin",
   pluginDataDir: "/data/official/acme",
-  resolved: undefined!,
   agentsDirs: ["/plugin/agents"],
   knownSkills: ["pi-claude-marketplace-acme-testing"],
   mapModel: true,
@@ -147,7 +146,6 @@ const stageAgentsInputWithoutCwd: StageAgentsInput = {
   pluginName: "acme",
   pluginRoot: "/plugin",
   pluginDataDir: "/data/official/acme",
-  resolved: undefined!,
   agentsDirs: [],
 };
 void stageAgentsInputWithoutCwd;

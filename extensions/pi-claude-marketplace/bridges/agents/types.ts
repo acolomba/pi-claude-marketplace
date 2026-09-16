@@ -15,7 +15,6 @@
 // The line-based parser in frontmatter.ts only emits string values for the
 // known fields; consumers narrow as needed.
 
-import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
@@ -69,7 +68,6 @@ export interface StageAgentsInput {
   readonly pluginName: string;
   readonly pluginRoot: string;
   readonly pluginDataDir: string;
-  readonly resolved: MaterializablePlugin;
   /** Absolute agent directories in resolver order; empty when no agents component exists. */
   readonly agentsDirs: readonly string[];
   /** Generated skill names for this plugin (used to validate `skills:` refs). */

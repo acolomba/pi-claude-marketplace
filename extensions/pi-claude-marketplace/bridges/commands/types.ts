@@ -40,7 +40,6 @@ export interface DiscoveredCommand {
 /** Input bundle for `prepareStageCommands`. */
 export interface StageCommandsInput {
   readonly locations: ScopedLocations;
-  readonly marketplaceName: string;
   readonly pluginName: string;
   readonly pluginRoot: string;
   readonly pluginDataDir: string;

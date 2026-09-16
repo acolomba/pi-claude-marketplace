@@ -23,7 +23,6 @@ void discoveredCommand;
 
 const stageCommandsInput: StageCommandsInput = {
   locations: undefined!,
-  marketplaceName: "official",
   pluginName: "acme",
   pluginRoot: "/plugin",
   pluginDataDir: "/data/official/acme",
@@ -95,7 +94,6 @@ void discoveredCommandWithoutFile;
 // @ts-expect-error a stage input always carries the install cwd
 const stageCommandsInputWithoutCwd: StageCommandsInput = {
   locations: undefined!,
-  marketplaceName: "official",
   pluginName: "acme",
   pluginRoot: "/plugin",
   pluginDataDir: "/data/official/acme",

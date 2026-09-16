@@ -231,7 +231,6 @@ async function prepareUpdateHandles(
   try {
     handles.skills = await prepareStageSkills(ops, {
       locations,
-      marketplaceName: marketplace,
       pluginName: plugin,
       pluginRoot: installable.pluginRoot,
       pluginDataDir,
@@ -242,7 +241,6 @@ async function prepareUpdateHandles(
     });
     handles.commands = await prepareStageCommands(ops, {
       locations,
-      marketplaceName: marketplace,
       pluginName: plugin,
       pluginRoot: installable.pluginRoot,
       pluginDataDir,
@@ -257,7 +255,6 @@ async function prepareUpdateHandles(
       pluginName: plugin,
       pluginRoot: installable.pluginRoot,
       pluginDataDir,
-      resolved: installable,
       agentsDirs,
       knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
       // AG-7 opt-in: forward the direct-path `--map-model` setting. The

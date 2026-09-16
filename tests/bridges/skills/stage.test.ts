@@ -87,7 +87,6 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -156,7 +155,6 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -231,7 +229,6 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -295,7 +292,6 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -351,7 +347,6 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -430,7 +425,6 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -493,7 +487,6 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -564,7 +557,6 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -616,7 +608,6 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -692,7 +683,6 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -753,7 +743,6 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot: windowsRoot,
       pluginDataDir,
@@ -821,7 +810,6 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: path.join(scopeRoot, "ignored-project"),
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -876,7 +864,6 @@ describe("prepareStageSkills", () => {
       await prepareStageSkills(createRemovalOps(), {
         locations,
         cwd: scopeRoot,
-        marketplaceName: "catalog",
         pluginName: "acme",
         pluginRoot,
         pluginDataDir: "[unterminated",
@@ -940,7 +927,6 @@ describe("prepareStageSkills", () => {
       await prepareStageSkills(createRemovalOps(), {
         locations,
         cwd: scopeRoot,
-        marketplaceName: "catalog",
         pluginName: "acme",
         pluginRoot,
         pluginDataDir,
@@ -996,7 +982,6 @@ describe("prepareStageSkills", () => {
       await prepareStageSkills(createRemovalOps(), {
         locations,
         cwd: scopeRoot,
-        marketplaceName: "catalog",
         pluginName: "acme",
         pluginRoot,
         pluginDataDir,
@@ -1038,7 +1023,6 @@ describe("commitPreparedSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1093,7 +1077,6 @@ describe("commitPreparedSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1142,7 +1125,6 @@ describe("commitPreparedSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1207,7 +1189,6 @@ describe("commitPreparedSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1282,7 +1263,6 @@ describe("commitPreparedSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1356,7 +1336,6 @@ describe("commitPreparedSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1417,7 +1396,6 @@ describe("commitPreparedSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1474,7 +1452,6 @@ describe("abortPreparedSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1517,7 +1494,6 @@ describe("abortPreparedSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1562,7 +1538,6 @@ describe("replacePreparedSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1611,7 +1586,6 @@ describe("replacePreparedSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1679,7 +1653,6 @@ describe("replacePreparedSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1765,7 +1738,6 @@ describe("replacePreparedSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1839,7 +1811,6 @@ describe("replacePreparedSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1918,7 +1889,6 @@ describe("rollbackSkillsReplacement", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1973,7 +1943,6 @@ describe("rollbackSkillsReplacement", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -2030,7 +1999,6 @@ describe("rollbackSkillsReplacement", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -2121,7 +2089,6 @@ describe("rollbackSkillsReplacement", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -2170,7 +2137,6 @@ describe("finalizeSkillsReplacement", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -2217,7 +2183,6 @@ describe("finalizeSkillsReplacement", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -2272,7 +2237,6 @@ describe("finalizeSkillsReplacement", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
-      marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,

@@ -660,7 +660,6 @@ async function runInstallLedgerBody(
     do: async (c) => {
       const prep = await prepareStageSkills(opts.removalOps, {
         locations: c.locations,
-        marketplaceName: c.marketplace,
         pluginName: c.plugin,
         pluginRoot: c.resolved.pluginRoot,
         pluginDataDir: c.pluginDataDir,
@@ -705,7 +704,6 @@ async function runInstallLedgerBody(
     do: async (c) => {
       const prep = await prepareStageCommands(opts.removalOps, {
         locations: c.locations,
-        marketplaceName: c.marketplace,
         pluginName: c.plugin,
         pluginRoot: c.resolved.pluginRoot,
         pluginDataDir: c.pluginDataDir,
@@ -750,7 +748,6 @@ async function runInstallLedgerBody(
         pluginName: c.plugin,
         pluginRoot: c.resolved.pluginRoot,
         pluginDataDir: c.pluginDataDir,
-        resolved: c.resolved,
         agentsDirs: c.agentsDirs,
         knownSkills: c.stagedSkillNames,
         // AG-7 opt-in: `--map-model` on /claude:plugin install threads

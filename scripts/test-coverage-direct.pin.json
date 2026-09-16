@@ -11,7 +11,7 @@
     },
     {
       "sourcePath": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
-      "reading": "branches 109/111, lines 1043/1049",
+      "reading": "branches 109/111, lines 1040/1046",
       "findingIds": ["D-08-A14"],
       "reasons": [
         "422-426 (branch 422): re-validation of a manifest entry that the identical compiled schema already accepted in the same pass. MARKETPLACE_SCHEMA.plugins is Type.Array(PLUGIN_ENTRY_SCHEMA) and PLUGIN_ENTRY_VALIDATOR is Compile(PLUGIN_ENTRY_SCHEMA), so an entry reaching the re-check was already validated by that exact schema, in this process, from this parse. ARCHITECTURE.md records the re-check as deliberate defense-in-depth.",

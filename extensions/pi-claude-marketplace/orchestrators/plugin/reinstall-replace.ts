@@ -311,7 +311,6 @@ async function prepareAllHandles(
   try {
     handles.skills = await operations.prepareStageSkills(ops, {
       locations: input.locations,
-      marketplaceName: input.marketplace,
       pluginName: input.plugin,
       pluginRoot: input.installable.pluginRoot,
       pluginDataDir: input.pluginDataDir,
@@ -321,7 +320,6 @@ async function prepareAllHandles(
     });
     handles.commands = await operations.prepareStageCommands(ops, {
       locations: input.locations,
-      marketplaceName: input.marketplace,
       pluginName: input.plugin,
       pluginRoot: input.installable.pluginRoot,
       pluginDataDir: input.pluginDataDir,
@@ -335,7 +333,6 @@ async function prepareAllHandles(
       pluginName: input.plugin,
       pluginRoot: input.installable.pluginRoot,
       pluginDataDir: input.pluginDataDir,
-      resolved: input.installable,
       agentsDirs: input.agentsDirs,
       knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
       cwd: input.cwd,
