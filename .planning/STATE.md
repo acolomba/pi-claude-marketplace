@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
 status: executing
-stopped_at: Completed 06-11-PLAN.md
-last_updated: "2026-09-16T02:44:10.023Z"
+stopped_at: Completed 06-13-PLAN.md
+last_updated: "2026-09-16T13:29:04.149Z"
 last_activity: 2026-09-16
-last_activity_desc: Plan 06-11 complete (edge group 17 rows -> 10 repaired, 0 contracted, 7 outstanding; 90 -> 80 unread measured, zero findings gained)
-state_head: e242e417bcce1f913b312a64baa73f161a8986cc
+last_activity_desc: Plan 06-13 complete (domain/persistence/platform: 23 rows -> 6 repaired, 2 contracted, 15 outstanding; 80 -> 72 unread measured, zero findings gained; the five Pi mirrors kept and made compiler-checked)
+state_head: e45d316d9d3f8db062b9c16f8a752cf2e36982d9
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 60
-  completed_plans: 49
+  completed_plans: 50
   percent: 63
 milestone_name: test-backlog
 ---
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 06 (Unused Type Member Gate) — EXECUTING
-Plan: 12 of 14
-Status: Executing the six bounded repair plans (06-09 ✅ -> 06-14 ✅ -> 06-10 ✅ -> 06-11 ✅ -> 06-13 -> 06-12)
-Last activity: 2026-09-16 — Plan 06-11 complete (edge group: 10 rows repaired, 0 contracted, 7 outstanding with recorded refusals; 90 -> 80 unread measured, zero findings gained)
+Plan: 13 of 14
+Status: Executing the six bounded repair plans (06-09 ✅ -> 06-14 ✅ -> 06-10 ✅ -> 06-11 ✅ -> 06-13 ✅ -> 06-12)
+Last activity: 2026-09-16 — Plan 06-13 complete (domain 10->7, persistence 6->3, platform 7->5: 6 rows repaired, 2 contracted via the first two external-input entries, 15 outstanding with measured reasons; 80 -> 72 unread, zero findings gained; the five Pi mirrors kept and now held to the peer's own overload)
 
 Plan 06-01 landed the member gate's compiler tracer: `node
 scripts/check-unused-type-members.mjs` compiles the project once, inventories
@@ -465,7 +465,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-16T02:43:38.154Z
+**Last session:** 2026-09-16T13:29:03.875Z
 **Resume file:** None
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–5 are complete.
@@ -485,7 +485,7 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 
 ### Phase 6 Plan 1 complete
 
-Stopped at: Completed 06-11-PLAN.md
+Stopped at: Completed 06-13-PLAN.md
 (directed value transfers) and 06-03 (validated contracts), which the plan
 graph runs together in Wave 2 over disjoint files.
 
@@ -803,6 +803,7 @@ together with its three bridge declaration sites. Next is 06-10.
 | Phase 06 P09 | 1h 11m | 3 tasks | 12 files |
 | Phase 06 P14 | 1h 37m | 4 tasks | 11 files |
 | Phase 06 P11 | 1h 16m | 3 tasks | 7 files |
+| Phase 06 P13 | 78 min | 3 tasks | 7 files |
 
 ## Decisions
 
