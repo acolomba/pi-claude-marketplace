@@ -4,6 +4,7 @@ import {
   createNodeInstallPlugin,
   type InstallPluginOptions,
 } from "../../orchestrators/plugin/install-flow.ts";
+import { PROMOTED_ROW_REASONS } from "../../orchestrators/plugin/install.messaging.ts";
 import { loadConfig, type PluginConfigEntry } from "../../persistence/config-io.ts";
 import {
   writeBatchedConfigEntries,
@@ -456,11 +457,9 @@ function buildImportNotificationMarketplaces(
       status: "installed",
       name: o.plugin,
       dependencies: dependenciesFromInstalled(o),
-      // D-04-07: a promotion's brace names both facts the standalone row names
-      // -- the record was here before, and this command promoted it.
-      ...(o.promoted === true && {
-        reasons: ["already installed", "dependency promoted"] as const,
-      }),
+      // D-04-07: a promotion's brace is the standalone row's -- the record was
+      // here before, and this command promoted it.
+      ...(o.promoted === true && { reasons: PROMOTED_ROW_REASONS }),
       // D-03/D-06: realized install transition -> info, reloads Pi resources.
       // A promotion (D-04-07) reloads only when it re-materialized the record.
       severity: "info",

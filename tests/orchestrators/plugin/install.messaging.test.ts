@@ -9,6 +9,7 @@ import {
   composePromotedRow,
   formatOrchestratedCause,
   narrowResolverReasons,
+  PROMOTED_ROW_REASONS,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
@@ -613,6 +614,19 @@ describe("composePromotedRow", () => {
       severity: "info",
       needsReload: true,
     });
+  });
+
+  test("D-04-07: carries the promotion brace both surfaces spell once", () => {
+    // arrange
+    const args = { plugin: "linter", version: "3.0.0", scope: "user" as const, needsReload: false };
+
+    // act
+    const row = composePromotedRow(args);
+
+    // assert: the very tuple import's promoted row reads, so the two surfaces
+    // cannot drift apart in token set or order.
+    assert.strictEqual(row.reasons, PROMOTED_ROW_REASONS);
+    assert.deepStrictEqual(PROMOTED_ROW_REASONS, ["already installed", "dependency promoted"]);
   });
 
   test("D-04-07: the promotion row renders through the installed arm with the brace in reason order", () => {
