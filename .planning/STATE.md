@@ -2,14 +2,14 @@
 gsd_state_version: "1.0"
 milestone: v1.20
 milestone_name: transitive-dependencies
-current_phase: 4
+current_phase: 04
 current_phase_name: Install provenance
-status: planning
+status: executing
 stopped_at: Phase 4 planned - 6 plans across 6 sequential waves, ready to execute
-last_updated: "2026-09-16T01:37:42.448Z"
+last_updated: "2026-09-16T01:56:10.760Z"
 last_activity: 2026-09-15
-last_activity_desc: Phase 4 planned - research, patterns, 6 plans, checker passed with no blockers
-state_head: 0f2638d92b54ec41f39ffd5559c0416dacd2b8f9
+last_activity_desc: Phase 04 execution started
+state_head: 500b195efb694cecbb13b8546612c36c1a272ab0
 progress:
   total_phases: 5
   completed_phases: 3
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-09-14 after manifest verification)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 3 — Dependency resolution
+**Current focus:** Phase 04 — Install provenance
 Installing a plugin that declares dependencies should install what it needs.
 25 requirements across 5 phases. v1.19 Unit Test Refactor closed 2026-09-04 and
 is archived under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 4 — Install provenance
-Plan: 0 of 6 — 6 plans across 6 strictly sequential waves
-Status: READY TO EXECUTE
+Phase: 04 (Install provenance) — EXECUTING
+Plan: 1 of 6
+Status: Executing Phase 04
 
 **Phase 4 was planned 2026-09-15.** Eight decisions in `04-CONTEXT.md`
 (D-04-01..08), alternatives preserved in `04-DISCUSSION-LOG.md`, a
@@ -278,7 +278,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-15 — Phase 3 complete, transitioned to Phase 4
+Last activity: 2026-09-15 — Phase 04 execution started
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 3 of 5 phases complete (60%).
