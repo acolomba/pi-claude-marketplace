@@ -1,4 +1,5 @@
 # ai harnesses
+/.agents/skills/herdr/
 
 # pi
 /.pi/git/
@@ -26,6 +27,7 @@
 /.claude/jobs/
 /.claude/package.json
 /.claude/scripts/*
+/.claude/skills/herdr
 /.claude/skills/spike-findings-*/
 
 # codex
