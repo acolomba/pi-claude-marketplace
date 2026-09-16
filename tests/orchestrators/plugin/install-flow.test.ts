@@ -5378,6 +5378,7 @@ test("D-04-07: the promotion declares the promoted key and reports one installed
         resourcesChanged: false,
         declaresAgents: false,
         declaresMcp: false,
+        promoted: true,
       });
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -5425,6 +5426,7 @@ test("D-04-07: an orchestrated promotion flips the record, writes no declaration
             resourcesChanged: false,
             declaresAgents: false,
             declaresMcp: false,
+            promoted: true,
           },
         },
       );
@@ -5655,6 +5657,7 @@ test("D-04-07: installing a disabled dependency by name promotes it, re-material
         resourcesChanged: true,
         declaresAgents: false,
         declaresMcp: false,
+        promoted: true,
       });
     } finally {
       await rm(cwd, { recursive: true, force: true });

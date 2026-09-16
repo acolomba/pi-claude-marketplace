@@ -86,10 +86,11 @@ export interface PluginInstalledOutcome {
   readonly declaresMcp: boolean;
   /**
    * D-04-07: the entry named a record that arrived as another plugin's
-   * dependency, and the install promoted it rather than installing anew. A
-   * promotion moves nothing on disk unless it re-materialized a disabled
-   * record, so this row's reload hint follows `resourcesChanged` where a
-   * fresh install's is unconditional. Omitted for a fresh install.
+   * dependency, and the install promoted it rather than installing anew, as
+   * its outcome reports. A promotion moves nothing on disk unless it
+   * re-materialized a disabled record, so this row's reload hint follows
+   * `resourcesChanged` where a fresh install's is unconditional. Omitted for a
+   * fresh install.
    */
   readonly promoted?: true;
   /**
@@ -719,12 +720,16 @@ async function installOnePlannedPlugin(
   result: MutableImportResult,
   plugin: PlannedPlugin,
   /**
-   * D-04-07: the recorded dependency this entry promotes, when the plugin is
-   * already recorded as one. ENBL-07: a partially installed record was
-   * accepted in that shape when the cascade wrote it, so the settings that
-   * name it consent to the record as it stands, not to a new degradation;
-   * the promotion's `--partial` gate reads that consent here. Import never
+   * D-04-07: the recorded dependency this entry promotes, when the scope's
+   * snapshot already recorded it as one. ENBL-07: a partially installed record
+   * was accepted in that shape when the cascade wrote it, so the settings that
+   * name it consent to the record as it stands, not to a new degradation; the
+   * promotion's `--partial` gate reads that consent here. Import never
    * installs a fresh plugin partially, so the flag is set for no other entry.
+   * The record also says whether the promotion enables it. Whether the install
+   * promoted at all is read off its outcome, not this record: the snapshot is
+   * taken once per scope, so a dependency an earlier entry's cascade recorded
+   * in this same import has no record here and is promoted at lock time.
    */
   promoting?: PluginInstallRecord,
 ): Promise<PlannedPluginBucket> {
@@ -782,7 +787,7 @@ async function installOnePlannedPlugin(
         resourcesChanged: outcome.resourcesChanged,
         declaresAgents: outcome.declaresAgents,
         declaresMcp: outcome.declaresMcp,
-        ...(promoting !== undefined && { promoted: true }),
+        ...(outcome.promoted === true && { promoted: true }),
         ...(promoting !== undefined && isRecordedButDisabled(promoting) && { reenabled: true }),
       });
       result.changedResources ||= outcome.resourcesChanged;

@@ -1023,12 +1023,12 @@ async function materializePromotedRecord(
 /**
  * D-04-07: emit the promotion row and return the matching outcome. Mirrors
  * `failedRowOutcome`: orchestrated mode returns the outcome and emits nothing.
- * The outcome is an `installed` one whose resources changed only when the
- * promotion re-materialized a disabled record -- otherwise the record was here
- * before and only its provenance moved -- and whose declares-flags read the
- * record's own inventory, so an orchestrated caller describes the promoted
- * plugin as it is rather than as empty. The row stamps the reload hint on the
- * same condition, as the enable verb's fresh row does.
+ * The outcome is an `installed` one stamped `promoted`, whose resources changed
+ * only when the promotion re-materialized a disabled record -- otherwise the
+ * record was here before and only its provenance moved -- and whose
+ * declares-flags read the record's own inventory, so an orchestrated caller
+ * describes the promoted plugin as it is rather than as empty. The row stamps
+ * the reload hint on the same condition, as the enable verb's fresh row does.
  */
 function promotedRowOutcome(args: {
   readonly ctx: NotificationContext;
@@ -1047,6 +1047,7 @@ function promotedRowOutcome(args: {
     resourcesChanged: enabled,
     declaresAgents: promotion.declaresAgents,
     declaresMcp: promotion.declaresMcp,
+    promoted: true,
   };
   if (!orchestrated) {
     notifyWithContext(

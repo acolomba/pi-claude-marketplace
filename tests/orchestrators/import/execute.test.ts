@@ -2782,6 +2782,94 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
   verifyBoundary();
 });
 
+test("D-04-07: marks a dependency promoted at lock time by the same import's earlier cascade", async (t) => {
+  // arrange: one import names `sample` and then `dep`. The scope's snapshot is
+  // taken once before the loop, so when `sample`'s cascade records `dep`, the
+  // `dep` entry still sees no record and reaches the install with nothing to
+  // promote at its call site; the install finds the record under its lock and
+  // promotes it there. The promotion is read off the install's outcome, so the
+  // entry and its row still say so.
+  const { cwd, project } = await createHermeticScopes(t, "promotes-same-import");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2);
+  const marketplaceRoot = path.join(cwd, "fixture-mp");
+  const dependency = { name: "dep", version: "*" };
+  await writeUnder(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "fixture-mp",
+      owner: { name: "import owner suite" },
+      plugins: [
+        {
+          name: "sample",
+          source: "./plugins/sample",
+          version: "1.0.0",
+          dependencies: [dependency],
+        },
+        { name: "dep", source: "./plugins/dep", version: "1.0.0" },
+      ],
+    }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "sample", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "sample", version: "1.0.0", dependencies: [dependency] }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "dep", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "dep", version: "1.0.0" }),
+  );
+  await writeUnder(
+    path.join(cwd, ".claude", "settings.json"),
+    JSON.stringify({
+      enabledPlugins: { "sample@fixture-mp": true, "dep@fixture-mp": true },
+      extraKnownMarketplaces: { "fixture-mp": { directory: marketplaceRoot } },
+    }),
+  );
+  const expectedResult: ClaudeImportExecutionResult = {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("fixture-mp", "project")],
+    installedPlugins: [
+      installed("sample", "fixture-mp", "project", { agents: false, mcp: false }, false),
+      {
+        ...installed("dep", "fixture-mp", "project", { agents: false, mcp: false }, false),
+        promoted: true,
+      },
+    ],
+  };
+  const expectedBytes = configBytes({
+    marketplaces: { "fixture-mp": { source: marketplaceRoot } },
+    plugins: { "sample@fixture-mp": {}, "dep@fixture-mp": {} },
+  });
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    gitOps: createOfflineGitOps(),
+    pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"] as const,
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, expectedResult);
+  assert.strictEqual(
+    (await loadState(project.extensionRoot)).marketplaces["fixture-mp"]?.plugins["dep"]?.provenance,
+    "explicit",
+  );
+  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● fixture-mp [project] (added)\n" +
+        "  ● sample (installed)\n" +
+        "  ● dep (installed) {already installed, dependency promoted}\n\n" +
+        "Import: 3 successes\n\n" +
+        "/reload to pick up changes",
+    },
+  ]);
+  verifyBoundary();
+});
+
 test("declares a marketplace whose only plugin failed to install", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "marketplace-only-patch");
