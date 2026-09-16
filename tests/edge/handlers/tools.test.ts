@@ -22,9 +22,8 @@
 // notify nor probe for a companion extension.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import https from "node:https";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
@@ -39,6 +38,7 @@ import {
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { type PluginNotificationMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -175,30 +175,7 @@ function installNetworkCounter(t: TestContext): () => number {
  * environment restores are registered before the tool runs.
  */
 async function createHermeticScope(t: TestContext, label: string): Promise<HermeticScope> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `tools-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `tools-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(cwd, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
-  });
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
+  const { cwd } = await createHermeticEnvironment(t, `tools-${label}-`);
   const networkCallCount = installNetworkCounter(t);
   return { cwd, networkCallCount };
 }

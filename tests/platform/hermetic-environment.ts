@@ -25,7 +25,8 @@ function restoreEnvironmentVariable(
   }
 }
 
-async function enterHermeticEnvironment(prefix: string): Promise<{
+/** Enters a case-owned Pi environment; the caller runs `restore` itself, typically in a `finally`. */
+export async function enterHermeticEnvironment(prefix: string): Promise<{
   readonly environment: HermeticEnvironment;
   readonly restore: () => Promise<void>;
 }> {

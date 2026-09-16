@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
 import { aggregateDiscoveredResources } from "../../extensions/pi-claude-marketplace/orchestrators/discover.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { AggregateResourcesDiscoverError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { TestContext } from "node:test";
@@ -18,27 +18,11 @@ interface TestLocations {
 }
 
 async function makeTestLocations(t: TestContext, prefix: string): Promise<TestLocations> {
-  const root = await mkdtemp(path.join(os.tmpdir(), prefix));
-  t.after(async () => {
-    await rm(root, { recursive: true, force: true });
-  });
-
-  const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
-  let user: ScopedLocations;
-  try {
-    process.env.PI_CODING_AGENT_DIR = path.join(root, "user");
-    user = locationsFor("user", root);
-  } finally {
-    if (previousAgentDirectory === undefined) {
-      delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
-    }
-  }
+  const { root } = await createHermeticEnvironment(t, prefix);
 
   return {
     root,
-    user,
+    user: locationsFor("user", root),
     project: locationsFor("project", path.join(root, "project")),
   };
 }
