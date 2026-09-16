@@ -140,6 +140,9 @@ function recordReinstalledOutcome(
     resources,
     ...(input.hookEntries !== undefined && { hookEntries: [...input.hookEntries] }),
     enabled: true,
+    // D-04-01: a reinstall replaces the artifacts, not the reason the plugin
+    // is here -- the old record's provenance carries forward with installedAt.
+    provenance: input.oldRecord.provenance,
     installedAt: input.oldRecord.installedAt,
     updatedAt: new Date().toISOString(),
   };

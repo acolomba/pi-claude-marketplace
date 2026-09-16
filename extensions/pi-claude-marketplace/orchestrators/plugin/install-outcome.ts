@@ -136,7 +136,7 @@ import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -168,6 +168,13 @@ export interface InstallLedgerOptions {
    * tags -- the entry still decides which repository is read.
    */
   readonly sourcePinOverride?: string;
+  /**
+   * D-04-01: how THIS member got here -- `"explicit"` for the plugin the user
+   * named, `"dependency"` for a member its closure pulled in. The install
+   * cascade decides it per member; a caller that omits it (the enable branch,
+   * which re-materializes a KEPT record) leaves the recorded value in place.
+   */
+  readonly provenance?: PluginInstallRecord["provenance"];
   readonly allowExistingRecord?: boolean;
   readonly cloneCacheSeam?: InstallCloneCacheSeam;
   readonly cloneProbe?: typeof probeInstallClone;
@@ -978,6 +985,13 @@ async function runInstallLedgerBody(
         // The disable branch sets it to false; the enable branch re-runs
         // statePhase (via runInstallLedger), which resets it to true here.
         enabled: true,
+        // D-04-01 / ENBL-02: a KEPT record's provenance rides through the
+        // enable branch, which hand-builds its options with
+        // `allowExistingRecord` and never names the field -- falling back
+        // through `existing` is what preserves it there. A fresh install
+        // takes the cascade's per-member decision; an install that reaches
+        // the ledger without one is a plugin the caller named.
+        provenance: existing?.provenance ?? opts.provenance ?? "explicit",
         // D-54-01 / ENBL-02: on re-materialization (allowExistingRecord),
         // PRESERVE the original installedAt -- the record was never
         // uninstalled, only disabled. Fresh installs stamp now.

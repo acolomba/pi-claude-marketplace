@@ -73,7 +73,7 @@ import type {
 import type { InstallMsg } from "./install.messaging.ts";
 import type { ClosureLookupResult, ClosureSubject } from "../../domain/dependency-closure.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
@@ -284,6 +284,8 @@ function buildInstallLedgerOptions(
      * `sha-<12hex>` branch, which is the form RESV-05 cannot read back.
      */
     pinVersion?: string;
+    /** D-04-01: whether THIS member is the plugin the caller named. */
+    provenance?: PluginInstallRecord["provenance"];
   },
 ): InstallLedgerOptions {
   return {
@@ -293,6 +295,7 @@ function buildInstallLedgerOptions(
     marketplace: core.marketplace,
     plugin: core.plugin,
     ...(core.sourcePin !== undefined && { sourcePinOverride: core.sourcePin }),
+    ...(core.provenance !== undefined && { provenance: core.provenance }),
     ...(opts.mapModel !== undefined && { mapModel: opts.mapModel }),
     ...(opts.partial !== undefined && { partial: opts.partial }),
     ...(core.pinVersion !== undefined && { pinVersionOverride: core.pinVersion }),
@@ -1179,8 +1182,8 @@ async function installPluginWithTransaction(
         // `deriveInstallVersion`, so copying it onto every member would record
         // each dependency under the requesting plugin's version string.
         ledgerOptionsFor: (member) => {
-          const pinVersion =
-            member.pinnedVersion ?? (member.key === rootKey ? opts.pinVersionOverride : undefined);
+          const isRoot = member.key === rootKey;
+          const pinVersion = member.pinnedVersion ?? (isRoot ? opts.pinVersionOverride : undefined);
           return buildInstallLedgerOptions(opts, {
             scope,
             cwd,
@@ -1188,6 +1191,10 @@ async function installPluginWithTransaction(
             plugin: member.name,
             ...(member.pinnedOid !== undefined && { sourcePin: member.pinnedOid }),
             ...(pinVersion !== undefined && { pinVersion }),
+            // D-04-01: the root is the one member the closure walk never
+            // skips, so the key comparison alone decides provenance -- per
+            // member, independent of install order.
+            provenance: isRoot ? "explicit" : "dependency",
           });
         },
         installedKeys: collectInstalledKeys(state),

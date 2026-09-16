@@ -73,6 +73,15 @@ const PERSISTED_HOOK_ENTRY_SCHEMA = Type.Object({
  * before validation runs, so v1.0..v1.13 state.json files load cleanly.
  * `enabled: false` is the sole disable marker; `true` means active.
  *
+ * D-04-01 / D-04-03: `provenance` is REQUIRED (schemaVersion 3+) and states
+ * how the plugin got here -- `"explicit"` when the user named it, `"dependency"`
+ * when another plugin's declaration pulled it in. The migration fills
+ * `"explicit"` for every record that lacks the field via
+ * `ensurePluginProvenance` before validation runs, so schemaVersion 1 and 2
+ * state.json files load cleanly. `"explicit"` is the truthful default rather
+ * than a guess: no released build ran a dependency cascade, so every record a
+ * released build wrote is a plugin the user asked for by name.
+ *
  * COMPAT-01: exported so the no-expansion gate reads the record's key set off
  * this single source of truth rather than a hand-maintained field list that
  * would drift. No production consumer imports it; the schema stays the sole
@@ -121,6 +130,10 @@ export const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
     hooks: Type.Array(Type.String()),
   }),
   enabled: Type.Boolean(),
+  // D-04-01: the mode only. A declarer list would be a cache of another
+  // plugin's manifest that nothing keeps honest; prune re-derives "does
+  // anything still need this?" from the installed declarations instead.
+  provenance: Type.Union([Type.Literal("explicit"), Type.Literal("dependency")]),
   installedAt: Type.String(),
   updatedAt: Type.String(),
 });
@@ -173,6 +186,7 @@ export function clonePluginRecord(record: PluginInstallRecord): PluginInstallRec
       hooks: [...record.resources.hooks],
     },
     enabled: record.enabled,
+    provenance: record.provenance,
     installedAt: record.installedAt,
     updatedAt: record.updatedAt,
   };
@@ -281,11 +295,12 @@ const MARKETPLACE_RECORD_SCHEMA = Type.Object({
 /**
  * ST-1: state.json shape. schemaVersion 1 is the pre-ENBL-02 shape (no
  * `enabled` field on plugin records); schemaVersion 2 is the ENBL-02 shape
- * (`enabled: boolean` required). The union lets loadState accept both during
- * the migration cycle; `persistMigratedState` always writes schemaVersion 2.
+ * (`enabled: boolean` required); schemaVersion 3 is the D-04-03 shape
+ * (`provenance` required). The union lets loadState accept all three during
+ * the migration cycle; `persistMigratedState` always writes schemaVersion 3.
  */
 export const STATE_SCHEMA = Type.Object({
-  schemaVersion: Type.Union([Type.Literal(1), Type.Literal(2)]),
+  schemaVersion: Type.Union([Type.Literal(1), Type.Literal(2), Type.Literal(3)]),
   // BFILL-02 / D-68-01: the last extension version that reconciled this state.
   // OPTIONAL and additive -- NO schemaVersion bump. An absent stamp means
   // scan-once (treated as version-changed) so an old doc without it loads
@@ -303,7 +318,7 @@ export const STATE_VALIDATOR = Compile(STATE_SCHEMA);
 
 /** First-load default (ENOENT and empty treated identically). */
 export const DEFAULT_STATE: ExtensionState = Object.freeze({
-  schemaVersion: 2,
+  schemaVersion: 3,
   marketplaces: {},
 });
 
@@ -384,7 +399,7 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       // Missing file -> default state (NOT throw).
-      return { schemaVersion: 2, marketplaces: {} };
+      return { schemaVersion: 3, marketplaces: {} };
     }
 
     throw new Error(`Failed to read ${stateJsonPath}: ${errorMessage(err)}`, { cause: err });
@@ -407,7 +422,8 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
     parsedRecord !== undefined &&
     Object.hasOwn(parsedRecord, "schemaVersion") &&
     parsedRecord.schemaVersion !== 1 &&
-    parsedRecord.schemaVersion !== 2
+    parsedRecord.schemaVersion !== 2 &&
+    parsedRecord.schemaVersion !== 3
   ) {
     throw new Error(`state.json at ${stateJsonPath} has an unsupported schema version`);
   }
@@ -455,11 +471,11 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
   const normalized: unknown =
     typeof reconciliationStamp === "string"
       ? {
-          schemaVersion: 2,
+          schemaVersion: 3,
           lastReconciledExtensionVersion: reconciliationStamp,
           marketplaces,
         }
-      : { schemaVersion: 2, marketplaces };
+      : { schemaVersion: 3, marketplaces };
 
   if (!STATE_VALIDATOR.Check(normalized)) {
     throw new Error(
