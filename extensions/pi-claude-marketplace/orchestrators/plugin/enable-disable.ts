@@ -163,23 +163,28 @@ export type EnableDegradationSignals = LedgerDegradationSignals;
  *   structural `"marketplace not added"` sentinel can flow through the same field.
  */
 export type EnableDisablePluginOutcome =
+  | ({ readonly status: "enabled"; readonly version?: string } & EnableDisableSubject &
+      EnableDegradationSignals)
+  | ({ readonly status: "disabled"; readonly version?: string } & EnableDisableSubject)
   | ({
-      readonly status: "enabled";
-      readonly name: string;
-      readonly version?: string;
-    } & EnableDegradationSignals)
-  | { readonly status: "disabled"; readonly name: string; readonly version?: string }
-  | {
       readonly status: "skipped";
-      readonly name: string;
       readonly reason: "already enabled" | "already disabled" | "not installed";
-    }
+    } & EnableDisableSubject)
   | {
       readonly status: "failed";
       readonly reason: Reason;
       readonly error: Error;
       readonly cause: string;
     };
+
+/**
+ * The plugin every non-failed arm names. Declared once so a reader of any arm
+ * credits the same slot -- the failed arm carries no subject, which is why the
+ * base is intersected rather than hoisted over the whole union.
+ */
+export interface EnableDisableSubject {
+  readonly name: string;
+}
 
 /**
  * D-54-01 options bundle for `setPluginEnabled`. Mirrors

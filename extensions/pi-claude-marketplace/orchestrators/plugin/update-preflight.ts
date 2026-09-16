@@ -128,8 +128,7 @@ export type UpdatePreflightOutcome =
   PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome | PreflightFailedOutcome;
 
 type PartialableUpdateShapeError = PluginShapeError & {
-  readonly shape: PluginShapeError["shape"] & {
-    readonly kind: "no-longer-installable";
+  readonly shape: Extract<PluginShapeError["shape"], { kind: "no-longer-installable" }> & {
     readonly partialable: true;
     readonly unsupportedKinds: readonly string[];
   };
