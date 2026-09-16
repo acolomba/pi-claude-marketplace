@@ -121,7 +121,7 @@ The same rule protects the dependency's marketplace. A dependency can come from 
 
 A plugin you install by name is recorded as one you asked for, even if another plugin also needs it. A later install of a plugin that needs it does not change that record. The move only goes the other way: when you install a dependency by name later, its record changes to say that you asked for it, and the row reads `{already installed, dependency promoted}`. This is a promotion. It changes nothing else about the record, and it writes the plugin's key into the configuration file, as a fresh install by name does. If the dependency was disabled, the same command enables it, because a plugin you ask for by name is enabled. `reinstall` and `update` never promote: they replace files and versions and leave the record's origin as it is.
 
-A version pin does not promote. The command refuses with `{already installed}`, and the record stays as it is. To move a dependency to another version, run `update` or `reinstall`.
+`install` takes no version, so a promotion never changes the dependency's version. To move a dependency to another version, run `update` or `reinstall`.
 
 A dependency that was installed partially, with some of its component kinds unsupported, needs `--partial` again. This is the same consent every partial install needs. Without the flag the command refuses with `{already installed}`. With it the record changes only its provenance and keeps its partial shape. On a fully supported dependency `--partial` changes nothing. `--map-model` has no effect on this command: it changes how generated agents are written, and this command generates none.
 
