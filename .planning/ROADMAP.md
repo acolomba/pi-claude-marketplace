@@ -23,7 +23,7 @@ v1.20 phase. Decimal phases (2.1, 3.1) are urgent insertions only, marked
 - [x] **Phase 1: Manifest read fidelity** — open the manifest where it actually sits and stop discarding what it says. A bare `<pluginRoot>/plugin.json` is read at both call sites that hardcode the wrapped path, `"./skills/"` and `skills` collapse to one component path so the fallback does not enumerate a directory twice, and `info` renders object-shaped `{name, version, marketplace}` dependency entries instead of filtering them out. Independent of the dependency machinery; the cheapest phase in the milestone. (MANF-01, MANF-02, MANF-03, MANF-04, MANF-05, DEPS-01, DEPS-02) (completed 2026-09-14)
 - [x] **Phase 2: Uninstall data disposition and the uninstall option seam** — `uninstall --keep-data` preserves the plugin's data directory; without it the directory is deleted with no prompt, including on the reconcile path that carries no command line. This phase also establishes the single seam through which a per-invocation uninstall option is parsed, carried into `uninstallPlugin()` and defaulted for callers with no command line, so `--prune` joins an existing structure in Phase 5 rather than a second mechanism being invented for it. Independent of the dependency work. (DATA-01, DATA-02, DATA-03) (completed 2026-09-14)
 - [x] **Phase 3: Dependency resolution** — installing a plugin installs what it declares it needs, retiring the PI-13 / PR-5 no-auto-resolution decision. Marketplace attribution, a stated version-constraint grammar, cycle termination, no reinstall of what is already there, and a named failure that leaves nothing half-materialized. Maps onto the existing `orchestrators/import/` cascade and the `orchestrators/plugin/bootstrap.ts` composer rather than adding a second cascade beside them. (RESV-01, RESV-02, RESV-03, RESV-04, RESV-05, RESV-06) (completed 2026-09-15)
-- [ ] **Phase 4: Install provenance** — each install record states whether the user asked for the plugin by name or another plugin declared it, with the promotion and retention rules that keep the two from overwriting each other, and a pre-milestone record reported as stale rather than silently repaired. This is the record `--prune` reads. (PROV-01, PROV-02, PROV-03, PROV-04)
+- [ ] **Phase 4: Install provenance** — each install record states whether the user asked for the plugin by name or another plugin declared it, with the promotion and retention rules that keep the two from overwriting each other, and a pre-milestone record upgraded with a truthful default rather than misreported. This phase also retires the cascade-dependency config write Phase 3 shipped, so the desired-state config names only what the user asked for; provenance is what keeps reconcile from sweeping a dependency once that write is gone. This is the record `--prune` reads. (PROV-01, PROV-02, PROV-03, PROV-04)
 - [ ] **Phase 5: Prune on uninstall** — `uninstall --prune` removes the dependency-installed plugins no remaining plugin declares, never a directly-installed one and never a still-needed one, and says which ones it removed. The uninstall flag surface closes here at exactly the two flags upstream defines. (PRUNE-01, PRUNE-02, PRUNE-03, PRUNE-04, FLAG-01)
 
 **Settled going in.** These are decided; planning should not reopen them.
@@ -54,18 +54,23 @@ v1.20 phase. Decimal phases (2.1, 3.1) are urgent insertions only, marked
    deliberately. RESV-03 needs either a new runtime dependency or a documented
    constraint subset with a stated refusal for anything outside it. Decide; do not
    assume semver is available.
-2. **Where a dependency-installed plugin stands relative to `claude-plugins.json` —
-   Phase 3 discuss.** `buildUninstallBucket` (`orchestrators/reconcile/plan.ts:352`)
-   uninstalls every recorded plugin the merged declared config does not name. So a
-   cascade install that is not reconciled with that config is removed on the next
-   `/reload`; a cascade install written in as an ordinary declared entry makes the
-   config and `--prune` disagree about who owns it. RESV-01 is not delivered until a
-   dependency survives a reload, so this cannot wait for Phase 4.
-3. **What a stale record's notification says and which command it points at
-   (PROV-04) — Phase 4 discuss.** This is MIGR-01's own unresolved design question,
-   scoped down to the "stale state, absent config" wording and recovery command.
-   Answer that much and no more; MIGR-01's deletion of `persistence/migrate.ts` and
-   replacement of `migrate-config.ts` stay in the backlog.
+2. ~~**Where a dependency-installed plugin stands relative to
+   `claude-plugins.json` — Phase 3 discuss.**~~ **SETTLED, then reversed.** Phase 3
+   answered it by writing every cascade dependency into the declared config, which
+   is what stops `buildUninstallBucket` sweeping it on the next `/reload`. D-04-02
+   ruled that wrong: the desired-state config holds ONLY explicitly-requested
+   plugins. Phase 4 retires the write and makes provenance the thing reconcile
+   respects instead, in a fixed order (field → exemption → removal). The second
+   horn of the original question — "the config and `--prune` disagree about who owns
+   it" — is exactly the conflation that reversal removes.
+3. ~~**What a stale record's notification says and which command it points at
+   (PROV-04) — Phase 4 discuss.**~~ **SETTLED in the opposite direction.** D-04-03
+   makes the upgrade SILENT — a legacy record is back-filled `"explicit"` before
+   validation, on the `enabled` / ENBL-02 precedent — so there is no notification
+   and no recovery command to word. PROV-04 was reworded to match (D-04-06). The
+   "stale state, absent config" wording returns to MIGR-01 in the backlog intact,
+   alongside the `persistence/migrate.ts` deletion; this milestone borrows nothing
+   from it.
 4. **`--prune`'s value on the reconcile path — Phase 5 discuss.**
    `applyPluginUninstalls()` (`orchestrators/reconcile/apply.ts`) runs from
    `resources_discover` / `session_start` with no command line, so it takes the
