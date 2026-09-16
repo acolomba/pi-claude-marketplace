@@ -121,6 +121,8 @@ export interface HostEvent {
 }
 
 export declare function observe(handler: (event: HostEvent) => void): void;
+
+export declare function registerAsync(handler: () => Promise<HostResult>): void;
 `;
 
 const hostTypesPath = "node_modules/external-host/index.d.ts";
@@ -1252,4 +1254,135 @@ test("a selection a coordinate shares with the access around it is still found",
     "type-selection: Selects the started variant this alias reads a slot out of. " +
       `(filter ${casesPath}:13:25 selects by status)`,
   ]);
+});
+
+// An `async` handler annotated with a promise of the result gives its returned
+// literal a UNION contextual type -- the result beside a thenable of it -- which
+// `checker.getPropertyOfType` answers only when every arm declares the key. The
+// three cases below state which arm counts a key spells resolve to, and which
+// leave it unsettled.
+//
+// `Emitted.payload` is at line 9, column 3 in every one of them, and `Spare` is
+// declared in the last so a contract can name a member no arm of the contextual
+// union carries.
+const asyncTypes = `import { registerAsync } from "external-host";
+
+export interface Carried {
+  readonly delivered: string;
+  readonly ignored?: string;
+}
+
+export interface Emitted {
+  readonly payload?: string;
+  readonly unsent?: string;
+}
+`;
+
+// One arm of `Emitted | PromiseLike<Emitted>` declares `payload`. The literal is
+// built at line 15 column 14 and returned at line 15 column 5.
+const singleArmOriginCases = `${asyncTypes}
+export function emit(carried: Carried): void {
+  registerAsync(async (): Promise<Emitted> => {
+    return { payload: carried.delivered };
+  });
+}
+`;
+
+// Two arms of `Emitted | Alternate | PromiseLike<Emitted | Alternate>` declare
+// `payload`, so which one supplied the value is unsettled. Line 19 column 14
+// holds the literal slot and column 5 the return.
+const ambiguousArmOriginCases = `${asyncTypes}
+export interface Alternate {
+  readonly payload?: string;
+}
+
+export function emit(carried: Carried): void {
+  registerAsync(async (): Promise<Emitted | Alternate> => {
+    return { payload: carried.delivered };
+  });
+}
+`;
+
+// `Spare` appears in no arm of the contextual union, so a contract naming
+// `Spare.payload` describes a slot this origin does not build. Line 19 column 14
+// holds the literal slot and column 5 the return.
+const foreignOwnerOriginCases = `${asyncTypes}
+export interface Spare {
+  readonly payload?: string;
+}
+
+export function emit(carried: Carried): void {
+  registerAsync(async (): Promise<Emitted> => {
+    return { payload: carried.delivered };
+  });
+}
+`;
+
+const asyncPayloadContract = {
+  id: `${casesPath}:9:3`,
+  owner: "Emitted",
+  key: "payload",
+  category: "external-output",
+  purpose: "Mirrors the host result slot the registered async handler returns.",
+  origin: `${casesPath}:15:14`,
+  boundary: `${casesPath}:15:5`,
+};
+
+test("an origin under a union contextual type resolves to the one arm that declares the key", async (t) => {
+  // arrange
+  const report = await analyzeWith(t, singleArmOriginCases, documentWith(asyncPayloadContract));
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "Emitted", "payload").status, "explicit-contract");
+  assert.deepStrictEqual(memberFor(report, "Emitted", "payload").reasons, [
+    `external-output: ${asyncPayloadContract.purpose} ` +
+      `(origin ${casesPath}:15:14 reaches boundary ${casesPath}:15:5)`,
+  ]);
+  // The arm was resolved, not the whole union: the sibling slot the literal
+  // never spells is still a finding.
+  assert.strictEqual(memberFor(report, "Emitted", "unsent").status, "unread");
+});
+
+test("an origin whose key two arms of the contextual union declare is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      ambiguousArmOriginCases,
+      documentWith({
+        ...asyncPayloadContract,
+        origin: `${casesPath}:19:14`,
+        boundary: `${casesPath}:19:5`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:9:3 origin ${casesPath}:19:14 ` +
+        "does not build Emitted.payload",
+    },
+  );
+});
+
+test("an origin building a slot no arm of the contextual union declares is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      foreignOwnerOriginCases,
+      documentWith({
+        ...asyncPayloadContract,
+        id: `${casesPath}:14:3`,
+        owner: "Spare",
+        origin: `${casesPath}:19:14`,
+        boundary: `${casesPath}:19:5`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:14:3 origin ${casesPath}:19:14 ` +
+        "does not build Spare.payload",
+    },
+  );
 });
