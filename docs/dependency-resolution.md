@@ -115,6 +115,8 @@ A dependency installs into the same scope as the plugin that asked for it. `/cla
 
 The configuration file names only the plugins you asked for by name. This extension does not write a dependency into `claude-plugins.json` or `claude-plugins.local.json`. Instead, its install record says that it arrived through another plugin. A reload keeps the dependency because its record says so, not because the configuration names it.
 
+The same rule protects the dependency's marketplace. A dependency can come from a marketplace you added at user scope while the plugin that needs it installs at project scope. The project configuration then never names that marketplace, and this extension does not add it there. A reload keeps that marketplace record while a dependency is recorded under it. Any other plugin under it that the configuration does not name is still removed, as under any other marketplace.
+
 ## Why a dependency can fail
 
 Each cause shows as a reason in braces on the failing dependency's own row. This table names every reason the cascade can show.

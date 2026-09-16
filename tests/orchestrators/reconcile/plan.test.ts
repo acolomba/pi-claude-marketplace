@@ -112,6 +112,19 @@ function provenanceState(): ExtensionState {
   });
 }
 
+// D-04-05: the cross-marketplace shape. `keep` is declared and holds the
+// requesting plugin; `adopted` was recorded through the CMP-3 fallback, is
+// declared nowhere, and holds a dependency record -- with or without a direct
+// install beside it that nothing declares. Both cases below plan over the same
+// declared config, so a removal guard that ignored provenance shows up as a
+// planned removal of `adopted` in either whole-plan assertion.
+function adoptedMarketplaceState(adoptedPlugins: Record<string, PluginRecord>): ExtensionState {
+  return stateWith({
+    keep: marketplaceRecord("keep", githubSource("acme/keep"), { steady: pluginRecord(true) }),
+    adopted: marketplaceRecord("adopted", githubSource("acme/adopted"), adoptedPlugins),
+  });
+}
+
 describe("planReconcile", () => {
   test("resolves a declared alias to the canonical recorded plugin target", () => {
     // arrange
@@ -812,6 +825,74 @@ describe("planReconcile", () => {
       marketplacesToRemove: [],
       pluginsToInstall: [],
       pluginsToUninstall: [{ scope: "project", plugin: "orphan", marketplace: "keep" }],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      sourceMismatches: [],
+    });
+  });
+
+  test("D-04-05: retains an undeclared marketplace while a record under it is a dependency", () => {
+    // arrange
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "steady@keep": {} });
+    const state = adoptedMarketplaceState({
+      dependency: pluginRecord(true, { provenance: "dependency" }),
+    });
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      sourceMismatches: [],
+    });
+  });
+
+  test("D-04-05: still sweeps a direct-install orphan under a marketplace retained for its dependency", () => {
+    // arrange
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "steady@keep": {} });
+    const state = adoptedMarketplaceState({
+      dependency: pluginRecord(true, { provenance: "dependency" }),
+      orphan: pluginRecord(true),
+    });
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [{ scope: "project", plugin: "orphan", marketplace: "adopted" }],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      sourceMismatches: [],
+    });
+  });
+
+  test("D-04-05: still removes an undeclared marketplace whose records are all direct installs", () => {
+    // arrange
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "steady@keep": {} });
+    const state = adoptedMarketplaceState({ orphan: pluginRecord(true) });
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [{ scope: "project", marketplace: "adopted", plugins: ["orphan"] }],
+      pluginsToInstall: [],
+      pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
       sourceMismatches: [],

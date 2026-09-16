@@ -244,6 +244,21 @@ function buildMarketplaceClaims(
   };
 }
 
+/**
+ * D-04-05: whether any record under a marketplace arrived as another plugin's
+ * dependency. The exemption that keeps such a record out of the uninstall
+ * bucket must reach the marketplace-removal path too: a dependency resolved
+ * through the CMP-3 project -> user fallback is recorded under a marketplace
+ * the target scope's config never declares (only the requesting plugin's own
+ * marketplace is adopted into the config, D-04-02), and removing that
+ * marketplace would tear the dependency down whole-cloth. So a recorded but
+ * undeclared marketplace is retained while it holds a dependency, and the
+ * uninstall bucket still sweeps the direct-install orphans under it.
+ */
+function holdsDependencyRecord(mpRecord: ExtensionState["marketplaces"][string]): boolean {
+  return Object.values(mpRecord.plugins).some((record) => record.provenance === "dependency");
+}
+
 function diffMarketplaces(
   merged: MergedConfig,
   state: ExtensionState,
@@ -321,7 +336,13 @@ function diffMarketplaces(
   for (const [mpName, mpRecord] of Object.entries(recorded)) {
     // A claimed canonical record remains steady state. Conflict candidates
     // also remain untouched: ambiguity is report-only and must fail closed.
-    if (!retainedRecorded.has(mpName) && !claims.conflictedRecorded.has(mpName)) {
+    // D-04-05: so does a marketplace holding a dependency record -- its
+    // direct-install orphans are `buildUninstallBucket`'s to sweep.
+    if (
+      !retainedRecorded.has(mpName) &&
+      !claims.conflictedRecorded.has(mpName) &&
+      !holdsDependencyRecord(mpRecord)
+    ) {
       // WILL-03 / D-65.1-03: carry the recorded plugin names so the PENDING
       // projection can synthesize per-plugin `will uninstall` rows. The apply
       // path cascades these internally; do NOT add them to `pluginsToUninstall`
@@ -479,7 +500,9 @@ function classifyDeclaredPlugin(
  * consider recorded plugins whose marketplace is still recorded (a
  * marketplace in `marketplacesToRemove` will be torn down whole-cloth by
  * the apply path; listing each plugin under it as a separate uninstall
- * would double-bill the work).
+ * would double-bill the work). A marketplace `diffMarketplaces` retained for
+ * the dependency it holds (D-04-05) is still recorded, so its other plugins
+ * are considered here like any retained marketplace's.
  */
 function buildUninstallBucket(
   state: ExtensionState,
@@ -494,7 +517,7 @@ function buildUninstallBucket(
       continue;
     }
 
-    if (!retainedMarketplaces.has(mpName)) {
+    if (!retainedMarketplaces.has(mpName) && !holdsDependencyRecord(mpRecord)) {
       continue;
     }
 

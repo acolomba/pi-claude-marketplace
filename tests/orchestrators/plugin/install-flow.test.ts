@@ -474,6 +474,23 @@ function conflictingMarketplaceRecord(
  * -- `undefined` preserves the legacy `0.0.1` shape, a string sets that
  * version, and `null` omits the field so the tier-1 read finds none.
  */
+/**
+ * The one dependency element every declaring fixture carries, on both the
+ * plugin's own manifest and its marketplace entry. It names `some-other-plugin`
+ * in the declaring marketplace unless the case addresses another one -- the
+ * cross-marketplace shape a dependency reaches through the CMP-3 fallback.
+ */
+function seededDependencyElement(opts: {
+  dependencyVersion?: string;
+  dependencyMarketplace?: string;
+}): Record<string, unknown> {
+  return {
+    name: "some-other-plugin",
+    ...(opts.dependencyMarketplace !== undefined && { marketplace: opts.dependencyMarketplace }),
+    version: opts.dependencyVersion ?? "*",
+  };
+}
+
 function buildSeededPluginManifest(
   pluginName: string,
   opts: {
@@ -482,6 +499,7 @@ function buildSeededPluginManifest(
     pluginJsonDefaultEnabled?: boolean;
     declareDependencies?: boolean;
     dependencyVersion?: string;
+    dependencyMarketplace?: string;
   },
 ): Record<string, unknown> {
   return {
@@ -496,7 +514,7 @@ function buildSeededPluginManifest(
     // about the CASCADE rather than about the read order -- the read order has
     // its own cases, where the two sides deliberately disagree.
     ...(opts.declareDependencies === true && {
-      dependencies: [{ name: "some-other-plugin", version: opts.dependencyVersion ?? "*" }],
+      dependencies: [seededDependencyElement(opts)],
     }),
     // D-64-06: declaring experimental kinds drives `resolveStrict` to the
     // `partially-available` arm without a structural defect.
@@ -516,6 +534,7 @@ function buildSeededMarketplaceEntry(
     pluginVersion?: string;
     declareDependencies?: boolean;
     dependencyVersion?: string;
+    dependencyMarketplace?: string;
     entryDefaultEnabled?: boolean;
   },
 ): Record<string, unknown> {
@@ -528,7 +547,7 @@ function buildSeededMarketplaceEntry(
     // exercises the successful-install surface. The named plugin must be seeded
     // as a sibling; an unresolvable declaration now fails the whole install.
     ...(opts.declareDependencies === true && {
-      dependencies: [{ name: "some-other-plugin", version: opts.dependencyVersion ?? "*" }],
+      dependencies: [seededDependencyElement(opts)],
     }),
     ...(opts.entryDefaultEnabled !== undefined && { defaultEnabled: opts.entryDefaultEnabled }),
   };
@@ -641,6 +660,13 @@ async function seedPathMarketplaceWithPlugin(opts: {
    * offline; a real range routes the cascade into constraint resolution.
    */
   dependencyVersion?: string;
+  /**
+   * D-04-05: the marketplace that declaration addresses. Absent, the element
+   * names no marketplace and resolves in the declaring one; set, it names a
+   * marketplace another `seedPathMarketplaceWithPlugin` call recorded, at
+   * whichever scope that call chose.
+   */
+  dependencyMarketplace?: string;
   /** Pre-seed a state.json with this plugin already installed (PI-5/PI-15). */
   preInstall?: boolean;
   /** Seed an additional plugin in state that already owns one of the generated names (PI-6). */
@@ -3576,6 +3602,103 @@ test("RESV-01 / D-04-04: an orchestrated install records its cascade dependency 
         Object.keys(converged.marketplaces["mp"]?.plugins ?? {}).sort(),
         ["hello", "some-other-plugin"],
         "the dependency survives the reload that follows the install",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-05 / CMP-3: a dependency adopted from a user-scope marketplace survives the project reload that follows the install", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0405-adopted-"));
+    try {
+      // arrange: `marketplace add` ran at user scope for `deps-mp`, which holds
+      // the dependency, and `mp` is a project-scope marketplace whose `hello`
+      // names `some-other-plugin@deps-mp`. The install targets project, so the
+      // cascade resolves the dependency through the CMP-3 fallback and records
+      // it under a `deps-mp` record the project config never declares -- only
+      // the requesting plugin's own marketplace is adopted into the config.
+      const projectLocations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "deps-mp-src"),
+        marketplaceName: "deps-mp",
+        pluginName: "some-other-plugin",
+        scope: "user",
+        skills: [{ sourceName: "tool" }],
+      });
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        dependencyMarketplace: "deps-mp",
+      });
+      const install = makeCtx();
+      const outcome = await installPlugin({
+        ctx: install.ctx,
+        pi: install.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      assert.equal(outcome.status, "installed");
+      const installed = await loadState(projectLocations.extensionRoot);
+      assert.equal(
+        installed.marketplaces["deps-mp"]?.plugins["some-other-plugin"]?.provenance,
+        "dependency",
+        "the cascade recorded the dependency under its own, adopted marketplace",
+      );
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const declared = await loadConfig(projectLocations.configJsonPath);
+      assert.equal(declared.status, "valid");
+      if (declared.status === "valid") {
+        assert.deepEqual(
+          Object.keys(declared.config.marketplaces ?? {}),
+          ["mp"],
+          "the dependency's marketplace is declared nowhere, which is what the planner must respect",
+        );
+      }
+
+      // act: the next `resources_discover`.
+      const { loadMergedScopeConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+      const { planReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
+      const { applyReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+      const { merged } = await loadMergedScopeConfig(projectLocations);
+      const planned = planReconcile(merged, installed, "project");
+      const reload = makeCtx();
+      await applyReconcile({
+        ctx: reload.ctx,
+        pi: reload.pi,
+        cwd,
+        scope: "project",
+        completionCache: createCompletionCache(),
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      });
+
+      // assert: neither teardown path names the adopted marketplace or the
+      // dependency under it (D-04-05), and the pass leaves every record exactly
+      // as the install wrote it (the pass stamps its own extension version on
+      // the document, which is why the comparison is over the records).
+      assert.deepEqual(
+        {
+          marketplacesToRemove: planned.marketplacesToRemove,
+          pluginsToUninstall: planned.pluginsToUninstall,
+        },
+        { marketplacesToRemove: [], pluginsToUninstall: [] },
+      );
+      assert.deepEqual(reload.notifications, [], "a converged pass says nothing");
+      assert.deepStrictEqual(
+        (await loadState(projectLocations.extensionRoot)).marketplaces,
+        installed.marketplaces,
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
