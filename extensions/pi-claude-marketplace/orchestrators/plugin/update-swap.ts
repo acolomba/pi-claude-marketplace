@@ -174,7 +174,7 @@ interface PrepHandles {
   mcp: PreparedMcpStaging;
 }
 
-export interface UpdatePhase3Failure extends Omit<Phase3Failure, "cause"> {
+export interface UpdatePhase3Failure extends Phase3Failure {
   readonly cause: Error;
 }
 
