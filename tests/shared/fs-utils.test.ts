@@ -359,10 +359,7 @@ describe("rollbackReplacementCommon", () => {
     await fs.writeFile(secondBackup, "old-b");
     const input = {
       ops: createRemovalOps(),
-      renamed: [
-        { from: path.join(stagingRoot, "a.txt"), to: firstReplacement },
-        { from: path.join(stagingRoot, "b.txt"), to: secondReplacement },
-      ],
+      renamed: [{ to: firstReplacement }, { to: secondReplacement }],
       backups: [
         { name: "same", from: firstRestored, to: firstBackup },
         { name: "same", from: secondRestored, to: secondBackup },
@@ -418,10 +415,7 @@ describe("rollbackReplacementCommon", () => {
     ] satisfies RemovalOpsOperation[];
     const input = {
       ops: removal.removalOps,
-      renamed: [
-        { from: path.join(stagingRoot, "a.txt"), to: firstReplacement },
-        { from: path.join(stagingRoot, "b.txt"), to: secondReplacement },
-      ],
+      renamed: [{ to: firstReplacement }, { to: secondReplacement }],
       backups: [
         { name: "same", from: firstRestored, to: firstBackup },
         { name: "same", from: secondRestored, to: secondBackup },
@@ -455,7 +449,7 @@ describe("rollbackReplacementCommon", () => {
     await fs.writeFile(path.join(replacement, "content.txt"), "content");
     const input = {
       ops: createRemovalOps(),
-      renamed: [{ from: path.join(stagingRoot, "replacement"), to: replacement }],
+      renamed: [{ to: replacement }],
       backups: [],
       stagingRoot,
       backupRoot,
@@ -508,7 +502,7 @@ describe("rollbackReplacementCommon", () => {
     ];
     const input = {
       ops: removal.removalOps,
-      renamed: [{ from: path.join(stagingRoot, "replacement.txt"), to: replacement }],
+      renamed: [{ to: replacement }],
       backups: [{ name: "same", from: restored, to: backup }],
       stagingRoot,
       backupRoot,

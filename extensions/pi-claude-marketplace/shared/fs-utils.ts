@@ -222,7 +222,7 @@ export interface RollbackReplacementInput {
    */
   readonly ops: RemovalOps;
   /** New files/dirs that were renamed into place. Removed in reverse. */
-  readonly renamed: readonly { readonly from: string; readonly to: string }[];
+  readonly renamed: readonly { readonly to: string }[];
   /** Pre-replacement files/dirs moved aside. Restored in reverse. */
   readonly backups: readonly {
     readonly name: string;

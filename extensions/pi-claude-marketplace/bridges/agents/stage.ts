@@ -68,7 +68,7 @@ type AgentsReplacementInternals = Readonly<{
   backupRoot: string;
   oldIndexText: string | undefined;
   backups: readonly { name: string; from: string; to: string }[];
-  renamed: readonly { from: string; to: string }[];
+  renamed: readonly { to: string }[];
 }>;
 
 const agentsReplacementInternals = new WeakMap<
@@ -466,7 +466,7 @@ export async function replacePreparedAgents(
       ? [...prepared._previousEntries, ...prepared._foreignPreservedEntries]
       : [...prepared._previousEntries];
   const backups: { name: string; from: string; to: string }[] = [];
-  const renamed: { from: string; to: string }[] = [];
+  const renamed: { to: string }[] = [];
 
   try {
     for (const entry of backupEntries) {
@@ -500,7 +500,7 @@ export async function replacePreparedAgents(
       }
 
       await rename(pair.from, pair.to);
-      renamed.push(pair);
+      renamed.push({ to: pair.to });
     }
 
     await saveAgentsIndex(prepared.locations, {
@@ -585,7 +585,7 @@ function requireAgentsReplacementInternals(
 async function rollbackAgentsReplacementInternal(
   ops: RemovalOps,
   prepared: Extract<PreparedAgentsStaging, { kind: "staged" }>,
-  renamed: readonly { from: string; to: string }[],
+  renamed: readonly { to: string }[],
   backups: readonly { name: string; from: string; to: string }[],
   backupRoot: string,
   oldIndexText: string | undefined,
