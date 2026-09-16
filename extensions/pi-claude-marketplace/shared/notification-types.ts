@@ -118,6 +118,12 @@ export const REASONS = [
   // fact about one plugin, and the list of who needs it is a fact about
   // several.
   "dependents remain",
+  // D-05-11 / PRUNE-04: the plugin was recorded as another plugin's
+  // dependency, nothing installed declares it any more, and `uninstall
+  // --prune` removed it. It rides an ordinary `uninstalled` row because the
+  // operation IS an uninstall; the brace says why this plugin, which the user
+  // did not name, went. Under `--keep-data` it precedes `data kept` (D-05-09).
+  "dependency pruned",
 ] as const;
 
 /** Literal union derived from the closed reason vocabulary. */

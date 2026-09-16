@@ -163,6 +163,43 @@ test("D-05-06: every record except the excluded one is indexed by the keys it de
   });
 });
 
+test("D-05-10: every indexed record is a candidate carrying its provenance and the snapshot's own objects, the excluded target omitted", async () => {
+  // arrange
+  const state = stateOf(MP, OTHER);
+  const loadManifest = manifestLoader({
+    [MP.manifestPath]: manifestOf("mp", { app: {}, helper: {}, paused: {} }),
+    [OTHER.manifestPath]: manifestOf("other", { kit: {} }),
+  });
+
+  // act
+  const result = await buildScopeDeclarationIndex({
+    state,
+    locations: FAKE_LOCATIONS,
+    exclude: "app@mp",
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  // assert
+  assert.equal(result.ok, true);
+  const candidates = result.ok ? result.candidates : [];
+  assert.deepStrictEqual(
+    candidates.map(({ key, provenance, plugin, marketplace }) => ({
+      key,
+      provenance,
+      plugin,
+      marketplace: marketplace.name,
+    })),
+    [
+      { key: "helper@mp", provenance: "dependency", plugin: "helper", marketplace: "mp" },
+      { key: "paused@mp", provenance: "explicit", plugin: "paused", marketplace: "mp" },
+      { key: "kit@other", provenance: "explicit", plugin: "kit", marketplace: "other" },
+    ],
+  );
+  assert.strictEqual(candidates[0]?.marketplace, state.marketplaces["mp"]);
+  assert.strictEqual(candidates[0]?.record, state.marketplaces["mp"]?.plugins["helper"]);
+});
+
 test("D-05-04: a disabled record and a dependency-provenance record both hold their declarations", async () => {
   // arrange
   const loadManifest = manifestLoader({

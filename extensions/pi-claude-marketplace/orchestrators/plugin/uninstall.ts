@@ -7,23 +7,33 @@
 //     PU-5 silent converge: if record absent, set alreadyGone=true and return (NO save)
 //     D-05-14 dependents guard: throw UninstallRefusedError if any OTHER record
 //       in this scope declares the target, or if some record's declarations
-//       cannot be read (D-05-07) -- BEFORE the cascade, so nothing leaves disk
+//       cannot be read (D-05-07) -- BEFORE the cascade, so nothing leaves disk;
+//       the guard hands back the declaration index and the walked records
 //     outcome = await cascadeUnstagePlugin(plugin, marketplace, locations, installed)
 //     if (!outcome.ok) throw outcome.cause  // PU-7 propagation; state record retained
 //     delete state.marketplaces[mp].plugins[plugin]
-//     await tx.save()  // WR-04: explicit save on mutating arms ONLY
+//     D-05-01..03 / D-05-10 (`prune`): sweep the orphaned dependency records
+//       out of the SAME snapshot -- pruneOrphans over the guard's index, then
+//       the per-member removal body for each key, in that order; a member
+//       failure is a warning row, never a throw, and the members never save
+//     await tx.save()  // WR-04: explicit save on mutating arms ONLY -- ONCE,
+//                      // after the primary AND every pruned member
 //   })
 //   if (alreadyGone) return  -- PU-5 silent success
 //   POST-state-commit: rm -rf pluginDataDir unless keepData; leaks SWALLOWED per
 //   D-19-01 -- the underlying rm() still runs, only the user-visible
-//   warning surface is gone.
+//   warning surface is gone. The same cleanup then runs once per removed
+//   member with the same `keepData` (D-05-09).
 //   PU-8 reload hint: computed by notify() from PluginUninstalledMessage
 //  (uninstalled is in the state-changing variant set).
 //
-// Each outcome arm emits one notify() call with a single
-// MarketplaceNotificationMessage. Post-state cleanup failures (cache-refresh,
-// data-dir rm) are swallowed: the underlying calls still run; there is no
-// notification shape for "cleanup leak after a successful state mutation".
+// Each outcome arm emits one notify() call. The success arm's blocks are the
+// named plugin's marketplace first and one block per other marketplace that
+// lost a pruned member, in first-appearance order (PRUNE-04); with nothing
+// pruned that is the one block the plain uninstall renders (D-05-12). Post-state
+// cleanup failures (cache-refresh, data-dir rm) are swallowed: the underlying
+// calls still run; there is no notification shape for "cleanup leak after a
+// successful state mutation".
 //
 // Cycle break (D-11): orchestrators/plugin/ may import named exports from
 // orchestrators/marketplace/shared.ts ONLY (NOT from add.ts/remove.ts/etc).
@@ -49,7 +59,7 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 
-import { findDependents } from "../../domain/dependency-orphans.ts";
+import { findDependents, pruneOrphans } from "../../domain/dependency-orphans.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -73,10 +83,14 @@ import {
   missIsNotInstalled,
   resolveCrossScopePluginTarget,
 } from "./shared.ts";
-import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
+import {
+  composePrunedRow,
+  composeRemovalBlocks,
+  UNINSTALL_CONTEXT,
+} from "./uninstall.messaging.ts";
 
+import type { IndexedRecord, ScopeDeclarationIndexResult } from "./dependency-index.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
-import type { DeclarationIndex } from "../../domain/dependency-orphans.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
@@ -213,19 +227,23 @@ export class UninstallRefusedError extends Error {
   }
 }
 
+/** The guard's successful walk: the declaration index and the records it indexed. */
+type DeclarationSnapshot = Extract<ScopeDeclarationIndexResult, { readonly ok: true }>;
+
 /**
  * D-05-14 / PRUNE-05: refuse to remove `key` while any other record in this
  * scope's state declares it, and refuse (D-05-07) while any other record's
  * declarations cannot be established. Runs INSIDE the locked transaction over
  * `tx.state`, so the declarer set and the removal decision share one snapshot
- * under one cross-process lock (T-05-03). Returns the index on the way
- * through, because the orphan sweep that follows the removal consumes it.
+ * under one cross-process lock (T-05-03). Returns the walk on the way
+ * through, because the orphan sweep that follows the removal consumes both
+ * its index and its candidate records.
  */
 async function assertNoDependents(args: {
   readonly state: ExtensionState;
   readonly locations: ScopedLocations;
   readonly key: string;
-}): Promise<DeclarationIndex> {
+}): Promise<DeclarationSnapshot> {
   const result = await buildScopeDeclarationIndex({
     state: args.state,
     locations: args.locations,
@@ -240,7 +258,7 @@ async function assertNoDependents(args: {
     throw new UninstallRefusedError("dependents remain", `required by ${dependents.join(", ")}`);
   }
 
-  return result.index;
+  return result;
 }
 
 const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
@@ -444,15 +462,182 @@ function foldPartialCascadeFailure(
   installed: Parameters<typeof applyPartialCascadeFold>[0],
   localOutcome: UnstageOutcome,
 ): Error {
-  // `localOutcome.cause` is non-undefined when ok=false (D-03 contract); the
-  // fallback keeps the type honest rather than asserting.
-  const cause = localOutcome.cause ?? new Error(`Cascade unstage failed for plugin "${plugin}".`);
+  const cause = cascadeFailureCause(plugin, localOutcome);
   if (cause instanceof AgentsUnstageFailureError) {
     throw cause;
   }
 
   applyPartialCascadeFold(installed, localOutcome.dropped);
   return cause;
+}
+
+/**
+ * The cause of a cascade that did not fully unstage. `localOutcome.cause` is
+ * non-undefined when ok=false (D-03 contract); the fallback keeps the type
+ * honest rather than asserting.
+ */
+function cascadeFailureCause(plugin: string, localOutcome: UnstageOutcome): Error {
+  return localOutcome.cause ?? new Error(`Cascade unstage failed for plugin "${plugin}".`);
+}
+
+/**
+ * D-05-10 / D-05-13: one dependency record the sweep visited, and what became
+ * of it. `removed` records leave the snapshot and get the same post-commit
+ * cleanup as the named plugin; a failed member keeps its (possibly shrunken)
+ * record and renders a warning row. `hooksDropped` is the routing-cache fact:
+ * a hooks config left disk, so the cache must forget it after the save.
+ */
+interface PrunedMember {
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly row: PluginUninstalledMessage | PluginFailedMessage;
+  readonly removed: boolean;
+  readonly hooksDropped: boolean;
+}
+
+/**
+ * D-05-13: the warning row for a pruned member whose cascade did not fully
+ * unstage. It is the failed row the primary renders with `warning` in place of
+ * `error`: the command WAS carried out -- the named plugin and the other
+ * members are gone -- and this one plugin fell short. No reload: the member's
+ * record is still there.
+ */
+function buildMemberFailedRow(member: IndexedRecord, cause: Error): PluginFailedMessage {
+  return {
+    status: "failed",
+    name: member.plugin,
+    version: member.record.version,
+    reasons: [narrowCascadeFailure(cause)],
+    cause,
+    severity: "warning",
+    needsReload: false,
+  };
+}
+
+/**
+ * D-05-10: the guard-free removal of ONE orphaned dependency record, run inside
+ * the primary's locked transaction between its commit and the single save.
+ *
+ * The body is TOTAL. A throw here would abort the save after the named
+ * plugin's artifacts are already off disk and leave its record a ghost (NFR-3),
+ * so every failure becomes the member's warning row instead (D-05-13):
+ * - AG-5 (`AgentsUnstageFailureError`): the record is left untouched, as the
+ *   primary's TR-03 arm leaves it, for manual recovery or retry.
+ * - Any other partial failure: the dropped artifacts are folded out of the
+ *   record in place, so the saved row never claims artifacts gone from disk.
+ * It never saves the transaction -- the one save runs after the sweep -- and
+ * never sweeps the config layers: a dependency-provenance record is declared
+ * in neither config file (D-04-02), and a hand-authored declaration for one is
+ * the user's desired state, which the next reload honours by reinstalling.
+ */
+async function removeDependencyMember(args: {
+  readonly member: IndexedRecord;
+  readonly locations: ScopedLocations;
+  readonly scope: Scope;
+  readonly keepData: boolean;
+  readonly cascade: typeof cascadeUnstagePlugin;
+  readonly transaction: UninstallTransaction;
+}): Promise<PrunedMember> {
+  const { member, scope } = args;
+  const marketplace = member.marketplace.name;
+  const outcome = await args.cascade(member.plugin, marketplace, args.locations, member.record);
+  if (outcome.ok) {
+    args.transaction.commitPluginRemoval(member.marketplace, {
+      scope,
+      marketplace,
+      plugin: member.plugin,
+    });
+    return {
+      marketplace,
+      plugin: member.plugin,
+      row: composePrunedRow({
+        plugin: member.plugin,
+        version: member.record.version,
+        keepData: args.keepData,
+      }),
+      removed: true,
+      hooksDropped: true,
+    };
+  }
+
+  const cause = cascadeFailureCause(member.plugin, outcome);
+  if (!(cause instanceof AgentsUnstageFailureError)) {
+    applyPartialCascadeFold(member.record, outcome.dropped);
+  }
+
+  return {
+    marketplace,
+    plugin: member.plugin,
+    row: buildMemberFailedRow(member, cause),
+    removed: false,
+    hooksDropped: outcome.dropped.hooks.length > 0,
+  };
+}
+
+/**
+ * D-05-01 / D-05-02 / D-05-03: the whole-scope orphan sweep. Decides the
+ * removal order with `pruneOrphans` over the guard's index and candidates --
+ * the same locked snapshot -- seeded with the named plugin's key, then runs
+ * the member body once per key in that order (dependents before their
+ * dependencies). Reached only from the arm where the named plugin was
+ * actually removed.
+ */
+async function sweepOrphans(args: {
+  readonly snapshot: DeclarationSnapshot;
+  readonly primaryKey: string;
+  readonly locations: ScopedLocations;
+  readonly scope: Scope;
+  readonly keepData: boolean;
+  readonly cascade: typeof cascadeUnstagePlugin;
+  readonly transaction: UninstallTransaction;
+}): Promise<PrunedMember[]> {
+  const { snapshot, primaryKey, ...removal } = args;
+  const order = pruneOrphans(snapshot.candidates, snapshot.index, new Set([primaryKey]));
+  // Every key `pruneOrphans` returns is a candidate's key, so the filter
+  // yields exactly one record per key and no lookup can miss.
+  const members = order.flatMap((key) =>
+    snapshot.candidates.filter((candidate) => candidate.key === key),
+  );
+  const pruned: PrunedMember[] = [];
+  for (const member of members) {
+    pruned.push(await removeDependencyMember({ member, ...removal }));
+  }
+
+  return pruned;
+}
+
+/**
+ * D-05-09: the post-commit cleanup of every pruned member, after the primary's
+ * own. A member whose hooks config left disk is dropped from the routing
+ * cache; a removed member gets the same cache, data-directory and clone-cache
+ * cleanup as the named plugin, with the SAME data disposition. The clone GC
+ * is idempotent, so running it per member is correct.
+ */
+async function finalizePrunedMembers(args: {
+  readonly members: readonly PrunedMember[];
+  readonly hooksRouting: UninstallHooksRouting;
+  readonly completionCache: CompletionCache;
+  readonly locations: ScopedLocations;
+  readonly scope: Scope;
+  readonly keepData: boolean;
+  readonly transaction: UninstallTransaction;
+}): Promise<void> {
+  for (const member of args.members) {
+    if (member.hooksDropped) {
+      dropCachedHooks(args.hooksRouting, args.scope, member.marketplace, member.plugin);
+    }
+
+    if (member.removed) {
+      await args.transaction.runPostCommitCleanup({
+        completionCache: args.completionCache,
+        locations: args.locations,
+        scope: args.scope,
+        marketplace: member.marketplace,
+        plugin: member.plugin,
+        keepData: args.keepData,
+      });
+    }
+  }
 }
 
 /**
@@ -778,6 +963,11 @@ async function uninstallPluginWithTransaction(
   // non-AG-5 mutates resources.* in place and surfaces via this sentinel.
   let cascadeFailure: Error | undefined;
   const routeEffect = { removeAfterSave: false };
+  // D-05-10: the sweep's members, carried out of the closure for the
+  // post-commit cleanup and the report. Object form so the post-guard reads
+  // see the closure's writes rather than the initializer.
+  const prune = { members: [] as PrunedMember[] };
+  const keepData = opts.keepData ?? false;
 
   try {
     // WR-04: explicit-save transaction so the abort arms
@@ -825,8 +1015,10 @@ async function uninstallPluginWithTransaction(
       // D-05-14 / D-05-07: the dependents guard runs AFTER the two converge
       // arms (a target that is not installed is `{not installed}`, never a
       // refusal -- D-05-03) and BEFORE the cascade, so a refusal throws out of
-      // the guard with nothing removed and NO save.
-      await assertNoDependents({ state, locations, key: `${plugin}@${marketplace}` });
+      // the guard with nothing removed and NO save. The walk it hands back is
+      // the sweep's input (same snapshot, same lock).
+      const primaryKey = `${plugin}@${marketplace}`;
+      const snapshot = await assertNoDependents({ state, locations, key: primaryKey });
 
       // PU-1 ordering enforced INSIDE cascadeUnstagePlugin (D-03:
       // skills -> commands -> agents -> mcp).
@@ -864,10 +1056,28 @@ async function uninstallPluginWithTransaction(
         await transaction.sweepConfigLayers(locations, plugin, marketplace);
       }
 
-      // WR-04: explicit save on the mutating success arm. Ordering
-      // preserved from the previous withStateGuard shape: state persists
+      // D-05-03 / D-05-10: the sweep runs on THIS arm only -- the named plugin
+      // is off disk and out of the snapshot -- and before the one save, so the
+      // members' removals and the primary's land in a single write.
+      if (opts.prune === true) {
+        prune.members.push(
+          ...(await sweepOrphans({
+            snapshot,
+            primaryKey,
+            locations,
+            scope,
+            keepData,
+            cascade,
+            transaction,
+          })),
+        );
+      }
+
+      // WR-04: explicit save on the mutating success arm, ONCE, after the
+      // primary's commit, the config write-back and the sweep. State persists
       // AFTER the config write-back (a write-back throw aborts the save,
-      // keeping the record intact for retry exactly as before).
+      // keeping the record intact for retry); the member body never throws,
+      // so a member failure cannot abort it.
       await tx.save();
       routeEffect.removeAfterSave = true;
     });
@@ -933,7 +1143,16 @@ async function uninstallPluginWithTransaction(
     marketplace,
     plugin,
     // DATA-01 / D-02-04: omission is the deletion default.
-    keepData: opts.keepData ?? false,
+    keepData,
+  });
+  await finalizePrunedMembers({
+    members: prune.members,
+    hooksRouting,
+    completionCache,
+    locations,
+    scope,
+    keepData,
+    transaction,
   });
 
   // PU-8 reload hint: computed by notify from the
@@ -968,18 +1187,19 @@ async function uninstallPluginWithTransaction(
     };
   }
 
+  // PRUNE-04: the cardinality stays `single` with members present -- the user
+  // named ONE plugin, and the pruned rows are that uninstall's consequence
+  // (the install cascade's precedent), so no tally line joins the report.
   const uninstalledRow = buildUninstalledRow(plugin, removedVersion, opts.keepData);
   notifyWithContext(
     ctx,
     pi,
     UNINSTALL_CONTEXT,
-    [
-      {
-        name: marketplace,
-        scope,
-        plugins: [uninstalledRow],
-      },
-    ],
+    composeRemovalBlocks({
+      primary: { marketplace, row: uninstalledRow },
+      members: prune.members,
+      scope,
+    }),
     undefined,
     "single",
   );

@@ -5,14 +5,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 55-entry
+ * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 56-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 55-entry set.
+ * 56-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
@@ -38,7 +38,11 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * installed` cannot report on its own (53 to 54). D-05-14 added `dependents
  * remain`, uninstall's refusal marker for a plugin another installed plugin in
  * the scope still declares -- an error, not a benign skip, so it joins the
- * command-private reasons and not the idempotent group (54 to 55).
+ * command-private reasons and not the idempotent group (54 to 55). D-05-11
+ * added `dependency pruned`, the marker `uninstall --prune` stamps on each
+ * orphaned dependency record it swept out after the named plugin -- a removal
+ * the user did not name, so it is a state change and joins the command-private
+ * reasons, not the idempotent group (55 to 56).
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -297,6 +301,11 @@ type CommandPrivateReason =
   // subjects -- and it is NOT idempotent: the operation was refused, not
   // already done.
   | "dependents remain"
+  // D-05-11 / PRUNE-04: uninstall's prune marker, owned by
+  // `orchestrators/plugin/uninstall.messaging.ts`. The row's plugin was
+  // recorded as another plugin's dependency and `--prune` removed it once
+  // nothing installed declared it. NOT idempotent: a record left the state.
+  | "dependency pruned"
   | "stale clone"
   | "duplicate name"
   | "marketplace not added"

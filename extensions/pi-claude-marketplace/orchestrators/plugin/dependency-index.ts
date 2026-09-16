@@ -46,12 +46,25 @@ import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { readDependencyDeclaration } from "./dependency-declaration-read.ts";
 
 import type { DependencyDeclarationReader } from "./dependency-declaration-read.ts";
-import type { DeclarationIndex } from "../../domain/dependency-orphans.ts";
+import type { DeclarationIndex, OrphanCandidate } from "../../domain/dependency-orphans.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 
 type MarketplaceStateRecord = ExtensionState["marketplaces"][string];
+
+/**
+ * One walked record as the orphan sweep consumes it (D-05-10): the
+ * `OrphanCandidate` view -- key and provenance -- plus the snapshot objects a
+ * removal needs, so the orchestrator never walks the state a second time and
+ * never looks a key back up. `marketplace` and `record` are the SAME objects
+ * the locked snapshot holds; a removal mutates them in place.
+ */
+export interface IndexedRecord extends OrphanCandidate {
+  readonly marketplace: ExtensionState["marketplaces"][string];
+  readonly plugin: string;
+  readonly record: ExtensionState["marketplaces"][string]["plugins"][string];
+}
 
 /** Inputs of one scope-wide index build. */
 export interface ScopeDeclarationIndexOptions {
@@ -67,14 +80,20 @@ export interface ScopeDeclarationIndexOptions {
 }
 
 /**
- * The index, or the first record whose declarations could not be established
- * (D-05-07). `reason` is the DECLARER's read-failure token -- `not in manifest`
- * for an entry its marketplace does not list, `invalid manifest` for an
- * unusable declaration, or the probe classifier's token for a manifest that
- * failed to load -- and `cause.message` names the declarer.
+ * The index and the walked records, or the first record whose declarations
+ * could not be established (D-05-07). `reason` is the DECLARER's read-failure
+ * token -- `not in manifest` for an entry its marketplace does not list,
+ * `invalid manifest` for an unusable declaration, or the probe classifier's
+ * token for a manifest that failed to load -- and `cause.message` names the
+ * declarer. `candidates` holds every indexed record (the excluded target
+ * omitted) in walk order, enabled or disabled, whatever its provenance.
  */
 export type ScopeDeclarationIndexResult =
-  | { readonly ok: true; readonly index: DeclarationIndex }
+  | {
+      readonly ok: true;
+      readonly index: DeclarationIndex;
+      readonly candidates: readonly IndexedRecord[];
+    }
   | {
       readonly ok: false;
       readonly declarer: string;
@@ -147,8 +166,9 @@ export async function buildScopeDeclarationIndex(
   options: ScopeDeclarationIndexOptions,
 ): Promise<ScopeDeclarationIndexResult> {
   const index = new Map<string, ReadonlySet<string>>();
+  const candidates: IndexedRecord[] = [];
   for (const marketplace of Object.values(options.state.marketplaces)) {
-    for (const name of Object.keys(marketplace.plugins)) {
+    for (const [name, record] of Object.entries(marketplace.plugins)) {
       const key = `${name}@${marketplace.name}`;
       if (key === options.exclude) {
         continue;
@@ -160,8 +180,9 @@ export async function buildScopeDeclarationIndex(
       }
 
       index.set(key, read.declared);
+      candidates.push({ key, provenance: record.provenance, marketplace, plugin: name, record });
     }
   }
 
-  return { ok: true, index };
+  return { ok: true, index, candidates };
 }

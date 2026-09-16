@@ -216,5 +216,132 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // D-05-01 / D-05-02 / D-05-11 / PRUNE-04: `--prune` swept two orphaned
+    // dependency records out after the named plugin -- one under the same
+    // marketplace, one under another. The named plugin's block comes first,
+    // then one block per other marketplace that lost a member.
+    "success-prune": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "helper",
+                version: "1.0.0",
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "uninstalled",
+                name: "shared-lib",
+                version: "2.0.0",
+                reasons: ["dependency pruned"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+          {
+            name: "community",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "tooling",
+                version: "3.0.0",
+                reasons: ["dependency pruned"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-05-09: the data disposition covers every plugin the command removed,
+    // and each pruned row says why it went before what was kept.
+    "success-prune-keep-data": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["data kept"],
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "uninstalled",
+                name: "shared-lib",
+                version: "2.0.0",
+                reasons: ["dependency pruned", "data kept"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-05-13: a pruned member whose removal failed renders its own warning
+    // row beside the rows that succeeded; the named plugin's removal and the
+    // other members' stand, so the block computes `warning`.
+    "prune-partial-failure": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "helper",
+                version: "1.0.0",
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "uninstalled",
+                name: "shared-lib",
+                version: "2.0.0",
+                reasons: ["dependency pruned"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+          {
+            name: "community",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "warning",
+                needsReload: false,
+                name: "tooling",
+                version: "3.0.0",
+                reasons: ["source mismatch"],
+                cause: new Error("Agents unstage refused: foreign content"),
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };

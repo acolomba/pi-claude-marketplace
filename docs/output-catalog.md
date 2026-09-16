@@ -1004,7 +1004,7 @@ ______________________________________________________________________
 
 Single-plugin command in v2 still renders the always-marketplace-header form; the marketplace appears as a bare header and the plugin row indents underneath.
 
-The command takes `[--scope user|project] [--keep-data] [--local]`. `--keep-data` preserves the plugin's persistent data directory (DATA-01 / D-02-03); the plugin's artifacts and its installation record are removed either way. The flag adds the `data kept` reason to the row and changes nothing else -- there is no retained-data report and no retained-path trailer (D-02-01). Omitting `--keep-data` deletes that data directory with no confirmation prompt (DATA-02 / D-02-04), and the load-time reconcile that uninstalls a plugin dropped from `claude-plugins.json` takes the same deletion default, because it has no command line to carry the flag (DATA-03). `--delete-data`, `-y` and `--yes` are rejected as unknown flags before any state changes (D-02-05): there is no prompt to answer, and the default needs no second spelling. `--local` keeps its shared write-target meaning, selecting `claude-plugins.local.json` for the config write. An uninstall is refused while another installed plugin in the same scope still declares the target as a dependency (PRUNE-05 / D-05-14): nothing is removed and the row names the dependents.
+The command takes `[--scope user|project] [--keep-data] [--local] [--prune]`. `--keep-data` preserves the plugin's persistent data directory (DATA-01 / D-02-03); the plugin's artifacts and its installation record are removed either way. The flag adds the `data kept` reason to the row and changes nothing else -- there is no retained-data report and no retained-path trailer (D-02-01). Omitting `--keep-data` deletes that data directory with no confirmation prompt (DATA-02 / D-02-04), and the load-time reconcile that uninstalls a plugin dropped from `claude-plugins.json` takes the same deletion default, because it has no command line to carry the flag (DATA-03). `--delete-data`, `-y` and `--yes` are rejected as unknown flags before any state changes (D-02-05): there is no prompt to answer, and the default needs no second spelling. `--local` keeps its shared write-target meaning, selecting `claude-plugins.local.json` for the config write. An uninstall is refused while another installed plugin in the same scope still declares the target as a dependency (PRUNE-05 / D-05-14): nothing is removed and the row names the dependents. `--prune` also removes, after the named plugin, every dependency-installed plugin in the scope that no remaining installed plugin declares (PRUNE-01 / D-05-01): never a plugin installed by name, never one something still needs, and never anything unless the named plugin was actually removed.
 
 ### Success
 
@@ -1125,6 +1125,57 @@ A plugin operation has failed.
 ● official [user]
   ⊘ helper v1.0.0 (failed) {not in manifest}
     cause: cannot read the dependencies of other@official: not declared by its marketplace
+```
+
+### Success with `--prune` (PRUNE-01..04 / D-05-01 / D-05-02 / D-05-11)
+
+Triggered when `uninstall <plugin>@<marketplace> --prune` removes the named plugin and the scope holds dependency-installed records that nothing remaining declares. The sweep is WHOLE-SCOPE and runs to a fixpoint (D-05-01 / D-05-02): after the named plugin goes, every record whose provenance is `dependency` and which no remaining installed record -- a disabled one included (PRUNE-03 / D-05-04) -- declares is removed, then the test repeats, so a dependency orphaned by removing another dependency goes too, and so does an orphan an earlier plain uninstall or a reload left behind. A plugin the user installed by name is never pruned, whatever declares it (PRUNE-02): the candidate set is filtered on the record's provenance before any declaration is read. Every removal happens inside the ONE locked state transaction that removed the named plugin, with one save. Each pruned plugin renders an ordinary `uninstalled` row under its own marketplace header carrying the `dependency pruned` reason (D-05-11): same glyph, `info` severity and reload hint as the named plugin's row, and the brace says why a plugin the user did not name went. The named plugin's block comes first with its row first; each other marketplace that lost a member gets its own block in the order the sweep reached it, and rows within a block are in removal order (dependents before their dependencies). Cardinality stays `single` -- the user named ONE plugin and the pruned rows are that uninstall's consequence -- so no tally line appears. When `--prune` was passed and nothing qualified, the report is byte-identical to the plain `success` state above (D-05-12): no second token, no marker.
+
+<!-- catalog-state: success-prune -->
+
+```text
+● official [user]
+  ○ helper v1.0.0 (uninstalled)
+  ○ shared-lib v2.0.0 (uninstalled) {dependency pruned}
+
+● community [user]
+  ○ tooling v3.0.0 (uninstalled) {dependency pruned}
+
+/reload to pick up changes
+```
+
+### Success with `--prune --keep-data` (D-05-09)
+
+`--keep-data` is a disposition for the whole command: every plugin the command removes keeps its persistent data directory, the named plugin and each pruned member alike. The named plugin's row carries `{data kept}` exactly as in `success-keep-data`; each pruned row carries `{dependency pruned, data kept}` in that order -- why the plugin went, then what was kept. Everything else is the `success-prune` state above.
+
+<!-- catalog-state: success-prune-keep-data -->
+
+```text
+● official [user]
+  ○ helper v1.0.0 (uninstalled) {data kept}
+  ○ shared-lib v2.0.0 (uninstalled) {dependency pruned, data kept}
+
+/reload to pick up changes
+```
+
+### Partial failure -- a pruned member could not be removed (D-05-13)
+
+Triggered when one of the records the sweep selected fails to unstage. Each removal is its own committed step: the named plugin's removal and every other member's removal STAND, nothing is rolled back, and the state is saved exactly once with the failed member's record still present (NFR-3) -- shrunk to the artifacts still on disk when the cascade dropped some before failing, or intact when foreign content refused the unstage. The failed member renders its own `failed` row with the cascade's reason and a `cause:` trailer, at `warning` severity: the command WAS carried out and this one plugin fell short, so the block computes `warning` and the summary line reads `A plugin operation needs attention.` (host label `Warning:`). The successful rows keep their `info` severity and the reload hint still trails the report, because artifacts did leave disk. The remedy for the failed member is to retry `uninstall <member>` once the cause is cleared.
+
+<!-- catalog-state: prune-partial-failure -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ○ helper v1.0.0 (uninstalled)
+  ○ shared-lib v2.0.0 (uninstalled) {dependency pruned}
+
+● community [user]
+  ⊘ tooling v3.0.0 (failed) {source mismatch}
+    cause: Agents unstage refused: foreign content
+
+/reload to pick up changes
 ```
 
 ______________________________________________________________________

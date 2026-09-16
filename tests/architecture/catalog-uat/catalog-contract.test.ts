@@ -55,8 +55,13 @@ const EXPECTED_SECTION_COUNT = 20;
 // D-05-16: +1 state for the load-time refusal -- the reconcile pass reports
 // the same `{dependents remain}` row, cause line included, on every pass
 // until the config is fixed (208 -> 209).
-const EXPECTED_STATE_COUNT = 209;
-const EXPECTED_UTF8_BYTES = 27_873;
+// PRUNE-01..04 / D-05-01 / D-05-09 / D-05-13: +3 states for `uninstall
+// --prune` -- the two-block sweep report with its `{dependency pruned}` rows,
+// the same under `--keep-data` with `{dependency pruned, data kept}`, and the
+// partial failure where one pruned member's warning row sits beside the
+// removals that stood (209 -> 212).
+const EXPECTED_STATE_COUNT = 212;
+const EXPECTED_UTF8_BYTES = 28_548;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -345,7 +350,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 209 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 212 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);
