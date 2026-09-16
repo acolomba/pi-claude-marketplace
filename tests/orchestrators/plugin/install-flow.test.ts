@@ -41,6 +41,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
+  clonePluginRecord,
   loadState,
   saveState,
   STATE_VALIDATOR,
@@ -3582,6 +3583,73 @@ test("RESV-01 / WR-09: an orchestrated install declares its cascade dependencies
   });
 });
 
+test("RESV-01 / DFEN-04: an orchestrated cascade whose root lands disabled declares the dependency and the disabled root in one write", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-orchestrated-disabled-"));
+    try {
+      // arrange: the parent's marketplace entry defaults to disabled, so the
+      // orchestrated install applies the default and the root lands disabled
+      // while its dependency installs enabled.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        entryDefaultEnabled: false,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { loadConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        applyDefaultEnabled: true,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+
+      // assert: DFEN-04 -- the root ran to completion and then unstaged, so
+      // it changed no resources and reports the disabled landing.
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: false,
+        declaresMcp: false,
+        landedDisabled: true,
+        resourcesChanged: false,
+        status: "installed",
+        version: "0.0.1",
+      });
+      const declared = await loadConfig(locations.configJsonPath);
+      assert.strictEqual(declared.status, "valid");
+      if (declared.status === "valid") {
+        assert.deepStrictEqual(declared.config.plugins, {
+          "some-other-plugin@mp": {},
+          "hello@mp": { enabled: false },
+        });
+      }
+
+      const installed = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(
+        {
+          hello: installed.marketplaces["mp"]?.plugins["hello"]?.enabled,
+          "some-other-plugin": installed.marketplaces["mp"]?.plugins["some-other-plugin"]?.enabled,
+        },
+        { hello: false, "some-other-plugin": true },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("CMP-3 / D-03-08: a project install off a user-scope marketplace resolves a same-marketplace dependency", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-cmp3-dep-"));
@@ -4957,6 +5025,53 @@ test("D-04-01: a plugin declaring no dependencies records its single member as e
         schemaVersion: 3,
         provenance: { hello: "explicit" },
       });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-01: a direct install stays a direct install when a later plugin declares it", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0401-ratchet-"));
+    try {
+      // arrange: install the dependency by name first, then snapshot the WHOLE
+      // record it wrote. The cascade that follows must leave every field of it
+      // alone, not only `provenance` -- a snapshot of one field would pass
+      // against a cascade that rewrote the rest.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+      const directRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "some-other-plugin"
+      ];
+      assert.ok(directRecord !== undefined, "the direct install succeeded, so its record exists");
+      const directSnapshot = clonePluginRecord(directRecord);
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["some-other-plugin"],
+        directSnapshot,
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -8608,6 +8723,67 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
       assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
       assert.deepStrictEqual(firstTree, [
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hooky/",
+        "pi-claude-marketplace/hooks/",
+        "pi-claude-marketplace/hooks/hooky/",
+        "pi-claude-marketplace/hooks/hooky/hooks.json",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hooky?.resources,
+        { agents: [], hooks: ["hooky"], mcpServers: [], prompts: [], skills: [] },
+      );
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("RESV-01: a post-save routing rebuild failure leaves the install recorded with its hooks on disk", async (t) => {
+  await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-hooks-post-save-rebuild-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        hooksJson: {
+          PreToolUse: [{ hooks: [{ command: "echo valid", type: "command" }], matcher: "" }],
+        },
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hooky",
+      });
+      const rebuild = t.mock.method(hooksRouting, "rebuildRoutingTables", () => {
+        throw new Error("post-save routing rebuild denied");
+      });
+      const locations = locationsFor("project", cwd);
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hooky",
+        scope: "project",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: false,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(rebuild.mock.callCount(), 1);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "pi-claude-marketplace/",
         "pi-claude-marketplace/data/",
         "pi-claude-marketplace/data/mp/",
