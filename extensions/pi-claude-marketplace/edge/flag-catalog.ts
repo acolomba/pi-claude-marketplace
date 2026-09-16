@@ -97,6 +97,23 @@ const KEEP_DATA_FLAG_ENTRY: FlagEntry = {
   complete: true,
 };
 
+// FLAG-01 / D-05-10: `--prune` also removes, after the named plugin, every
+// dependency-installed record in the scope that no remaining installed plugin
+// declares. A plugin the operator installed by name is never pruned.
+//
+// WR-01 applies here exactly as it does to `--keep-data`: the name is EXPORTED
+// (as `PRUNE_FLAG` below) because the uninstall handler maps the consumed flag
+// onto its `prune` option field, and a hand-written literal there fails OPEN --
+// a catalog rename would leave `consumedFlags.has("--prune")` false, so the
+// sweep the operator asked for would silently not run while the command
+// reported success.
+const PRUNE_FLAG_ENTRY: FlagEntry = {
+  name: "--prune",
+  description: "Also remove dependency-installed plugins no remaining plugin needs",
+  parse: true,
+  complete: true,
+};
+
 const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
   install: [
     // AG-7 opt-in: `--map-model` surfaces as a completion suggestion.
@@ -159,7 +176,7 @@ const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
       complete: true,
     },
   ],
-  uninstall: [KEEP_DATA_FLAG_ENTRY, WRITE_TARGET_FLAG_ENTRY],
+  uninstall: [KEEP_DATA_FLAG_ENTRY, PRUNE_FLAG_ENTRY, WRITE_TARGET_FLAG_ENTRY],
   reinstall: [WRITE_TARGET_FLAG_ENTRY],
   fetch: [],
   enable: [WRITE_TARGET_FLAG_ENTRY],
@@ -191,6 +208,14 @@ export const SCOPE_TARGET_FLAG = WRITE_TARGET_FLAG_ENTRY.name;
  * duplicated literal whose desynchronization would silently delete data.
  */
 export const KEEP_DATA_FLAG = KEEP_DATA_FLAG_ENTRY.name;
+
+/**
+ * WR-01 / FLAG-01 / D-05-10: the orphan-sweep flag name (`--prune`). The
+ * uninstall handler reads this constant when mapping the scanner's consumed
+ * flags onto the `prune` option, so the catalog owns the name rather than a
+ * duplicated literal whose desynchronization would silently skip the sweep.
+ */
+export const PRUNE_FLAG = PRUNE_FLAG_ENTRY.name;
 
 /**
  * Ordered completion entries (name + description) for a verb -- the entries

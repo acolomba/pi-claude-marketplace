@@ -79,7 +79,7 @@ import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/
 
 /** The usage block, written out here rather than read back off the handler. */
 const USAGE_BLOCK =
-  "Usage: /claude:plugin uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local]";
+  "Usage: /claude:plugin uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]";
 
 /**
  * The exact payload seeded under each scope's plugin data directory. Data
@@ -431,6 +431,61 @@ for (const { args, placement } of [
   });
 }
 
+// FLAG-01 / D-05-10: `--prune` is accepted in any position and any number of
+// times. The scope holds one record, so nothing qualifies for the sweep and the
+// row is the plain success row (D-05-12); the flag's effect on a scope that does
+// hold orphans is the orchestrator suite's contract.
+for (const { args, placement } of [
+  { args: "--prune demo@alpha", placement: "ahead of the reference" },
+  { args: "demo@alpha --prune", placement: "after the reference" },
+  { args: "--prune demo@alpha --prune", placement: "twice" },
+]) {
+  test(`FLAG-01: accepts the prune flag ${placement} and removes the record and its data`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, "prune-position");
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+      value: workspace.cwd,
+      reads: 1,
+    });
+    const uninstallHandler = makeHandlerUnderTest(pi);
+
+    // act
+    await uninstallHandler(args, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED]);
+    assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_REMOVED);
+    verifyBoundary();
+  });
+}
+
+// D-05-09: `--keep-data` and `--prune` are independent dispositions, so both
+// apply whatever their relative order.
+for (const { args, placement } of [
+  { args: "--prune --keep-data demo@alpha", placement: "prune first" },
+  { args: "demo@alpha --keep-data --prune", placement: "keep-data first" },
+]) {
+  test(`FLAG-01: keeps the seeded data bytes when the prune flag rides beside the preservation flag, ${placement}`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, "prune-keep-data");
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+      value: workspace.cwd,
+      reads: 1,
+    });
+    const uninstallHandler = makeHandlerUnderTest(pi);
+
+    // act
+    await uninstallHandler(args, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED_DATA_KEPT]);
+    assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_REMOVED_DATA_KEPT);
+    verifyBoundary();
+  });
+}
+
 for (const { expectedEffects, expectedNotification, scopeValue } of [
   {
     scopeValue: "project",
@@ -666,18 +721,11 @@ test("honors the scope flag and the scope-target flag together", async (t) => {
   verifyBoundary();
 });
 
-// D-02-05: the rejected data-disposition aliases, the Phase 5 option this phase
-// deliberately does not implement, the value form of the accepted flag, and an
-// unrelated long option. The consuming scanner refuses short options too, which
-// is what keeps `-y` from ever reaching a confirmation the command does not have.
-for (const rejectedToken of [
-  "--delete-data",
-  "-y",
-  "--yes",
-  "--prune",
-  "--keep-data=false",
-  "--frobnicate",
-]) {
+// D-02-05 / FLAG-01: the rejected data-disposition aliases, the value form of
+// the accepted flag, and an unrelated long option. The consuming scanner refuses
+// short options too, which is what keeps `-y` from ever reaching a confirmation
+// the command does not have.
+for (const rejectedToken of ["--delete-data", "-y", "--yes", "--keep-data=false", "--frobnicate"]) {
   for (const { args, placement } of [
     { args: `${rejectedToken} demo@alpha`, placement: "ahead of the reference" },
     { args: `demo@alpha ${rejectedToken}`, placement: "after the reference" },

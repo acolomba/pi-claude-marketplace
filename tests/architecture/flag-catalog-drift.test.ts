@@ -127,7 +127,7 @@ const HANDLER_ACCEPTED_PARSE_SETS: Record<CatalogVerb, readonly string[]> = {
   update: ["--local", "--map-model", "--partial"],
   list: ["--available", "--installed", "--partial", "--remote", "--unavailable"],
   info: ["--fetch"],
-  uninstall: ["--keep-data", "--local"],
+  uninstall: ["--keep-data", "--local", "--prune"],
   reinstall: ["--local"],
   fetch: [],
   enable: ["--local"],
@@ -162,8 +162,9 @@ test("catalog vs handlers: every verb's parse-set matches the ordered handler-ac
 // WR-02: the `omitted` rows are a record of today's help block, not an
 // endorsement of it. `--keep-data` shipped absent from this surface while the
 // operator's only other route to it was tab completion or a post-mortem usage
-// error, so uninstall now documents both of its extra flags; the remaining
-// rows stay as the block has them.
+// error, so uninstall documents every one of its extra flags (FLAG-01:
+// `--keep-data`, `--local`, `--prune`); the remaining rows stay as the block
+// has them.
 const TOP_LEVEL_USAGE_FLAGS: Record<
   CatalogVerb,
   { readonly documented: readonly string[]; readonly omitted: readonly string[] }
@@ -175,7 +176,7 @@ const TOP_LEVEL_USAGE_FLAGS: Record<
     omitted: ["--available", "--installed", "--partial", "--remote", "--unavailable"],
   },
   info: { documented: [], omitted: ["--fetch"] },
-  uninstall: { documented: ["--keep-data", "--local"], omitted: [] },
+  uninstall: { documented: ["--keep-data", "--local", "--prune"], omitted: [] },
   reinstall: { documented: [], omitted: ["--local"] },
   fetch: { documented: [], omitted: [] },
   enable: { documented: ["--local"], omitted: [] },

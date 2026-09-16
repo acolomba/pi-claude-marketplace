@@ -149,6 +149,12 @@ export interface UninstallPluginOptions {
   /** Preserves plugin data after uninstall; omission or false removes it. */
   readonly keepData?: boolean;
   /**
+   * D-05-10: also removes every dependency-installed record in the scope that
+   * no remaining installed plugin declares, after the named plugin. Omission
+   * or false is "no prune"; the reconcile caller never sets it (D-05-08).
+   */
+  readonly prune?: boolean;
+  /**
    * D-12-style injection seam for the per-plugin cascade primitive. Defaults
    * to `cascadeUnstagePlugin` from `../marketplace/shared.ts`. Tests inject a
    * stub for deterministic outcome control. Zero runtime cost in production:
