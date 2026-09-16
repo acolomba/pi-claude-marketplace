@@ -76,6 +76,7 @@ test("normalizes a complete legacy marketplace in place", () => {
         updatedAt: "2026-02-03T04:05:06.000Z",
         customPluginField: "retained",
         enabled: true,
+        provenance: "explicit",
       },
     },
     customMarketplaceField: { retained: true },
@@ -139,6 +140,7 @@ test("preserves optional fields when autoupdate scrubbing is closed", () => {
             },
             hookEntries: [{ event: "SessionStart", command: "./start.sh" }],
             enabled: false,
+            provenance: "dependency",
             installedAt: "2026-03-04T05:06:07.000Z",
             updatedAt: "2026-04-05T06:07:08.000Z",
           },
@@ -175,6 +177,7 @@ test("preserves optional fields when autoupdate scrubbing is closed", () => {
             },
             hookEntries: [{ event: "SessionStart", command: "./start.sh" }],
             enabled: false,
+            provenance: "dependency",
             installedAt: "2026-03-04T05:06:07.000Z",
             updatedAt: "2026-04-05T06:07:08.000Z",
           },
@@ -223,13 +226,14 @@ test("replays a normalized marketplace as an exact fixed point", () => {
           hooks: [],
         },
         enabled: true,
+        provenance: "explicit",
         installedAt: "2026-05-06T07:08:09.000Z",
         updatedAt: "2026-06-07T08:09:10.000Z",
       },
     },
   };
   const normalizedState = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: { gamma: normalizedMarketplace },
   };
   const expectedMigration = {
@@ -259,6 +263,7 @@ test("replays a normalized marketplace as an exact fixed point", () => {
               hooks: [],
             },
             enabled: true,
+            provenance: "explicit",
             installedAt: "2026-05-06T07:08:09.000Z",
             updatedAt: "2026-06-07T08:09:10.000Z",
           },
@@ -274,7 +279,7 @@ test("replays a normalized marketplace as an exact fixed point", () => {
   // assert
   assert.deepStrictEqual(replay, expectedMigration);
   assert.deepStrictEqual(normalizedState, {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: expectedMigration.marketplaces,
   });
   assert.strictEqual(replay.marketplaces.gamma, normalizedMarketplace);
@@ -522,6 +527,7 @@ test("creates required resources when a legacy plugin omits the collection", () 
             version: "1.0.0",
             enabled: true,
             resources: { agents: [], mcpServers: [], hooks: [] },
+            provenance: "explicit",
           },
         },
       },
@@ -571,6 +577,7 @@ test("replaces a null resource collection with required empty arrays", () => {
             version: "2.0.0",
             enabled: null,
             resources: { agents: [], mcpServers: [], hooks: [] },
+            provenance: "explicit",
           },
         },
       },
@@ -855,4 +862,60 @@ test("D-04-03: fills every provenance-less record across marketplaces independen
     schemaVersion: 2,
     marketplaces: expectedMigration.marketplaces,
   });
+});
+
+test("D-04-03: reads every record of a multi-marketplace legacy document as explicit and replays as a fixed point", () => {
+  // arrange
+  const extensionRoot = path.join(path.sep, "extension-root");
+  const record = (version: string): Record<string, unknown> => ({
+    version,
+    enabled: true,
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+  });
+  const legacyState = {
+    schemaVersion: 2,
+    marketplaces: {
+      alpha: {
+        name: "alpha",
+        manifestPath: "/custom/alpha/marketplace.json",
+        marketplaceRoot: "/custom/alpha",
+        plugins: { "plugin-one": record("1.0.0"), "plugin-two": record("1.1.0") },
+      },
+      beta: {
+        name: "beta",
+        manifestPath: "/custom/beta/marketplace.json",
+        marketplaceRoot: "/custom/beta",
+        plugins: { "plugin-three": record("2.0.0"), "plugin-four": record("2.1.0") },
+      },
+    },
+  };
+  const expectedMarketplaces = {
+    alpha: {
+      name: "alpha",
+      manifestPath: "/custom/alpha/marketplace.json",
+      marketplaceRoot: "/custom/alpha",
+      plugins: {
+        "plugin-one": { ...record("1.0.0"), provenance: "explicit" },
+        "plugin-two": { ...record("1.1.0"), provenance: "explicit" },
+      },
+    },
+    beta: {
+      name: "beta",
+      manifestPath: "/custom/beta/marketplace.json",
+      marketplaceRoot: "/custom/beta",
+      plugins: {
+        "plugin-three": { ...record("2.0.0"), provenance: "explicit" },
+        "plugin-four": { ...record("2.1.0"), provenance: "explicit" },
+      },
+    },
+  };
+
+  // act
+  const migration = migrateLegacyMarketplaceRecords(legacyState, extensionRoot, true);
+  const replay = migrateLegacyMarketplaceRecords(legacyState, extensionRoot, true);
+
+  // assert
+  assert.deepStrictEqual(migration, { marketplaces: expectedMarketplaces, mutated: true });
+  assert.deepStrictEqual(replay, { marketplaces: expectedMarketplaces, mutated: false });
+  assert.deepStrictEqual(legacyState, { schemaVersion: 2, marketplaces: expectedMarketplaces });
 });
