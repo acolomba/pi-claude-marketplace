@@ -7,9 +7,10 @@ import {
 import { loadConfig, type PluginConfigEntry } from "../../persistence/config-io.ts";
 import {
   writeBatchedConfigEntries,
+  writePluginConfigEntry,
   type BatchedConfigPatch,
 } from "../../persistence/config-write-back.ts";
-import { locationsFor } from "../../persistence/locations.ts";
+import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import {
   isRecordedButDisabled,
   loadState as defaultLoadState,
@@ -972,8 +973,11 @@ async function executeScopedPlan(
  * recorded-but-undeclared entries the reconcile planner would tear down.
  *
  * Target: import does NOT support `--local` (per RESEARCH project structure;
- * the flag is per-command and not on the import surface), so the post-pass
- * targets `locations.configJsonPath` unconditionally.
+ * the flag is per-command and not on the import surface), so the batch
+ * targets `locations.configJsonPath`. The one exception is a re-enabled
+ * promotion whose key the local file declares: its `{ enabled: true }` goes
+ * to the local file (`stampReenabledWhereLocalDeclares`) and the batch keeps
+ * the bare key.
  *
  * Source: verbatim `rawSource` from `scopePlan.marketplacesToEnsure` keyed by
  * marketplace name, preserving the `samePlannedSource` contract.
@@ -1014,9 +1018,10 @@ async function writeBatchedConfigForScope(
       }
 
       const current = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 as const };
+      const baseEnsure = await stampReenabledWhereLocalDeclares(locations, result, ensure);
       // WR-01: repairs apply ONLY when the key is absent from the loaded
       // config (already-declared entries are untouched -- byte stability).
-      const batch = mergeEnsureAndRepairs(ensure, repair, current);
+      const batch = mergeEnsureAndRepairs(baseEnsure, repair, current);
       if (isEmptyPatch(batch)) {
         // Everything already declared -- no write, mtime stable (RECON-05).
         return;
@@ -1041,6 +1046,50 @@ async function writeBatchedConfigForScope(
       `Failed to write ${scope} scope claude-plugins.json batched post-pass: ${errorMessage(err)}`,
     );
   }
+}
+
+/**
+ * D-04-07 / D-103-16: the enable path writes `{ enabled: true }` to the file
+ * that declares the key, and the disable verb's `{ enabled: false }` may live
+ * in the local file, whose entry shadows the base entry wholesale (CFG-02) --
+ * a stamp in the base file alone would leave the merged view disabled. So a
+ * re-enabled entry the local file declares is stamped there, through the
+ * single-entry writer (which adds no `marketplaces` key to a file that
+ * declares none), and its base patch drops to the bare key so the base
+ * declaration still exists. The local file is re-read per stamp so each write
+ * sees the one before it; an absent, invalid, or non-declaring local file
+ * leaves the base patch as built. Runs under the scope lock, before the base
+ * batch is written.
+ */
+async function stampReenabledWhereLocalDeclares(
+  locations: ScopedLocations,
+  result: MutableImportResult,
+  ensure: ImportConfigPatch,
+): Promise<ImportConfigPatch> {
+  const plugins = { ...ensure.plugins };
+  for (const installed of result.installedPlugins) {
+    if (installed.scope !== locations.scope || installed.reenabled !== true) {
+      continue;
+    }
+
+    const key = `${installed.plugin}@${installed.marketplace}`;
+    const localCfg = await loadConfig(locations.configLocalJsonPath);
+    if (localCfg.status !== "valid" || localCfg.config.plugins?.[key] === undefined) {
+      continue;
+    }
+
+    await writePluginConfigEntry(
+      localCfg.config,
+      locations.configLocalJsonPath,
+      locations.scopeRoot,
+      installed.plugin,
+      installed.marketplace,
+      { enabled: true },
+    );
+    plugins[key] = {};
+  }
+
+  return { ...ensure, plugins };
 }
 
 function buildBatchedPatchForScope(

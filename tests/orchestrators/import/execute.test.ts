@@ -2782,6 +2782,220 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
   verifyBoundary();
 });
 
+test("D-04-07: declares a promoted dependency enabled in the local file when the disable verb declared it there", async (t) => {
+  // arrange: the first import's cascade records `dep`, and `disable --local`
+  // declares `{ enabled: false }` for it in the local file, whose entry shadows
+  // the base entry wholesale (CFG-02). The second import names `dep`: the
+  // promotion re-materializes the record, and the post-pass writes the enable
+  // path's `{ enabled: true }` to the file that declares the key (D-103-16),
+  // leaving the base file the bare key. A stamp in the base file alone would
+  // leave the merged view disabled and hand the reload the row asks for a
+  // disable to plan.
+  const { cwd, project } = await createHermeticScopes(t, "promotes-disabled-dependency-local");
+  // Two imports and one disable: the disable verb takes one companion probe
+  // for its block before `notify()` takes its own, so that emission reads
+  // `getAllTools()` four times where an import's reads twice.
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 8);
+  const marketplaceRoot = path.join(cwd, "fixture-mp");
+  const dependency = { name: "dep", version: "*" };
+  await writeUnder(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "fixture-mp",
+      owner: { name: "import owner suite" },
+      plugins: [
+        {
+          name: "sample",
+          source: "./plugins/sample",
+          version: "1.0.0",
+          dependencies: [dependency],
+        },
+        { name: "dep", source: "./plugins/dep", version: "1.0.0" },
+      ],
+    }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "sample", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "sample", version: "1.0.0", dependencies: [dependency] }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "dep", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "dep", version: "1.0.0" }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "dep", "skills", "tool", "SKILL.md"),
+    "---\nname: tool\n---\n\nBody.\n",
+  );
+  const settingsPath = path.join(cwd, ".claude", "settings.json");
+  const settingsNaming = (enabledPlugins: Record<string, boolean>): string =>
+    JSON.stringify({
+      enabledPlugins,
+      extraKnownMarketplaces: { "fixture-mp": { directory: marketplaceRoot } },
+    });
+  const expectedSecondResult: ClaudeImportExecutionResult = {
+    ...emptyImportResult(),
+    changedResources: true,
+    installedPlugins: [
+      {
+        ...installed("dep", "fixture-mp", "project"),
+        promoted: true,
+        reenabled: true,
+      },
+    ],
+    skippedExistingMarketplaces: [skipped("fixture-mp", "project")],
+    skippedExistingPlugins: [skippedPlugin("sample", "fixture-mp", "project")],
+  };
+  const expectedBaseBytes = configBytes({
+    marketplaces: { "fixture-mp": { source: marketplaceRoot } },
+    plugins: { "sample@fixture-mp": {}, "dep@fixture-mp": {} },
+  });
+  const expectedLocalBytes = configBytes({
+    marketplaces: {},
+    plugins: { "dep@fixture-mp": { enabled: true } },
+  });
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+  const importOptions = {
+    ctx,
+    cwd,
+    gitOps: createOfflineGitOps(),
+    pi,
+    hooksRouting,
+    selectedScopes: ["project"] as const,
+  };
+  const skillDir = path.join(project.skillsTargetDir, "dep:tool");
+  await writeUnder(settingsPath, settingsNaming({ "sample@fixture-mp": true }));
+  await importClaudeSettings(importOptions);
+  await createNodeSetPluginEnabled(hooksRouting)({
+    ctx,
+    pi,
+    cwd,
+    scope: "project",
+    marketplace: "fixture-mp",
+    plugin: "dep",
+    enable: false,
+    local: true,
+  });
+  const dependencyBefore = (await loadState(project.extensionRoot)).marketplaces["fixture-mp"]
+    ?.plugins["dep"];
+  assert.strictEqual(dependencyBefore?.provenance, "dependency");
+  assert.strictEqual(dependencyBefore.enabled, false, "the disable verb disabled the dependency");
+  assert.strictEqual(
+    await readFile(project.configLocalJsonPath, "utf8"),
+    configBytes({ marketplaces: {}, plugins: { "dep@fixture-mp": { enabled: false } } }),
+    "and declared the disable in the local file",
+  );
+  await assert.rejects(stat(skillDir), "and took its skill off disk");
+
+  // act
+  await writeUnder(
+    settingsPath,
+    settingsNaming({ "sample@fixture-mp": true, "dep@fixture-mp": true }),
+  );
+  const secondResult = await importClaudeSettings(importOptions);
+
+  // assert: the record is enabled again and promoted; the skill is back on
+  // disk; the local file carries the enable path's own declaration and the base
+  // file the bare key; the merged view reads the local entry; and the reload the
+  // row asks for finds nothing to plan.
+  assert.deepStrictEqual(secondResult, expectedSecondResult);
+  const stateAfter = await loadState(project.extensionRoot);
+  const promoted = stateAfter.marketplaces["fixture-mp"]?.plugins["dep"];
+  assert.ok(promoted !== undefined);
+  assert.deepStrictEqual(promoted, {
+    ...dependencyBefore,
+    enabled: true,
+    provenance: "explicit",
+    updatedAt: promoted.updatedAt,
+  });
+  await stat(skillDir);
+  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBaseBytes);
+  assert.strictEqual(await readFile(project.configLocalJsonPath, "utf8"), expectedLocalBytes);
+  const { merged } = await loadMergedScopeConfig(project);
+  assert.deepStrictEqual(merged.plugins["dep@fixture-mp"], {
+    entry: { enabled: true },
+    source: "local",
+  });
+  assert.deepStrictEqual(
+    planReconcile(merged, stateAfter, "project"),
+    emptyReconcilePlan("project"),
+  );
+  assert.deepStrictEqual(notifications[2], {
+    message:
+      "● fixture-mp [project] (updated)\n" +
+      "  ● dep (installed) {already installed, dependency promoted}\n" +
+      "  ⊘ sample (skipped) {already installed}\n\n" +
+      "Import: 3 successes\n\n" +
+      "/reload to pick up changes",
+  });
+  verifyBoundary();
+});
+
+test("D-04-07: keeps the enabled declaration in the base file when the local file declares only other keys", async (t) => {
+  // arrange: a disabled dependency record, its `{ enabled: false }` in the base
+  // file, and a local file that declares a different key. The file that
+  // declares the promoted key takes the stamp (D-103-16); a local file that
+  // merely exists does not.
+  const { cwd, project } = await createHermeticScopes(t, "reenable-local-other-key");
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2);
+  await createScopeRoots(project);
+  await writeFile(
+    project.configJsonPath,
+    configBytes({
+      marketplaces: { mp: { source: "./mp" } },
+      plugins: { "plugin@mp": { enabled: false } },
+    }),
+    "utf8",
+  );
+  const localBytes = configBytes({ marketplaces: {}, plugins: { "other@mp": {} } });
+  await writeFile(project.configLocalJsonPath, localBytes, "utf8");
+  const expectedBaseBytes = configBytes({
+    marketplaces: { mp: { source: "./mp" } },
+    plugins: { "plugin@mp": { enabled: true } },
+  });
+  const recorded = recordedMarketplace({
+    name: "mp",
+    plugins: ["plugin"],
+    scope: "project",
+    source: pathSource("./mp"),
+  });
+  const disabledDependency: PluginRecord = {
+    ...recordedPlugin("plugin"),
+    enabled: false,
+    provenance: "dependency",
+  };
+
+  // act
+  await importClaudeSettings({
+    ctx,
+    cwd,
+    deps: collaborators({
+      installPlugin: () => Promise.resolve(installedOutcome()),
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "plugin@mp": true },
+            extraKnownMarketplaces: { mp: { directory: "./mp" } },
+          }),
+        ),
+      loadState: () =>
+        Promise.resolve(recordedState([{ ...recorded, plugins: { plugin: disabledDependency } }])),
+    }),
+    pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      base: await readFile(project.configJsonPath, "utf8"),
+      local: await readFile(project.configLocalJsonPath, "utf8"),
+    },
+    { base: expectedBaseBytes, local: localBytes },
+  );
+  verifyBoundary();
+});
+
 test("D-04-07: marks a dependency promoted at lock time by the same import's earlier cascade", async (t) => {
   // arrange: one import names `sample` and then `dep`. The scope's snapshot is
   // taken once before the loop, so when `sample`'s cascade records `dep`, the
