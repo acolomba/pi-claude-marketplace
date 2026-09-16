@@ -4,17 +4,17 @@ milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
 status: executing
-stopped_at: Completed 06-12-PLAN.md
-last_updated: "2026-09-16T17:05:00.000Z"
+stopped_at: Completed 06-15-PLAN.md
+last_updated: "2026-09-16T22:30:00.000Z"
 last_activity: 2026-09-16
-last_activity_desc: Plan 06-12 complete, closing the six-plan repair wave (orchestrators: 49 rows -> 36 repaired, 3 contracted, 10 outstanding; 72 -> 33 unread measured, zero findings gained; the phase residual is 33 and 06-08 stays blocked)
-state_head: 2a2f1bf7
+last_activity_desc: Plan 06-15 complete, closing five measured analyzer gaps (six engine corrections, 11 new validated contracts, 33 -> 16 unread against a predicted 14; every measured row was predicted and two predicted rows are recorded as still refused; the phase residual is 16 and 06-08 stays blocked)
+state_head: 4480b8c0
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 60
-  completed_plans: 51
-  percent: 64
+  completed_plans: 52
+  percent: 63
 milestone_name: test-backlog
 ---
 
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 06 (Unused Type Member Gate) — EXECUTING
-Plan: 14 of 14
-Status: The six bounded repair plans are COMPLETE (06-09 ✅ -> 06-14 ✅ -> 06-10 ✅ -> 06-11 ✅ -> 06-13 ✅ -> 06-12 ✅). 06-08 remains blocked on a measured residual of 33 unread members.
-Last activity: 2026-09-16 — Plan 06-12 complete (orchestrators 49->10: 36 rows repaired at source, 3 contracted, 10 outstanding with a written mechanism each; 72 -> 33 unread, zero findings gained; two restatements the engine refused were reverted rather than shipped)
+Plan: 15 of 15 executed; 06-08 (gate activation) is the only one still outstanding
+Status: The six bounded repair plans are COMPLETE (06-09 ✅ -> 06-14 ✅ -> 06-10 ✅ -> 06-11 ✅ -> 06-13 ✅ -> 06-12 ✅) and the analyzer-gap plan 06-15 ✅ follows them. 06-08 remains blocked on a measured residual of 16 unread members.
+Last activity: 2026-09-16 — Plan 06-15 complete (six analyzer corrections, each shipping the counterexample that fails it; 11 new validated contracts for 90 -> 101; 33 -> 16 unread against a predicted 14, with every measured row predicted and no unpredicted row moving; the two `PluginRow` rows stay refused at arrival through a destructured binding, measured rather than guessed)
 
 Plan 06-01 landed the member gate's compiler tracer: `node
 scripts/check-unused-type-members.mjs` compiles the project once, inventories
@@ -526,7 +526,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-16T13:29:03.875Z
+**Last session:** 2026-09-16T22:30:00.000Z
 **Resume file:** None
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–5 are complete.
@@ -866,6 +866,7 @@ together with its three bridge declaration sites. Next is 06-10.
 | Phase 06 P11 | 1h 16m | 3 tasks | 7 files |
 | Phase 06 P13 | 78 min | 3 tasks | 7 files |
 | Phase 06 P12 | 2h 54m | 7 tasks | 28 files |
+| Phase 06 P15 | 4h 20m | 7 tasks | 9 files |
 
 ## Decisions
 
@@ -882,9 +883,15 @@ together with its three bridge declaration sites. Next is 06-10.
 - [Phase 06]: An async body that hands back another promise hands back what that promise fulfils, so its value sits where its own awaited value does rather than one await deeper
 - [Phase 06]: A key exactly one arm of a union declares can only have come from that arm; two arms spelling one key stay unsettled and resolve to nothing
 - [Phase 06]: type-refinement is a fifth contract category, separate from type-selection, because narrowing a slot an intersection already declares is different evidence from selecting a variant
+- [Phase 06]: `never` admits nothing, so its constituent set is empty — that is what makes an absence marker a narrowing, while a marker over a slot the rest already closes compares empty against empty and still narrows nothing
+- [Phase 06]: conditional-clause is a sixth contract category rather than a widening of type-selection, because both live rows fail that prover's own downstream checks and absorbing them would weaken the discriminant proof fifty-plus entries rest on
+- [Phase 06]: A whole-object comparison settles an ambiguous key only through a discriminant value that leaves exactly one arm standing, and only for keys the comparison actually names; the single-arm place rule and the production-lineage requirement are untouched
+- [Phase 06]: Production lineage follows a name bound to a factory call through to the function that call returns, and through nothing else; a factory returning a name reaches nothing, which under-credits by design
+- [Phase 06]: A refusal the unchanged engine already makes is proved discriminating by writing the permissive variant of the prover and measuring which controls break, because such a control cannot fail RED by construction
+- [Phase 06]: An engine widening in the opt-in contract layer is measured clearing zero rows with no entry written — a free, exact permissiveness control that all four contract-layer changes in 06-15 passed
 - [Phase 06]: The live closure is honest rather than complete: 138 members really are unread, each recorded with its evidence and an owner repair plan, rather than excused by a widened proof
 - [Phase 06]: A published duplicate is repaired by aliasing it to the declaration its reads already resolve to, never by deleting the published name — structural compatibility is not a read (D-03), so the fifteen AsyncRewakeEntry rows leave the population without the runtime row's own count moving
-- [Phase 06]: `WriteHookConfigResult.written` stays unread on purpose: nine `assert.deepStrictEqual` sites read the whole result, so the row is an analyzer under-credit, not a dead member — `assertionSummary` demands production lineage and `isProductionDerived` does not reach production through a factory-returned closure, which the sibling `RemoveHookConfigResult.removed` proves by carrying two deep-comparison witnesses from the same file
+- [Phase 06, superseded by 06-15]: `WriteHookConfigResult.written` stays unread on purpose: nine `assert.deepStrictEqual` sites read the whole result, so the row is an analyzer under-credit, not a dead member — `assertionSummary` demands production lineage and `isProductionDerived` does not reach production through a factory-returned closure, which the sibling `RemoveHookConfigResult.removed` proves by carrying two deep-comparison witnesses from the same file
 - [Phase 06]: A repair's delta is measured by a `(path, owner, key)` set difference against a pre-edit baseline, not by comparing totals — a flat total would hide a repair that pushed some other member into `unread`
 - [Phase 06]: A repeated inline shape is repaired by collapsing it onto one named declaration, not by deleting the copy a test asserts — `AgentOwnershipConflictError.stagingFor` is read by two suites and frozen against caller mutation, so the dead rows were the duplication, not the field
 - [Phase 06]: An `Extract` filter over an unbounded type parameter proves nothing, because the parameter stands for everything; bounding it by the union the filter selects within is what makes the selection contract available
