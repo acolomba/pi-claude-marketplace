@@ -987,6 +987,17 @@ Some plugin operations have failed.
 
 The dependency resolved cleanly and its own six-phase ledger then failed. There is no cascade reason to add -- the ledger's error IS the fact -- so the row carries an empty reasons array and the renderer suppresses the brace. The requesting plugin's row still says why it is there. Everything this command had already materialized is unwound; a dependency installed BEFORE the command ran is not touched (D-03-07). Re-running the same command after fixing the cause starts from the same state as the first attempt.
 
+### Dependency promoted to a direct install (D-04-07)
+
+<!-- catalog-state: dependency-promoted -->
+
+```text
+● official [user]
+  ● linter v3.0.0 (installed) {already installed, dependency promoted}
+```
+
+`linter` was recorded as another plugin's dependency, and the user then installed it by name. Nothing is materialized: the record already holds the plugin's artifacts, so the command changes exactly one thing -- the record now says the user asked for it -- and writes the plugin's key into the desired-state config, the same declaration a fresh install by name makes (D-04-02). The row is `installed` because the desired state IS reached, and its brace names both facts: `{already installed}` says the record was here before, `{dependency promoted}` says what this command did to it. Neither token alone would do. `{already installed}` on its own is the refusal row above, `(failed) {already installed}`, and a row that changed state cannot borrow a failure's bytes -- `error` means the operation was not carried out. Severity `info`; no reload-hint, because nothing on disk moved. A plugin already recorded as a direct install is not promoted and still gets the refusal.
+
 ______________________________________________________________________
 
 ## `/claude:plugin uninstall <plugin>@<marketplace>`

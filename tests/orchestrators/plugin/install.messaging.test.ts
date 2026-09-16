@@ -6,6 +6,7 @@ import {
   classifyEntityShapeError,
   classifyInstallFailure,
   composeInstallFailureMessage,
+  composePromotedRow,
   formatOrchestratedCause,
   narrowResolverReasons,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
@@ -570,6 +571,44 @@ describe("composeInstallFailureMessage", () => {
       severity: "error",
       needsReload: false,
     });
+  });
+});
+
+describe("composePromotedRow", () => {
+  test("D-04-07: composes an installed row carrying the promotion brace at info severity with no reload", () => {
+    // arrange
+    const args = { plugin: "linter", version: "3.0.0", scope: "user" as const };
+
+    // act
+    const row = composePromotedRow(args);
+
+    // assert
+    assert.deepStrictEqual(row, {
+      status: "installed",
+      name: "linter",
+      version: "3.0.0",
+      scope: "user",
+      dependencies: [],
+      reasons: ["already installed", "dependency promoted"],
+      severity: "info",
+      needsReload: false,
+    });
+  });
+
+  test("D-04-07: the promotion row renders through the installed arm with the brace in reason order", () => {
+    // arrange
+    const row = composePromotedRow({ plugin: "linter", version: "3.0.0", scope: "user" });
+    const probe = { piSubagentsLoaded: false, piMcpAdapterLoaded: false } satisfies SoftDepStatus;
+
+    // act
+    const rendered = INSTALL_CONTEXT.render.installed(row, probe, "user");
+
+    // assert: no soft-dep marker joins the brace whatever the host lacks --
+    // the row declares no companion because nothing was materialized.
+    assert.strictEqual(
+      rendered,
+      "● linter v3.0.0 (installed) {already installed, dependency promoted}",
+    );
   });
 });
 

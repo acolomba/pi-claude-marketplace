@@ -70,6 +70,7 @@ const EXPECTED_REASONS = [
   "dependency cycle",
   "dependency failed",
   "dependency disabled",
+  "dependency promoted",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

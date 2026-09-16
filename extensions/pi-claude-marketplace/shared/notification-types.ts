@@ -99,6 +99,15 @@ export const REASONS = [
   // the user can act on. Enablement is never decided on a dependency's behalf
   // (see `docs/plugin-enablement.md`), so reporting it is the whole remedy.
   "dependency disabled",
+  // D-04-07: the plugin the user just named was already recorded, as another
+  // plugin's dependency, and this command promoted that record to a direct
+  // install. `already installed` alone reports a REFUSAL -- the command did
+  // nothing -- and this row reports a state change, so the two cannot share a
+  // brace without one of them lying. It rides an `installed` row beside
+  // `already installed`: the desired state is reached, nothing was
+  // materialized, and the pair says which of those two facts this command
+  // is responsible for.
+  "dependency promoted",
 ] as const;
 
 /** Literal union derived from the closed reason vocabulary. */

@@ -5099,6 +5099,235 @@ test("D-04-01: a direct install stays a direct install when a later plugin decla
   });
 });
 
+/**
+ * D-04-07: seed a marketplace whose `hello` declares `some-other-plugin`, run
+ * the cascade so the dependency is recorded as such, and hand back the whole
+ * state document as it stands before the promotion. Every case below compares
+ * the AFTER document against this one, so a promotion that touched any other
+ * field or any other record would show up in the diff.
+ */
+async function seedDependencyInstalled(
+  cwd: string,
+  installPlugin: InstallOperation,
+): Promise<{
+  readonly before: ExtensionState;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
+  readonly notifications: NotifyRecord[];
+}> {
+  const locations = locationsFor("project", cwd);
+  await seedPathMarketplaceWithPlugin({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    pluginName: "hello",
+    skills: [{ sourceName: "tool" }],
+    declareDependencies: true,
+    siblingPlugins: [{ name: "some-other-plugin" }],
+  });
+  const { ctx, pi, notifications } = makeCtx();
+  await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+  const before = await loadState(locations.extensionRoot);
+  assert.equal(
+    before.marketplaces["mp"]?.plugins["some-other-plugin"]?.provenance,
+    "dependency",
+    "the cascade recorded the dependency as such, so the promotion has something to promote",
+  );
+  notifications.length = 0;
+  return { before, ctx, pi, notifications };
+}
+
+test("D-04-07: installing a dependency by name flips its provenance and nothing else in the state document", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-record-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { before, ctx, pi } = await seedDependencyInstalled(cwd, installPlugin);
+      const dependencyBefore = before.marketplaces["mp"]?.plugins["some-other-plugin"];
+      assert.ok(dependencyBefore !== undefined);
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+
+      // assert: the whole document, so a rewritten version, timestamp or
+      // resource list on the promoted record -- or any change to `hello`'s
+      // record -- fails here, not only a wrong provenance.
+      const expected: ExtensionState = {
+        ...before,
+        marketplaces: {
+          ...before.marketplaces,
+          mp: {
+            ...before.marketplaces["mp"]!,
+            plugins: {
+              ...before.marketplaces["mp"]!.plugins,
+              "some-other-plugin": { ...dependencyBefore, provenance: "explicit" },
+            },
+          },
+        },
+      };
+      assert.deepStrictEqual(await loadState(locations.extensionRoot), expected);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-07: the promotion declares the promoted key and reports one installed row at info severity", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-row-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { ctx, pi, notifications } = await seedDependencyInstalled(cwd, installPlugin);
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+
+      // assert: D-04-02 -- the whole config document. The promoted key joins
+      // the requesting plugin's, and nothing else is written.
+      assert.equal(
+        await readFile(locations.configJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "hello@mp": {},\n    "some-other-plugin@mp": {}\n  }\n}\n',
+      );
+      // assert: the row is an `installed` row carrying the promotion brace, at
+      // info severity (the dispatcher passes no severity argument for info),
+      // with no summary line and no reload trailer -- nothing was materialized.
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ● some-other-plugin v0.0.1 (installed) {already installed, dependency promoted}",
+        },
+      ]);
+      assert.deepStrictEqual(outcome, {
+        status: "installed",
+        version: "0.0.1",
+        resourcesChanged: false,
+        declaresAgents: false,
+        declaresMcp: false,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-07: an orchestrated promotion flips the record, writes no declaration and emits nothing", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-orchestrated-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { ctx, pi, notifications } = await seedDependencyInstalled(cwd, installPlugin);
+      const configBefore = await readFile(locations.configJsonPath, "utf8");
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          provenance: (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+            "some-other-plugin"
+          ]?.provenance,
+          config: await readFile(locations.configJsonPath, "utf8"),
+          notifications,
+          outcome,
+        },
+        {
+          provenance: "explicit",
+          config: configBefore,
+          notifications: [],
+          outcome: {
+            status: "installed",
+            version: "0.0.1",
+            resourcesChanged: false,
+            declaresAgents: false,
+            declaresMcp: false,
+          },
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-07: a plugin already recorded as a direct install still fails with the already-installed refusal", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-explicit-"));
+    try {
+      // arrange: `hello` is installed by name, so its record is explicit; the
+      // second install by name is D-04-07's empty case and must refuse exactly
+      // as it does for any other repeat install.
+      const locations = locationsFor("project", cwd);
+      const { ctx, pi, notifications } = await seedDependencyInstalled(cwd, installPlugin);
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const configBefore = await readFile(locations.configJsonPath, "utf8");
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert: the refusal's bytes, and no write to either document.
+      assert.deepStrictEqual(
+        {
+          notifications,
+          status: outcome.status,
+          state: await readFile(locations.stateJsonPath, "utf8"),
+          config: await readFile(locations.configJsonPath, "utf8"),
+        },
+        {
+          notifications: [
+            {
+              message:
+                "A plugin operation has failed.\n\n" +
+                "● mp [project]\n" +
+                "  ⊘ hello (failed) {already installed}\n" +
+                '    cause: Plugin "hello" is already installed in marketplace "mp".',
+              severity: "error",
+            },
+          ],
+          status: "failed",
+          state: stateBefore,
+          config: configBefore,
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("RESV-01 / D-01-32: a dependency declared only in the plugin's own manifest installs", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-ownmanifest-"));

@@ -321,6 +321,38 @@ export function composeInstallFailureMessage(args: {
 }
 
 /**
+ * D-04-07: the row for a promotion -- the plugin the user named was already
+ * recorded as another plugin's dependency, and the command made that record a
+ * direct install. It is an `installed` row because the desired state IS
+ * reached, and it carries `{already installed, dependency promoted}` because
+ * the record was here before and only its provenance changed: `already
+ * installed` alone is the refusal row's brace and would report a state change
+ * as a failure. Severity is `info` -- the operation was carried out in full and
+ * no companion can be missing on a row that materialized nothing -- and the
+ * reload hint stays off for the same reason. Nothing to compute: the row's
+ * facts are the record's name and version, and the promotion itself.
+ *
+ * Separate from `composeInstallFailureMessage`, which composes refusals and
+ * throws; a promotion is neither.
+ */
+export function composePromotedRow(args: {
+  readonly plugin: string;
+  readonly version: string;
+  readonly scope: Scope;
+}): PluginInstalledMessage {
+  return {
+    status: "installed",
+    name: args.plugin,
+    version: args.version,
+    scope: args.scope,
+    dependencies: [],
+    reasons: ["already installed", "dependency promoted"],
+    severity: "info",
+    needsReload: false,
+  };
+}
+
+/**
  * Format the orchestrated-mode `cause` string for the
  * `InstallPluginOutcome.cause` field. The import cascade caller at
  * `orchestrators/import/execute.ts` reads this string for its

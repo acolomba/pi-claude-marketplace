@@ -42,6 +42,7 @@ import {
   classifyEntityShapeError,
   classifyInstallFailure,
   composeInstallFailureMessage,
+  composePromotedRow,
   formatOrchestratedCause,
 } from "./install.messaging.ts";
 import {
@@ -818,6 +819,109 @@ function failedRowOutcome(args: {
 }
 
 /**
+ * D-04-07: promote a recorded dependency the user has now asked for by name.
+ * The whole decision lives here so the lock closure gains one condition: the
+ * target plugin is absent from the snapshot, or is recorded as a direct
+ * install already, and the answer is `undefined` -- the cascade runs and the
+ * existing already-installed refusal stands for the second case. Otherwise the
+ * record's provenance flips to the direct-install value and nothing else on it
+ * moves: no ledger runs, so version, resources and timestamps stay what the
+ * cascade wrote (re-running the ledger with its existing-record allowance
+ * would re-materialize the plugin and rewrite all three).
+ *
+ * D-04-02: the user has asked for the plugin by name, so its key now belongs
+ * in the desired-state config. The write is the same adopting write the
+ * standalone install arm makes for a fresh install -- the promoted key alone,
+ * plus the marketplace entry when the merged view does not declare it yet --
+ * and it is SKIPPED in orchestrated mode, as every write arm in this file is
+ * (reconcile derives desired state FROM the merged config; writing back would
+ * clobber a per-machine override).
+ *
+ * The match is the exact `plugin` and `marketplace` names the snapshot is
+ * keyed by, the same character-for-character comparison the cascade root and
+ * reconcile's declared-key set use: no folding, no normalizing, no trimming.
+ */
+async function promoteDependencyRecord(args: {
+  readonly state: ExtensionState;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly orchestrated: boolean;
+  readonly config: {
+    readonly current: Parameters<typeof writeAdoptingConfigEntries>[0]["current"];
+    readonly sibling: Parameters<typeof writeAdoptingConfigEntries>[0]["sibling"];
+    readonly targetConfigPath: string;
+    readonly scopeRoot: string;
+  };
+}): Promise<PluginInstallRecord | undefined> {
+  const { state, marketplace, plugin, orchestrated, config } = args;
+  const record = state.marketplaces[marketplace]?.plugins[plugin];
+  if (record?.provenance !== "dependency") {
+    return undefined;
+  }
+
+  record.provenance = "explicit";
+  if (!orchestrated) {
+    await writeAdoptingConfigEntries({
+      current: config.current,
+      sibling: config.sibling,
+      state,
+      marketplace,
+      plugin,
+      targetConfigPath: config.targetConfigPath,
+      scopeRoot: config.scopeRoot,
+      pluginPatch: {},
+    });
+  }
+
+  return record;
+}
+
+/**
+ * D-04-07: emit the promotion row and return the matching outcome. Mirrors
+ * `failedRowOutcome`: orchestrated mode returns the outcome and emits nothing.
+ * The outcome is an `installed` one whose resources did not change -- the
+ * record was here before and only its provenance moved -- and whose
+ * declares-flags read the record's own inventory, so an orchestrated caller
+ * describes the promoted plugin as it is rather than as empty.
+ */
+function promotedRowOutcome(args: {
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly record: PluginInstallRecord;
+  readonly orchestrated: boolean;
+}): InstallPluginOutcome {
+  const { ctx, pi, marketplace, scope, plugin, record, orchestrated } = args;
+  const outcome: InstallPluginOutcome = {
+    status: "installed",
+    version: record.version,
+    resourcesChanged: false,
+    declaresAgents: record.resources.agents.length > 0,
+    declaresMcp: record.resources.mcpServers.length > 0,
+  };
+  if (!orchestrated) {
+    notifyWithContext(
+      ctx,
+      pi,
+      INSTALL_CONTEXT,
+      [
+        {
+          name: marketplace,
+          scope,
+          plugins: [composePromotedRow({ plugin, version: record.version, scope })],
+        },
+      ],
+      undefined,
+      "single",
+    );
+  }
+
+  return outcome;
+}
+
+/**
  * D-19-03 failure routing for a throw out of the state guard. Priority,
  * highest first:
  *
@@ -1015,6 +1119,10 @@ async function installPluginWithTransaction(
   // every site.
   const disabledInstall: { landed: boolean; cascadeError?: Error } = { landed: false };
   let removeDisabledRoutesAfterSave = false;
+  // D-04-07: the record a promotion flipped, set inside the lock and read by
+  // the post-guard row; absent on every path that ran the cascade. Carried on
+  // an object for the same reason `disabledInstall` is.
+  const promotion: { record: PluginInstallRecord | undefined } = { record: undefined };
 
   // WB-01: target-path selection happens ONCE, and both write arms below read
   // that one decision, so they cannot drift onto different files. The
@@ -1107,6 +1215,22 @@ async function installPluginWithTransaction(
       // local file's entries into the base file (SPLIT-02).
       const { targetConfigPath, targetIsLocal, current, sibling } = selection;
       configBasename = path.basename(targetConfigPath);
+
+      // D-04-07: a recorded dependency the user has now named is promoted
+      // here, BEFORE the cascade -- the cascade's ledger would refuse it as
+      // already installed on an arm that never saves. This is the file's
+      // second mutating arm: the promotion saves explicitly and returns.
+      promotion.record = await promoteDependencyRecord({
+        state,
+        marketplace,
+        plugin,
+        orchestrated,
+        config: { current, sibling, targetConfigPath, scopeRoot: locations.scopeRoot },
+      });
+      if (promotion.record !== undefined) {
+        await tx.save();
+        return;
+      }
 
       // RESV-01: the cascade, not a single ledger call. It drives the
       // guard-free `runInstallLedger` once per closure member under THIS
@@ -1330,10 +1454,10 @@ async function installPluginWithTransaction(
         });
       }
 
-      // WR-04: the SOLE mutating arm saves explicitly. Ordering preserved
-      // from the previous withStateGuard shape: state persists AFTER the
-      // config write-back (a write-back throw aborts the save, leaving the
-      // state snapshot discarded exactly as before).
+      // WR-04: one of the two mutating arms (the other is the D-04-07
+      // promotion above), and it saves explicitly. State persists AFTER the
+      // config write-back, so a write-back throw aborts the save and the
+      // state snapshot is discarded.
       await tx.save();
 
       if (removeDisabledRoutesAfterSave) {
@@ -1480,6 +1604,22 @@ async function installPluginWithTransaction(
       ...(await crossScopeFlag({ cwd, marketplace, scope })),
     });
     return { status: "failed", error: new Error(cause), cause };
+  }
+
+  // D-04-07: the promotion arm. State was saved inside the lock and no ledger
+  // ran, so there are no post-commit warnings to collect and no hooks to
+  // hydrate; the row is the whole report.
+  const promotedRecord = promotion.record;
+  if (promotedRecord !== undefined) {
+    return promotedRowOutcome({
+      ctx,
+      pi,
+      marketplace,
+      scope,
+      plugin,
+      record: promotedRecord,
+      orchestrated,
+    });
   }
 
   // D-102-02: the ledger succeeded and the disable cascade then failed. The

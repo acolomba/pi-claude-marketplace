@@ -26,7 +26,7 @@ import {
   STATUS_TOKENS,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
-test("OUT-08: REASONS is the closed 53-entry reason set", () => {
+test("OUT-08: REASONS is the closed 54-entry reason set", () => {
   // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
   // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
   // MCPR-03 / D-02: +1 for the malformed mcp failure-class member (34 -> 35).
@@ -61,7 +61,11 @@ test("OUT-08: REASONS is the closed 53-entry reason set", () => {
   // dependency off the benign-skip default when its record is disabled and it
   // therefore materialized nothing for the requesting plugin to install
   // against (52 -> 53).
-  assert.equal(REASONS.length, 53);
+  // D-04-07: +1 for `dependency promoted` -- install's marker for a recorded
+  // dependency the user then asked for by name. The record changes hands and
+  // nothing is materialized; `already installed` alone is the refusal's brace
+  // and cannot report a state change (53 -> 54).
+  assert.equal(REASONS.length, 54);
 });
 
 test("SNM-02: STATUS_TOKENS is the closed 24-entry token set", () => {

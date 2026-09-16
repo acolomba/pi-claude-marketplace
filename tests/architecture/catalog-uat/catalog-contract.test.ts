@@ -44,8 +44,12 @@ const EXPECTED_SECTION_COUNT = 20;
 // RESV-05: +1 state for the cascade skip whose record is DISABLED -- the
 // `{already installed, dependency disabled}` brace and the warning it raises
 // (204 -> 205).
-const EXPECTED_STATE_COUNT = 205;
-const EXPECTED_UTF8_BYTES = 27_293;
+// D-04-07: +1 state for the promotion of a recorded dependency the user then
+// installed by name -- the `installed` row carrying `{already installed,
+// dependency promoted}`, the one install outcome that changes a record
+// without materializing anything (205 -> 206).
+const EXPECTED_STATE_COUNT = 206;
+const EXPECTED_UTF8_BYTES = 27_385;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -334,7 +338,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 205 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 206 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

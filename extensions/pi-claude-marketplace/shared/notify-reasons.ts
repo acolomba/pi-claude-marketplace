@@ -5,14 +5,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 53-entry
+ * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 54-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 53-entry set.
+ * 54-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
@@ -32,7 +32,10 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * `dependency failed` -- which are what let one cascade row name WHICH
  * dependency failed and WHY, instead of the requesting plugin alone (45 to 52).
  * RESV-05 added `dependency disabled`, which lifts a skipped-but-inert
- * dependency off the benign-skip default (52 to 53).
+ * dependency off the benign-skip default (52 to 53). D-04-07 added
+ * `dependency promoted`, install's marker for a recorded dependency the user
+ * then asked for by name -- a state change, which the refusal `already
+ * installed` cannot report on its own (53 to 54).
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -277,6 +280,11 @@ type CommandPrivateReason =
   // materialized nothing. It joins `already installed` in the same brace and
   // is what lifts that row off the benign-skip default.
   | "dependency disabled"
+  // D-04-07: install's marker for a recorded dependency the user then named.
+  // The record changed hands and nothing was materialized, so it joins
+  // `already installed` on an `installed` row rather than a skipped one -- a
+  // promotion mutates state, which is why it is not an idempotent reason.
+  | "dependency promoted"
   | "plugins remain"
   | "stale clone"
   | "duplicate name"

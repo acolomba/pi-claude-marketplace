@@ -215,6 +215,10 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
     // so it materialized nothing. It joins `already installed` in the same
     // brace and lifts that row off the benign-skip default.
     "dependency disabled",
+    // D-04-07: a recorded dependency the user then installed by name. The
+    // record's provenance changed and nothing was materialized, so it rides an
+    // `installed` row beside `already installed`.
+    "dependency promoted",
   ];
 
   // act

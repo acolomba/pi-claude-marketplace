@@ -874,5 +874,35 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // D-04-07: the plugin was recorded as another plugin's dependency and the
+    // user then installed it by name. One field of one record changes and
+    // nothing is materialized, so the row is `installed` at info with no
+    // reload, and the brace carries both facts: the record was here before,
+    // and this command promoted it. `{already installed}` alone is the
+    // refusal's brace.
+    "dependency-promoted": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "linter",
+                version: "3.0.0",
+                scope: "user",
+                dependencies: [],
+                reasons: ["already installed", "dependency promoted"],
+                severity: "info",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };
