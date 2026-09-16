@@ -2,7 +2,7 @@ import path from "node:path";
 
 import ts from "typescript";
 
-import { resolveCandidates } from "./check-unused-type-members.model.mjs";
+import { propertySymbolOf, resolveCandidates } from "./check-unused-type-members.model.mjs";
 import {
   createOperationModel,
   readsOfOperand,
@@ -765,38 +765,6 @@ function indexTransfers(syntax, state) {
   for (const call of syntax.calls) {
     indexCall(call, state);
   }
-}
-
-/**
- * The property a read of `key` would land on, including the case where the
- * place holds a union and only one of its arms declares the key at all.
- *
- * The checker answers a union only when every arm declares the key, which
- * leaves the common relay shape -- a success arm beside a failure arm -- with
- * no answer. A key exactly one arm spells can only have come from that arm, so
- * resolving it there is directed rather than structural. Two arms spelling one
- * key leave it unsettled which supplied the value, and nothing is resolved:
- * under-crediting keeps a member a finding rather than excusing it by its
- * neighbour.
- */
-function propertySymbolOf(type, key, checker) {
-  const direct = checker.getPropertyOfType(type, key);
-
-  if (direct !== undefined || !type.isUnion()) {
-    return direct;
-  }
-
-  const found = [];
-
-  for (const constituent of type.types) {
-    const property = checker.getPropertyOfType(constituent, key);
-
-    if (property !== undefined) {
-      found.push(property);
-    }
-  }
-
-  return found.length === 1 ? found[0] : undefined;
 }
 
 function propertyTypeOf(type, key, checker) {

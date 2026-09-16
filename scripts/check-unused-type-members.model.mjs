@@ -415,6 +415,43 @@ export function resolveCandidates(checker, byDeclaration, symbol) {
   return resolved;
 }
 
+/**
+ * The property a read of `key` would land on, including the case where the
+ * place holds a union and only one of its arms declares the key at all.
+ *
+ * The checker answers a union only when every arm declares the key, which
+ * leaves the common relay shape -- a success arm beside a failure arm -- with
+ * no answer. A key exactly one arm spells can only have come from that arm, so
+ * resolving it there is directed rather than structural. Two arms spelling one
+ * key leave it unsettled which supplied the value, and nothing is resolved:
+ * under-crediting keeps a member a finding rather than excusing it by its
+ * neighbour.
+ *
+ * Exported because both halves of the analysis ask the same question: the
+ * transfer walk asks it of a place a value flowed through, and the contract
+ * engine asks it of the shape an object literal is being built against. The
+ * rule about which arm counts has exactly one definition here.
+ */
+export function propertySymbolOf(type, key, checker) {
+  const direct = checker.getPropertyOfType(type, key);
+
+  if (direct !== undefined || !type.isUnion()) {
+    return direct;
+  }
+
+  const found = [];
+
+  for (const constituent of type.types) {
+    const property = checker.getPropertyOfType(constituent, key);
+
+    if (property !== undefined) {
+      found.push(property);
+    }
+  }
+
+  return found.length === 1 ? found[0] : undefined;
+}
+
 // Symbol identity is stable for the life of one program, and the same symbol is
 // reached from thousands of call sites, so each one is resolved once.
 function addCandidatesOfSymbol(context, symbol, found) {

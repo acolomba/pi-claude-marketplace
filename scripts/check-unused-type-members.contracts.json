@@ -722,6 +722,24 @@
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
       "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:64:46"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:97:3",
+      "owner": "ResourcesDiscoverResult",
+      "key": "skillPaths",
+      "category": "external-output",
+      "purpose": "The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back.",
+      "origin": "extensions/pi-claude-marketplace/index.ts:161:11",
+      "boundary": "extensions/pi-claude-marketplace/index.ts:160:9"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:98:3",
+      "owner": "ResourcesDiscoverResult",
+      "key": "promptPaths",
+      "category": "external-output",
+      "purpose": "The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back.",
+      "origin": "extensions/pi-claude-marketplace/index.ts:162:11",
+      "boundary": "extensions/pi-claude-marketplace/index.ts:160:9"
     }
   ]
 }

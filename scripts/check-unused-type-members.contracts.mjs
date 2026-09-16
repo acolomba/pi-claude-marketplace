@@ -3,7 +3,11 @@ import path from "node:path";
 
 import ts from "typescript";
 
-import { AnalysisSetupError, resolveCandidates } from "./check-unused-type-members.model.mjs";
+import {
+  AnalysisSetupError,
+  propertySymbolOf,
+  resolveCandidates,
+} from "./check-unused-type-members.model.mjs";
 
 /**
  * Validated external and type-system contracts for the unused-type-member gate.
@@ -336,6 +340,12 @@ function literalNameOf(node) {
  * The inventoried declarations a written slot fills. The contextual type is the
  * shape being built, so its property is the declaration the value is placed on;
  * the object literal's own synthetic property is not.
+ *
+ * That contextual type is a union whenever an `async` body is annotated with a
+ * promise of the shape, because such a body may hand back the value or a
+ * thenable of it. `propertySymbolOf` is what settles which arm a key belongs
+ * to, and it refuses two arms rather than guessing -- the same rule the
+ * transfer walk applies to a place a value flowed through.
  */
 function originCandidates(node, context) {
   if (!ts.isPropertyAssignment(node) && !ts.isShorthandPropertyAssignment(node)) {
@@ -345,7 +355,7 @@ function originCandidates(node, context) {
   const key = literalNameOf(node);
   const contextual = key === undefined ? undefined : context.checker.getContextualType(node.parent);
   const symbol =
-    contextual === undefined ? undefined : context.checker.getPropertyOfType(contextual, key);
+    contextual === undefined ? undefined : propertySymbolOf(contextual, key, context.checker);
   return symbol === undefined
     ? []
     : resolveCandidates(context.checker, context.byDeclaration, symbol);
