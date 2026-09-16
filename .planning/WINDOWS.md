@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 2
+open_count: 3
 waived_count: 13
 fixed_count: 18
-total_count: 33
-last_updated: 2026-09-15T22:02:05.511Z
+total_count: 34
+last_updated: 2026-09-16T22:12:40.622Z
 ---
 
 # Broken Windows Ledger
@@ -48,6 +48,7 @@ last_updated: 2026-09-15T22:02:05.511Z
 | 31 | 106 | deviation | tests/architecture/compat-01-no-expansion.test.ts |  | The workflows reason required the inherited compatibility lock to append the new closed-set member. | fixed |  | 2026-08-29T19:13:44.624Z | 2026-08-29T19:13:48.337Z |
 | 32 | 06 | deviation | scripts/check-unused-type-members.contracts.json |  | Live gate closes with 138 unread members, each recorded in 06-LIVE-TRIAGE.md with evidence and one of six bounded owner repair plans (06-09..06-14); 06-08 activation is blocked on them | open |  | 2026-09-15T18:22:05.279Z |  |
 | 33 | 06 | deviation | extensions/pi-claude-marketplace/bridges/hooks/stage.ts | 227 | WriteHookConfigResult.written left unread on purpose: nine deepStrictEqual sites read the whole result, so the row is an analyzer lineage under-credit through a factory-returned closure, not a dead member | open |  | 2026-09-15T22:02:05.511Z |  |
+| 34 | 06 | deviation | extensions/pi-claude-marketplace/edge/handlers/tools.ts | 140 | PluginRow.marketplace and .scope stay unread: an external-output arrival chain breaks at a destructured binding, which the flow walk records no transfer into | open |  | 2026-09-16T22:12:40.622Z |  |
 
 ````json
 [
@@ -446,6 +447,19 @@ last_updated: 2026-09-15T22:02:05.511Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-15T22:02:05.511Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 34,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "extensions/pi-claude-marketplace/edge/handlers/tools.ts",
+    "line": 140,
+    "description": "PluginRow.marketplace and .scope stay unread: an external-output arrival chain breaks at a destructured binding, which the flow walk records no transfer into",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-16T22:12:40.622Z",
     "resolved_at": null,
     "milestone": null
   }
