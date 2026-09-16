@@ -757,7 +757,6 @@ async function installPluginWithTransaction(
         // no edit to any of the six phase bodies.
         const disableResult = await disableCascade.disableFreshInstall({
           state,
-          scope,
           locations,
           marketplace,
           plugin,

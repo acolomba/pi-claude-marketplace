@@ -402,12 +402,12 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1244:24"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:60:3",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:59:3",
       "owner": "FailedUnstageOutcome",
       "key": "ok",
       "category": "type-refinement",
       "purpose": "Narrows ok at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:59:29"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:58:29"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1004:3",
@@ -448,6 +448,22 @@
       "category": "type-selection",
       "purpose": "Selects within ListMsg by status, so this position accepts one variant group rather than the whole union.",
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts:101:50"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:64:26",
+      "owner": "RemoveDataDirFn.options",
+      "key": "recursive",
+      "category": "type-refinement",
+      "purpose": "Narrows recursive at this position, so a non-recursive removal cannot satisfy the seam.",
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:64:12"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:64:43",
+      "owner": "RemoveDataDirFn.options",
+      "key": "force",
+      "category": "type-refinement",
+      "purpose": "Narrows force at this position, so a non-forced removal cannot satisfy the seam.",
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts:64:12"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts:107:45",

@@ -55,12 +55,10 @@ import type { Scope } from "../shared/types.ts";
 // ---------------------------------------------------------------------------
 
 export interface MarketplaceStateRecordLike {
-  readonly manifestPath?: string;
   readonly plugins?: Record<string, unknown>;
 }
 
 export interface LocationsResolverLike {
-  marketplaceNamesCachePath(scope: Scope): string;
   pluginCachePath(scope: Scope, marketplace: string): Promise<string>;
   loadStateForScope(scope: Scope): Promise<{
     marketplaces: Record<string, MarketplaceStateRecordLike>;
@@ -146,17 +144,11 @@ async function classifyNotInstalledPluginRow(
  */
 export function makeLocationsResolver(cwd: string): LocationsResolverLike {
   return {
-    marketplaceNamesCachePath(scope: Scope): string {
-      return locationsFor(scope, cwd).marketplaceNamesCacheFile;
-    },
-
     pluginCachePath(scope: Scope, marketplace: string): Promise<string> {
       return locationsFor(scope, cwd).pluginCacheFile(marketplace);
     },
 
-    async loadStateForScope(scope: Scope): Promise<{
-      marketplaces: Record<string, MarketplaceStateRecordLike>;
-    }> {
+    async loadStateForScope(scope: Scope) {
       const locations = locationsFor(scope, cwd);
       const state = await loadState(locations.extensionRoot);
       // Project the persistence-level state shape into the structural
@@ -165,10 +157,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
       // exists to document the contract surface explicitly.
       const projected: Record<string, MarketplaceStateRecordLike> = {};
       for (const [name, record] of Object.entries(state.marketplaces)) {
-        projected[name] = {
-          manifestPath: record.manifestPath,
-          plugins: record.plugins,
-        };
+        projected[name] = { plugins: record.plugins };
       }
 
       return { marketplaces: projected };

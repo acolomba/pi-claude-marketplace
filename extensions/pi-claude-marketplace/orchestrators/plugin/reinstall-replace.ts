@@ -49,13 +49,19 @@ import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { RmOptions } from "node:fs";
 
 type BridgePhase = "skills" | "commands" | "agents" | "mcp";
 
-/** Filesystem removal seam used after a committed reinstall. */
+/**
+ * Filesystem removal seam used after a committed reinstall. The options
+ * narrow Node's own removal options: both slots are optional booleans there,
+ * and pinning each to `true` is what stops a non-recursive or non-forced
+ * removal from satisfying the seam.
+ */
 export type RemoveDataDirFn = (
   path: string,
-  options: { recursive: true; force: true },
+  options: RmOptions & { recursive: true; force: true },
 ) => Promise<void>;
 
 /** Prepared bridge handles retained until state persistence commits. */

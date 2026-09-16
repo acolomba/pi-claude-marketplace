@@ -23,7 +23,6 @@ export type InstallHooksRouting = Pick<
 /** Inputs needed to disable the record written by the install ledger. */
 export interface FreshInstallDisableOptions {
   readonly state: ExtensionState;
-  readonly scope: Scope;
   readonly locations: ScopedLocations;
   readonly marketplace: string;
   readonly plugin: string;

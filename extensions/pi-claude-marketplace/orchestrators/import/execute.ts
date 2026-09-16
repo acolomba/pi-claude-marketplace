@@ -31,6 +31,7 @@ import { buildClaudeImportPlan } from "./marketplaces.ts";
 import { loadMergedClaudeSettingsForScope as defaultLoadSettings } from "./settings.ts";
 
 import type {
+  ClaudeSettingsReadOptions,
   ImportDiagnostic,
   ImportDiagnosticCode,
   MergedClaudeSettingsResult,
@@ -158,7 +159,7 @@ interface MutableImportResult {
 export interface ImportDeps {
   readonly loadSettings?: (
     scope: Scope,
-    opts: { cwd: string },
+    opts: ClaudeSettingsReadOptions,
   ) => Promise<MergedClaudeSettingsResult>;
   readonly loadState?: (scope: Scope, cwd: string) => Promise<ExtensionState>;
   readonly addMarketplace?: (
@@ -213,7 +214,7 @@ function stateLoader(
 
 function settingsLoader(
   deps: ImportDeps | undefined,
-): (scope: Scope, opts: { cwd: string }) => Promise<MergedClaudeSettingsResult> {
+): (scope: Scope, opts: ClaudeSettingsReadOptions) => Promise<MergedClaudeSettingsResult> {
   return deps?.loadSettings ?? defaultLoadSettings;
 }
 
@@ -1002,7 +1003,7 @@ function buildBatchedPatchForScope(
     rawSourceByName.set(mp.marketplace, mp.source);
   }
 
-  const marketplaces: Record<string, { source: string }> = {};
+  const marketplaces: ImportConfigPatch["marketplaces"] = {};
   for (const added of result.addedMarketplaces) {
     if (added.scope !== scopePlan.scope) {
       continue;
@@ -1046,7 +1047,7 @@ function buildRepairPatchForScope(
   scopePlan: ScopedImportPlan,
   rawSourceByName: ReadonlyMap<string, string>,
 ): ImportConfigPatch {
-  const marketplaces: Record<string, { source: string }> = {};
+  const marketplaces: ImportConfigPatch["marketplaces"] = {};
   for (const skipped of result.skippedExistingMarketplaces) {
     if (skipped.scope !== scopePlan.scope) {
       continue;

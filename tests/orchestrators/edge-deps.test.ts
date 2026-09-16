@@ -218,49 +218,6 @@ async function layoutMarketplace(
   await writeStateFile(cwd, [marketplaceRecord(cwd, marketplaceName, records)]);
 }
 
-describe("marketplaceNamesCachePath", () => {
-  test("derives the project-scope names cache file from the working directory", async (t) => {
-    // arrange
-    const scope = await createHermeticScope(t, "names-project");
-    const resolver = makeLocationsResolver(scope.cwd);
-    const expectedCachePath = path.join(
-      scope.cwd,
-      ".pi",
-      "pi-claude-marketplace",
-      "cache",
-      "marketplace-names.json",
-    );
-
-    // act
-    const cachePath = resolver.marketplaceNamesCachePath("project");
-
-    // assert
-    assert.strictEqual(cachePath, expectedCachePath);
-    assert.strictEqual(scope.fetchCallCount(), 0);
-  });
-
-  test("derives the user-scope names cache file from the agent directory", async (t) => {
-    // arrange
-    const scope = await createHermeticScope(t, "names-user");
-    const resolver = makeLocationsResolver(scope.cwd);
-    const expectedCachePath = path.join(
-      scope.home,
-      ".pi",
-      "agent",
-      "pi-claude-marketplace",
-      "cache",
-      "marketplace-names.json",
-    );
-
-    // act
-    const cachePath = resolver.marketplaceNamesCachePath("user");
-
-    // assert
-    assert.strictEqual(cachePath, expectedCachePath);
-    assert.strictEqual(scope.fetchCallCount(), 0);
-  });
-});
-
 describe("pluginCachePath", () => {
   test("derives the project-scope per-marketplace cache file", async (t) => {
     // arrange
@@ -307,7 +264,7 @@ describe("pluginCachePath", () => {
 });
 
 describe("loadStateForScope", () => {
-  test("projects every recorded marketplace to its manifest path and plugin records", async (t) => {
+  test("projects every recorded marketplace to its plugin records", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "state-projection");
     const pluginRoot = pluginRootIn(scope.cwd, "team-mp", "plug");
@@ -320,14 +277,8 @@ describe("loadStateForScope", () => {
     const resolver = makeLocationsResolver(scope.cwd);
     const expectedState = {
       marketplaces: {
-        "team-mp": {
-          manifestPath: manifestPathIn(scope.cwd, "team-mp"),
-          plugins: { plug: pluginRecord(pluginRoot, { version: "1.0.0" }) },
-        },
-        "empty-mp": {
-          manifestPath: manifestPathIn(scope.cwd, "empty-mp"),
-          plugins: {},
-        },
+        "team-mp": { plugins: { plug: pluginRecord(pluginRoot, { version: "1.0.0" }) } },
+        "empty-mp": { plugins: {} },
       },
     } satisfies { readonly marketplaces: Record<string, MarketplaceStateRecordLike> };
 
