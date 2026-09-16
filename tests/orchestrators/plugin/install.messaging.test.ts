@@ -577,7 +577,7 @@ describe("composeInstallFailureMessage", () => {
 describe("composePromotedRow", () => {
   test("D-04-07: composes an installed row carrying the promotion brace at info severity with no reload", () => {
     // arrange
-    const args = { plugin: "linter", version: "3.0.0", scope: "user" as const };
+    const args = { plugin: "linter", version: "3.0.0", scope: "user" as const, needsReload: false };
 
     // act
     const row = composePromotedRow(args);
@@ -595,9 +595,34 @@ describe("composePromotedRow", () => {
     });
   });
 
+  test("D-04-07: stamps the reload hint the caller reports for a re-materialized record", () => {
+    // arrange
+    const args = { plugin: "linter", version: "3.0.0", scope: "user" as const, needsReload: true };
+
+    // act
+    const row = composePromotedRow(args);
+
+    // assert
+    assert.deepStrictEqual(row, {
+      status: "installed",
+      name: "linter",
+      version: "3.0.0",
+      scope: "user",
+      dependencies: [],
+      reasons: ["already installed", "dependency promoted"],
+      severity: "info",
+      needsReload: true,
+    });
+  });
+
   test("D-04-07: the promotion row renders through the installed arm with the brace in reason order", () => {
     // arrange
-    const row = composePromotedRow({ plugin: "linter", version: "3.0.0", scope: "user" });
+    const row = composePromotedRow({
+      plugin: "linter",
+      version: "3.0.0",
+      scope: "user",
+      needsReload: false,
+    });
     const probe = { piSubagentsLoaded: false, piMcpAdapterLoaded: false } satisfies SoftDepStatus;
 
     // act

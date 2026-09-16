@@ -5399,6 +5399,143 @@ test("D-04-07: an orchestrated promotion flips the record, writes no declaration
   });
 });
 
+/**
+ * D-04-07: disable the seeded dependency through the real disable verb, so its
+ * record carries `enabled: false` with its inventory kept (ENBL-18), its
+ * artifacts are off disk, and the config entry says `{ enabled: false }` --
+ * the state a promotion of a disabled record starts from.
+ */
+async function disableSeededDependency(
+  cwd: string,
+  hooksRouting: InstallHooksRouting,
+  seeded: { readonly ctx: NotificationContext; readonly pi: ToolInventory },
+): Promise<void> {
+  const { createNodeSetPluginEnabled } =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts");
+  const disable = makeCtx();
+  await createNodeSetPluginEnabled(hooksRouting)({
+    ctx: disable.ctx,
+    pi: seeded.pi,
+    cwd,
+    scope: "project",
+    marketplace: "mp",
+    plugin: "some-other-plugin",
+    enable: false,
+  });
+  assert.equal(disable.notifications.length, 1, "the disable verb reported once");
+  assert.equal(disable.notifications[0]?.severity, undefined, "and not as a failure");
+}
+
+test("D-04-07: installing a disabled dependency by name promotes it, re-materializes it and enables it", async () => {
+  await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-disabled-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { before, ctx, pi, notifications } = await seedDependencyInstalled(cwd, installPlugin);
+      const dependencyBefore = before.marketplaces["mp"]?.plugins["some-other-plugin"];
+      assert.ok(dependencyBefore !== undefined);
+      await disableSeededDependency(cwd, hooksRouting, { ctx, pi });
+      const skillDir = path.join(locations.skillsTargetDir, "some-other-plugin:tool");
+      await assert.rejects(stat(skillDir), "the disable took the dependency's skill off disk");
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+
+      // assert: the record is the one the cascade wrote, enabled again and
+      // promoted, with its install time kept and its update time moved; the
+      // skill is back on disk; the declaration carries the enable path's own
+      // `enabled: true`; the row is the promotion row with the reload trailer
+      // a re-materialization earns.
+      const promoted = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "some-other-plugin"
+      ];
+      assert.ok(promoted !== undefined);
+      assert.ok(promoted.updatedAt > dependencyBefore.updatedAt, "the update time moved");
+      assert.deepStrictEqual(promoted, {
+        ...dependencyBefore,
+        provenance: "explicit",
+        updatedAt: promoted.updatedAt,
+      });
+      await stat(skillDir);
+      assert.equal(
+        await readFile(locations.configJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "hello@mp": {},\n    "some-other-plugin@mp": {\n      "enabled": true\n    }\n  }\n}\n',
+      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ● some-other-plugin v0.0.1 (installed) {already installed, dependency promoted}\n\n" +
+            "/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(outcome, {
+        status: "installed",
+        version: "0.0.1",
+        resourcesChanged: true,
+        declaresAgents: false,
+        declaresMcp: false,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-07: a --local promotion of a disabled dependency writes the enable path's own declaration to the local file", async () => {
+  await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-disabled-local-"));
+    try {
+      // arrange: the disable verb stamped `{ enabled: false }` in the base
+      // file. A bare local key would replace that entry wholesale (CFG-02) and
+      // enable the plugin by omission; the promotion enables it on purpose and
+      // says so in the file it writes.
+      const locations = locationsFor("project", cwd);
+      const { ctx, pi } = await seedDependencyInstalled(cwd, installPlugin);
+      await disableSeededDependency(cwd, hooksRouting, { ctx, pi });
+      const baseBefore = await readFile(locations.configJsonPath, "utf8");
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+        local: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          base: await readFile(locations.configJsonPath, "utf8"),
+          local: await readFile(locations.configLocalJsonPath, "utf8"),
+          enabled: (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+            "some-other-plugin"
+          ]?.enabled,
+        },
+        {
+          base: baseBefore,
+          local:
+            '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {\n    "some-other-plugin@mp": {\n      "enabled": true\n    }\n  }\n}\n',
+          enabled: true,
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("D-04-07: a plugin already recorded as a direct install still fails with the already-installed refusal", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-explicit-"));
