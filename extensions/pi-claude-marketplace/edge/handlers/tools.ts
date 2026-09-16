@@ -281,9 +281,6 @@ async function loadToolPluginPayload(
   params: {
     marketplace?: string;
     scope?: "user" | "project";
-    installed?: boolean;
-    available?: boolean;
-    unavailable?: boolean;
   },
   ctx: ExtensionContext,
   buckets: ToolFilterBuckets,

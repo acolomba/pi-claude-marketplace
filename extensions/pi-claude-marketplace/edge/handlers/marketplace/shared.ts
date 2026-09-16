@@ -14,26 +14,23 @@ import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 import { extractLocalFlag } from "../shared.ts";
 
+import type { GetMarketplaceInfoOptions } from "../../../orchestrators/marketplace/info.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { Scope } from "../../../shared/types.ts";
 
 /**
- * Delegate shape shared by `getMarketplaceInfo` and `removeMarketplace`.
- * `GetMarketplaceInfoOptions` matches this exactly; `RemoveMarketplaceOptions`
- * adds an OPTIONAL `cascade?` field, which a caller omitting `cascade`
- * structurally satisfies.
+ * Delegate shape for a `<name>`-only marketplace subcommand, named as the
+ * option bag `getMarketplaceInfo` declares and reads rather than as a mirror
+ * the shim keeps in step by hand. A delegate whose own parameter adds an
+ * OPTIONAL slot (`removeMarketplace`'s `cascade?`) stays assignable, because
+ * parameter contravariance asks only that this shape satisfy the delegate's.
+ *
+ * RECON-03: orchestrators may return a typed outcome in orchestrated mode. The
+ * edge handler omits `notifications`, so the standalone-mode void return is
+ * exercised; `Promise<unknown>` keeps the return unconstrained for any future
+ * orchestrators added to this shim.
  */
-export type SingleNameMarketplaceRun = (opts: {
-  ctx: ExtensionCommandContext;
-  pi: ExtensionAPI;
-  name: string;
-  cwd: string;
-  scope?: Scope;
-  // RECON-03: orchestrators may now return a typed outcome
-  // in orchestrated mode. The edge handler omits `notifications`, so the
-  // standalone-mode void return is exercised; `void | unknown` keeps the type
-  // unconstrained for any future orchestrators added to this shim.
-}) => Promise<unknown>;
+export type SingleNameMarketplaceRun = (opts: GetMarketplaceInfoOptions) => Promise<unknown>;
 
 /**
  * Build a thin-shim handler for a `<name>`-only marketplace subcommand. The
