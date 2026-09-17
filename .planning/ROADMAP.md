@@ -24,7 +24,7 @@ v1.20 phase. Decimal phases (2.1, 3.1) are urgent insertions only, marked
 - [x] **Phase 2: Uninstall data disposition and the uninstall option seam** — `uninstall --keep-data` preserves the plugin's data directory; without it the directory is deleted with no prompt, including on the reconcile path that carries no command line. This phase also establishes the single seam through which a per-invocation uninstall option is parsed, carried into `uninstallPlugin()` and defaulted for callers with no command line, so `--prune` joins an existing structure in Phase 5 rather than a second mechanism being invented for it. Independent of the dependency work. (DATA-01, DATA-02, DATA-03) (completed 2026-09-14)
 - [x] **Phase 3: Dependency resolution** — installing a plugin installs what it declares it needs, retiring the PI-13 / PR-5 no-auto-resolution decision. Marketplace attribution, a stated version-constraint grammar, cycle termination, no reinstall of what is already there, and a named failure that leaves nothing half-materialized. Maps onto the existing `orchestrators/import/` cascade and the `orchestrators/plugin/bootstrap.ts` composer rather than adding a second cascade beside them. (RESV-01, RESV-02, RESV-03, RESV-04, RESV-05, RESV-06) (completed 2026-09-15)
 - [x] **Phase 4: Install provenance** — each install record states whether the user asked for the plugin by name or another plugin declared it, with the promotion and retention rules that keep the two from overwriting each other, and a pre-milestone record upgraded with a truthful default rather than misreported. This phase also retires the cascade-dependency config write Phase 3 shipped, so the desired-state config names only what the user asked for; provenance is what keeps reconcile from sweeping a dependency once that write is gone. This is the record `--prune` reads. (PROV-01, PROV-02, PROV-03, PROV-04) (completed 2026-09-16)
-- [ ] **Phase 5: Prune on uninstall** — `uninstall --prune` removes the dependency-installed plugins no remaining plugin declares, never a directly-installed one and never a still-needed one, and says which ones it removed. The uninstall flag surface closes here at exactly the two flags upstream defines. (PRUNE-01, PRUNE-02, PRUNE-03, PRUNE-04, PRUNE-05, FLAG-01)
+- [x] **Phase 5: Prune on uninstall** — `uninstall --prune` removes the dependency-installed plugins no remaining plugin declares, never a directly-installed one and never a still-needed one, and says which ones it removed. The uninstall flag surface closes here at exactly the two flags upstream defines. (PRUNE-01, PRUNE-02, PRUNE-03, PRUNE-04, PRUNE-05, FLAG-01) (completed 2026-09-16)
 
 **Settled going in.** These are decided; planning should not reopen them.
 
@@ -304,7 +304,7 @@ plugin names — so plan these phases with the UI gate skipped.
 | 2. Uninstall data disposition and the uninstall option seam | v1.20 | 2/2 | Complete    | 2026-09-14 |
 | 3. Dependency resolution | v1.20 | 7/7 | Complete    | 2026-09-15 |
 | 4. Install provenance | v1.20 | 6/6 | Complete    | 2026-09-16 |
-| 5. Prune on uninstall | v1.20 | 3/3 | In Progress|  |
+| 5. Prune on uninstall | v1.20 | 3/3 | Complete    | 2026-09-16 |
 
 ## Carried Forward
 

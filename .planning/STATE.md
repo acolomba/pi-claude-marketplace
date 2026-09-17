@@ -4,39 +4,65 @@ milestone: v1.20
 milestone_name: transitive-dependencies
 current_phase: 5
 current_phase_name: Prune on uninstall
-status: verifying
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-09-17T00:13:37.153Z"
+status: completed
+stopped_at: Phase 5 complete, all 5 phases verified, ready for milestone audit
+last_updated: "2026-09-17T01:39:22.196Z"
 last_activity: 2026-09-16
-last_activity_desc: Phase 05 execution started
-state_head: 4041f3ea993c496b70401917d0623c010e3d1aa0
+last_activity_desc: Phase 5 complete
+state_head: e824a0e48a9be75a8d993828758fe09c7534d4a7
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 22
   completed_plans: 22
-  percent: 80
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-14 after manifest verification)
+See: `.planning/PROJECT.md` (updated 2026-09-17 after Phase 5 prune-on-uninstall)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 05 — Prune on uninstall
+**Current focus:** Milestone v1.20 close — audit, complete, cleanup (all 5 phases verified)
 Installing a plugin that declares dependencies should install what it needs.
 25 requirements across 5 phases. v1.19 Unit Test Refactor closed 2026-09-04 and
 is archived under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 05 (Prune on uninstall) — EXECUTING
+Phase: 5 (Prune on uninstall) — COMPLETE
 Plan: 3 of 3
-Status: Phase complete — ready for verification
+Status: All 5 phases complete — milestone v1.20 ready for audit and close
+
+**Phase 5 closed 2026-09-16**, verified 6/6 must-haves; the four human items
+(live refusal row, live `--prune`, dev-tree provenance residue, and the
+two-stale-records scenario behind D-05-07) were accepted by the operator on
+2026-09-17 and D-05-07 stands. Three plans ran in three sequential waves on
+this checkout (worktree isolation degraded per #683). `uninstall X` now
+refuses on both entry points while any installed record in the scope
+declares X (`⊘ X (failed) {dependents remain}` with a sorted `cause:` line;
+disabled declarers hold, other-scope declarers are not consulted, an
+unreadable declarer refuses with `{unreadable}`); `uninstall --prune`
+sweeps the whole scope to a fixpoint between the primary's removal and the
+single `tx.save()`, removing only `provenance: "dependency"` records no
+remaining plugin declares, and renders each as `(uninstalled)
+{dependency pruned}`; reconcile never prunes and retries refused entries
+within one pass. `--prune` rides the catalog-owned flag surface beside
+`--keep-data`, and the drift guard pins exactly those two extra flags
+(FLAG-01). `dependents remain` and `dependency pruned` landed across all ten
+closed-set pin surfaces (catalog 212 states).
+
+**The code review converged in two iterations** (`05-REVIEW.md`,
+`05-REVIEW-FIX.md`): one critical (a failed pruned member no longer lets the
+sweep prune the dependencies only it declared — `isHeldBy` re-check per
+member) and four warnings fixed in five commits; two operator decisions were
+recorded as open Info items (a stricter guard on an unusable own manifest;
+`unreadable` vs a new `dependents unknown` token). `PRUNE-GUARD-MR-01` in
+BACKLOG.md records that `marketplace remove` bypasses the dependents guard.
 
 **Phase 4 closed 2026-09-16**, verified 9/9 must-haves; the one human item
 (the promoted row's legibility in a live session) was accepted on the pinned
@@ -275,10 +301,10 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-16 — Phase 05 execution started
+Last activity: 2026-09-16 — Phase 5 complete
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
-Milestone progress is 3 of 5 phases complete (60%).
+Milestone progress is 5 of 5 phases complete (100%).
 See `01-VERIFICATION.md` for passing automated and real-plugin evidence.
 Phase 2 context records the user preference to follow existing output and help conventions.
 
@@ -302,7 +328,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 
 **Velocity:**
 
-- Total plans completed: 170
+- Total plans completed: 173
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -320,6 +346,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | 02 | 2 | - | - |
 | 3 | 7 | - | - |
 | 04 | 6 | - | - |
+| 5 | 3 | - | - |
 
 **Recent Trend:** 35 Phase 113 plans completed with all direct owner, review, validation, verification, security, and clean-repository gates green.
 **Per-Plan Metrics:**
@@ -791,7 +818,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 05-03-PLAN.md
+**Stopped at:** Phase 5 complete (verified 2026-09-17, human items accepted) — all 5 phases complete, ready for milestone audit/close
 
 **Resume file:** None
 `HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
