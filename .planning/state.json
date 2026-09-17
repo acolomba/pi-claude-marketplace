@@ -1,58 +1,38 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "refine-unit-tests — Refine Unit Tests",
+  "milestone": "v1.20 — transitive-dependencies",
   "phases": [
     {
       "number": "1",
-      "name": "Live Evidence Revalidation",
+      "name": "Manifest read fidelity",
       "status": "complete"
     },
     {
       "number": "2",
-      "name": "Containment and Input Safety",
+      "name": "Uninstall data disposition and the uninstall option seam",
       "status": "complete"
     },
     {
       "number": "3",
-      "name": "Production Defect Corrections",
+      "name": "Dependency resolution",
       "status": "complete"
     },
     {
       "number": "4",
-      "name": "Hermetic Test Infrastructure",
+      "name": "Install provenance",
       "status": "complete"
     },
     {
       "number": "5",
-      "name": "Injection and Ownership Design",
-      "status": "complete"
-    },
-    {
-      "number": "6",
-      "name": "Assertion and Module Refinement",
-      "status": "complete"
-    },
-    {
-      "number": "7",
-      "name": "Gate Integrity",
-      "status": "complete"
-    },
-    {
-      "number": "8",
-      "name": "Direct Coverage",
-      "status": "complete"
-    },
-    {
-      "number": "9",
-      "name": "Final Quality and Backlog Closure",
+      "name": "Prune on uninstall",
       "status": "complete"
     }
   ],
   "next": {
-    "command": "/gsd:progress",
-    "label": "Show progress",
-    "reason": "Unsure of state — showing progress"
+    "command": "/gsd:new-milestone",
+    "label": "Start a new milestone",
+    "reason": "All phases complete — start a new milestone"
   },
-  "updated_at": "2026-09-13T12:02:02.148Z"
+  "updated_at": "2026-09-17T01:39:22.249Z"
 }

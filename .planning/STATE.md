@@ -5,11 +5,11 @@ milestone_name: transitive-dependencies
 current_phase: 5
 current_phase_name: Prune on uninstall
 status: completed
-stopped_at: v1.20 audit tech_debt (2172348e); operator chose to address debt before complete-milestone
-last_updated: "2026-09-17T01:39:22.196Z"
+stopped_at: v1.20 shipped as PR #198 (all audit tech debt settled except BACKLOG PRUNE-GUARD-MR-01); next is complete-milestone after merge
+last_updated: "2026-09-17T20:34:55.808Z"
 last_activity: 2026-09-17
-last_activity_desc: Completed quick task 260917-cqc (IN-05 tighten, IN-06 accept); secure/validate gates on phases 3-5; merged origin/main
-state_head: e824a0e48a9be75a8d993828758fe09c7534d4a7
+last_activity_desc: Shipped milestone v1.20 as PR #198 (features/manifest -> main)
+state_head: 1517a88c3864406178506bcca4a922e12518176c
 progress:
   total_phases: 5
   completed_phases: 5
@@ -36,7 +36,7 @@ is archived under `.planning/milestones/v1.19-*`.
 
 Phase: 5 (Prune on uninstall) — COMPLETE
 Plan: 3 of 3
-Status: All 5 phases complete — milestone v1.20 ready for audit and close
+Status: Milestone v1.20 shipped — PR #198
 
 **Phase 5 closed 2026-09-16**, verified 6/6 must-haves; the four human items
 (live refusal row, live `--prune`, dev-tree provenance residue, and the
@@ -301,7 +301,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-17 — Completed quick task 260917-hfp: phase 5 review Info items IN-01..04, IN-07, IN-08 settled (the v1.20 audit tech-debt list is now clear except BACKLOG `PRUNE-GUARD-MR-01`)
+Last activity: 2026-09-17 — Shipped milestone v1.20 as PR #198 (features/manifest -> main)
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 5 of 5 phases complete (100%).

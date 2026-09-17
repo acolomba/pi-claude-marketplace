@@ -2,7 +2,13 @@
 
 ## [Unreleased]
 
-- `info` on a git-source plugin that is not yet fetched now lists the dependencies its marketplace entry declares, after `components: not resolved`.
+- A plugin can declare the other plugins it needs, and `install` now installs them with it. See [Dependency resolution](docs/dependency-resolution.md). (#198)
+  - A dependency resolves from the marketplace it names, or from the declaring plugin's marketplace. Version constraints follow the semver range syntax. A cycle stops. An already-installed dependency is not reinstalled. When one dependency fails, the whole install rolls back and the message names the dependency and the reason.
+  - Each install record now says whether you asked for the plugin by name or another plugin pulled it in. A direct install stays direct when a later install declares it. Records from older versions are upgraded silently.
+  - `uninstall --prune` also removes the dependencies that no remaining plugin needs. It never removes a plugin you installed by name. `uninstall` refuses to remove a plugin that another installed plugin still needs, and names the dependents.
+  - `uninstall --keep-data` keeps the plugin's data directory. Without the flag, `uninstall` deletes the directory and does not prompt.
+  - A bare `<pluginRoot>/plugin.json` is now read, and a plugin that declares `"./skills/"` next to a `skills/` directory no longer warns about duplicate skills.
+  - `info` lists every declared dependency, including object-shaped entries with a version constraint, and does so on a git-source plugin that is not yet fetched.
 - The changelog now lists one entry per pull request, ending in its number, and thanks every issue reporter and contributor. (#197)
 - Internal: every test suite now runs in a hermetic environment that owns `HOME` and the Pi agent directory. (#196)
 - Internal: the TypeScript rules and review skills moved under `skills/`, and each GSD agent loads only the ones it needs. (#195)
