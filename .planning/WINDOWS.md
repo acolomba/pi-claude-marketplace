@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 3
+open_count: 6
 waived_count: 18
 fixed_count: 19
-total_count: 40
-last_updated: 2026-09-17T06:03:22.673Z
+total_count: 43
+last_updated: 2026-09-17T19:11:00.326Z
 ---
 
 # Broken Windows Ledger
@@ -55,6 +55,9 @@ last_updated: 2026-09-17T06:03:22.673Z
 | 38 | 06 | deviation | extensions/pi-claude-marketplace/orchestrators/types.ts | 155 | UpdatePhaseFailure.msg stays unread by a recorded decision the gate carries as a per-row exception: The reader survey agrees the slot has no reader today -- the only syntax naming this declaration is the write at update-swap.ts:929, and the f.msg reads at :921 and :929 land on Phase3Failure.msg through UpdatePhase3Failure, a different declaration. The removal is still refused: phaseFailures is populated by exactly one path, the phase-3 rollback aggregation, and its own header states the contract, to surface failures structurally so the cascade renderer can build the rollback-partial parent plus indented children. A slot a rollback path populates is behaviour even with no reader today, and deleting it forces a future consumer to re-parse the per-phase text back out of notes prose. | waived | Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one. | 2026-09-17T06:03:13.396Z | 2026-09-17T06:03:21.958Z |
 | 39 | 06 | deviation | extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts | 41 | AuthAttemptResult.authAttempted stays unread by a recorded decision the gate carries as a per-row exception: D-32-05 put authAttempted: true on BOTH arms deliberately, as a reference-only future-proofing marker, and the declaration own comment states the implementation never branches on it: onAuthFailure(url, cred) is called with only the credential and never receives this value. The analyzer is not involved -- there is no read to find. Its structural twin DeviceFlowResult.authAttempted in domain/github-auth.ts is test-only-observed with 36 witnesses; this platform copy exists only because platform/README.md forbids a platform to domain import, so it carries no witness of its own and the orchestrators rely on structural typing to pass initiateDeviceFlow across. Clearing this row means revisiting D-32-05, not repairing source. | waived | Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one. | 2026-09-17T06:03:14.040Z | 2026-09-17T06:03:22.325Z |
 | 40 | 06 | deviation | extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts | 42 | AuthAttemptResult.authAttempted stays unread by a recorded decision the gate carries as a per-row exception: D-32-05 put authAttempted: true on BOTH arms deliberately, as a reference-only future-proofing marker, and the declaration own comment states the implementation never branches on it: onAuthFailure(url, cred) is called with only the credential and never receives this value. The analyzer is not involved -- there is no read to find. Its structural twin DeviceFlowResult.authAttempted in domain/github-auth.ts is test-only-observed with 36 witnesses; this platform copy exists only because platform/README.md forbids a platform to domain import, so it carries no witness of its own and the orchestrators rely on structural typing to pass initiateDeviceFlow across. Clearing this row means revisiting D-32-05, not repairing source. | waived | Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one. | 2026-09-17T06:03:14.703Z | 2026-09-17T06:03:22.673Z |
+| 41 | 07 | deviation | scripts/coverage-producer.convert.mjs |  | Producer adapter split into coverage-producer.convert.mjs (library) and coverage-producer.mjs (CLI) so fallow's unused-export gate has a static consumer; plan named one file | open |  | 2026-09-17T19:10:51.585Z |  |
+| 42 | 07 | deviation | .gitignore |  | Added !vendor/coverage/*.tgz so the delivered producer archive is tracked despite the repository-wide *.tgz ignore; .gitignore was not in the plan's file list | open |  | 2026-09-17T19:10:59.969Z |  |
+| 43 | 07 | deviation | package.json |  | coverage:producer:build script alias added with the delivery tool (Task 2) instead of Task 3 because fallow reports an unreferenced script as an unused file | open |  | 2026-09-17T19:11:00.326Z |  |
 
 ````json
 [
@@ -545,6 +548,45 @@ last_updated: 2026-09-17T06:03:22.673Z
     "reason": "Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one.",
     "recorded_at": "2026-09-17T06:03:14.703Z",
     "resolved_at": "2026-09-17T06:03:22.673Z",
+    "milestone": null
+  },
+  {
+    "id": 41,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "scripts/coverage-producer.convert.mjs",
+    "line": null,
+    "description": "Producer adapter split into coverage-producer.convert.mjs (library) and coverage-producer.mjs (CLI) so fallow's unused-export gate has a static consumer; plan named one file",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-17T19:10:51.585Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 42,
+    "kind": "deviation",
+    "phase": "07",
+    "file": ".gitignore",
+    "line": null,
+    "description": "Added !vendor/coverage/*.tgz so the delivered producer archive is tracked despite the repository-wide *.tgz ignore; .gitignore was not in the plan's file list",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-17T19:10:59.969Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 43,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "package.json",
+    "line": null,
+    "description": "coverage:producer:build script alias added with the delivery tool (Task 2) instead of Task 3 because fallow reports an unreferenced script as an unused file",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-17T19:11:00.326Z",
+    "resolved_at": null,
     "milestone": null
   }
 ]
