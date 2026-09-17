@@ -4935,7 +4935,7 @@ const REFUSAL_CASES: readonly RefusalCase[] = [
   {
     title: "D-05-07: a record its marketplace manifest does not list refuses the uninstall",
     plugins: { helper: {}, other: { listed: false } },
-    expectedRow: "⊘ helper v0.0.1 (failed) {not in manifest}",
+    expectedRow: "⊘ helper v0.0.1 (failed) {unreadable}",
     expectedCause: "cannot read the dependencies of other@mp: not declared by its marketplace",
   },
 ];

@@ -1115,7 +1115,7 @@ A plugin operation has failed.
 
 ### Failure -- refused, a declarer could not be read (D-05-07)
 
-Triggered when some OTHER installed record in the scope has declarations the guard cannot establish: its marketplace manifest fails to load, that manifest does not list it, or its declaration parses as unusable. The rule is fail-closed -- an unreadable record is never read as "declares nothing", because deleting on incomplete information is the one outcome the guard must never produce -- so the uninstall is refused rather than risked. The brace carries the DECLARER's read-failure token (`not in manifest` here; `invalid manifest` for an unusable declaration; `source missing`, `unparseable`, `permission denied` or `unreadable` for a manifest that failed to load), and the `cause:` trailer names which record could not be read, never an absolute path. The remedy is to repair that record's marketplace (`marketplace update`) or to remove it (`marketplace remove`). Severity: `error`. No reload-hint.
+Triggered when some OTHER installed record in the scope has declarations the guard cannot establish: its marketplace manifest fails to load, that manifest does not list it, or its declaration parses as unusable. The rule is fail-closed -- an unreadable record is never read as "declares nothing", because deleting on incomplete information is the one outcome the guard must never produce -- so the uninstall is refused rather than risked. The brace carries `unreadable` -- the "could not read on-disk state" default -- and NOT the declarer's own read-failure token: the row's subject is the plugin the user named, whose manifest is fine, and the brace states a fact about the row's subject. The `cause:` trailer names which record could not be read and why (not declared by its marketplace, an unusable declaration, or the marketplace manifest's load error), never an absolute path. The remedy is to repair that record's marketplace (`marketplace update`) or to remove it (`marketplace remove`). Severity: `error`. No reload-hint.
 
 <!-- catalog-state: refused-declarer-unreadable -->
 
@@ -1123,7 +1123,7 @@ Triggered when some OTHER installed record in the scope has declarations the gua
 A plugin operation has failed.
 
 ● official [user]
-  ⊘ helper v1.0.0 (failed) {not in manifest}
+  ⊘ helper v1.0.0 (failed) {unreadable}
     cause: cannot read the dependencies of other@official: not declared by its marketplace
 ```
 

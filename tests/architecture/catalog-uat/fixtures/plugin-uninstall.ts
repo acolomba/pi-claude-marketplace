@@ -189,8 +189,9 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
     },
 
     // D-05-07: some OTHER record's declarations could not be established, so
-    // the uninstall is refused rather than risked. The brace carries the
-    // declarer's read-failure token and the cause names which record it was.
+    // the uninstall is refused rather than risked. The brace carries the D-47-B
+    // `unreadable` default -- a token about the declarer would make a false
+    // claim about the target -- and the cause names which record it was.
     "refused-declarer-unreadable": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
@@ -206,7 +207,7 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
                 needsReload: false,
                 name: "helper",
                 version: "1.0.0",
-                reasons: ["not in manifest"],
+                reasons: ["unreadable"],
                 cause: new Error(
                   "cannot read the dependencies of other@official: not declared by its marketplace",
                 ),

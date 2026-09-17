@@ -323,12 +323,9 @@ test("D-05-07: a record its marketplace does not list ends the walk as not in ma
   // assert
   assert.equal(result.ok, false);
   assert.deepStrictEqual(
-    result.ok
-      ? undefined
-      : { declarer: result.declarer, reason: result.reason, message: result.cause.message },
+    result.ok ? undefined : { declarer: result.declarer, message: result.cause.message },
     {
       declarer: "helper@mp",
-      reason: "not in manifest",
       message: "cannot read the dependencies of helper@mp: not declared by its marketplace",
     },
   );
@@ -356,12 +353,9 @@ test("D-05-07: an unusable declaration ends the walk as invalid manifest with th
   // assert
   assert.equal(result.ok, false);
   assert.deepStrictEqual(
-    result.ok
-      ? undefined
-      : { declarer: result.declarer, reason: result.reason, message: result.cause.message },
+    result.ok ? undefined : { declarer: result.declarer, message: result.cause.message },
     {
       declarer: "helper@mp",
-      reason: "invalid manifest",
       message: "cannot read the dependencies of helper@mp: dependencies.0: Invalid input",
     },
   );
@@ -370,23 +364,23 @@ test("D-05-07: an unusable declaration ends the walk as invalid manifest with th
 interface LoadFailureCase {
   readonly title: string;
   readonly thrown: Error;
-  readonly reason: string;
+  readonly message: string;
 }
 
 const LOAD_FAILURES: readonly LoadFailureCase[] = [
   {
-    title: "D-05-07: a missing marketplace manifest ends the walk as source missing",
+    title: "D-05-07: a missing marketplace manifest ends the walk naming the record",
     thrown: errno("ENOENT"),
-    reason: "source missing",
+    message: "cannot read the dependencies of app@mp: ENOENT: open 'mp'",
   },
   {
-    title: "D-05-07: a malformed marketplace manifest ends the walk as unparseable",
+    title: "D-05-07: a malformed marketplace manifest ends the walk naming the record",
     thrown: new InvalidMarketplaceManifestError("bad json", { cause: new SyntaxError("x") }),
-    reason: "unparseable",
+    message: "cannot read the dependencies of app@mp: bad json",
   },
 ];
 
-for (const { title, thrown, reason } of LOAD_FAILURES) {
+for (const { title, thrown, message } of LOAD_FAILURES) {
   test(title, async () => {
     // arrange
     const loadManifest = manifestLoader({ [MP.manifestPath]: thrown });
@@ -403,8 +397,8 @@ for (const { title, thrown, reason } of LOAD_FAILURES) {
     // assert
     assert.equal(result.ok, false);
     assert.deepStrictEqual(
-      result.ok ? undefined : { declarer: result.declarer, reason: result.reason },
-      { declarer: "app@mp", reason },
+      result.ok ? undefined : { declarer: result.declarer, message: result.cause.message },
+      { declarer: "app@mp", message },
     );
   });
 }
@@ -450,8 +444,11 @@ test("D-05-07: the first unreadable record wins over a later one", async () => {
   // assert
   assert.equal(result.ok, false);
   assert.deepStrictEqual(
-    result.ok ? undefined : { declarer: result.declarer, reason: result.reason },
-    { declarer: "missing@mp", reason: "not in manifest" },
+    result.ok ? undefined : { declarer: result.declarer, message: result.cause.message },
+    {
+      declarer: "missing@mp",
+      message: "cannot read the dependencies of missing@mp: not declared by its marketplace",
+    },
   );
 });
 

@@ -209,8 +209,10 @@ export type UninstallHooksRouting = Pick<
  * D-05-14 / D-05-07: the uninstall was REFUSED inside the locked transaction
  * before anything left disk -- either another installed plugin in the scope
  * still declares the target (`dependents remain`) or some other record's
- * declarations could not be established, in which case `reason` is that
- * declarer's read-failure token.
+ * declarations could not be established (`unreadable`: the D-47-B "we could
+ * not read on-disk state" member, because the row's subject is the target and
+ * the declarer's own read-failure token would make a false claim about the
+ * target's manifest; the cause line names the declarer).
  *
  * `message` IS the rendered cause line, so it carries only `name@marketplace`
  * keys, field paths or already-redacted text -- never an absolute path -- and
@@ -250,7 +252,7 @@ async function assertNoDependents(args: {
     exclude: args.key,
   });
   if (!result.ok) {
-    throw new UninstallRefusedError(result.reason, result.cause.message);
+    throw new UninstallRefusedError("unreadable", result.cause.message);
   }
 
   const dependents = findDependents(args.key, result.index);

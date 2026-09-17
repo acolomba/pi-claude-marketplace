@@ -61,7 +61,7 @@ const EXPECTED_SECTION_COUNT = 20;
 // partial failure where one pruned member's warning row sits beside the
 // removals that stood (209 -> 212).
 const EXPECTED_STATE_COUNT = 212;
-const EXPECTED_UTF8_BYTES = 28_548;
+const EXPECTED_UTF8_BYTES = 28_543;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,

@@ -48,7 +48,6 @@
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 
 import { readDependencyDeclaration } from "./dependency-declaration-read.ts";
@@ -57,7 +56,6 @@ import type { DependencyDeclarationReader } from "./dependency-declaration-read.
 import type { DeclarationIndex, OrphanCandidate } from "../../domain/dependency-orphans.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { ContentReason } from "../../shared/notification-types.ts";
 
 type MarketplaceStateRecord = ExtensionState["marketplaces"][string];
 
@@ -89,11 +87,13 @@ export interface ScopeDeclarationIndexOptions {
 
 /**
  * The index and the walked records, or the first record whose declarations
- * could not be established (D-05-07). `reason` is the DECLARER's read-failure
- * token -- `not in manifest` for an entry its marketplace does not list,
- * `invalid manifest` for an unusable declaration, or the probe classifier's
- * token for a manifest that failed to load -- and `cause.message` names the
- * declarer. `candidates` holds every indexed record (the excluded target
+ * could not be established (D-05-07). `cause.message` names the declarer and
+ * says why it could not be read -- its marketplace does not list it, its
+ * declaration is unusable, or its marketplace manifest failed to load. No
+ * classified token rides along: the row a caller renders is about the TARGET,
+ * and the declarer's read-failure token would make a false claim about the
+ * target's own manifest (the row grammar's brace states a fact about the row's
+ * subject). `candidates` holds every indexed record (the excluded target
  * omitted) in walk order, enabled or disabled, whatever its provenance.
  */
 export type ScopeDeclarationIndexResult =
@@ -105,7 +105,6 @@ export type ScopeDeclarationIndexResult =
   | {
       readonly ok: false;
       readonly declarer: string;
-      readonly reason: ContentReason;
       readonly cause: Error;
     };
 
@@ -115,11 +114,10 @@ type IndexFailure = Extract<ScopeDeclarationIndexResult, { readonly ok: false }>
 type RecordDeclarations =
   { readonly ok: true; readonly declared: ReadonlySet<string> } | IndexFailure;
 
-function unreadableDeclarer(key: string, reason: ContentReason, detail: string): IndexFailure {
+function unreadableDeclarer(key: string, detail: string): IndexFailure {
   return {
     ok: false,
     declarer: key,
-    reason,
     cause: new Error(`cannot read the dependencies of ${key}: ${detail}`),
   };
 }
@@ -140,12 +138,12 @@ async function readRecordDeclarations(
   try {
     manifest = await (options.loadManifest ?? loadMarketplaceManifest)(marketplace.manifestPath);
   } catch (err: unknown) {
-    return unreadableDeclarer(key, narrowProbeError(err), redactAbsolutePaths(errorMessage(err)));
+    return unreadableDeclarer(key, redactAbsolutePaths(errorMessage(err)));
   }
 
   const declared = lookupDeclaredPlugin(manifest, name);
   if (declared.kind === "absent") {
-    return unreadableDeclarer(key, "not in manifest", "not declared by its marketplace");
+    return unreadableDeclarer(key, "not declared by its marketplace");
   }
 
   const read = await readDependencyDeclaration({
@@ -155,7 +153,7 @@ async function readRecordDeclarations(
     ...(options.reader !== undefined && { reader: options.reader }),
   });
   if (read.kind === "unusable") {
-    return unreadableDeclarer(key, "invalid manifest", read.detail);
+    return unreadableDeclarer(key, read.detail);
   }
 
   return {
