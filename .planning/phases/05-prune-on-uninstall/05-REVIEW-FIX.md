@@ -83,6 +83,46 @@ Test cases added: `D-05-07: with refuseUnusableOwnManifest, <an unparseable firs
 
 **Re-open trigger:** a programmatic consumer of the bare reason value appears (code that branches on `reason === "unreadable"` to distinguish a dependents-guard refusal from a manifest read failure). At that point the token is no longer only presentation, and option (a) from iteration 1 should be reconsidered.
 
+## Info items settled (2026-09-17)
+
+The six Info items iteration 1 left untouched (`fix_scope: critical_warning`) are settled by quick task `260917-hfp`: IN-01, IN-02, IN-03, IN-07 and IN-08 are fixed, IN-04 is carried to the backlog.
+
+### IN-01: fixed
+
+**Commit:** 97c9ce14 (`fix(prune): sweep only in standalone mode and tidy the owners`)
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts`, `tests/orchestrators/plugin/uninstall.test.ts`
+**Applied change:** the sweep gate in the transaction closure is `opts.prune === true && !orchestrated`, and the `prune` option doc on `UninstallPluginOptions` says the option is honoured in standalone mode only and ignored under `notifications.mode === "orchestrated"` (D-05-08). The runtime gate was chosen over narrowing the orchestrated overload: `UninstallPluginOperation` is an overload pair, and a `prune?: never` on the narrow orchestrated overload makes an orchestrated call carrying `prune: true` fall through to the wide overload with no diagnostic and a silently widened return type; a real compile error needs `UninstallPluginOptions` rebuilt as a discriminated union mirrored by `apply.ts` and the owner-suite harness. New owner-suite case: `D-05-08: an orchestrated call carrying the prune option removes only the named plugin` (red on the unchanged code: the dependency-provenance orphan `o@mp` was swept and the recorded inventory was `{}`).
+
+### IN-02: fixed
+
+**Commit:** 97c9ce14 (same commit)
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts`
+**Applied change:** `const prunedMembers: PrunedMember[] = [];` replaces the `{ members: [] }` wrapper; the three accesses (the push inside the closure, `finalizePrunedMembers`, `composeRemovalBlocks`) read the array, and the sentence claiming the object form was needed for the post-guard reads is gone.
+
+### IN-03: fixed
+
+**Commit:** 97c9ce14 (same commit)
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts`
+**Applied change:** `MarketplaceStateRecord` is exported with a doc comment saying why (`.fallowrc.json` sets `private-type-leaks: "error"`, so the exported `IndexedRecord` cannot reference a private alias; the `BrowserTui` export in `edge/browser/plugin-browser.ts` is the precedent), and both `IndexedRecord.marketplace` and `IndexedRecord.record` use it. `ExtensionState["marketplaces"][string]` is spelled once in the file; `npm run fallow` stays at zero findings.
+
+### IN-04: carried, no code change
+
+**Carried to:** `.planning/BACKLOG.md` § `PRUNE-GUARD-MR-01` (line ~3011). The entry already names the `marketplace remove` bypass (it unstages through `cascadeUnstagePlugin` and never reaches `uninstallPlugin`), the D-05-07 two-stale-records exit it must keep open, and the pick-up scope (read the scope's declaration index before the removal and refuse or report on the same `dependents remain` row with a cause line naming the dependents). The BACKLOG entry was verified against the finding and not edited.
+
+### IN-07: fixed
+
+**Commit:** 03d56b0d (`docs(catalog): attach the shrunk-or-intact clause to the failed member`)
+**Files modified:** `docs/output-catalog.md`
+**Applied change:** in the `prune-partial-failure` prose (D-05-13) the clause `shrunk to the artifacts still on disk when the cascade dropped some before failing, or intact when foreign content refused the unstage` now follows `with the failed member's record still present (NFR-3)` directly, and the PRUNE-03 fact is its own sentence after it: `That member is still an installed plugin that still declares its own dependencies, so the sweep keeps every dependency only it holds; those records render no row, exactly as the guard would refuse them if named directly (PRUNE-03).` One line changed; the rendered example block is byte-identical and `catalog-contract.test.ts` still locks 213 states / 28,729 bytes; `partial-vocabulary-guard.test.ts` passes; `docs/dependency-resolution.md` already phrased the fact correctly and is untouched.
+
+### IN-08: fixed
+
+**Commit:** 3e1198c9 (`fix(reconcile): stop retrying refusals when a pass settled nothing`)
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts`, `extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts`, `tests/orchestrators/reconcile/apply.test.ts`
+**Applied change:** `applyPluginUninstalls` counts a `settled` outcome on the `outcomes.push(outcome)` branch of each pass and exits on `refused.length === 0 || settled === 0`; a PU-5 converge is neither refused nor settled, so a pass that only converges and refuses ends the loop. Termination: `pending.length === refused.length + settled + converged`, so `settled >= 1` implies the next `pending` is strictly shorter and `settled === 0` returns. The header comment states the rule and the argument. `ApplyReconcileOptions` gains `readonly uninstallPlugin?: UninstallPluginOperation` beside `gitOps?`, in the same production-omits / tests-inject voice; it was needed because from `applyReconcile` a refused or converged child call touches no injectable collaborator (`hooksRouting` and `completionCache` are read only on the success arm, `ctx`/`pi` only by standalone notify, the state reader only in the read pass), so the per-entry invocation count of the child operation is the only observable that separates one pass from two. `npm run fallow` accepted the `??` fallback inside the function (cognitive ceiling not reached), so the `applyPlan` hoist fallback was not needed. New reconcile case: `D-05-16 / PU-5: a converged entry beside a refusal is settled in one pass` (red with the seam in place and the length test unchanged: `calls` was `["gone@mp", "orphan@mp", "orphan@mp"]`).
+
+CHANGELOG: no entry; the milestone's pull-request entry covers this branch.
+
 ---
 
 _Fixed: 2026-09-17T01:40:00Z_
