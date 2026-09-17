@@ -125,6 +125,41 @@ A plugin you install by name is recorded as one you asked for, even if another p
 
 A dependency that was installed partially, with some of its component kinds unsupported, needs `--partial` again. This is the same consent every partial install needs. Without the flag the command refuses with `{already installed}`. With it the record changes only its provenance and keeps its partial shape. On a fully supported dependency `--partial` changes nothing. `--map-model` has no effect on this command: it changes how generated agents are written, and this command generates none.
 
+## Removing a plugin other plugins need
+
+`uninstall` refuses to remove a plugin while another installed plugin in the same scope declares it. A disabled plugin still counts as installed, so it still holds its dependencies. The refused row reads `{dependents remain}`, and its `cause:` line names each dependent as `name@marketplace`. Nothing is removed and nothing is written.
+
+To clear the refusal, uninstall the dependents first. If the plugin arrived as a dependency, you can also run `--prune` on the dependent. The dependent goes, and the plugin goes with it as an orphan (see the next section).
+
+```text
+/claude:plugin uninstall <dependent>@<marketplace> --prune
+```
+
+A reload applies the same rule. If you remove a plugin from the configuration file while another installed plugin still declares it, the reload refuses to remove it. The reload reports the same row every time until you fix the configuration. Claude Code documents this refusal for `disable`; this extension applies it to `uninstall`.
+
+The check reads the declarations of every other installed plugin in the scope, offline, from each plugin's own manifest or its marketplace entry (D-05-06). If any one of them cannot be read, the uninstall is refused (D-05-07). This is a deliberate choice. This extension never removes a plugin on incomplete information. A declaration cannot be read when the plugin's marketplace no longer lists it, when its manifest is unreadable, or when its `dependencies` value cannot be used. The brace then carries that plugin's read-failure reason, for example `{not in manifest}`, and the `cause:` line names which plugin could not be read. To repair it, update the marketplace so the manifest lists the plugin again. If the record is stale, remove the marketplace instead.
+
+```text
+/claude:plugin marketplace update <name>
+/claude:plugin marketplace remove <name>
+```
+
+This rule has one consequence to know about. Two plugins in one scope that are both missing from their marketplace manifests refuse each other's uninstall: each one is the other's unreadable declarer. `marketplace remove` is the exit, because it does not run this check.
+
+## Pruning dependencies nothing needs
+
+`uninstall <plugin> --prune` also removes every plugin in the same scope that arrived as another plugin's dependency and that no remaining installed plugin declares. This includes dependencies that a plain `uninstall` or a reload orphaned earlier, and it includes the dependencies of the dependencies it removes. The sweep repeats until nothing new qualifies (D-05-01 / D-05-02).
+
+```text
+/claude:plugin uninstall <plugin>@<marketplace> --prune
+```
+
+The sweep never removes a plugin you installed by name, whatever declares it. A dependency you later installed by name counts as installed by name (see [Installing a dependency by name](#installing-a-dependency-by-name)). It never removes a plugin that a remaining installed plugin, enabled or disabled, still declares. It never removes a plugin in the other scope. It runs only after the named plugin was removed: a refused or failed uninstall prunes nothing (D-05-03).
+
+Each removed dependency shows its own `(uninstalled) {dependency pruned}` row under its marketplace. `--keep-data` covers every plugin the command removes, and the rows then read `{dependency pruned, data kept}`. When nothing qualifies, the command prints the plain uninstall row and nothing more. If one removed dependency fails to remove, the others stay removed and its row shows the failure (D-05-13).
+
+A reload never prunes. An orphaned dependency stays installed until you run `--prune`, because its install record says that it arrived through another plugin (see [Where a dependency lands](#where-a-dependency-lands)). This matches Claude Code, which keeps orphaned dependencies on disk in case you reinstall a plugin that needs them.
+
 ## Why a dependency can fail
 
 Each cause shows as a reason in braces on the failing dependency's own row. This table names every reason the cascade can show.

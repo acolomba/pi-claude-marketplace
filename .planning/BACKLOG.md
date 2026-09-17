@@ -3007,3 +3007,16 @@ it. Scope when picked up: the standalone verb (no `-y`: D-02-05), a
 `--dry-run` that renders the would-be-pruned rows without removing them, and
 an `{orphaned}` inventory marker on `list`/`info` rows — a new closed-set
 token with the full catalog amendment.
+
+## PRUNE-GUARD-MR-01: `marketplace remove` bypasses the dependents guard
+
+Surfaced while planning the v1.20 prune work (2026-09-16). `marketplace
+remove` unstages every plugin under the marketplace through
+`cascadeUnstagePlugin` directly and never reaches `uninstallPlugin`, so it
+carries no dependents guard: a plugin in ANOTHER marketplace that depends on
+one of the removed plugins is left dangling. PRUNE-05 names `uninstall`, so
+this is a recorded decision, not an omission -- and the bypass is currently
+the documented exit for the two-stale-records scenario (D-05-07), which any
+guard here must keep open. Scope when picked up: read the scope's
+declaration index before the removal and refuse (or report) on the same
+`dependents remain` row, with a cause line naming the dependents.

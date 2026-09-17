@@ -375,6 +375,20 @@ Uninstall a plugin.
 /claude:plugin uninstall context7-plugin@context7-marketplace
 ```
 
+Keep the plugin's data directory with `--keep-data`.
+
+```text
+/claude:plugin uninstall context7-plugin@context7-marketplace --keep-data
+```
+
+Also remove the dependencies that no remaining plugin needs with `--prune`.
+
+```text
+/claude:plugin uninstall context7-plugin@context7-marketplace --prune
+```
+
+This extension refuses to uninstall a plugin that another installed plugin still needs. For more information, see [Dependency resolution](docs/dependency-resolution.md).
+
 Reload Pi after changes.
 
 ```text
