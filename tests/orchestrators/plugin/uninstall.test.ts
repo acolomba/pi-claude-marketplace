@@ -5519,6 +5519,42 @@ test("D-05-08: without the option an orphan survives the uninstall of an unrelat
   });
 });
 
+test("D-05-08: an orchestrated call carrying the prune option removes only the named plugin", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-orchestrated-prune-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { x: {}, o: { provenance: "dependency" } },
+        cwd,
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, { status: "uninstalled", name: "x", version: "0.0.1" });
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(await recordedInventory(locations), { "o@mp": ["mp-o-skill"] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 /**
  * A cascade that fails for ONE plugin by name and runs the real cascade for
  * every other, so the member-failure cases exercise real removals around the

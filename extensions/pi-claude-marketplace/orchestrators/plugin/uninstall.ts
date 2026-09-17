@@ -165,7 +165,10 @@ export interface UninstallPluginOptions {
   /**
    * D-05-10: also removes every dependency-installed record in the scope that
    * no remaining installed plugin declares, after the named plugin. Omission
-   * or false is "no prune"; the reconcile caller never sets it (D-05-08).
+   * or false is "no prune". Honoured in standalone mode only: under
+   * `notifications.mode === "orchestrated"` the option is ignored, because the
+   * orchestrated outcome carries no member rows to report a sweep, and the
+   * reconcile caller never sets it (D-05-08).
    */
   readonly prune?: boolean;
   /**
@@ -984,9 +987,8 @@ async function uninstallPluginWithTransaction(
   let cascadeFailure: Error | undefined;
   const routeEffect = { removeAfterSave: false };
   // D-05-10: the sweep's members, carried out of the closure for the
-  // post-commit cleanup and the report. Object form so the post-guard reads
-  // see the closure's writes rather than the initializer.
-  const prune = { members: [] as PrunedMember[] };
+  // post-commit cleanup and the report.
+  const prunedMembers: PrunedMember[] = [];
   const keepData = opts.keepData ?? false;
 
   try {
@@ -1078,9 +1080,12 @@ async function uninstallPluginWithTransaction(
 
       // D-05-03 / D-05-10: the sweep runs on THIS arm only -- the named plugin
       // is off disk and out of the snapshot -- and before the one save, so the
-      // members' removals and the primary's land in a single write.
-      if (opts.prune === true) {
-        prune.members.push(
+      // members' removals and the primary's land in a single write. It runs in
+      // standalone mode only: the orchestrated outcome carries no member rows
+      // to report a sweep, and the reconcile caller never sets the option
+      // (D-05-08).
+      if (opts.prune === true && !orchestrated) {
+        prunedMembers.push(
           ...(await sweepOrphans({
             snapshot,
             primaryKey,
@@ -1166,7 +1171,7 @@ async function uninstallPluginWithTransaction(
     keepData,
   });
   await finalizePrunedMembers({
-    members: prune.members,
+    members: prunedMembers,
     hooksRouting,
     completionCache,
     locations,
@@ -1217,7 +1222,7 @@ async function uninstallPluginWithTransaction(
     UNINSTALL_CONTEXT,
     composeRemovalBlocks({
       primary: { marketplace, row: uninstalledRow },
-      members: prune.members,
+      members: prunedMembers,
       scope,
     }),
     undefined,

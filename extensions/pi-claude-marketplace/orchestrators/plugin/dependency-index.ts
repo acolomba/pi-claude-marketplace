@@ -57,7 +57,11 @@ import type { DeclarationIndex, OrphanCandidate } from "../../domain/dependency-
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 
-type MarketplaceStateRecord = ExtensionState["marketplaces"][string];
+/**
+ * One marketplace's record in the state document. Exported because the
+ * exported `IndexedRecord` references it (fallow private-type-leak rule).
+ */
+export type MarketplaceStateRecord = ExtensionState["marketplaces"][string];
 
 /**
  * One walked record as the orphan sweep consumes it (D-05-10): the
@@ -67,9 +71,9 @@ type MarketplaceStateRecord = ExtensionState["marketplaces"][string];
  * the locked snapshot holds; a removal mutates them in place.
  */
 export interface IndexedRecord extends OrphanCandidate {
-  readonly marketplace: ExtensionState["marketplaces"][string];
+  readonly marketplace: MarketplaceStateRecord;
   readonly plugin: string;
-  readonly record: ExtensionState["marketplaces"][string]["plugins"][string];
+  readonly record: MarketplaceStateRecord["plugins"][string];
 }
 
 /** Inputs of one scope-wide index build. */
