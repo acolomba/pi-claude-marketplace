@@ -49,8 +49,7 @@
 //   plugin-backfilled        a promotion riding the same cascade as an install
 
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -74,6 +73,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
@@ -235,37 +235,15 @@ interface HermeticScopes {
  * mid-act still tears its tree down.
  */
 async function createHermeticScopes(t: TestContext, label: string): Promise<HermeticScopes> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `apply-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `apply-${label}-home-`));
+  // Registered before the environment so the permissions come back before its
+  // removal runs: after-hooks run in registration order.
   const denied: string[] = [];
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
     for (const directory of denied) {
       await chmod(directory, 0o755);
     }
-
-    await rm(cwd, { force: true, maxRetries: 10, recursive: true, retryDelay: 100 });
-    await rm(home, { force: true, maxRetries: 10, recursive: true, retryDelay: 100 });
   });
-  process.env.HOME = home;
-  // SC-1: getAgentDir() reads PI_CODING_AGENT_DIR before homedir(), so an
-  // environment that sets it would defeat the hermetic HOME above.
-  delete process.env.PI_CODING_AGENT_DIR;
+  const { cwd, home } = await createHermeticEnvironment(t, `apply-${label}-`);
   return {
     cwd,
     home,

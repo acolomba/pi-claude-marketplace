@@ -46,9 +46,8 @@
 // tests/orchestrators/plugin/enable-disable.test.ts owns at full direct coverage.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import https from "node:https";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
@@ -59,6 +58,7 @@ import {
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { makeEnableDisableHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/enable-disable.ts";
+import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import {
   buildInstalledPluginRecord,
@@ -166,35 +166,12 @@ function installNetworkTrap(t: TestContext): void {
  * registered before the handler runs.
  */
 async function createHermeticWorkspace(t: TestContext, label: string): Promise<HermeticWorkspace> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `plugin-enable-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `plugin-enable-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(cwd, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
-  });
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
+  const { cwd, agentDir } = await createHermeticEnvironment(t, `plugin-enable-${label}-`);
   installNetworkTrap(t);
   return {
     cwd,
     projectRoot: path.join(cwd, ".pi"),
-    userRoot: path.join(home, ".pi", "agent"),
+    userRoot: agentDir,
   };
 }
 

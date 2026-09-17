@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import claudeMarketplaceExtension from "../../extensions/pi-claude-marketplace/index.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import { PINNED_SHA } from "./_pinned-sha.ts";
 import { targetByPlugin } from "./_targets.ts";
@@ -113,29 +114,16 @@ async function prepareUpstreamCheckout(root: string): Promise<string> {
 }
 
 export async function withE2EEnvironment<T>(fn: (env: E2EEnvironment) => Promise<T>): Promise<T> {
-  const originalHome = process.env.HOME;
-  const originalCwd = process.cwd();
-  const root = await mkdtemp(path.join(tmpdir(), "pi-cm-e2e-"));
-  const home = path.join(root, "home");
-  const cwd = path.join(root, "project");
-  process.env.HOME = home;
-  await mkdir(home, { recursive: true });
-  await mkdir(cwd, { recursive: true });
-
-  try {
-    const upstreamRoot = await prepareUpstreamCheckout(root);
-    process.chdir(cwd);
-    return await fn({ home, cwd, upstreamRoot, marketplaceAdded: false });
-  } finally {
-    process.chdir(originalCwd);
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
+  return withHermeticEnvironment("pi-cm-e2e-", async ({ root, home, cwd }) => {
+    const originalCwd = process.cwd();
+    try {
+      const upstreamRoot = await prepareUpstreamCheckout(root);
+      process.chdir(cwd);
+      return await fn({ home, cwd, upstreamRoot, marketplaceAdded: false });
+    } finally {
+      process.chdir(originalCwd);
     }
-
-    await rm(root, { recursive: true, force: true });
-  }
+  });
 }
 
 export async function installTargetWithMockPi(

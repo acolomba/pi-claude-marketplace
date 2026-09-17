@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
@@ -66,19 +65,7 @@ describe("prepareStageMcpServers", () => {
 
   test("ignores an ambient user MCP server during project staging", async (t) => {
     // arrange
-    const ambientAgentDir = await mkdtemp(path.join(tmpdir(), "mcp-stage-ambient-"));
-    const hadAgentDir = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-    const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-    process.env.PI_CODING_AGENT_DIR = ambientAgentDir;
-    t.after(async () => {
-      if (hadAgentDir && previousAgentDir !== undefined) {
-        process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-      } else {
-        delete process.env.PI_CODING_AGENT_DIR;
-      }
-
-      await rm(ambientAgentDir, { recursive: true, force: true });
-    });
+    await createHermeticEnvironment(t, "mcp-stage-ambient-");
     const ambientMcpPath = locationsFor("user", "/ambient-cwd").mcpJsonPath;
     const ambientBytes = '{"mcpServers":{"ambient":{"command":"host-only"}}}\n';
     await mkdir(path.dirname(ambientMcpPath), { recursive: true });

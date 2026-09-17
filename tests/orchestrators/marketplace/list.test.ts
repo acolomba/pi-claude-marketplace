@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -15,6 +14,7 @@ import { listMarketplaces } from "../../../extensions/pi-claude-marketplace/orch
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { ListMarketplacesOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -139,30 +139,7 @@ async function snapshotWorkspace(home: string, cwd: string): Promise<WorkspaceSn
 async function withHermeticHome<T>(
   fn: (environment: { readonly cwd: string; readonly home: string }) => Promise<T>,
 ): Promise<T> {
-  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const originalHome = process.env.HOME;
-  const cwd = await mkdtemp(path.join(tmpdir(), "mp-list-cwd-"));
-  const home = await mkdtemp(path.join(tmpdir(), "mp-list-home-"));
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
-  try {
-    return await fn({ cwd, home });
-  } finally {
-    if (originalAgentDir === undefined) {
-      delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
-    }
-
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
-    }
-
-    await rm(cwd, { recursive: true, force: true, maxRetries: 3, retryDelay: 5 });
-    await rm(home, { recursive: true, force: true, maxRetries: 3, retryDelay: 5 });
-  }
+  return withHermeticEnvironment("mp-list-", fn);
 }
 
 test("bare list emits the exact zero-row notification without creating scope data", async () => {

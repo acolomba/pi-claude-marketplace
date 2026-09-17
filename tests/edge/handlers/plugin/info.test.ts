@@ -67,14 +67,14 @@
 // rename follows the catalog instead of failing here.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import https from "node:https";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
 import { parseFlagNames } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makePluginInfoHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/info.ts";
+import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -108,37 +108,14 @@ interface HermeticWorkspace {
  * before the handler runs.
  */
 async function createHermeticWorkspace(t: TestContext, label: string): Promise<HermeticWorkspace> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `plugin-info-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `plugin-info-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(cwd, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
-  });
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
+  const { cwd, agentDir } = await createHermeticEnvironment(t, `plugin-info-${label}-`);
   const networkSpy = t.mock.method(https, "request", (): never => {
     throw new Error("plugin info must not open a network connection");
   });
   return {
     cwd,
     projectRoot: path.join(cwd, ".pi"),
-    userRoot: path.join(home, ".pi", "agent"),
+    userRoot: agentDir,
     networkCallCount: (): number => networkSpy.mock.callCount(),
   };
 }

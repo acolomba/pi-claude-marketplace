@@ -17,6 +17,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import {
   createDelegatingRemovalOps,
   createRemovalOpsFake,
@@ -761,17 +762,7 @@ describe("prepareStageSkills", () => {
 
   test("keeps the project token literal for a user-scope install", async (t) => {
     // arrange
-    const scopeRoot = await mkdtemp(path.join(tmpdir(), "skills-stage-user-"));
-    t.after(() => rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 }));
-    const priorAgentDirectory = process.env.PI_CODING_AGENT_DIR;
-    t.after(() => {
-      if (priorAgentDirectory === undefined) {
-        delete process.env.PI_CODING_AGENT_DIR;
-      } else {
-        process.env.PI_CODING_AGENT_DIR = priorAgentDirectory;
-      }
-    });
-    process.env.PI_CODING_AGENT_DIR = scopeRoot;
+    const { agentDir: scopeRoot } = await createHermeticEnvironment(t, "skills-stage-user-");
     const locations = locationsFor("user", scopeRoot);
     const pluginRoot = path.join(scopeRoot, "plugin");
     const pluginDataDir = path.join(scopeRoot, "plugin-data");

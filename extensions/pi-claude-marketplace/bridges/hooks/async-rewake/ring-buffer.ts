@@ -25,13 +25,15 @@
 // that history was lost.
 //
 // UTF-8 wrap-boundary caveat: when overflow drops the head, a multi-
-// byte sequence that straddled the wrap point may decode to a single
-// `�` glyph at the truncated body's head. This is documented and
-// accepted -- the `truncated` flag already tells the consumer that
-// history was lost, the loss is at the truncation point by construction,
-// and reaching for `StringDecoder` would buy a marginally cleaner glyph
-// at the cost of cross-write state we do not need (and would not be
-// observable to the LLM after the `[…truncated]` marker either way).
+// byte sequence that straddled the wrap point leaves its trailing
+// continuation bytes behind, and `toString("utf8")` renders each of
+// them as a U+FFFD replacement character at the truncated body's head.
+// This is documented and accepted -- the `truncated` flag already
+// tells the consumer that history was lost, the loss is at the
+// truncation point by construction, and reaching for `StringDecoder`
+// would buy a marginally cleaner head at the cost of cross-write state
+// we do not need (and would not be observable to the LLM after the
+// `[…truncated]` marker either way).
 //
 // Pure-and-total contract: NEITHER `write` NOR `read` may throw on any
 // input. `capacity === 0` is a valid construction (every write latches

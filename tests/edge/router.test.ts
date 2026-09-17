@@ -50,6 +50,7 @@ type HandlerName = keyof SubcommandHandlers;
 interface DispatchRow {
   readonly subcommand: string;
   readonly handler: HandlerName;
+  readonly expectedArgs?: string;
 }
 
 // The accepted top-level vocabulary, minus the one token that opens the second
@@ -69,6 +70,8 @@ const TOP_LEVEL_DISPATCH: readonly DispatchRow[] = [
   { subcommand: "enable", handler: "enable" },
   { subcommand: "disable", handler: "disable" },
   { subcommand: "import", handler: "import" },
+  { subcommand: "browse", handler: "browse" },
+  { subcommand: "help", handler: "help" },
 ];
 
 const MARKETPLACE_DISPATCH: readonly DispatchRow[] = [
@@ -81,10 +84,11 @@ const MARKETPLACE_DISPATCH: readonly DispatchRow[] = [
   { subcommand: "update", handler: "marketplaceUpdate" },
   { subcommand: "autoupdate", handler: "marketplaceAutoupdate" },
   { subcommand: "noautoupdate", handler: "marketplaceNoautoupdate" },
+  { subcommand: "help", handler: "help", expectedArgs: "marketplace" },
 ];
 
 const EXPECTED_TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|marketplace> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project]\n" +
@@ -97,7 +101,9 @@ const EXPECTED_TOP_LEVEL_USAGE =
   "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  import [--scope user|project]\n" +
-  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...";
+  "  browse\n" +
+  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
+  "  help [marketplace]";
 
 const EXPECTED_MARKETPLACE_USAGE =
   "Usage: /claude:plugin marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
@@ -126,12 +132,13 @@ for (const { subcommand, handler } of TOP_LEVEL_DISPATCH) {
   });
 }
 
-for (const { subcommand, handler } of MARKETPLACE_DISPATCH) {
+for (const { subcommand, handler, expectedArgs } of MARKETPLACE_DISPATCH) {
   test(`dispatches the marketplace ${subcommand} subcommand to the ${handler} handler with the remaining argument text (AP-3)`, async () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
     const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
-    when(() => handlers[handler]("official --scope user", ctx)).thenResolve(undefined);
+    const forwardArg = expectedArgs ?? "official --scope user";
+    when(() => handlers[handler](forwardArg, ctx)).thenResolve(undefined);
 
     // act
     await routeClaudePlugin(`marketplace ${subcommand} official --scope user`, handlers, ctx);
@@ -145,7 +152,11 @@ for (const { subcommand, handler } of MARKETPLACE_DISPATCH) {
 
 test("accepts exactly the top-level names its dispatch rows serve, plus the marketplace entry token", () => {
   // arrange
-  const expectedVocabulary = [...TOP_LEVEL_DISPATCH.map((row) => row.subcommand), "marketplace"];
+  const expectedVocabulary = [
+    ...TOP_LEVEL_DISPATCH.slice(0, -1).map((row) => row.subcommand),
+    "marketplace",
+    TOP_LEVEL_DISPATCH[TOP_LEVEL_DISPATCH.length - 1]!.subcommand,
+  ];
 
   // act
   const vocabulary = [...TOP_LEVEL_SUBCOMMANDS];
@@ -163,6 +174,21 @@ test("accepts exactly the marketplace names its dispatch rows serve", () => {
 
   // assert
   assert.deepStrictEqual(vocabulary, expectedVocabulary);
+});
+
+test("routes the marketplace help subcommand to handlers.help with marketplace topic", async () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+  when(() => handlers.help("marketplace", ctx)).thenResolve(undefined);
+
+  // act
+  await routeClaudePlugin("marketplace help", handlers, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, []);
+  verifyBoundary();
+  verify(handlers);
 });
 
 test("routes the ls alias and the list subcommand to one and the same plugin list handler", async () => {
@@ -345,18 +371,17 @@ for (const { input, shape } of [
   { input: "", shape: "no characters at all" },
   { input: "   ", shape: "nothing but whitespace" },
 ]) {
-  test(`reports a usage error with the top-level usage block for input with ${shape} (AP-3)`, async () => {
+  test(`dispatches to the browse handler for input with ${shape} (AP-3)`, async () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
     const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+    when(() => handlers.browse("", ctx)).thenResolve(undefined);
 
     // act
     await routeClaudePlugin(input, handlers, ctx);
 
     // assert
-    assert.deepStrictEqual(notifications, [
-      { message: `Usage error.\n\n${EXPECTED_TOP_LEVEL_USAGE}`, severity: "error" },
-    ]);
+    assert.deepStrictEqual(notifications, []);
     verifyBoundary();
     verify(handlers);
   });

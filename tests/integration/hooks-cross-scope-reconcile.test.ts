@@ -13,8 +13,7 @@
 // the reconcile completes.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -31,6 +30,7 @@ import {
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -100,16 +100,11 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
   const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
   const completionCache = createCompletionCache();
 
-  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const tmpRoot = await mkdtemp(path.join(tmpdir(), "hooks-cross-scope-recon-"));
-  const agentDir = path.join(tmpRoot, "agent");
-  const projectCwd = path.join(tmpRoot, "project");
+  return withHermeticEnvironment("hooks-cross-scope-recon-", async ({ root: tmpRoot }) => {
+    const projectCwd = path.join(tmpRoot, "project");
 
-  await mkdir(agentDir, { recursive: true });
-  await mkdir(projectCwd, { recursive: true });
-  process.env.PI_CODING_AGENT_DIR = agentDir;
+    await mkdir(projectCwd, { recursive: true });
 
-  try {
     // Seed USER scope: one hooks-bearing plugin with a PreToolUse handler.
     const userLoc = locationsFor("user", projectCwd);
     const userPluginRoot = path.join(tmpRoot, "user-mp-src", "plugins", "user-plugin");
@@ -218,13 +213,5 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
       ["project/project-plugin", "user/user-plugin"],
       "applyReconcile's per-scope rebuild must preserve entries from BOTH scopes",
     );
-  } finally {
-    if (originalAgentDir === undefined) {
-      delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
-    }
-
-    await rm(tmpRoot, { recursive: true, force: true });
-  }
+  });
 });

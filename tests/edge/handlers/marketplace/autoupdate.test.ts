@@ -40,12 +40,12 @@
 // grammar, which tests/orchestrators/marketplace/autoupdate.test.ts owns.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
 import { makeAutoupdateHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/autoupdate.ts";
+import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -95,7 +95,7 @@ interface HermeticWorkspace {
   /** `<cwd>/.pi` -- the project scope root (SC-1). */
   readonly projectRoot: string;
   /** The user scope root, pinned through PI_CODING_AGENT_DIR (SC-1). */
-  readonly userRoot: string;
+  readonly agentDir: string;
 }
 
 interface ConfigFootprint {
@@ -112,32 +112,8 @@ interface ConfigFootprint {
  * and both environment restores are registered before the handler runs.
  */
 async function createHermeticWorkspace(t: TestContext, label: string): Promise<HermeticWorkspace> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `mp-autoupdate-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `mp-autoupdate-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(cwd, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
-  });
-  const userRoot = path.join(home, "agent");
-  process.env.HOME = home;
-  process.env.PI_CODING_AGENT_DIR = userRoot;
-  return { cwd, projectRoot: path.join(cwd, ".pi"), userRoot };
+  const { cwd, agentDir } = await createHermeticEnvironment(t, `mp-autoupdate-${label}-`);
+  return { cwd, projectRoot: path.join(cwd, ".pi"), agentDir };
 }
 
 async function seedMarketplace(
@@ -160,7 +136,7 @@ async function seedMarketplace(
 /** `alpha` in the project scope and `beta` in the user scope, neither declared in a config. */
 async function seedBothScopes(workspace: HermeticWorkspace): Promise<void> {
   await seedMarketplace(workspace, "project", workspace.projectRoot, "alpha");
-  await seedMarketplace(workspace, "user", workspace.userRoot, "beta");
+  await seedMarketplace(workspace, "user", workspace.agentDir, "beta");
 }
 
 async function readConfigFile(filePath: string): Promise<unknown> {
@@ -181,8 +157,8 @@ async function readConfigFootprint(workspace: HermeticWorkspace): Promise<Config
     projectLocal: await readConfigFile(
       path.join(workspace.projectRoot, "claude-plugins.local.json"),
     ),
-    userBase: await readConfigFile(path.join(workspace.userRoot, "claude-plugins.json")),
-    userLocal: await readConfigFile(path.join(workspace.userRoot, "claude-plugins.local.json")),
+    userBase: await readConfigFile(path.join(workspace.agentDir, "claude-plugins.json")),
+    userLocal: await readConfigFile(path.join(workspace.agentDir, "claude-plugins.local.json")),
   };
 }
 

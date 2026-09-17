@@ -23,6 +23,7 @@ import {
 import { createHooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 
 import type {
   OrphanProbes,
@@ -2076,17 +2077,7 @@ test(
   async (t) => {
     // arrange
     const runtime = createHooksRuntime();
-    const root = await mkdtemp(path.join(tmpdir(), "async-registry-cross-scope-"));
-    const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-    t.after(() => {
-      if (previousAgentDir === undefined) {
-        delete process.env.PI_CODING_AGENT_DIR;
-      } else {
-        process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-      }
-    });
-    const agentRoot = path.join(root, "agent");
-    process.env.PI_CODING_AGENT_DIR = agentRoot;
+    const { root } = await createHermeticEnvironment(t, "async-registry-cross-scope-");
     const timers = observeTimers(t, Date.parse("2026-08-31T11:25:00.000Z"));
     shutdownInMemoryChildren(runtime);
     const userLocations = locationsFor("user", root);
@@ -2176,7 +2167,6 @@ test(
       destroyChild(projectChild);
       await reapOrphans(runtime, userLocations, deadOrphanProbes());
       await reapOrphans(runtime, projectLocations, deadOrphanProbes());
-      await rm(root, { recursive: true, force: true, maxRetries: 3 });
     }
   },
 );

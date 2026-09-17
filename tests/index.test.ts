@@ -38,7 +38,7 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -52,6 +52,7 @@ import * as entryModule from "../extensions/pi-claude-marketplace/index.ts";
 import { EXTENSION_VERSION } from "../extensions/pi-claude-marketplace/shared/extension-version.ts";
 
 import { createNotificationBoundary } from "./edge/notification-boundary.ts";
+import { createHermeticEnvironment } from "./platform/hermetic-environment.ts";
 
 import type { Notification } from "./edge/notification-boundary.ts";
 import type {
@@ -106,6 +107,7 @@ type CommandRegistration = Parameters<ExtensionAPI["registerCommand"]>[1];
 type ToolRegistration = Parameters<ExtensionAPI["registerTool"]>[0];
 
 interface HermeticScope {
+  readonly agentDir: string;
   readonly cwd: string;
   readonly home: string;
 }
@@ -212,11 +214,9 @@ function restoreEnv(key: string, previous: string | undefined): void {
 }
 
 /**
- * One temporary working directory and one temporary home per case, with the
- * agent-directory variable cleared: `getAgentDir()` reads it before `homedir()`,
- * so an ambient value would defeat a hermetic `HOME`. The factory hydrates the
- * user scope off disk while it runs, so a case without its own home would read
- * the operator's real one.
+ * One hermetic Pi environment per case: the factory hydrates the user scope
+ * off disk while it runs, so a case without its own home would read the
+ * operator's real one.
  *
  * The process moves into a root of its own, distinct from the working directory
  * the discover event names, so a handler that read the process working directory
@@ -224,17 +224,10 @@ function restoreEnv(key: string, previous: string | undefined): void {
  * restore is registered before anything is mutated.
  */
 async function createHermeticScope(t: TestContext, label: string): Promise<HermeticScope> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `index-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `index-${label}-home-`));
+  const { agentDir, cwd, home } = await createHermeticEnvironment(t, `index-${label}-`);
   const processRoot = await mkdtemp(path.join(tmpdir(), `index-${label}-process-`));
   const previousCwd = process.cwd();
-  const tracked = [
-    "HOME",
-    "PI_CODING_AGENT_DIR",
-    "PATH",
-    "PI_CLAUDE_MARKETPLACE_PATH",
-    ...SESSION_ENV_KEYS,
-  ];
+  const tracked = ["PATH", "PI_CLAUDE_MARKETPLACE_PATH", ...SESSION_ENV_KEYS];
   const saved = tracked.map((key) => {
     return { key, previous: process.env[key] };
   });
@@ -244,15 +237,11 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
       restoreEnv(key, previous);
     }
 
-    await rm(cwd, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
     await rm(processRoot, { recursive: true, force: true });
   });
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
   process.chdir(processRoot);
   installNetworkTrap(t);
-  return { cwd, home };
+  return { agentDir, cwd, home };
 }
 
 /**
@@ -893,7 +882,7 @@ test("leaves both scope roots untouched and emits nothing when a pristine worksp
   // assert
   assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
   assert.deepStrictEqual(existsSync(path.join(scope.cwd, ".pi")), false);
-  assert.deepStrictEqual(existsSync(path.join(scope.home, ".pi")), false);
+  assert.deepStrictEqual(await readdir(scope.agentDir), []);
   assert.deepStrictEqual(notifications, []);
   verifyBoundary();
 });

@@ -27,8 +27,7 @@
 
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -51,6 +50,7 @@ import {
   seedAutoupdateConfig,
 } from "../../edge/handlers/marketplace-seed.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { ListPluginsOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import type {
@@ -289,19 +289,7 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
 // ──────────────────────────────────────────────────────────────────────────
 
 test("CMC-10: exact zero-row notification ignores an ambient Pi agent directory", async (t) => {
-  const ambientAgentDir = await mkdtemp(path.join(tmpdir(), "plug-list-ambient-"));
-  const hadAgentDir = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  process.env.PI_CODING_AGENT_DIR = ambientAgentDir;
-  t.after(async () => {
-    if (hadAgentDir && previousAgentDir !== undefined) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(ambientAgentDir, { recursive: true, force: true });
-  });
+  const { agentDir: ambientAgentDir } = await createHermeticEnvironment(t, "plug-list-ambient-");
   await saveState(locationsFor("user", "/ambient-cwd").extensionRoot, {
     schemaVersion: 2,
     marketplaces: {

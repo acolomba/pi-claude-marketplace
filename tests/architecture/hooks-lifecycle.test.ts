@@ -23,8 +23,7 @@
 //     under `orchestrators/plugin/` so it is not relevant to this scan.
 
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -32,6 +31,7 @@ import { createHooksHydration } from "../../extensions/pi-claude-marketplace/bri
 import { readHooksJson } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { createHooksRuntime } from "../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import { HOOKS_LIFECYCLE_TARGETS, PLUGIN_ORCHESTRATORS_REL } from "./gate-targets.ts";
 import { REPO_ROOT } from "./source-scan.ts";
@@ -373,18 +373,7 @@ test("WR-03 Block F: every orchestrators/plugin/*.ts that mutates the cache also
 
 test("same-runtime reload makes every retained registration inert before argument access", async (t) => {
   // arrange
-  const root = await mkdtemp(path.join(tmpdir(), "hooks-lifecycle-generation-"));
-  const priorAgentRoot = process.env.PI_CODING_AGENT_DIR;
-  process.env.PI_CODING_AGENT_DIR = path.join(root, "agent");
-  t.after(async () => {
-    if (priorAgentRoot === undefined) {
-      delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = priorAgentRoot;
-    }
-
-    await rm(root, { recursive: true, force: true, maxRetries: 3 });
-  });
+  const { root } = await createHermeticEnvironment(t, "hooks-lifecycle-generation-");
   const readRoots: string[] = [];
   const reader: HooksHydrationDeps = {
     loadState(extensionRoot: string): Promise<ExtensionState> {

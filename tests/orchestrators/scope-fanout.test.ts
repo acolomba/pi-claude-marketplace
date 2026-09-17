@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -11,6 +10,7 @@ import {
   type ScopedLocations,
 } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -25,21 +25,7 @@ interface TestScopes {
 }
 
 async function makeTestScopes(t: TestContext, prefix: string): Promise<TestScopes> {
-  const root = await mkdtemp(path.join(os.tmpdir(), prefix));
-  const cwd = path.join(root, "project");
-  const hadAgentDirectory = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
-  process.env.PI_CODING_AGENT_DIR = path.join(root, "user");
-  await mkdir(cwd, { recursive: true });
-  t.after(async () => {
-    if (hadAgentDirectory && previousAgentDirectory !== undefined) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(root, { recursive: true, force: true });
-  });
+  const { cwd, root } = await createHermeticEnvironment(t, prefix);
 
   return {
     cwd,

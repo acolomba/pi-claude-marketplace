@@ -108,6 +108,13 @@ export function notifyUsageError(ctx: NotificationContext, message: UsageErrorMe
 }
 
 /**
+ * Surfaces usage documentation at "info" severity (for explicit help requests).
+ */
+export function notifyUsageInfo(ctx: NotificationContext, usage: string): void {
+  ctx.ui.notify(usage, "info");
+}
+
+/**
  * S2 / PR #51: post-cascade hygiene warnings out-of-band notification seam.
  *
  * Surfaces post-state-commit warnings (data-dir mkdir deferred,

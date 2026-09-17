@@ -16,8 +16,7 @@
 // actual on-disk source, not a synthesized non-existent path.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
@@ -30,6 +29,7 @@ import {
   loadState,
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -61,31 +61,18 @@ async function withHermeticPiHome<T>(
     sentinelPath: string;
   }) => Promise<T>,
 ): Promise<T> {
-  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const tmpRoot = await mkdtemp(path.join(tmpdir(), "hooks-spawn-e2e-"));
-  const agentDir = path.join(tmpRoot, "agent");
-  const extensionRoot = path.join(agentDir, "pi-claude-marketplace");
-  const sourcesPluginRoot = path.join(
-    extensionRoot,
-    "sources",
-    "test-mp",
-    "plugins",
-    "test-plugin",
-  );
-  const sentinelPath = path.join(tmpRoot, "sentinel.log");
-  await mkdir(agentDir, { recursive: true });
-  process.env.PI_CODING_AGENT_DIR = agentDir;
-  try {
+  return withHermeticEnvironment("hooks-spawn-e2e-", async ({ root: tmpRoot, agentDir }) => {
+    const extensionRoot = path.join(agentDir, "pi-claude-marketplace");
+    const sourcesPluginRoot = path.join(
+      extensionRoot,
+      "sources",
+      "test-mp",
+      "plugins",
+      "test-plugin",
+    );
+    const sentinelPath = path.join(tmpRoot, "sentinel.log");
     return await fn({ agentDir, extensionRoot, sourcesPluginRoot, sentinelPath });
-  } finally {
-    if (originalAgentDir === undefined) {
-      delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
-    }
-
-    await rm(tmpRoot, { recursive: true, force: true });
-  }
+  });
 }
 
 function buildStateWithHooksPlugin(sourcesPluginRoot: string): ExtensionState {
@@ -245,21 +232,15 @@ test("HOOK-E2E-05: path-source plugin whose resolvedSource is OUTSIDE extensionR
   const runtime = createHooksRuntime();
   const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
 
-  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const tmpRoot = await mkdtemp(path.join(tmpdir(), "hooks-spawn-pathsrc-"));
-  const agentDir = path.join(tmpRoot, "agent");
-  const extensionRoot = path.join(agentDir, "pi-claude-marketplace");
-  // External path-source plugin -- a sibling directory OUTSIDE extensionRoot.
-  // This is the shape the assertPathInside guard removal allows: the user
-  // ran `marketplace add /path/to/external/checkout` and pointed at code that
-  // lives elsewhere on disk.
-  const externalPluginRoot = path.join(tmpRoot, "external-src", "plugins", "ext-plugin");
-  const sentinelPath = path.join(tmpRoot, "external-sentinel.log");
+  return withHermeticEnvironment("hooks-spawn-pathsrc-", async ({ root: tmpRoot, agentDir }) => {
+    const extensionRoot = path.join(agentDir, "pi-claude-marketplace");
+    // External path-source plugin -- a sibling directory OUTSIDE extensionRoot.
+    // This is the shape the assertPathInside guard removal allows: the user
+    // ran `marketplace add /path/to/external/checkout` and pointed at code that
+    // lives elsewhere on disk.
+    const externalPluginRoot = path.join(tmpRoot, "external-src", "plugins", "ext-plugin");
+    const sentinelPath = path.join(tmpRoot, "external-sentinel.log");
 
-  await mkdir(agentDir, { recursive: true });
-  process.env.PI_CODING_AGENT_DIR = agentDir;
-
-  try {
     // Lay out the external plugin tree.
     const externalHandlersDir = path.join(externalPluginRoot, "hooks-handlers");
     await mkdir(externalHandlersDir, { recursive: true });
@@ -369,13 +350,5 @@ echo '{}'
       /^external-fired at \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\n$/,
       "sentinel must prove the external-path handler ran",
     );
-  } finally {
-    if (originalAgentDir === undefined) {
-      delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
-    }
-
-    await rm(tmpRoot, { recursive: true, force: true });
-  }
+  });
 });

@@ -400,6 +400,64 @@ export function isScopeBearingListRow(
   return SCOPE_BEARING_LIST_STATUS[row.status];
 }
 
+/**
+ * Read `p.scope` defensively from the PluginNotificationMessage union.
+ * The `available` / `unavailable` variants OMIT the `scope` field by
+ * construction (SNM-11); the other list-surface variants carry an OPTIONAL
+ * `scope` that is present only when the plugin's install scope differs
+ * from the marketplace block's scope (orphan-fold rule, D-13-18). When
+ * absent, fall back to the marketplace scope so the structured tool
+ * surface always carries a stable `scope` field for the agent.
+ *
+ * For `installed` / `upgradable` the `scope` field exists structurally;
+ * for `available` / `unavailable` it does not -- `isScopeBearingListRow`
+ * narrows the variants appropriately.
+ */
+export function pluginScopeOrFallback(
+  p: PluginNotificationMessage,
+  marketplaceScope: Scope,
+): Scope {
+  return isScopeBearingListRow(p) ? (p.scope ?? marketplaceScope) : marketplaceScope;
+}
+
+/**
+ * Read `p.version` off a plugin notification row. D-15-04: every list-surface
+ * variant carries the same optional `version?` slot, so every arm returns the
+ * same field and the switch computes nothing.
+ *
+ * D-116-14: the switch stays anyway, and must not be collapsed into a single
+ * expression. Its job is the missing-arm gate -- `noImplicitReturns` makes the
+ * end of this function reachable the moment a list-surface status goes unnamed,
+ * so a status added to the row union is a compile error here rather than a row
+ * that silently loses its version.
+ */
+export function pluginVersion(p: PluginNotificationMessage): string | undefined {
+  switch (p.status) {
+    case "installed":
+    case "reinstalled":
+    case "uninstalled":
+    case "disabled":
+    case "available":
+    case "remote":
+    case "unavailable":
+    case "partially-available":
+    case "upgradable":
+    case "partially-installed":
+    case "partially-upgradable":
+    case "failed":
+    case "skipped":
+      return p.version;
+    case "updated":
+      return p.to;
+    case "manual recovery":
+    case "will install":
+    case "will uninstall":
+    case "will enable":
+    case "will disable":
+      return undefined;
+  }
+}
+
 /** Fields shared by every marketplace notification row. */
 export interface MpCommon extends MessageBase {
   readonly name: string;

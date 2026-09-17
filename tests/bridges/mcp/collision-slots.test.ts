@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
 import { loadEffectiveServerNames } from "../../../extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 interface CollisionPaths {
   agentDirectory: string;
@@ -13,38 +13,14 @@ interface CollisionPaths {
 }
 
 async function allocateCollisionPaths(t: TestContext): Promise<CollisionPaths> {
-  const root = await mkdtemp(path.join(tmpdir(), "mcp-collision-slots-"));
-  t.after(async () => rm(root, { recursive: true, force: true }));
-
-  return {
-    agentDirectory: path.join(root, "pi-agent"),
-    cwd: path.join(root, "project"),
-    homeDirectory: path.join(root, "home"),
-  };
+  const { agentDir, cwd, home } = await createHermeticEnvironment(t, "mcp-collision-slots-");
+  return { agentDirectory: agentDir, cwd, homeDirectory: home };
 }
 
 describe("loadEffectiveServerNames", () => {
   test("preserves every slot priority and stable repeated reads", async (t) => {
     // arrange
     const { agentDirectory, cwd, homeDirectory } = await allocateCollisionPaths(t);
-    const previousHome = process.env.HOME;
-    t.after(() => {
-      if (previousHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = previousHome;
-      }
-    });
-    process.env.HOME = homeDirectory;
-    const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
-    t.after(() => {
-      if (previousAgentDirectory === undefined) {
-        delete process.env.PI_CODING_AGENT_DIR;
-      } else {
-        process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
-      }
-    });
-    process.env.PI_CODING_AGENT_DIR = agentDirectory;
     const slotPaths = [
       path.join(homeDirectory, ".config", "mcp", "mcp.json"),
       path.join(agentDirectory, "mcp.json"),
@@ -88,24 +64,6 @@ describe("loadEffectiveServerNames", () => {
   test("keeps the first declaration across all four ordered slots", async (t) => {
     // arrange
     const { agentDirectory, cwd, homeDirectory } = await allocateCollisionPaths(t);
-    const previousHome = process.env.HOME;
-    t.after(() => {
-      if (previousHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = previousHome;
-      }
-    });
-    process.env.HOME = homeDirectory;
-    const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
-    t.after(() => {
-      if (previousAgentDirectory === undefined) {
-        delete process.env.PI_CODING_AGENT_DIR;
-      } else {
-        process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
-      }
-    });
-    process.env.PI_CODING_AGENT_DIR = agentDirectory;
     const homeSlot = path.join(homeDirectory, ".config", "mcp", "mcp.json");
     const agentSlot = path.join(agentDirectory, "mcp.json");
     const projectSlot = path.join(cwd, ".mcp.json");
@@ -144,25 +102,7 @@ describe("loadEffectiveServerNames", () => {
 
   test("returns an empty map when every collision document is missing", async (t) => {
     // arrange
-    const { agentDirectory, cwd, homeDirectory } = await allocateCollisionPaths(t);
-    const previousHome = process.env.HOME;
-    t.after(() => {
-      if (previousHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = previousHome;
-      }
-    });
-    process.env.HOME = homeDirectory;
-    const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
-    t.after(() => {
-      if (previousAgentDirectory === undefined) {
-        delete process.env.PI_CODING_AGENT_DIR;
-      } else {
-        process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
-      }
-    });
-    process.env.PI_CODING_AGENT_DIR = agentDirectory;
+    const { cwd } = await allocateCollisionPaths(t);
     const expectedOwners = new Map<string, string>();
 
     // act
@@ -174,26 +114,8 @@ describe("loadEffectiveServerNames", () => {
 
   test("treats a non-directory path component as an absent document", async (t) => {
     // arrange
-    const { agentDirectory, cwd, homeDirectory } = await allocateCollisionPaths(t);
-    const previousHome = process.env.HOME;
-    t.after(() => {
-      if (previousHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = previousHome;
-      }
-    });
-    process.env.HOME = homeDirectory;
-    const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
-    t.after(() => {
-      if (previousAgentDirectory === undefined) {
-        delete process.env.PI_CODING_AGENT_DIR;
-      } else {
-        process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
-      }
-    });
-    process.env.PI_CODING_AGENT_DIR = agentDirectory;
-    await writeFile(homeDirectory, "not a directory\n");
+    const { cwd, homeDirectory } = await allocateCollisionPaths(t);
+    await writeFile(path.join(homeDirectory, ".config"), "not a directory\n");
     const expectedOwners = new Map<string, string>();
 
     // act
@@ -206,24 +128,6 @@ describe("loadEffectiveServerNames", () => {
   test("skips empty, array, and primitive documents before a valid declaration", async (t) => {
     // arrange
     const { agentDirectory, cwd, homeDirectory } = await allocateCollisionPaths(t);
-    const previousHome = process.env.HOME;
-    t.after(() => {
-      if (previousHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = previousHome;
-      }
-    });
-    process.env.HOME = homeDirectory;
-    const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
-    t.after(() => {
-      if (previousAgentDirectory === undefined) {
-        delete process.env.PI_CODING_AGENT_DIR;
-      } else {
-        process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
-      }
-    });
-    process.env.PI_CODING_AGENT_DIR = agentDirectory;
     const homeSlot = path.join(homeDirectory, ".config", "mcp", "mcp.json");
     const agentSlot = path.join(agentDirectory, "mcp.json");
     const projectSlot = path.join(cwd, ".mcp.json");
@@ -248,24 +152,6 @@ describe("loadEffectiveServerNames", () => {
   test("accepts empty wrapped and unwrapped objects while skipping null", async (t) => {
     // arrange
     const { agentDirectory, cwd, homeDirectory } = await allocateCollisionPaths(t);
-    const previousHome = process.env.HOME;
-    t.after(() => {
-      if (previousHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = previousHome;
-      }
-    });
-    process.env.HOME = homeDirectory;
-    const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
-    t.after(() => {
-      if (previousAgentDirectory === undefined) {
-        delete process.env.PI_CODING_AGENT_DIR;
-      } else {
-        process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
-      }
-    });
-    process.env.PI_CODING_AGENT_DIR = agentDirectory;
     const homeSlot = path.join(homeDirectory, ".config", "mcp", "mcp.json");
     const agentSlot = path.join(agentDirectory, "mcp.json");
     const projectSlot = path.join(cwd, ".mcp.json");
@@ -287,24 +173,6 @@ describe("loadEffectiveServerNames", () => {
   test("skips invalid wrapped server collections and keeps the next valid one", async (t) => {
     // arrange
     const { agentDirectory, cwd, homeDirectory } = await allocateCollisionPaths(t);
-    const previousHome = process.env.HOME;
-    t.after(() => {
-      if (previousHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = previousHome;
-      }
-    });
-    process.env.HOME = homeDirectory;
-    const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
-    t.after(() => {
-      if (previousAgentDirectory === undefined) {
-        delete process.env.PI_CODING_AGENT_DIR;
-      } else {
-        process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
-      }
-    });
-    process.env.PI_CODING_AGENT_DIR = agentDirectory;
     const homeSlot = path.join(homeDirectory, ".config", "mcp", "mcp.json");
     const agentSlot = path.join(agentDirectory, "mcp.json");
     const projectSlot = path.join(cwd, ".mcp.json");
@@ -328,25 +196,7 @@ describe("loadEffectiveServerNames", () => {
 
   test("propagates an unreadable collision document", async (t) => {
     // arrange
-    const { agentDirectory, cwd, homeDirectory } = await allocateCollisionPaths(t);
-    const previousHome = process.env.HOME;
-    t.after(() => {
-      if (previousHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = previousHome;
-      }
-    });
-    process.env.HOME = homeDirectory;
-    const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
-    t.after(() => {
-      if (previousAgentDirectory === undefined) {
-        delete process.env.PI_CODING_AGENT_DIR;
-      } else {
-        process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
-      }
-    });
-    process.env.PI_CODING_AGENT_DIR = agentDirectory;
+    const { cwd, homeDirectory } = await allocateCollisionPaths(t);
     const homeSlot = path.join(homeDirectory, ".config", "mcp", "mcp.json");
     await mkdir(homeSlot, { recursive: true });
 

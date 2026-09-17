@@ -307,6 +307,13 @@ Toggle marketplace plugin auto-updates. When you update the marketplace manually
 
 ### Plugin
 
+Browse plugins interactively across configured marketplaces. In interactive mode, running bare `/claude:plugin` also opens the browser.
+
+```text
+/claude:plugin browse
+/claude:plugin
+```
+
 List plugins available for installation. Omit the marketplace name to list across configured marketplaces.
 
 ```text

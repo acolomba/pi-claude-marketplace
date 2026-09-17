@@ -93,9 +93,8 @@
 // tests/orchestrators/plugin/reinstall-flow.test.ts owns.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import https from "node:https";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
@@ -107,6 +106,7 @@ import {
 import { makeReinstallHandler as makeReinstallHandlerWithOperation } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts";
 import { createNodeReinstallPlugins } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import {
   buildInstalledPluginRecord,
@@ -178,37 +178,14 @@ interface HermeticWorkspace {
  * before the handler runs.
  */
 async function createHermeticWorkspace(t: TestContext, label: string): Promise<HermeticWorkspace> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `plugin-reinstall-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `plugin-reinstall-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(cwd, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
-  });
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
+  const { cwd, agentDir } = await createHermeticEnvironment(t, `plugin-reinstall-${label}-`);
   const requestSpy = t.mock.method(https, "request", (): never => {
     throw new Error("reinstall must not open a network connection");
   });
   return {
     cwd,
     projectRoot: path.join(cwd, ".pi"),
-    userRoot: path.join(home, ".pi", "agent"),
+    userRoot: agentDir,
     transportCalls: (): number => requestSpy.mock.callCount(),
   };
 }

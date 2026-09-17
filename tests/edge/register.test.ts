@@ -67,6 +67,7 @@ import {
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { retryTree } from "../orchestrators/plugin/scope-tree-inventory.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import { buildInstalledPluginRecord } from "./handlers/marketplace-seed.ts";
 import { createNotificationBoundary } from "./notification-boundary.ts";
@@ -126,7 +127,7 @@ type PiRegistrar = Omit<ExtensionAPI, "registerTool"> & {
 };
 
 const EXPECTED_TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|marketplace> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project]\n" +
@@ -139,7 +140,9 @@ const EXPECTED_TOP_LEVEL_USAGE =
   "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  import [--scope user|project]\n" +
-  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...";
+  "  browse\n" +
+  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
+  "  help [marketplace]";
 
 interface HermeticScope {
   readonly cwd: string;
@@ -197,32 +200,11 @@ function installNetworkTrap(t: TestContext): void {
  * anything runs.
  */
 async function createHermeticScope(t: TestContext, label: string): Promise<HermeticScope> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `register-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `register-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const previousCwd = process.cwd();
-  t.after(async () => {
+  t.after(() => {
     process.chdir(previousCwd);
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(cwd, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
   });
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
+  const { cwd } = await createHermeticEnvironment(t, `register-${label}-`);
   process.chdir(cwd);
   installNetworkTrap(t);
   return { cwd };
