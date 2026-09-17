@@ -5,14 +5,19 @@
 //   node scripts/coverage-producer.mjs --request <json> --out <json>
 //                                      [--receipt <json>] [--producer <entry>]
 //
-// The request lists scripts as `{ url, code, sourceMap, coverage }`: the
-// script URL V8 recorded, the executed JavaScript file, the source map file
-// and the raw V8 file holding that URL's record, with paths relative to the
-// request file. The output is written atomically; `--receipt` also writes
-// the identity of the producer, parser, merger, codec, runtime and adapter
-// the conversion used. A record that cannot be converted fails the whole
-// command with exit status 1 and no output file. The module is inert on
-// import.
+// A request takes one of two forms, with every path relative to the request
+// file. A run request names a capture run manifest and lists scripts as
+// `{ path, coverage }`: the repository-relative module path and the raw V8
+// file holding its record. The module's immutable source and executed text
+// come from the run's own stores and are mapped through the identity source
+// map of `coverage-source-map.mjs`. An explicit request lists scripts as
+// `{ url, code, sourceMap, coverage }`: the script URL V8 recorded, the
+// executed JavaScript file, the source map file and the raw V8 file, and
+// converts them as given. The output is written atomically; `--receipt` also
+// writes the identity of the producer, parser, merger, codec, runtime and
+// adapter the conversion used. A record that cannot be converted fails the
+// whole command with exit status 1 and no output file. The module is inert
+// on import.
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -24,6 +29,7 @@ import {
   ProducerError,
   producerIdentity,
 } from "./coverage-producer.convert.mjs";
+import { executedSourceMap, openCaptureRun, recordedModule } from "./coverage-source-map.mjs";
 
 class UsageError extends Error {}
 
@@ -57,28 +63,56 @@ function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
 }
 
-// Each request script names the executed code, the source map and the raw V8
-// file that holds the record for `url`; paths are relative to the request.
-function readRequestScript(requestDirectory, entry, index) {
-  for (const field of ["url", "code", "sourceMap", "coverage"]) {
+function requireStrings(entry, index, fields) {
+  for (const field of fields) {
     if (typeof entry?.[field] !== "string") {
       throw new ProducerError(`Request script ${index} lacks a string ${field}`);
     }
   }
+}
 
-  const rawPath = path.resolve(requestDirectory, entry.coverage);
-  const records = readJson(rawPath).result?.filter((record) => record.url === entry.url) ?? [];
+// The one V8 record for `url` in the raw file at `rawPath`.
+function rawRecord(rawPath, url) {
+  const records = readJson(rawPath).result?.filter((record) => record.url === url) ?? [];
 
   if (records.length !== 1) {
     throw new ProducerError(
-      `Expected exactly one record for ${entry.url} in ${rawPath}, found ${records.length}`,
+      `Expected exactly one record for ${url} in ${rawPath}, found ${records.length}`,
     );
   }
+
+  return records[0];
+}
+
+// An explicit script names the executed code, the source map and the raw V8
+// file that holds the record for `url`.
+function readExplicitScript(requestDirectory, entry, index) {
+  requireStrings(entry, index, ["url", "code", "sourceMap", "coverage"]);
 
   return {
     code: readFileSync(path.resolve(requestDirectory, entry.code), "utf8"),
     sourceMap: readJson(path.resolve(requestDirectory, entry.sourceMap)),
-    coverage: records[0],
+    coverage: rawRecord(path.resolve(requestDirectory, entry.coverage), entry.url),
+  };
+}
+
+// A run script names a module the run recorded and the raw V8 file holding
+// its record; the executed text and its identity map come from the run. A
+// module named by several scripts is read and mapped once.
+function readRunScript(run, mapped, requestDirectory, entry, index) {
+  requireStrings(entry, index, ["path", "coverage"]);
+  let script = mapped.get(entry.path);
+
+  if (script === undefined) {
+    const module = recordedModule(run, entry.path);
+    script = { url: module.url, code: module.executed, sourceMap: executedSourceMap(module) };
+    mapped.set(entry.path, script);
+  }
+
+  return {
+    code: script.code,
+    sourceMap: script.sourceMap,
+    coverage: rawRecord(path.resolve(requestDirectory, entry.coverage), script.url),
   };
 }
 
@@ -90,7 +124,18 @@ function readRequest(requestPath) {
   }
 
   const requestDirectory = path.dirname(requestPath);
-  return request.scripts.map((entry, index) => readRequestScript(requestDirectory, entry, index));
+
+  if (request.run === undefined) {
+    return request.scripts.map((entry, index) =>
+      readExplicitScript(requestDirectory, entry, index),
+    );
+  }
+
+  const run = openCaptureRun(path.resolve(requestDirectory, request.run));
+  const mapped = new Map();
+  return request.scripts.map((entry, index) =>
+    readRunScript(run, mapped, requestDirectory, entry, index),
+  );
 }
 
 function writeJsonAtomically(filePath, value) {
