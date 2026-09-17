@@ -5,7 +5,7 @@ Regenerating rewrites this prose and carries every recorded disposition and note
 forward; nothing written outside the ledger block survives.
 
 This is an inventory, not a clean-gate verdict. It records 3352
-candidates, of which 16 are still unresolved and
+candidates, of which 9 are still unresolved and
 357 need a recorded disposition. Closure is
 `--check`, which fails every one of them until its evidence is recorded.
 
@@ -13,19 +13,19 @@ candidates, of which 16 are still unresolved and
 
 | Measurement | Value |
 | --- | --- |
-| Recorded | 2026-09-16T22:04:09.069Z |
-| Revision | 18b9b3e5628950d77be085d1903b8b3f843637d2 |
-| Source digest | `3fec0ee2dae9ce808548145a0d19c9339e3ffd97b136f1cda08bd285d15ca998` |
+| Recorded | 2026-09-17T02:47:23.684Z |
+| Revision | b9f705d7c853b25b33160db7de31a18e499d120b |
+| Source digest | `d6f385e8811e57cd2dd48c67a8ac8964dd6df28d0f0fc9288cfa3cba19c5abee` |
 | Source files hashed | 605 |
 | Production files analysed | 236 |
 | Candidates | 3352 |
 | Runtime-observed | 2995 |
 | Test-only-observed | 240 |
-| Explicit-contract | 101 |
-| Unread | 16 |
+| Explicit-contract | 108 |
+| Unread | 9 |
 | Unsupported analysis | 0 |
-| Transfer steps | 3030520 |
-| Transfer walk milliseconds | 51570 |
+| Transfer steps | 3035308 |
+| Transfer walk milliseconds | 50317 |
 
 ## Population by owner
 
@@ -36,11 +36,11 @@ candidates, of which 16 are still unresolved and
 | bridges/hooks | 314 | 241 | 71 | 2 | 0 | 0 |
 | bridges/mcp | 55 | 47 | 4 | 4 | 0 | 0 |
 | bridges/skills | 70 | 61 | 4 | 5 | 0 | 0 |
-| domain | 266 | 227 | 22 | 11 | 6 | 0 |
-| edge | 121 | 111 | 3 | 5 | 2 | 0 |
+| domain | 266 | 227 | 22 | 15 | 2 | 0 |
+| edge | 121 | 111 | 3 | 7 | 0 | 0 |
 | orchestrators | 1766 | 1617 | 94 | 50 | 5 | 0 |
 | persistence | 77 | 58 | 18 | 1 | 0 | 0 |
-| platform | 84 | 67 | 9 | 5 | 3 | 0 |
+| platform | 84 | 67 | 9 | 6 | 2 | 0 |
 | shared | 337 | 324 | 5 | 8 | 0 | 0 |
 | transaction | 17 | 15 | 2 | 0 | 0 | 0 |
 
@@ -50,19 +50,8 @@ candidates, of which 16 are still unresolved and
 
 | Declaration | Owner | Member | Status | Reasons | Disposition |
 | --- | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:55:3 | IfPrefixTarget | piEvents | unread | - | Load-bearing `satisfies` constraint; NOT removed and the table declared type is NOT widened. `IfPrefixTarget` is unexported and exists only as the right-hand side of `IF_PREFIX_TARGETS ... as const satisfies Record<string, IfPrefixTarget>`; every read goes through the const own inferred type, which is why no read lands here. Measured: deleting this member makes `npm run typecheck` fail five times, once per table entry, `extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts(87,5): error TS2353: Object literal may only specify known properties, and piEvents does not exist in type IfPrefixTarget` (and at 91:5, 95:5, 99:5, 103:5). The deletion was restored. Widening the table declared type to manufacture a read is forbidden here: the key order is locked against an architecture test introspection and widening changes what consumers see. Next owner: a bounded engine plan adding a `satisfies`-constraint category, with the constrained const as its evidence. |
-| extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:56:3 | IfPrefixTarget | extractTarget | unread | - | Load-bearing `satisfies` constraint; NOT removed and the table declared type is NOT widened. Same shape as the sibling at `:55:3`: `IfPrefixTarget` is unexported and exists only as the right-hand side of the `as const satisfies Record<string, IfPrefixTarget>` on `IF_PREFIX_TARGETS`. Measured: narrowing this member to `"nope"` makes `npm run typecheck` fail five times, once per table entry, `extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts(89,5): error TS2322: Type "command" is not assignable to type "nope"` (and at 93:5, 97:5, 101:5, 105:5). The drift was restored. Next owner: the same bounded `satisfies`-constraint category named on the sibling row. |
 | extensions/pi-claude-marketplace/domain/components/hooks.ts:77:3 | ResolveHookIfContext | homedir | unread | - | Analyzer under-credit plus a live compiler obligation; no source touched here. The anchor context is duplicated in `domain` on purpose so the parser does not depend on the bridge surface (D-11 import direction); the value flows through whole and every real read lands on the bridge-side twin `CompileIfPredicateContext`, which is why the third slot (`cwd`) is credited and these two are not. The member is NOT dead: deleting it makes `npm run typecheck` fail at `extensions/pi-claude-marketplace/bridges/hooks/event-router.ts(149,47): error TS2345 ... Property homedir is missing in type ResolveHookIfContext but required in type CompileIfPredicateContext` (and again at 670:47). The deletion was restored. The repair that settles the row is to make the bridge-side declaration an alias of this one -- the legal import direction, and the shape 06-06 named for the async-rewake duplicate -- which edits `extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts`. That file belongs to owner plan 06-09, which has already completed, so this plan does not reach into it. Next owner: a follow-up that holds the `bridges/hooks/if-field` files. |
 | extensions/pi-claude-marketplace/domain/components/hooks.ts:79:3 | ResolveHookIfContext | projectRoot | unread | - | Analyzer under-credit plus a live compiler obligation; no source touched here. Same duplicate-declaration shape as the sibling at `:77:3` (D-11 import direction keeps the parser off the bridge surface). Measured not dead: deleting it makes `npm run typecheck` fail at `extensions/pi-claude-marketplace/bridges/hooks/event-router.ts(149,47): error TS2345 ... Property projectRoot is missing in type ResolveHookIfContext but required in type CompileIfPredicateContext` (and again at 670:47). The deletion was restored. Same repair and same owner as the sibling row: alias the bridge-side `CompileIfPredicateContext` to this declaration, in `extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts`, which this plan does not own. |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:19:7 | DroppedHookSchema | matcher | unread | - | Load-bearing compile-time proof; NOT removed. This member exists so the arm-key drift assertion can compare `Type.Static<DroppedHookSchema>` against the hand-written `DroppedHook` union key for key. Measured by deleting it and running `npm run typecheck`, which fails twice: at the assertion itself, `extensions/pi-claude-marketplace/domain/resolver-types.ts(66,43): error TS2344: Type false does not satisfy the constraint true` (the `DroppedHookArmKeysCheck` argument), and at the consumer, `extensions/pi-claude-marketplace/domain/plugin-resolver.ts(133,3): error TS2375`, where `droppedHooks` collapses to `never[]` because the group arm no longer matches. The deletion was restored. Recorded observed limit (06-06): a compile-time schema proof has no contract category -- nothing reads these members and nothing can. Next owner: a bounded engine plan adding a schema-proof category with its own drift controls. |
-| extensions/pi-claude-marketplace/domain/resolver-types.ts:32:7 | DroppedHookSchema | matcher | unread | - | Load-bearing compile-time proof; NOT removed. This member exists so the arm-key drift assertion can compare `Type.Static<DroppedHookSchema>` against the hand-written `DroppedHook` union key for key. Measured by deleting it and running `npm run typecheck`, which fails twice: at the assertion itself, `extensions/pi-claude-marketplace/domain/resolver-types.ts(66,43): error TS2344: Type false does not satisfy the constraint true` (the `DroppedHookArmKeysCheck` argument), and at the consumer, `extensions/pi-claude-marketplace/domain/plugin-resolver.ts(133,3): error TS2375`, where `droppedHooks` collapses to `never[]` because the handler arm no longer matches. The deletion was restored. Recorded observed limit (06-06): a compile-time schema proof has no contract category -- nothing reads these members and nothing can. Next owner: a bounded engine plan adding a schema-proof category with its own drift controls. |
-
-### edge
-
-| Declaration | Owner | Member | Status | Reasons | Disposition |
-| --- | --- | --- | --- | --- | --- |
-| extensions/pi-claude-marketplace/edge/handlers/tools.ts:140:3 | PluginRow | marketplace | unread | - | Payload slot crossing the Pi tool boundary: the boundary half is proved now and the arrival half is not, so the slot is left standing rather than deleted. It is built at extensions/pi-claude-marketplace/edge/handlers/tools.ts:437:9, pushed into the `rows` local inside `renderPluginPayload`, and returned under `details` from the tool's `execute` -- a method shorthand whose enclosing object literal contextually types to `ToolDefinition<...>`, declared in node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts -- so the value really does leave this tree and removing the slot would silently change a shipped payload. An `external-output` entry naming that origin and the return at extensions/pi-claude-marketplace/edge/handlers/tools.ts:524:7 was submitted to the real engine against this tree and REFUSED: `Invalid contract: extensions/pi-claude-marketplace/edge/handlers/tools.ts:140:3 origin extensions/pi-claude-marketplace/edge/handlers/tools.ts:437:9 never reaches boundary extensions/pi-claude-marketplace/edge/handlers/tools.ts:524:7`. That refusal is one half further in than the boundary refusal 06-11 recorded: the boundary now resolves through the method shorthand, and the four sibling `marketplaces` payload slots in the same file are contracted by exactly that proof. What still stops this row was measured rather than guessed -- the flow walk records no transfer into a destructured binding, so `const { lines, rows } = rendered;` at extensions/pi-claude-marketplace/edge/handlers/tools.ts:512:7 leaves the chain from `renderPluginPayload`'s own `rows` to the returned one with no recorded edge. Neither the handler nor the payload was restructured to suit the prover. Next owner: a bounded engine plan that records the transfer a destructuring binding receives. |
-| extensions/pi-claude-marketplace/edge/handlers/tools.ts:141:3 | PluginRow | scope | unread | - | Payload slot crossing the Pi tool boundary: the boundary half is proved now and the arrival half is not, so the slot is left standing rather than deleted. It is built at extensions/pi-claude-marketplace/edge/handlers/tools.ts:438:9, pushed into the `rows` local inside `renderPluginPayload`, and returned under `details` from the tool's `execute` -- a method shorthand whose enclosing object literal contextually types to `ToolDefinition<...>`, declared in node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts -- so the value really does leave this tree and removing the slot would silently change a shipped payload. An `external-output` entry naming that origin and the return at extensions/pi-claude-marketplace/edge/handlers/tools.ts:524:7 was submitted to the real engine against this tree and REFUSED: `Invalid contract: extensions/pi-claude-marketplace/edge/handlers/tools.ts:141:3 origin extensions/pi-claude-marketplace/edge/handlers/tools.ts:438:9 never reaches boundary extensions/pi-claude-marketplace/edge/handlers/tools.ts:524:7`. That refusal is one half further in than the boundary refusal 06-11 recorded: the boundary now resolves through the method shorthand, and the four sibling `marketplaces` payload slots in the same file are contracted by exactly that proof. What still stops this row was measured rather than guessed -- the flow walk records no transfer into a destructured binding, so `const { lines, rows } = rendered;` at extensions/pi-claude-marketplace/edge/handlers/tools.ts:512:7 leaves the chain from `renderPluginPayload`'s own `rows` to the returned one with no recorded edge. Neither the handler nor the payload was restructured to suit the prover. Next owner: a bounded engine plan that records the transfer a destructuring binding receives. |
 
 ### orchestrators
 
@@ -80,7 +69,6 @@ candidates, of which 16 are still unresolved and
 | --- | --- | --- | --- | --- | --- |
 | extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:41:39 | AuthAttemptResult | authAttempted | unread | - | Analyzer-independent, and no source is touched. A recorded decision (D-32-05) put `authAttempted: true` on BOTH arms as a reference-only / future-proofing marker, and the declaration own comment states the implementation never branches on it: `onAuthFailure(url, cred)` is called with only the credential and never receives this value. This plan has no authority to revoke a recorded decision. Its structural twin `DeviceFlowResult.authAttempted` (`extensions/pi-claude-marketplace/domain/github-auth.ts:145:39`) is `test-only-observed` with 36 witnesses, first at `tests/domain/github-auth.test.ts:1016:28` (derived from the fresh report, not transcribed); the platform copy exists only because `platform/README.md` forbids a platform -> domain import, so it carries no witness of its own and the orchestrators rely on structural typing to pass `initiateDeviceFlow` across. Next owner: revisiting D-32-05, not a source repair in this phase. |
 | extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:42:34 | AuthAttemptResult | authAttempted | unread | - | Analyzer-independent, and no source is touched. A recorded decision (D-32-05) put `authAttempted: true` on BOTH arms as a reference-only / future-proofing marker, and the declaration own comment states the implementation never branches on it: `onAuthFailure(url, cred)` is called with only the credential and never receives this value. This plan has no authority to revoke a recorded decision. Its structural twin `DeviceFlowResult.authAttempted` (`extensions/pi-claude-marketplace/domain/github-auth.ts:146:34`) is `test-only-observed` with 36 witnesses, first at `tests/domain/github-auth.test.ts:1016:28` (derived from the fresh report, not transcribed); the platform copy exists only because `platform/README.md` forbids a platform -> domain import, so it carries no witness of its own and the orchestrators rely on structural typing to pass `initiateDeviceFlow` across. Next owner: revisiting D-32-05, not a source repair in this phase. |
-| extensions/pi-claude-marketplace/platform/pi-api.ts:99:3 | ResourcesDiscoverResult | themePaths | unread | - | Load-bearing mirror member; NOT removed. The peer declares `themePaths?: string[]` at node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:413:5, so this slot is what makes the local mirror a complete statement of the upstream shape. The handler never builds it, so no `external-output` origin exists and no contract category fits. Positive evidence it is not surplus, measured: widening it to `number[]` fails `npm run typecheck` at `extensions/pi-claude-marketplace/index.ts(86,5): error TS2769: No overload matches this call.` -- the peer own overload constrains this member even though nothing in this tree builds or reads it. Recorded limit: removing it entirely is caught only by the `satisfies` literal in `tests/platform/pi-api.test.ts`, not by an upstream-checked pin, because every upstream result slot is optional and a handler returning fewer of them stays assignable. Next owner: a category for a member that exists to mirror an external declaration complete shape; the `originCandidates` repair named on the two sibling rows does NOT reach this one, because it is never built at all. |
 
 ## Members only tests read
 
@@ -436,10 +424,14 @@ candidates, of which 16 are still unresolved and
 
 | Declaration | Owner | Member | Contract reason | Disposition |
 | --- | --- | --- | --- | --- |
+| extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:55:3 | IfPrefixTarget | piEvents | satisfies-constraint: The prefix table is checked against this interface, so every entry has to carry a Pi-event set; nothing in the project holds a value typed as the interface, so no read can land on this slot. (satisfies extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:86:34 compels piEvents) | Validated contract. satisfies-constraint: The prefix table is checked against this interface, so every entry has to carry a Pi-event set; nothing in the project holds a value typed as the interface, so no read can land on this slot. (satisfies extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:86:34 compels piEvents) |
+| extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:56:3 | IfPrefixTarget | extractTarget | satisfies-constraint: The prefix table is checked against this interface, so every entry has to name the runtime field its predicate consults; nothing in the project holds a value typed as the interface, so no read can land on this slot. (satisfies extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:86:34 compels extractTarget) | Validated contract. satisfies-constraint: The prefix table is checked against this interface, so every entry has to name the runtime field its predicate consults; nothing in the project holds a value typed as the interface, so no read can land on this slot. (satisfies extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:86:34 compels extractTarget) |
 | extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts:52:21 | PiToolName | toolName | conditional-clause: Names the slot each tool-call arm is walked through, so the literal tool names survive a property access that would collapse them to string. (conditional extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts:52:5 extracts through toolName) | Validated contract. conditional-clause: Names the slot each tool-call arm is walked through, so the literal tool names survive a property access that would collapse them to string. (conditional extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts:52:5 extracts through toolName) |
 | extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:29:48 | MatcherCondition | kind | type-selection: Selects within DroppedHook by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:29:25 selects by kind) | Validated contract. type-selection: Selects within DroppedHook by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:29:25 selects by kind) |
 | extensions/pi-claude-marketplace/domain/manifest-lookup.ts:57:30 | lookupDeclaredPlugin | kind | type-selection: Selects within ManifestLookup by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/manifest-lookup.ts:57:4 selects by kind) | Validated contract. type-selection: Selects within ManifestLookup by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/manifest-lookup.ts:57:4 selects by kind) |
 | extensions/pi-claude-marketplace/domain/plugin-root.ts:23:45 | AbsolutePluginRoot | __absolutePluginRootBrand | nominal-brand: Marks AbsolutePluginRoot so a value no branding module minted cannot stand in for it. (unique symbol extensions/pi-claude-marketplace/domain/plugin-root.ts:16:15 cannot be spelled outside its module) | Validated contract. nominal-brand: Marks AbsolutePluginRoot so a value no branding module minted cannot stand in for it. (unique symbol extensions/pi-claude-marketplace/domain/plugin-root.ts:16:15 cannot be spelled outside its module) |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:19:7 | DroppedHookSchema | matcher | schema-pin: Pinned key-for-key against the hand-written dropped-hook group arm, so a key dropped from either side fails the build; nothing reads the schema slot itself. (pin extensions/pi-claude-marketplace/domain/resolver-types.ts:67:1 holds matcher equal to extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:19:7) | Validated contract. schema-pin: Pinned key-for-key against the hand-written dropped-hook group arm, so a key dropped from either side fails the build; nothing reads the schema slot itself. (pin extensions/pi-claude-marketplace/domain/resolver-types.ts:67:1 holds matcher equal to extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:19:7) |
+| extensions/pi-claude-marketplace/domain/resolver-types.ts:32:7 | DroppedHookSchema | matcher | schema-pin: Pinned key-for-key against the hand-written dropped-hook handler arm, so a key dropped from either side fails the build; nothing reads the schema slot itself. (pin extensions/pi-claude-marketplace/domain/resolver-types.ts:67:1 holds matcher equal to extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:22:45) | Validated contract. schema-pin: Pinned key-for-key against the hand-written dropped-hook handler arm, so a key dropped from either side fails the build; nothing reads the schema slot itself. (pin extensions/pi-claude-marketplace/domain/resolver-types.ts:67:1 holds matcher equal to extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:22:45) |
 | extensions/pi-claude-marketplace/domain/resolver-types.ts:49:32 | DroppedHookArmKeysMatch | kind | type-selection: Selects within DroppedHook by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:49:9 selects by kind) | Validated contract. type-selection: Selects within DroppedHook by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:49:9 selects by kind) |
 | extensions/pi-claude-marketplace/domain/resolver-types.ts:50:60 | DroppedHookArmKeysMatch | kind | type-selection: Selects within Type.Static<DroppedHookSchema> by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:50:18 selects by kind) | Validated contract. type-selection: Selects within Type.Static<DroppedHookSchema> by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:50:18 selects by kind) |
 | extensions/pi-claude-marketplace/domain/resolver-types.ts:51:54 | DroppedHookArmKeysMatch | kind | type-selection: Selects within Type.Static<DroppedHookSchema> by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:51:12 selects by kind) | Validated contract. type-selection: Selects within Type.Static<DroppedHookSchema> by kind, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/domain/resolver-types.ts:51:12 selects by kind) |
@@ -457,6 +449,8 @@ candidates, of which 16 are still unresolved and
 | extensions/pi-claude-marketplace/edge/handlers/tools.ts:101:9 | marketplaces | scope | external-output: Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back. (origin extensions/pi-claude-marketplace/edge/handlers/tools.ts:114:48 reaches boundary extensions/pi-claude-marketplace/edge/handlers/tools.ts:117:7) | Validated contract. external-output: Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back. (origin extensions/pi-claude-marketplace/edge/handlers/tools.ts:114:48 reaches boundary extensions/pi-claude-marketplace/edge/handlers/tools.ts:117:7) |
 | extensions/pi-claude-marketplace/edge/handlers/tools.ts:102:9 | marketplaces | pluginCount | external-output: Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back. (origin extensions/pi-claude-marketplace/edge/handlers/tools.ts:114:55 reaches boundary extensions/pi-claude-marketplace/edge/handlers/tools.ts:117:7) | Validated contract. external-output: Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back. (origin extensions/pi-claude-marketplace/edge/handlers/tools.ts:114:55 reaches boundary extensions/pi-claude-marketplace/edge/handlers/tools.ts:117:7) |
 | extensions/pi-claude-marketplace/edge/handlers/tools.ts:103:9 | marketplaces | source | external-output: Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back. (origin extensions/pi-claude-marketplace/edge/handlers/tools.ts:114:68 reaches boundary extensions/pi-claude-marketplace/edge/handlers/tools.ts:117:7) | Validated contract. external-output: Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back. (origin extensions/pi-claude-marketplace/edge/handlers/tools.ts:114:68 reaches boundary extensions/pi-claude-marketplace/edge/handlers/tools.ts:117:7) |
+| extensions/pi-claude-marketplace/edge/handlers/tools.ts:140:3 | PluginRow | marketplace | external-output: Built into the plugin-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back. (origin extensions/pi-claude-marketplace/edge/handlers/tools.ts:437:9 reaches boundary extensions/pi-claude-marketplace/edge/handlers/tools.ts:524:7) | Validated contract. external-output: Built into the plugin-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back. (origin extensions/pi-claude-marketplace/edge/handlers/tools.ts:437:9 reaches boundary extensions/pi-claude-marketplace/edge/handlers/tools.ts:524:7) |
+| extensions/pi-claude-marketplace/edge/handlers/tools.ts:141:3 | PluginRow | scope | external-output: Built into the plugin-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back. (origin extensions/pi-claude-marketplace/edge/handlers/tools.ts:438:9 reaches boundary extensions/pi-claude-marketplace/edge/handlers/tools.ts:524:7) | Validated contract. external-output: Built into the plugin-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back. (origin extensions/pi-claude-marketplace/edge/handlers/tools.ts:438:9 reaches boundary extensions/pi-claude-marketplace/edge/handlers/tools.ts:524:7) |
 
 ### orchestrators
 
@@ -527,6 +521,7 @@ candidates, of which 16 are still unresolved and
 | extensions/pi-claude-marketplace/platform/pi-api.ts:93:3 | ResourcesDiscoverEvent | reason | external-input: The installed resources_discover event declaration requires this slot, and the registered handler is checked against that declaration, so the local mirror has to spell it. (upstream node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:407:5 requires it at extensions/pi-claude-marketplace/index.ts:87:5) | Validated `external-input` contract. The installed declaration at node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:407:5 requires `reason`, and `extensions/pi-claude-marketplace/index.ts:87:5` is a callback the peer own `ExtensionAPI.on("resources_discover", ...)` overload checks, with its parameter annotated as this mirror. `tests/platform/pi-api.test.ts` additionally pins the whole mirror mutually assignable with `Extract<ExtensionEvent, { type: "resources_discover" }>`; deleting `reason` from the mirror fails `npm run typecheck` at `tests/platform/pi-api.test.ts(93,12): error TS1360` (measured). |
 | extensions/pi-claude-marketplace/platform/pi-api.ts:97:3 | ResourcesDiscoverResult | skillPaths | external-output: The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back. (origin extensions/pi-claude-marketplace/index.ts:161:11 reaches boundary extensions/pi-claude-marketplace/index.ts:160:9) | Validated contract. external-output: The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back. (origin extensions/pi-claude-marketplace/index.ts:161:11 reaches boundary extensions/pi-claude-marketplace/index.ts:160:9) |
 | extensions/pi-claude-marketplace/platform/pi-api.ts:98:3 | ResourcesDiscoverResult | promptPaths | external-output: The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back. (origin extensions/pi-claude-marketplace/index.ts:162:11 reaches boundary extensions/pi-claude-marketplace/index.ts:160:9) | Validated contract. external-output: The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back. (origin extensions/pi-claude-marketplace/index.ts:162:11 reaches boundary extensions/pi-claude-marketplace/index.ts:160:9) |
+| extensions/pi-claude-marketplace/platform/pi-api.ts:99:3 | ResourcesDiscoverResult | themePaths | external-mirror: Keeps the local resources_discover result a faithful statement of the installed declaration the peer overload checks the handler against; upstream declares the slot optional, so widening it fails the build while nothing reads it here. (upstream node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:413:5 is checked at extensions/pi-claude-marketplace/index.ts:87:5) | Validated contract. external-mirror: Keeps the local resources_discover result a faithful statement of the installed declaration the peer overload checks the handler against; upstream declares the slot optional, so widening it fails the build while nothing reads it here. (upstream node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:413:5 is checked at extensions/pi-claude-marketplace/index.ts:87:5) |
 | extensions/pi-claude-marketplace/platform/pi-api.ts:117:56 | AssistantMessage | role | type-selection: Selects within AgentMessage by role, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/platform/pi-api.ts:117:32 selects by role) | Validated contract. type-selection: Selects within AgentMessage by role, so this position accepts one variant group rather than the whole union. (filter extensions/pi-claude-marketplace/platform/pi-api.ts:117:32 selects by role) |
 
 ### shared
@@ -551,28 +546,28 @@ and writing the evidence into its `note`.
 ```json
 {
   "schemaVersion": 1,
-  "generated": "2026-09-16T22:04:09.069Z",
-  "revision": "18b9b3e5628950d77be085d1903b8b3f843637d2",
+  "generated": "2026-09-17T02:47:23.684Z",
+  "revision": "b9f705d7c853b25b33160db7de31a18e499d120b",
   "fingerprint": {
     "algorithm": "sha256",
     "files": 605,
-    "digest": "3fec0ee2dae9ce808548145a0d19c9339e3ffd97b136f1cda08bd285d15ca998"
+    "digest": "d6f385e8811e57cd2dd48c67a8ac8964dd6df28d0f0fc9288cfa3cba19c5abee"
   },
   "counts": {
     "productionFiles": 236,
     "candidates": 3352,
     "runtimeObserved": 2995,
     "testOnlyObserved": 240,
-    "explicitContract": 101,
-    "unread": 16,
+    "explicitContract": 108,
+    "unread": 9,
     "unsupportedAnalysis": 0
   },
   "work": {
-    "transferSteps": 3030520,
-    "transferEdges": 217734,
-    "transferReads": 83327,
-    "operationReads": 996082,
-    "transferMs": 51570
+    "transferSteps": 3035308,
+    "transferEdges": 218300,
+    "transferReads": 83591,
+    "operationReads": 996284,
+    "transferMs": 50317
   },
   "owners": [
     {
@@ -625,8 +620,8 @@ and writing the evidence into its `note`.
       "candidates": 266,
       "runtimeObserved": 227,
       "testOnlyObserved": 22,
-      "explicitContract": 11,
-      "unread": 6,
+      "explicitContract": 15,
+      "unread": 2,
       "unsupportedAnalysis": 0
     },
     {
@@ -634,8 +629,8 @@ and writing the evidence into its `note`.
       "candidates": 121,
       "runtimeObserved": 111,
       "testOnlyObserved": 3,
-      "explicitContract": 5,
-      "unread": 2,
+      "explicitContract": 7,
+      "unread": 0,
       "unsupportedAnalysis": 0
     },
     {
@@ -661,8 +656,8 @@ and writing the evidence into its `note`.
       "candidates": 84,
       "runtimeObserved": 67,
       "testOnlyObserved": 9,
-      "explicitContract": 5,
-      "unread": 3,
+      "explicitContract": 6,
+      "unread": 2,
       "unsupportedAnalysis": 0
     },
     {
@@ -1671,18 +1666,18 @@ and writing the evidence into its `note`.
       "path": "extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts",
       "owner": "IfPrefixTarget",
       "key": "piEvents",
-      "status": "unread",
+      "status": "explicit-contract",
       "disposition": "explained",
-      "note": "Load-bearing `satisfies` constraint; NOT removed and the table declared type is NOT widened. `IfPrefixTarget` is unexported and exists only as the right-hand side of `IF_PREFIX_TARGETS ... as const satisfies Record<string, IfPrefixTarget>`; every read goes through the const own inferred type, which is why no read lands here. Measured: deleting this member makes `npm run typecheck` fail five times, once per table entry, `extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts(87,5): error TS2353: Object literal may only specify known properties, and piEvents does not exist in type IfPrefixTarget` (and at 91:5, 95:5, 99:5, 103:5). The deletion was restored. Widening the table declared type to manufacture a read is forbidden here: the key order is locked against an architecture test introspection and widening changes what consumers see. Next owner: a bounded engine plan adding a `satisfies`-constraint category, with the constrained const as its evidence."
+      "note": "Validated contract. satisfies-constraint: The prefix table is checked against this interface, so every entry has to carry a Pi-event set; nothing in the project holds a value typed as the interface, so no read can land on this slot. (satisfies extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:86:34 compels piEvents)"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:56:3",
       "path": "extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts",
       "owner": "IfPrefixTarget",
       "key": "extractTarget",
-      "status": "unread",
+      "status": "explicit-contract",
       "disposition": "explained",
-      "note": "Load-bearing `satisfies` constraint; NOT removed and the table declared type is NOT widened. Same shape as the sibling at `:55:3`: `IfPrefixTarget` is unexported and exists only as the right-hand side of the `as const satisfies Record<string, IfPrefixTarget>` on `IF_PREFIX_TARGETS`. Measured: narrowing this member to `\"nope\"` makes `npm run typecheck` fail five times, once per table entry, `extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts(89,5): error TS2322: Type \"command\" is not assignable to type \"nope\"` (and at 93:5, 97:5, 101:5, 105:5). The drift was restored. Next owner: the same bounded `satisfies`-constraint category named on the sibling row."
+      "note": "Validated contract. satisfies-constraint: The prefix table is checked against this interface, so every entry has to name the runtime field its predicate consults; nothing in the project holds a value typed as the interface, so no read can land on this slot. (satisfies extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:86:34 compels extractTarget)"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts:52:21",
@@ -1887,9 +1882,9 @@ and writing the evidence into its `note`.
       "path": "extensions/pi-claude-marketplace/domain/resolver-types.ts",
       "owner": "DroppedHookSchema",
       "key": "matcher",
-      "status": "unread",
+      "status": "explicit-contract",
       "disposition": "explained",
-      "note": "Load-bearing compile-time proof; NOT removed. This member exists so the arm-key drift assertion can compare `Type.Static<DroppedHookSchema>` against the hand-written `DroppedHook` union key for key. Measured by deleting it and running `npm run typecheck`, which fails twice: at the assertion itself, `extensions/pi-claude-marketplace/domain/resolver-types.ts(66,43): error TS2344: Type false does not satisfy the constraint true` (the `DroppedHookArmKeysCheck` argument), and at the consumer, `extensions/pi-claude-marketplace/domain/plugin-resolver.ts(133,3): error TS2375`, where `droppedHooks` collapses to `never[]` because the group arm no longer matches. The deletion was restored. Recorded observed limit (06-06): a compile-time schema proof has no contract category -- nothing reads these members and nothing can. Next owner: a bounded engine plan adding a schema-proof category with its own drift controls."
+      "note": "Validated contract. schema-pin: Pinned key-for-key against the hand-written dropped-hook group arm, so a key dropped from either side fails the build; nothing reads the schema slot itself. (pin extensions/pi-claude-marketplace/domain/resolver-types.ts:67:1 holds matcher equal to extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:19:7)"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:20:7",
@@ -1923,9 +1918,9 @@ and writing the evidence into its `note`.
       "path": "extensions/pi-claude-marketplace/domain/resolver-types.ts",
       "owner": "DroppedHookSchema",
       "key": "matcher",
-      "status": "unread",
+      "status": "explicit-contract",
       "disposition": "explained",
-      "note": "Load-bearing compile-time proof; NOT removed. This member exists so the arm-key drift assertion can compare `Type.Static<DroppedHookSchema>` against the hand-written `DroppedHook` union key for key. Measured by deleting it and running `npm run typecheck`, which fails twice: at the assertion itself, `extensions/pi-claude-marketplace/domain/resolver-types.ts(66,43): error TS2344: Type false does not satisfy the constraint true` (the `DroppedHookArmKeysCheck` argument), and at the consumer, `extensions/pi-claude-marketplace/domain/plugin-resolver.ts(133,3): error TS2375`, where `droppedHooks` collapses to `never[]` because the handler arm no longer matches. The deletion was restored. Recorded observed limit (06-06): a compile-time schema proof has no contract category -- nothing reads these members and nothing can. Next owner: a bounded engine plan adding a schema-proof category with its own drift controls."
+      "note": "Validated contract. schema-pin: Pinned key-for-key against the hand-written dropped-hook handler arm, so a key dropped from either side fails the build; nothing reads the schema slot itself. (pin extensions/pi-claude-marketplace/domain/resolver-types.ts:67:1 holds matcher equal to extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:22:45)"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:33:7",
@@ -2085,18 +2080,18 @@ and writing the evidence into its `note`.
       "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts",
       "owner": "PluginRow",
       "key": "marketplace",
-      "status": "unread",
+      "status": "explicit-contract",
       "disposition": "explained",
-      "note": "Payload slot crossing the Pi tool boundary: the boundary half is proved now and the arrival half is not, so the slot is left standing rather than deleted. It is built at extensions/pi-claude-marketplace/edge/handlers/tools.ts:437:9, pushed into the `rows` local inside `renderPluginPayload`, and returned under `details` from the tool's `execute` -- a method shorthand whose enclosing object literal contextually types to `ToolDefinition<...>`, declared in node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts -- so the value really does leave this tree and removing the slot would silently change a shipped payload. An `external-output` entry naming that origin and the return at extensions/pi-claude-marketplace/edge/handlers/tools.ts:524:7 was submitted to the real engine against this tree and REFUSED: `Invalid contract: extensions/pi-claude-marketplace/edge/handlers/tools.ts:140:3 origin extensions/pi-claude-marketplace/edge/handlers/tools.ts:437:9 never reaches boundary extensions/pi-claude-marketplace/edge/handlers/tools.ts:524:7`. That refusal is one half further in than the boundary refusal 06-11 recorded: the boundary now resolves through the method shorthand, and the four sibling `marketplaces` payload slots in the same file are contracted by exactly that proof. What still stops this row was measured rather than guessed -- the flow walk records no transfer into a destructured binding, so `const { lines, rows } = rendered;` at extensions/pi-claude-marketplace/edge/handlers/tools.ts:512:7 leaves the chain from `renderPluginPayload`'s own `rows` to the returned one with no recorded edge. Neither the handler nor the payload was restructured to suit the prover. Next owner: a bounded engine plan that records the transfer a destructuring binding receives."
+      "note": "Validated contract. external-output: Built into the plugin-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back. (origin extensions/pi-claude-marketplace/edge/handlers/tools.ts:437:9 reaches boundary extensions/pi-claude-marketplace/edge/handlers/tools.ts:524:7)"
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:141:3",
       "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts",
       "owner": "PluginRow",
       "key": "scope",
-      "status": "unread",
+      "status": "explicit-contract",
       "disposition": "explained",
-      "note": "Payload slot crossing the Pi tool boundary: the boundary half is proved now and the arrival half is not, so the slot is left standing rather than deleted. It is built at extensions/pi-claude-marketplace/edge/handlers/tools.ts:438:9, pushed into the `rows` local inside `renderPluginPayload`, and returned under `details` from the tool's `execute` -- a method shorthand whose enclosing object literal contextually types to `ToolDefinition<...>`, declared in node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts -- so the value really does leave this tree and removing the slot would silently change a shipped payload. An `external-output` entry naming that origin and the return at extensions/pi-claude-marketplace/edge/handlers/tools.ts:524:7 was submitted to the real engine against this tree and REFUSED: `Invalid contract: extensions/pi-claude-marketplace/edge/handlers/tools.ts:141:3 origin extensions/pi-claude-marketplace/edge/handlers/tools.ts:438:9 never reaches boundary extensions/pi-claude-marketplace/edge/handlers/tools.ts:524:7`. That refusal is one half further in than the boundary refusal 06-11 recorded: the boundary now resolves through the method shorthand, and the four sibling `marketplaces` payload slots in the same file are contracted by exactly that proof. What still stops this row was measured rather than guessed -- the flow walk records no transfer into a destructured binding, so `const { lines, rows } = rendered;` at extensions/pi-claude-marketplace/edge/handlers/tools.ts:512:7 leaves the chain from `renderPluginPayload`'s own `rows` to the returned one with no recorded edge. Neither the handler nor the payload was restructured to suit the prover. Next owner: a bounded engine plan that records the transfer a destructuring binding receives."
+      "note": "Validated contract. external-output: Built into the plugin-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back. (origin extensions/pi-claude-marketplace/edge/handlers/tools.ts:438:9 reaches boundary extensions/pi-claude-marketplace/edge/handlers/tools.ts:524:7)"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts:58:3",
@@ -3750,9 +3745,9 @@ and writing the evidence into its `note`.
       "path": "extensions/pi-claude-marketplace/platform/pi-api.ts",
       "owner": "ResourcesDiscoverResult",
       "key": "themePaths",
-      "status": "unread",
+      "status": "explicit-contract",
       "disposition": "explained",
-      "note": "Load-bearing mirror member; NOT removed. The peer declares `themePaths?: string[]` at node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:413:5, so this slot is what makes the local mirror a complete statement of the upstream shape. The handler never builds it, so no `external-output` origin exists and no contract category fits. Positive evidence it is not surplus, measured: widening it to `number[]` fails `npm run typecheck` at `extensions/pi-claude-marketplace/index.ts(86,5): error TS2769: No overload matches this call.` -- the peer own overload constrains this member even though nothing in this tree builds or reads it. Recorded limit: removing it entirely is caught only by the `satisfies` literal in `tests/platform/pi-api.test.ts`, not by an upstream-checked pin, because every upstream result slot is optional and a handler returning fewer of them stays assignable. Next owner: a category for a member that exists to mirror an external declaration complete shape; the `originCandidates` repair named on the two sibling rows does NOT reach this one, because it is never built at all."
+      "note": "Validated contract. external-mirror: Keeps the local resources_discover result a faithful statement of the installed declaration the peer overload checks the handler against; upstream declares the slot optional, so widening it fails the build while nothing reads it here. (upstream node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:413:5 is checked at extensions/pi-claude-marketplace/index.ts:87:5)"
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:117:56",
