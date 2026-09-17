@@ -52,14 +52,12 @@
     "gsd-code-fixer": [
       "skills/typescript-comments",
       "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review",
-      "skills/typescript-unit-testing-review"
+      "skills/typescript-google-style-review"
     ],
     "gsd-nyquist-auditor": [
       "skills/typescript-comments",
       "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review",
-      "skills/typescript-unit-testing-review"
+      "skills/typescript-google-style-review"
     ],
     "gsd-code-reviewer": [
       "skills/typescript-google-style-review",

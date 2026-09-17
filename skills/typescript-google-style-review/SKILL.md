@@ -5,7 +5,7 @@ description: Review TypeScript source against the Google Style Guide as this pro
 
 # Google style review
 
-Review checks derived from the Google Style Guide. Points this project decides for itself, rather than taking from the guide, are marked *(project)*.
+Points this project decides for itself, rather than taking from the guide, are marked *(project)*.
 
 Review the files in the change under review. New files follow the rules completely; in an existing file, new code follows the file's conventions where the rules are silent but never violates a rule. Do not demand cleanups of unchanged code. Flag style-only churn mixed into a functional change; style-only edits go in their own change.
 
