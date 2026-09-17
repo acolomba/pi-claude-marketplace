@@ -5,7 +5,7 @@ description: Unit testing rules for TypeScript -- pairing, coverage, case struct
 
 # TypeScript unit testing rules
 
-Rule form of the TypeScript Unit Testing Guidelines; that document holds the complete sample and rationale. "Do" and "Do not" are hard rules. "Prefer" states the default and allows a justified exception. "May" grants a permission. Copy the **Good** form.
+"Do" and "Do not" are hard rules. "Prefer" states the default and allows a justified exception. "May" grants a permission. Copy the **Good** form.
 
 Every case must discriminate the behavior named in its title: a wrong implementation makes the assertion fail. A test with weak assertions costs all the maintenance of a test and gives none of the protection.
 

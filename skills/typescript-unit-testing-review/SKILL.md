@@ -5,7 +5,7 @@ description: Review TypeScript unit tests against the project's unit testing rul
 
 # TypeScript unit testing review
 
-Review checks derived from the TypeScript Unit Testing Guidelines. When revising, produce the **Good** form from `skills/typescript-unit-testing/SKILL.md`.
+When revising, produce the **Good** form from `skills/typescript-unit-testing/SKILL.md`.
 
 The central question for every case: **would a plausible wrong implementation still pass it?** Every case must discriminate the behavior named in its title -- a wrong implementation makes the assertion fail. A test with weak assertions costs all the maintenance of a test and gives none of the protection; that is the highest-value finding this review can produce.
 
