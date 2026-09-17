@@ -3,16 +3,22 @@
 ## [Unreleased]
 
 - The changelog now lists one entry per pull request, ending in its number, and thanks every issue reporter and contributor. (#197)
+- Internal: every test suite now runs in a hermetic environment that owns `HOME` and the Pi agent directory. (#196)
+- Internal: the TypeScript rules and review skills moved under `skills/`, and each GSD agent loads only the ones it needs. (#195)
 - In an interactive session, the `/claude:plugin` command now opens a plugin browser like Claude Code's `/plugin` picker. Thanks to @rakesh-vs. (#152)
   - Bare `/claude:plugin` or `/claude:plugin browse` opens a four-screen browser to inspect marketplaces, browse plugins, pick actions (install, enable, disable, info, uninstall), and choose install scopes.
   - In a non-interactive session, the command lists plugins as before.
+- Internal: GSD now runs phases in parallel worktrees, and the `/new-workspace` skill creates one. (#190)
+- Internal: `scripts/init.sh` sets up a contributor checkout in one step. (#189)
 - An agent that does not declare `tools:` now installs without a tool allowlist, so pi-subagents grants its default tools. This matches Claude Code. Thanks to @kevinkirkup, who reported #179. (#188)
   - The old `read,bash,edit` default locked converted agents out of the rest of their toolset.
   - `disallowedTools` now emits `excludeTools`. This needs pi-subagents 0.62.0 or newer. Older versions ignore the field, and the conversion warns about the floor. A disallowed name with no Pi mapping now produces a warning. It used to disappear silently. `Skill` counts as granted unless disallowed.
   - Dropped agent fields `allowed-tools`, `mcpServers`, `permissionMode`, and `hooks` now each warn with an explanation instead of only a bare `dropped fields:` note. Claude Code ignores all four on plugin agents. The `mcpServers` warning names the pi-subagents agent-overrides settings key that grants the agent MCP tools.
+- Internal: SonarQube now reports 100% branch coverage. All but one of its 134 uncovered conditions were artifacts of the coverage merge. (#187)
+- Internal: pre-commit now enforces the two GitHub Actions supply-chain rules SonarQube reported, and every `npm ci` passes `--ignore-scripts`. (#183)
 - A skill that names a sibling skill as `plugin:skill` now gets the installed name in its staged copy, so the reference works on Windows and when the skill's folder repeats the plugin prefix. Fenced code examples stay verbatim. (#182)
-- Fixed miscellaneous bugs in agent discovery, marketplace aliases, path containment, `mcpServers` validation, hook `if` rules, compaction hook payloads, update cleanup, notification counts, and resource discovery across scopes. (#181)
 - Plugin skills now install as `<plugin>:<skill>` (`<plugin>.<skill>` on Windows), matching Claude Code. The old hyphen name broke skill references written as `plugin:skill` in plugin instructions and agent preloads. Thanks to @rakesh-vs. (#180)
+- Fixed miscellaneous bugs in agent discovery, marketplace aliases, path containment, `mcpServers` validation, hook `if` rules, compaction hook payloads, update cleanup, notification counts, and resource discovery across scopes. (#181)
 - A plugin file that starts with a UTF-8 byte-order mark now keeps its frontmatter. Agents used to lose their name, description, tools, and model to a filename fallback. Skills kept the block as body text, and commands staged the marker. (#178)
 
 ## [0.18.3] - 2026-09-08

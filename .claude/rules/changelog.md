@@ -27,8 +27,9 @@ particular: no `-ing` clause hanging off a comma, no `should`, `would`,
 - A PR of many small, unrelated fixes gets one line that names the areas:
   `Fixed miscellaneous bugs in agent discovery, path containment, and
   notification counts. (#181)`.
-- A PR with no user-visible change gets no entry. A release with nothing
-  user-visible says so in one line.
+- A PR with no user-visible change gets one brief, general line that names
+  the area: `Internal: the test suite now runs in a hermetic Pi home. (#196)`.
+  Dependency bumps are the exception and get no entry.
 
 ## Wording
 
