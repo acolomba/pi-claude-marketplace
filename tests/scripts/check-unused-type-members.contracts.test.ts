@@ -154,6 +154,7 @@ export interface HostThemeResult {
 
 export interface HostDrift {
   ambient?: string;
+  loose?: unknown;
 }
 
 export declare function theme(handler: () => Promise<HostThemeResult>): void;
@@ -2460,7 +2461,9 @@ test("a pin reaching only the member's own declaration states nothing about the 
 // a string, so the mirror has drifted. The arrow at line 17, column 10 is
 // reached only through an assertion; the one at line 21, column 19 is checked by
 // nothing installed; and the one at line 28, column 9 hands back the upstream
-// declaration rather than the mirror.
+// declaration rather than the mirror. `LooseMirror.loose` (line 34) corresponds
+// to `HostDrift.loose` at line 42 in ONE direction only, which is the shape a
+// correspondence checked one way would let through.
 const externalMirrorCases = `import { theme, type HostThemeResult } from "external-host";
 
 export interface Mirror {
@@ -2491,6 +2494,10 @@ export function elsewhere(): void {
   theme(async (): Promise<HostThemeResult> => {
     return { tag: "four" };
   });
+}
+
+export interface LooseMirror {
+  readonly loose?: string;
 }
 `;
 
@@ -2658,6 +2665,29 @@ test("a mirror entry carrying another category's key is refused", async (t) => {
     {
       name: "AnalysisSetupError",
       message: `Invalid contract: ${casesPath}:4:3 carries unknown key necessity`,
+    },
+  );
+});
+
+test("a mirror slot corresponding in one direction only is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      externalMirrorCases,
+      documentWith({
+        ...externalMirrorContract,
+        id: `${casesPath}:34:3`,
+        owner: "LooseMirror",
+        key: "loose",
+        upstream: `${hostTypesPath}:42:3`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:34:3 mirrors loose as string, ` +
+        `but ${hostTypesPath}:42:3 declares unknown`,
     },
   );
 });

@@ -49,6 +49,7 @@ const categoryKeys = {
   "conditional-clause": ["clause"],
   "satisfies-constraint": ["constraint"],
   "schema-pin": ["pin", "counterpart"],
+  "external-mirror": ["upstream", "checked"],
 };
 
 // A refinement is followed one slot at a time into the shape it narrows. A
@@ -1506,6 +1507,145 @@ function proveSchemaPin(entry, candidate, context) {
   return `(pin ${entry.pin} holds ${candidate.key} equal to ${entry.counterpart})`;
 }
 
+/**
+ * The slot an installed declaration offers for this key, or nothing when it
+ * offers none. A stale mirror -- a slot upstream stopped declaring, or one named
+ * against a coordinate no installed declaration owns -- is refused here, and
+ * that refusal is the only thing standing between this category and an
+ * allowance for any slot anybody feels like keeping.
+ *
+ * A REQUIRED upstream slot is refused by name: the installed declaration then
+ * INSISTS on the local one, which is the stronger `external-input` evidence.
+ * That proof's own `upstreamRequires` is untouched and still refuses an optional
+ * slot, so the two categories partition the cases between them.
+ */
+function mirroredUpstreamSlot(entry, candidate, node, context) {
+  const named =
+    (ts.isPropertySignature(node) || ts.isPropertyDeclaration(node)) &&
+    literalNameOf(node) === candidate.key &&
+    isExternalSource(node.getSourceFile(), context.projectRoot);
+
+  if (!named) {
+    fail(
+      `${entry.id} upstream ${entry.upstream} does not declare ${candidate.key} in an installed declaration`,
+    );
+  }
+
+  if (node.questionToken === undefined) {
+    fail(
+      `${entry.id} upstream ${entry.upstream} declares ${candidate.key} as required, so the external-input evidence applies instead`,
+    );
+  }
+
+  return node;
+}
+
+function declaredTypeOf(node, context) {
+  return node.type === undefined ? undefined : context.checker.getTypeFromTypeNode(node.type);
+}
+
+/**
+ * Whether the two slots say the same thing. Correspondence is checked in BOTH
+ * directions, because a mirror that has drifted one way still type-checks at
+ * every site that only reads it the other way.
+ */
+function assertMirrorCorresponds(entry, candidate, local, upstream, context) {
+  const here = declaredTypeOf(local, context);
+  const there = declaredTypeOf(upstream, context);
+  const corresponds =
+    here !== undefined &&
+    there !== undefined &&
+    context.checker.isTypeAssignableTo(here, there) &&
+    context.checker.isTypeAssignableTo(there, here);
+
+  if (!corresponds) {
+    const describe = (type) =>
+      type === undefined ? "nothing" : context.checker.typeToString(type);
+    fail(
+      `${entry.id} mirrors ${candidate.key} as ${describe(here)}, but ${entry.upstream} declares ${describe(there)}`,
+    );
+  }
+}
+
+/**
+ * The declarations a function hands back, resolved through its awaited type so
+ * an `async` body is read as the shape it resolves to rather than the promise
+ * around it.
+ *
+ * This is the return-side counterpart of `suppliesCandidate`, and it settles
+ * identity the same way: through `resolveCandidates`, so a same-spelled slot on
+ * a different declaration does not connect the site to the entry.
+ */
+function returnsCandidate(node, candidate, context) {
+  const signature = context.checker.getSignatureFromDeclaration(node);
+
+  if (signature === undefined) {
+    return false;
+  }
+
+  const declared = context.checker.getReturnTypeOfSignature(signature);
+  const resolved = context.checker.getAwaitedType(declared) ?? declared;
+  const property = context.checker.getPropertyOfType(resolved, candidate.key);
+
+  return (
+    property !== undefined &&
+    resolveCandidates(context.checker, context.byDeclaration, property).includes(candidate)
+  );
+}
+
+function assertMirrorChecked(entry, candidate, node, context) {
+  if (!ts.isFunctionLike(node)) {
+    fail(`${entry.id} checked ${entry.checked} is not a function an external declaration checks`);
+  }
+
+  if (insideAssertion(node)) {
+    fail(
+      `${entry.id} checked ${entry.checked} is reached only through an assertion, which checks nothing`,
+    );
+  }
+
+  if (externalCallSignatures(node, context).length === 0) {
+    fail(`${entry.id} checked ${entry.checked} is not checked against an installed declaration`);
+  }
+
+  if (!returnsCandidate(node, candidate, context)) {
+    fail(
+      `${entry.id} checked ${entry.checked} does not hand back ${candidate.owner}.${candidate.key}`,
+    );
+  }
+}
+
+/**
+ * Proves a member keeps a local mirror a faithful statement of an installed
+ * declaration. This is the WEAKER sibling of `external-input`, and the boundary
+ * between them is the point of the category.
+ *
+ * What the compiler really does here is measured rather than assumed: an
+ * optional upstream slot means DELETING the local one compels nothing, while
+ * widening it fails the overload that checks the handler. So the claim is
+ * exactly that and no more -- the member's shape is compared against an
+ * installed declaration at a named site -- and an upstream slot the host
+ * INSISTS on is handed back to `external-input` by name rather than absorbed.
+ */
+function proveExternalMirror(entry, candidate, context) {
+  const local = declarationOf(entry, candidate, context);
+  const upstream = resolveNode(
+    parseSite(entry.upstream, `${entry.id} upstream`),
+    `${entry.id} upstream`,
+    context,
+  );
+  const checked = resolveNode(
+    parseSite(entry.checked, `${entry.id} checked`),
+    `${entry.id} checked`,
+    context,
+  );
+
+  mirroredUpstreamSlot(entry, candidate, upstream, context);
+  assertMirrorCorresponds(entry, candidate, local, upstream, context);
+  assertMirrorChecked(entry, candidate, checked, context);
+  return `(upstream ${entry.upstream} is checked at ${entry.checked})`;
+}
+
 const provers = {
   "external-output": proveExternalOutput,
   "external-input": proveExternalInput,
@@ -1515,6 +1655,7 @@ const provers = {
   "conditional-clause": proveConditionalClause,
   "satisfies-constraint": proveSatisfiesConstraint,
   "schema-pin": proveSchemaPin,
+  "external-mirror": proveExternalMirror,
 };
 
 function decisionFor(entry, context) {

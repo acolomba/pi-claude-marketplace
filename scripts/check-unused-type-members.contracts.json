@@ -850,6 +850,15 @@
       "purpose": "Pinned key-for-key against the hand-written dropped-hook handler arm, so a key dropped from either side fails the build; nothing reads the schema slot itself.",
       "pin": "extensions/pi-claude-marketplace/domain/resolver-types.ts:67:1",
       "counterpart": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:22:45"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:99:3",
+      "owner": "ResourcesDiscoverResult",
+      "key": "themePaths",
+      "category": "external-mirror",
+      "purpose": "Keeps the local resources_discover result a faithful statement of the installed declaration the peer overload checks the handler against; upstream declares the slot optional, so widening it fails the build while nothing reads it here.",
+      "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:413:5",
+      "checked": "extensions/pi-claude-marketplace/index.ts:87:5"
     }
   ]
 }
