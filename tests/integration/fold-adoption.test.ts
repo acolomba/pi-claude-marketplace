@@ -41,8 +41,7 @@
 //   marketplace-add is required.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -55,6 +54,7 @@ import { addMarketplace } from "../../extensions/pi-claude-marketplace/orchestra
 import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { listPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { enterHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type {
   ExtensionAPI,
@@ -95,26 +95,8 @@ interface HermeticEnv {
 }
 
 async function setupHermeticEnv(prefix: string): Promise<HermeticEnv> {
-  const root = await mkdtemp(path.join(tmpdir(), prefix));
-  const home = path.join(root, "home");
-  const cwd = path.join(root, "project");
-  await mkdir(home, { recursive: true });
-  await mkdir(cwd, { recursive: true });
-  const originalHome = process.env.HOME;
-  process.env.HOME = home;
-  return {
-    home,
-    cwd,
-    cleanup: async (): Promise<void> => {
-      if (originalHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = originalHome;
-      }
-
-      await rm(root, { recursive: true, force: true });
-    },
-  };
+  const entered = await enterHermeticEnvironment(prefix);
+  return { home: entered.environment.home, cwd: entered.environment.cwd, cleanup: entered.restore };
 }
 
 /**

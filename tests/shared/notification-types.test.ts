@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   isScopeBearingListRow,
+  pluginScopeOrFallback,
+  pluginVersion,
   MARKETPLACE_STATUSES,
   PLUGIN_STATUSES,
   REASONS,
@@ -284,3 +286,145 @@ for (const { name, row, expected } of [
     assert.equal(scopeBearing, expected);
   });
 }
+
+test("pluginScopeOrFallback returns row scope when present on scope-bearing row", () => {
+  const row = {
+    status: "installed",
+    name: "alpha",
+    version: "1.0.0",
+    dependencies: [],
+    severity: "info",
+    needsReload: false,
+    scope: "project",
+  } satisfies PluginNotificationMessage;
+  assert.equal(pluginScopeOrFallback(row, "user"), "project");
+});
+
+test("pluginScopeOrFallback falls back to marketplace scope when scope absent on scope-bearing row", () => {
+  const row = {
+    status: "installed",
+    name: "alpha",
+    version: "1.0.0",
+    dependencies: [],
+    severity: "info",
+    needsReload: false,
+  } satisfies PluginNotificationMessage;
+  assert.equal(pluginScopeOrFallback(row, "user"), "user");
+});
+
+test("pluginScopeOrFallback falls back to marketplace scope for non-scope-bearing row", () => {
+  const row = {
+    status: "available",
+    name: "alpha",
+  } satisfies PluginNotificationMessage;
+  assert.equal(pluginScopeOrFallback(row, "project"), "project");
+});
+
+test("pluginVersion returns version when present on supported row", () => {
+  const row = {
+    status: "installed",
+    name: "alpha",
+    version: "1.2.3",
+    dependencies: [],
+    severity: "info",
+    needsReload: false,
+  } satisfies PluginNotificationMessage;
+  assert.equal(pluginVersion(row), "1.2.3");
+});
+
+test("pluginVersion returns target version on updated row", () => {
+  const row = {
+    status: "updated",
+    name: "alpha",
+    from: "1.0.0",
+    to: "2.0.0",
+    dependencies: [],
+    severity: "info",
+    needsReload: false,
+  } satisfies PluginNotificationMessage;
+  assert.equal(pluginVersion(row), "2.0.0");
+});
+
+test("pluginVersion handles each status arm", () => {
+  const cases: readonly PluginNotificationMessage[] = [
+    {
+      status: "installed",
+      name: "a",
+      version: "1.0",
+      dependencies: [],
+      severity: "info",
+      needsReload: false,
+    },
+    {
+      status: "reinstalled",
+      name: "a",
+      version: "1.0",
+      dependencies: [],
+      severity: "info",
+      needsReload: false,
+    },
+    { status: "uninstalled", name: "a", version: "1.0", severity: "info", needsReload: false },
+    { status: "disabled", name: "a", version: "1.0", severity: "info", needsReload: false },
+    { status: "available", name: "a", version: "1.0" },
+    { status: "remote", name: "a", version: "1.0" },
+    { status: "unavailable", name: "a", version: "1.0", reasons: [] },
+    { status: "partially-available", name: "a", version: "1.0", reasons: [] },
+    { status: "upgradable", name: "a", version: "1.0", reasons: [] },
+    {
+      status: "partially-installed",
+      name: "a",
+      version: "1.0",
+      reasons: [],
+      severity: "info",
+      needsReload: false,
+    },
+    { status: "partially-upgradable", name: "a", version: "1.0", reasons: [] },
+    { status: "failed", name: "a", version: "1.0", reasons: [], severity: "error" },
+    { status: "skipped", name: "a", version: "1.0", reasons: [] },
+    {
+      status: "updated",
+      name: "a",
+      from: "1.0",
+      to: "2.0",
+      dependencies: [],
+      severity: "info",
+      needsReload: false,
+    },
+    { status: "manual recovery", name: "a", severity: "warning", reasons: [] },
+    { status: "will install", name: "a" },
+    { status: "will uninstall", name: "a" },
+    { status: "will enable", name: "a" },
+    { status: "will disable", name: "a" },
+  ];
+  for (const c of cases) {
+    if (c.status === "updated") {
+      assert.equal(pluginVersion(c), "2.0");
+    } else if (
+      c.status === "manual recovery" ||
+      c.status === "will install" ||
+      c.status === "will uninstall" ||
+      c.status === "will enable" ||
+      c.status === "will disable"
+    ) {
+      assert.equal(pluginVersion(c), undefined);
+    } else {
+      assert.equal(pluginVersion(c), "1.0");
+    }
+  }
+});
+
+test("pluginVersion returns undefined when version omitted on supported row", () => {
+  const row = {
+    status: "available",
+    name: "alpha",
+  } satisfies PluginNotificationMessage;
+  assert.equal(pluginVersion(row), undefined);
+});
+
+test("pluginVersion returns undefined for non-versioned row statuses", () => {
+  const row = {
+    status: "will install",
+    name: "alpha",
+  } satisfies PluginNotificationMessage;
+  assert.equal(pluginVersion(row), undefined);
+});

@@ -20,8 +20,7 @@
 // that would have caught the runtime bug the unit tests missed.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
@@ -35,6 +34,7 @@ import {
   loadState,
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type { HookExecutor } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -160,24 +160,11 @@ const HOOKS_JSON_BYTES = JSON.stringify(
 async function withHermeticPiHome<T>(
   fn: (env: { agentDir: string; projectCwd: string }) => Promise<T>,
 ): Promise<T> {
-  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const tmpRoot = await mkdtemp(path.join(tmpdir(), "hooks-e2e-"));
-  const agentDir = path.join(tmpRoot, "agent");
-  const projectCwd = path.join(tmpRoot, "cwd");
-  await mkdir(agentDir, { recursive: true });
-  await mkdir(projectCwd, { recursive: true });
-  process.env.PI_CODING_AGENT_DIR = agentDir;
-  try {
+  return withHermeticEnvironment("hooks-e2e-", async ({ root: tmpRoot, agentDir }) => {
+    const projectCwd = path.join(tmpRoot, "cwd");
+    await mkdir(projectCwd, { recursive: true });
     return await fn({ agentDir, projectCwd });
-  } finally {
-    if (originalAgentDir === undefined) {
-      delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
-    }
-
-    await rm(tmpRoot, { recursive: true, force: true });
-  }
+  });
 }
 
 test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and dispatches SessionStart end-to-end", async () => {

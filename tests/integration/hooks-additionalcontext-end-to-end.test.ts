@@ -21,8 +21,7 @@
 // saw the injected text.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
@@ -35,6 +34,7 @@ import {
   loadState,
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -62,30 +62,17 @@ function makeMockPi(): { pi: ExtensionAPI; registrations: CapturedRegistration[]
 async function withHermeticPiHome<T>(
   fn: (env: { agentDir: string; extensionRoot: string; sourcesPluginRoot: string }) => Promise<T>,
 ): Promise<T> {
-  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const tmpRoot = await mkdtemp(path.join(tmpdir(), "hooks-addctx-e2e-"));
-  const agentDir = path.join(tmpRoot, "agent");
-  const extensionRoot = path.join(agentDir, "pi-claude-marketplace");
-  const sourcesPluginRoot = path.join(
-    extensionRoot,
-    "sources",
-    "test-mp",
-    "plugins",
-    "test-plugin",
-  );
-  await mkdir(agentDir, { recursive: true });
-  process.env.PI_CODING_AGENT_DIR = agentDir;
-  try {
+  return withHermeticEnvironment("hooks-addctx-e2e-", async ({ agentDir }) => {
+    const extensionRoot = path.join(agentDir, "pi-claude-marketplace");
+    const sourcesPluginRoot = path.join(
+      extensionRoot,
+      "sources",
+      "test-mp",
+      "plugins",
+      "test-plugin",
+    );
     return await fn({ agentDir, extensionRoot, sourcesPluginRoot });
-  } finally {
-    if (originalAgentDir === undefined) {
-      delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
-    }
-
-    await rm(tmpRoot, { recursive: true, force: true });
-  }
+  });
 }
 
 function buildStateWithHooksPlugin(sourcesPluginRoot: string): ExtensionState {

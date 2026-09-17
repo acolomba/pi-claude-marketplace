@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 
@@ -39,6 +38,7 @@ import {
   MarketplaceNotFoundError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { type PluginSkippedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { PluginEntry } from "../../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
@@ -138,23 +138,7 @@ function makeMaterializablePlugin(
 }
 
 async function withTempScopes<T>(run: (scopes: TempScopes) => Promise<T>): Promise<T> {
-  const root = await mkdtemp(path.join(tmpdir(), "plugin-shared-"));
-  const cwd = path.join(root, "project");
-  const hadAgentDir = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  await mkdir(cwd, { recursive: true });
-  process.env.PI_CODING_AGENT_DIR = path.join(root, "agent");
-  try {
-    return await run({ cwd, root });
-  } finally {
-    if (hadAgentDir) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(root, { recursive: true, force: true });
-  }
+  return withHermeticEnvironment("plugin-shared-", ({ cwd, root }) => run({ cwd, root }));
 }
 
 async function saveScopedState(

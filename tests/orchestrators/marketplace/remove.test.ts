@@ -34,6 +34,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -183,10 +184,9 @@ async function seedMarketplace(
 async function projectCase(
   testContext: TestContext,
 ): Promise<{ cwd: string; locations: ScopedLocations }> {
-  const cwd = await mkdtemp(path.join(tmpdir(), "marketplace-remove-"));
+  const { cwd } = await createHermeticEnvironment(testContext, "marketplace-remove-");
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
-  testContext.after(() => rm(cwd, { recursive: true, force: true }));
   return { cwd, locations };
 }
 
@@ -195,28 +195,13 @@ async function dualScopeCase(testContext: TestContext): Promise<{
   projectLocations: ScopedLocations;
   userLocations: ScopedLocations;
 }> {
-  const home = await mkdtemp(path.join(tmpdir(), "marketplace-remove-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "marketplace-remove-scopes-"));
-  const previousHome = process.env.HOME;
-  process.env.HOME = home;
+  const { cwd } = await createHermeticEnvironment(testContext, "marketplace-remove-scopes-");
   const projectLocations = locationsFor("project", cwd);
   const userLocations = locationsFor("user", cwd);
   await Promise.all([
     mkdir(projectLocations.extensionRoot, { recursive: true }),
     mkdir(userLocations.extensionRoot, { recursive: true }),
   ]);
-  testContext.after(async () => {
-    if (previousHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = previousHome;
-    }
-
-    await Promise.all([
-      rm(cwd, { recursive: true, force: true }),
-      rm(home, { recursive: true, force: true }),
-    ]);
-  });
   return { cwd, projectLocations, userLocations };
 }
 

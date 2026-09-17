@@ -14,8 +14,7 @@
 // re-running the production classification it is checking.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
@@ -26,6 +25,7 @@ import {
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { ManifestSoftFailError } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { InvalidMarketplaceManifestError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { PluginIndexRow } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -79,30 +79,7 @@ function refuseNetwork(): Promise<Response> {
  * environment restores are registered before the resolver runs.
  */
 async function createHermeticScope(t: TestContext, label: string): Promise<HermeticScope> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `edge-deps-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `edge-deps-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(cwd, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
-  });
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
+  const { cwd, home } = await createHermeticEnvironment(t, `edge-deps-${label}-`);
   const fetchSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
   return {
     cwd,

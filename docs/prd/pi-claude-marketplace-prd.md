@@ -586,7 +586,7 @@ These rules clarify how marketplace records and plugin install records interact 
 
 | ID       | Requirement                                                                                                                                                                                                                                                                        |
 | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **TC-1** | The first positional after `/claude:plugin` MUST surface `install / uninstall / update / list / marketplace`.                                                                                                                                                                      |
+| **TC-1** | The first positional after `/claude:plugin` MUST surface `browse / install / uninstall / update / list / marketplace`.                                                                                                                                                             |
 | **TC-2** | After the `marketplace` keyword, completion MUST surface `add / remove / list / update / autoupdate / noautoupdate` (and `rm` is accepted but not surfaced).                                                                                                                       |
 | **TC-3** | Whenever the cursor sits at a token starting with `-` (single OR double dash), completion MUST surface `--scope` plus, for `list`, `--installed / --available / --unavailable`. Single-dash and double-dash MUST behave identically (Pi has no short flags).                       |
 | **TC-4** | The token immediately following `--scope` MUST surface `user` and `project` only.                                                                                                                                                                                                  |
@@ -606,12 +606,12 @@ These rules clarify how marketplace records and plugin install records interact 
 
 ### 6.7 Argument Parsing
 
-| ID       | Requirement                                                                                                                 |
-| -------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **AP-1** | Tokenization MUST honor single and double quotes for arguments containing spaces.                                           |
-| **AP-2** | `--scope` MUST require exactly `user` or `project` as its value; missing value or any other value MUST raise a clear error. |
-| **AP-3** | Subcommand routing MUST surface a `Usage:` block on empty/unknown input (top-level and `marketplace`-nested).               |
-| **AP-4** | `--scope` MUST be accepted at any position in the arg list; positionals are extracted in order.                             |
+| ID       | Requirement                                                                                                                                                                                                      |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AP-1** | Tokenization MUST honor single and double quotes for arguments containing spaces.                                                                                                                                |
+| **AP-2** | `--scope` MUST require exactly `user` or `project` as its value; missing value or any other value MUST raise a clear error.                                                                                      |
+| **AP-3** | Subcommand routing MUST dispatch empty input to the browse picker (interactive mode) / list fallback (non-interactive mode), and surface a `Usage:` block on unknown input (top-level and `marketplace`-nested). |
+| **AP-4** | `--scope` MUST be accepted at any position in the arg list; positionals are extracted in order.                                                                                                                  |
 
 ### 6.8 Reload Hint & Soft-Dependency Probing
 

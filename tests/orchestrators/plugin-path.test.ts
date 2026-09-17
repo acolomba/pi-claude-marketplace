@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 
@@ -8,6 +7,7 @@ import {
   collectBinDirs,
   recomputePluginPath,
 } from "../../extensions/pi-claude-marketplace/orchestrators/plugin-path.ts";
+import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type {
   ExtensionState,
@@ -15,9 +15,7 @@ import type {
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 interface PathEnvironmentSnapshot {
-  readonly agentDir: string | undefined;
   readonly debug: string | undefined;
-  readonly home: string | undefined;
   readonly ledger: string | undefined;
   readonly path: string | undefined;
 }
@@ -81,31 +79,17 @@ async function seedUnsupportedState(extensionRoot: string): Promise<void> {
 
 function snapshotPathEnvironment(): PathEnvironmentSnapshot {
   return {
-    agentDir: process.env.PI_CODING_AGENT_DIR,
     debug: process.env.PI_CLAUDE_MARKETPLACE_DEBUG,
-    home: process.env.HOME,
     ledger: process.env.PI_CLAUDE_MARKETPLACE_PATH,
     path: process.env.PATH,
   };
 }
 
 function restorePathEnvironment(snapshot: PathEnvironmentSnapshot): void {
-  if (snapshot.agentDir === undefined) {
-    delete process.env.PI_CODING_AGENT_DIR;
-  } else {
-    process.env.PI_CODING_AGENT_DIR = snapshot.agentDir;
-  }
-
   if (snapshot.debug === undefined) {
     delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
   } else {
     process.env.PI_CLAUDE_MARKETPLACE_DEBUG = snapshot.debug;
-  }
-
-  if (snapshot.home === undefined) {
-    delete process.env.HOME;
-  } else {
-    process.env.HOME = snapshot.home;
   }
 
   if (snapshot.ledger === undefined) {
@@ -216,11 +200,13 @@ describe("collectBinDirs", () => {
 });
 
 describe("recomputePluginPath", () => {
-  test("applies user then project bins, removes stale ownership, and deduplicates", async () => {
+  test("applies user then project bins, removes stale ownership, and deduplicates", async (t) => {
     // arrange
     const environmentBefore = snapshotPathEnvironment();
-    const userRoot = await mkdtemp(path.join(tmpdir(), "plugin-path-user-"));
-    const projectRoot = await mkdtemp(path.join(tmpdir(), "plugin-path-project-"));
+    const { agentDir: userRoot, cwd: projectRoot } = await createHermeticEnvironment(
+      t,
+      "plugin-path-",
+    );
     const userFirst = path.join(userRoot, "missing-user-first");
     const shared = path.join(projectRoot, "missing-shared");
     const projectLast = path.join(projectRoot, "missing-project-last");
@@ -228,8 +214,6 @@ describe("recomputePluginPath", () => {
     const baseline = path.join(userRoot, "system-bin");
 
     try {
-      process.env.PI_CODING_AGENT_DIR = userRoot;
-      process.env.HOME = userRoot;
       process.env.PATH = [baseline, stale].join(path.delimiter);
       process.env.PI_CLAUDE_MARKETPLACE_PATH = stale;
       await seedState(
@@ -274,25 +258,21 @@ describe("recomputePluginPath", () => {
       await assert.rejects(() => access(path.join(userFirst, "bin")), { code: "ENOENT" });
     } finally {
       restorePathEnvironment(environmentBefore);
-      await Promise.all([
-        rm(userRoot, { recursive: true, force: true }),
-        rm(projectRoot, { recursive: true, force: true }),
-      ]);
     }
   });
 
-  test("reports an exact user read failure and keeps the project contribution", async () => {
+  test("reports an exact user read failure and keeps the project contribution", async (t) => {
     // arrange
     const environmentBefore = snapshotPathEnvironment();
-    const userRoot = await mkdtemp(path.join(tmpdir(), "plugin-path-user-failure-"));
-    const projectRoot = await mkdtemp(path.join(tmpdir(), "plugin-path-project-healthy-"));
+    const { agentDir: userRoot, cwd: projectRoot } = await createHermeticEnvironment(
+      t,
+      "plugin-path-failure-",
+    );
     const userExtensionRoot = path.join(userRoot, "pi-claude-marketplace");
     const projectSource = path.join(projectRoot, "project-plugin");
     const baseline = path.join(projectRoot, "system-bin");
 
     try {
-      process.env.PI_CODING_AGENT_DIR = userRoot;
-      process.env.HOME = userRoot;
       process.env.PATH = baseline;
       delete process.env.PI_CLAUDE_MARKETPLACE_PATH;
       await seedUnsupportedState(userExtensionRoot);
@@ -324,25 +304,21 @@ describe("recomputePluginPath", () => {
       });
     } finally {
       restorePathEnvironment(environmentBefore);
-      await Promise.all([
-        rm(userRoot, { recursive: true, force: true }),
-        rm(projectRoot, { recursive: true, force: true }),
-      ]);
     }
   });
 
-  test("reports an exact project read failure and keeps the user contribution", async () => {
+  test("reports an exact project read failure and keeps the user contribution", async (t) => {
     // arrange
     const environmentBefore = snapshotPathEnvironment();
-    const userRoot = await mkdtemp(path.join(tmpdir(), "plugin-path-user-healthy-"));
-    const projectRoot = await mkdtemp(path.join(tmpdir(), "plugin-path-project-failure-"));
+    const { agentDir: userRoot, cwd: projectRoot } = await createHermeticEnvironment(
+      t,
+      "plugin-path-healthy-",
+    );
     const projectExtensionRoot = path.join(projectRoot, ".pi", "pi-claude-marketplace");
     const userSource = path.join(userRoot, "user-plugin");
     const baseline = path.join(userRoot, "system-bin");
 
     try {
-      process.env.PI_CODING_AGENT_DIR = userRoot;
-      process.env.HOME = userRoot;
       process.env.PATH = baseline;
       delete process.env.PI_CLAUDE_MARKETPLACE_PATH;
       await seedState(
@@ -374,18 +350,16 @@ describe("recomputePluginPath", () => {
       });
     } finally {
       restorePathEnvironment(environmentBefore);
-      await Promise.all([
-        rm(userRoot, { recursive: true, force: true }),
-        rm(projectRoot, { recursive: true, force: true }),
-      ]);
     }
   });
 
-  test("reports both read failures in scope order and removes every owned path", async () => {
+  test("reports both read failures in scope order and removes every owned path", async (t) => {
     // arrange
     const environmentBefore = snapshotPathEnvironment();
-    const userRoot = await mkdtemp(path.join(tmpdir(), "plugin-path-user-failure-"));
-    const projectRoot = await mkdtemp(path.join(tmpdir(), "plugin-path-project-failure-"));
+    const { agentDir: userRoot, cwd: projectRoot } = await createHermeticEnvironment(
+      t,
+      "plugin-path-failure-",
+    );
     const userExtensionRoot = path.join(userRoot, "pi-claude-marketplace");
     const projectExtensionRoot = path.join(projectRoot, ".pi", "pi-claude-marketplace");
     const baseline = path.join(userRoot, "system-bin");
@@ -393,8 +367,6 @@ describe("recomputePluginPath", () => {
     const projectOwned = path.join(projectRoot, "owned-bin");
 
     try {
-      process.env.PI_CODING_AGENT_DIR = userRoot;
-      process.env.HOME = userRoot;
       process.env.PATH = [baseline, userOwned, projectOwned].join(path.delimiter);
       process.env.PI_CLAUDE_MARKETPLACE_PATH = [userOwned, projectOwned].join(path.delimiter);
       await seedUnsupportedState(userExtensionRoot);
@@ -422,22 +394,15 @@ describe("recomputePluginPath", () => {
       });
     } finally {
       restorePathEnvironment(environmentBefore);
-      await Promise.all([
-        rm(userRoot, { recursive: true, force: true }),
-        rm(projectRoot, { recursive: true, force: true }),
-      ]);
     }
   });
 
-  test("preserves absent PATH and ledger properties when both states have no bins", async () => {
+  test("preserves absent PATH and ledger properties when both states have no bins", async (t) => {
     // arrange
     const environmentBefore = snapshotPathEnvironment();
-    const userRoot = await mkdtemp(path.join(tmpdir(), "plugin-path-user-empty-"));
-    const projectRoot = await mkdtemp(path.join(tmpdir(), "plugin-path-project-empty-"));
+    const { cwd: projectRoot } = await createHermeticEnvironment(t, "plugin-path-empty-");
 
     try {
-      process.env.PI_CODING_AGENT_DIR = userRoot;
-      process.env.HOME = userRoot;
       delete process.env.PATH;
       delete process.env.PI_CLAUDE_MARKETPLACE_PATH;
 
@@ -452,22 +417,15 @@ describe("recomputePluginPath", () => {
       });
     } finally {
       restorePathEnvironment(environmentBefore);
-      await Promise.all([
-        rm(userRoot, { recursive: true, force: true }),
-        rm(projectRoot, { recursive: true, force: true }),
-      ]);
     }
   });
 
-  test("preserves empty PATH and ledger properties when both states have no bins", async () => {
+  test("preserves empty PATH and ledger properties when both states have no bins", async (t) => {
     // arrange
     const environmentBefore = snapshotPathEnvironment();
-    const userRoot = await mkdtemp(path.join(tmpdir(), "plugin-path-user-empty-"));
-    const projectRoot = await mkdtemp(path.join(tmpdir(), "plugin-path-project-empty-"));
+    const { cwd: projectRoot } = await createHermeticEnvironment(t, "plugin-path-empty-");
 
     try {
-      process.env.PI_CODING_AGENT_DIR = userRoot;
-      process.env.HOME = userRoot;
       process.env.PATH = "";
       process.env.PI_CLAUDE_MARKETPLACE_PATH = "";
 
@@ -482,23 +440,19 @@ describe("recomputePluginPath", () => {
       });
     } finally {
       restorePathEnvironment(environmentBefore);
-      await Promise.all([
-        rm(userRoot, { recursive: true, force: true }),
-        rm(projectRoot, { recursive: true, force: true }),
-      ]);
     }
   });
 
-  test("materializes absent PATH and ledger properties only when a bin must be applied", async () => {
+  test("materializes absent PATH and ledger properties only when a bin must be applied", async (t) => {
     // arrange
     const environmentBefore = snapshotPathEnvironment();
-    const userRoot = await mkdtemp(path.join(tmpdir(), "plugin-path-user-apply-"));
-    const projectRoot = await mkdtemp(path.join(tmpdir(), "plugin-path-project-empty-"));
+    const { agentDir: userRoot, cwd: projectRoot } = await createHermeticEnvironment(
+      t,
+      "plugin-path-apply-",
+    );
     const userSource = path.join(userRoot, "plugin-source");
 
     try {
-      process.env.PI_CODING_AGENT_DIR = userRoot;
-      process.env.HOME = userRoot;
       delete process.env.PATH;
       delete process.env.PI_CLAUDE_MARKETPLACE_PATH;
       await seedState(
@@ -519,10 +473,6 @@ describe("recomputePluginPath", () => {
       });
     } finally {
       restorePathEnvironment(environmentBefore);
-      await Promise.all([
-        rm(userRoot, { recursive: true, force: true }),
-        rm(projectRoot, { recursive: true, force: true }),
-      ]);
     }
   });
 });

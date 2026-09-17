@@ -10,8 +10,7 @@
 // record and its autoupdate flag are not Pi-visible resources.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -24,6 +23,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
@@ -83,33 +83,7 @@ async function createHermeticUserScope(
   t: TestContext,
   label: string,
 ): Promise<{ readonly cwd: string; readonly locations: ScopedLocations }> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `bootstrap-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `bootstrap-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(cwd, { force: true, recursive: true });
-    await rm(home, { force: true, recursive: true });
-  });
-  process.env.HOME = home;
-  // SC-1: getAgentDir() reads PI_CODING_AGENT_DIR before homedir(), so an
-  // environment that sets it would send user-scope writes to the developer's
-  // real Pi agent directory despite the hermetic HOME above.
-  delete process.env.PI_CODING_AGENT_DIR;
+  const { cwd } = await createHermeticEnvironment(t, `bootstrap-${label}-`);
   return { cwd, locations: locationsFor("user", cwd) };
 }
 

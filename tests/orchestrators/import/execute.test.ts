@@ -23,8 +23,7 @@
 // is made rather than being counted afterwards.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
@@ -51,6 +50,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type {
   HooksRouting,
@@ -123,30 +123,7 @@ interface HermeticScopes {
  * an environment that sets it would defeat the hermetic HOME (SC-1).
  */
 async function createHermeticScopes(t: TestContext, label: string): Promise<HermeticScopes> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `import-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `import-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(cwd, { force: true, recursive: true });
-    await rm(home, { force: true, recursive: true });
-  });
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
+  const { cwd } = await createHermeticEnvironment(t, `import-${label}-`);
   return { cwd, project: locationsFor("project", cwd), user: locationsFor("user", cwd) };
 }
 

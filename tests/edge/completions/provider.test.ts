@@ -231,7 +231,9 @@ test("TC-1 offers the whole top-level vocabulary at an empty prefix, in declarat
     { label: "enable", value: "enable " },
     { label: "disable", value: "disable " },
     { label: "import", value: "import " },
+    { label: "browse", value: "browse " },
     { label: "marketplace", value: "marketplace " },
+    { label: "help", value: "help " },
   ]);
 });
 
@@ -294,6 +296,7 @@ test("TC-2 promotes an exact top-level token with no trailing space to the next 
     { label: "update", value: "marketplace update " },
     { label: "autoupdate", value: "marketplace autoupdate " },
     { label: "noautoupdate", value: "marketplace noautoupdate " },
+    { label: "help", value: "marketplace help " },
   ]);
 });
 
@@ -315,6 +318,7 @@ test("TC-2 offers the marketplace vocabulary after the marketplace token and a s
     { label: "update", value: "marketplace update " },
     { label: "autoupdate", value: "marketplace autoupdate " },
     { label: "noautoupdate", value: "marketplace noautoupdate " },
+    { label: "help", value: "marketplace help " },
   ]);
 });
 
@@ -327,6 +331,7 @@ for (const { prefix, expected } of [
     ],
   },
   { prefix: "marketplace remov", expected: [{ label: "remove", value: "marketplace remove " }] },
+  { prefix: "marketplace h", expected: [{ label: "help", value: "marketplace help " }] },
   { prefix: "marketplace zz", expected: [] },
 ] satisfies readonly { prefix: string; expected: readonly Suggestion[] }[]) {
   test(`TC-2 narrows the marketplace vocabulary to ${String(expected.length)} entr(ies) for ${JSON.stringify(prefix)}`, async (t) => {

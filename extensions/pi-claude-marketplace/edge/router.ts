@@ -49,6 +49,10 @@ export interface SubcommandHandlers {
   marketplaceUpdate: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceAutoupdate: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
   marketplaceNoautoupdate: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  // Interactive SelectList browser (TUI-only). Falls back to `list` in
+  // non-TUI modes.
+  browse: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  help: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
 }
 
 /**
@@ -69,7 +73,9 @@ export const TOP_LEVEL_SUBCOMMANDS = [
   "enable",
   "disable",
   "import",
+  "browse",
   "marketplace",
+  "help",
 ] as const;
 
 /**
@@ -86,10 +92,11 @@ export const MARKETPLACE_SUBCOMMANDS = [
   "update",
   "autoupdate",
   "noautoupdate",
+  "help",
 ] as const;
 
 export const TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|marketplace> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
@@ -102,7 +109,9 @@ export const TOP_LEVEL_USAGE =
   "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  import [--scope user|project]\n" +
-  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...";
+  "  browse\n" +
+  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
+  "  help [marketplace]";
 
 export const MARKETPLACE_USAGE =
   "Usage: /claude:plugin marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
@@ -141,8 +150,10 @@ export async function routeClaudePlugin(
   const [head, rest] = peelToken(args);
 
   if (head === "") {
-    notifyUsageError(ctx, { message: "Usage error.", usage: TOP_LEVEL_USAGE });
-    return;
+    // Bare `/claude:plugin` opens the interactive browser (TUI) or falls
+    // back to the inventory list (non-TUI), matching Claude Code's
+    // `/plugin` UX. `rest` is "" here (peelToken of empty input).
+    return handlers.browse(rest, ctx);
   }
 
   switch (head) {
@@ -173,6 +184,10 @@ export async function routeClaudePlugin(
       return handlers.import(rest, ctx);
     case "marketplace":
       return routeMarketplace(rest, handlers, ctx);
+    case "browse":
+      return handlers.browse(rest, ctx);
+    case "help":
+      return handlers.help(rest, ctx);
     default:
       notifyUsageError(ctx, { message: `Unknown subcommand: "${head}".`, usage: TOP_LEVEL_USAGE });
       return;
@@ -211,6 +226,8 @@ async function routeMarketplace(
       return handlers.marketplaceAutoupdate(rest, ctx);
     case "noautoupdate":
       return handlers.marketplaceNoautoupdate(rest, ctx);
+    case "help":
+      return handlers.help("marketplace", ctx);
     default:
       notifyUsageError(ctx, {
         message: `Unknown marketplace subcommand: "${head}".`,
