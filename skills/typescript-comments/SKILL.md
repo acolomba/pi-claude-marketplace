@@ -48,6 +48,15 @@ becomes
 // truthful member is `"source mismatch"` and not `"not in manifest"`.
 ```
 
+## Prose
+
+- One idea per sentence. Short sentences, active voice, present tense.
+- Say what the code does, not how good it is: no `robust`, `seamless`, `comprehensive`, `crucial`.
+- No `not X but Y` or `not just X, it's Y` framing. State Y.
+- No padding a list to three items. List what exists.
+- No hedges (`essentially`, `simply`, `basically`) and no chatbot register (`Note that`, `It's worth noting`).
+- Use the domain word the code uses. Define a term at first use only when a reader of this file could not infer it.
+
 ## Allowed (and encouraged) as traceability anchors
 
 - Decision IDs: `D-01`, `D-21`, `D-54-01`, `D-15-11`, `D-17.1-01`, etc.
