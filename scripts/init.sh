@@ -32,7 +32,5 @@ fi
 
 codegraph install --target claude,codex --location local --no-permissions --init --yes
 
-# CLAUDE.md carries the committed codegraph block. The codex copy in AGENTS.md
-# would shadow CLAUDE.md, and the claude copy in .claude/CLAUDE.md would
-# duplicate it, so drop both.
+# prevents shadowing of CLAUDE.md in codex/pi
 rm -f AGENTS.md .claude/CLAUDE.md
