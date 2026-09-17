@@ -7,8 +7,8 @@ current_phase_name: Prune on uninstall
 status: completed
 stopped_at: v1.20 audit tech_debt (2172348e); operator chose to address debt before complete-milestone
 last_updated: "2026-09-17T01:39:22.196Z"
-last_activity: 2026-09-16
-last_activity_desc: Phase 5 complete
+last_activity: 2026-09-17
+last_activity_desc: Completed quick task 260917-cqc (IN-05 tighten, IN-06 accept); secure/validate gates on phases 3-5; merged origin/main
 state_head: e824a0e48a9be75a8d993828758fe09c7534d4a7
 progress:
   total_phases: 5
@@ -301,7 +301,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-16 — Phase 5 complete
+Last activity: 2026-09-17 — Completed quick task 260917-cqc: IN-05 tighten / IN-06 accept (after the phase 3–5 secure/validate gates and the origin/main merge)
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 5 of 5 phases complete (100%).
@@ -765,9 +765,9 @@ session that must settle it:
 
 ### Quick Tasks Completed
 
-Latest implementation: `260914-aer` — upstream dependency rejection, 2026-09-14.
-The review-fix pass includes this implementation. The formatting blocker is resolved.
-See [task summary](./quick/260914-aer-match-upstream-rejection-of-invalid-depe/260914-aer-SUMMARY.md).
+Latest implementation: `260917-cqc` — the dependents guard fails closed on a
+present-but-unusable own manifest (IN-05); IN-06 accepted, 2026-09-17.
+See [task summary](./quick/260917-cqc-tighten-dependents-guard-on-unusable-own/260917-cqc-SUMMARY.md).
 
 | #          | Description                                                                                                 | Date       | Commit   | Directory                                                                                            |
 | ---------- | ----------------------------------------------------------------------------------------------------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------- |
@@ -780,6 +780,7 @@ See [task summary](./quick/260914-aer-match-upstream-rejection-of-invalid-depe/2
 | 6 | Switch the Windows command name separator from dash to dot (follow-up to 260907-q0h, #143) | 2026-09-08 | 7ce485b1 | — |
 | 260907-uzb | FMBOM-01: strip leading UTF-8 BOM at skill and agent frontmatter read sites | 2026-09-08 | fb54c5d7 | [260907-uzb-fmbom-01-strip-leading-utf-8-bom-at-skil](./quick/260907-uzb-fmbom-01-strip-leading-utf-8-bom-at-skil/) |
 | 260909-g1l | correct UDISP-01 backlog entry and add bare plugin.json manifest-path entry | 2026-09-09 | 9a8f740b | [260909-g1l-correct-udisp-01-backlog-entry-and-add-b](./quick/260909-g1l-correct-udisp-01-backlog-entry-and-add-b/) |
+| 260917-cqc | Tighten dependents guard on unusable own manifest (IN-05); accept unreadable token (IN-06) | 2026-09-17 | fda3bc8e | [260917-cqc-tighten-dependents-guard-on-unusable-own](./quick/260917-cqc-tighten-dependents-guard-on-unusable-own/) |
 
 ## Deferred Items
 
