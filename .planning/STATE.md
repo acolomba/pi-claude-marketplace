@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
 status: executing
-stopped_at: Completed 06-15-PLAN.md
-last_updated: "2026-09-16T22:30:00.000Z"
-last_activity: 2026-09-16
-last_activity_desc: Plan 06-15 complete, closing five measured analyzer gaps (six engine corrections, 11 new validated contracts, 33 -> 16 unread against a predicted 14; every measured row was predicted and two predicted rows are recorded as still refused; the phase residual is 16 and 06-08 stays blocked)
-state_head: 4480b8c0
+stopped_at: Completed 06-16-PLAN.md
+last_updated: "2026-09-17T03:05:00.000Z"
+last_activity: 2026-09-17
+last_activity_desc: Plan 06-16 complete, adding three evidence categories and a two-part arrival correction (7 new validated contracts, 16 -> 9 unread against a predicted 9; every predicted row moved and no unpredicted row did; the residual is now exactly the 4 rows 06-17 owns plus 5 recorded decisions, and 06-08 stays blocked)
+state_head: d411e96a
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 60
-  completed_plans: 52
+  total_plans: 63
+  completed_plans: 53
   percent: 63
 milestone_name: test-backlog
 ---
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 06 (Unused Type Member Gate) — EXECUTING
-Plan: 15 of 15 executed; 06-08 (gate activation) is the only one still outstanding
-Status: The six bounded repair plans are COMPLETE (06-09 ✅ -> 06-14 ✅ -> 06-10 ✅ -> 06-11 ✅ -> 06-13 ✅ -> 06-12 ✅) and the analyzer-gap plan 06-15 ✅ follows them. 06-08 remains blocked on a measured residual of 16 unread members.
-Last activity: 2026-09-16 — Plan 06-15 complete (six analyzer corrections, each shipping the counterexample that fails it; 11 new validated contracts for 90 -> 101; 33 -> 16 unread against a predicted 14, with every measured row predicted and no unpredicted row moving; the two `PluginRow` rows stay refused at arrival through a destructured binding, measured rather than guessed)
+Plan: 16 of 17 executed; 06-17 (four source repairs) and 06-08 (gate activation) are still outstanding
+Status: The six bounded repair plans are COMPLETE (06-09 ✅ -> 06-14 ✅ -> 06-10 ✅ -> 06-11 ✅ -> 06-13 ✅ -> 06-12 ✅), followed by the two analyzer plans 06-15 ✅ and 06-16 ✅. 06-08 remains blocked on a measured residual of 9 unread members — but the engine has no further gap to close: 4 of the 9 are source repairs 06-17 owns, and the other 5 are recorded decisions only the operator can settle.
+Last activity: 2026-09-17 — Plan 06-16 complete (three new evidence categories — `satisfies-constraint`, `schema-pin`, `external-mirror` — plus a two-part arrival correction that carries a destructured key and descends a call; 7 new validated contracts for 101 -> 108; 16 -> 9 unread against a predicted 9, with every predicted row moving and no unpredicted row doing so; thirteen permissive mutants run against the gate suites, four of which broke nothing until a sharper counterexample was derived for them)
 
 Plan 06-01 landed the member gate's compiler tracer: `node
 scripts/check-unused-type-members.mjs` compiles the project once, inventories
@@ -526,11 +526,12 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-16T22:30:00.000Z
+**Last session:** 2026-09-17T03:05:00.000Z
 **Resume file:** None
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–5 are complete.
-Phase 6 has completed one of eight plans; Phase 7 plans are approved and follow it.
+Phase 6 has completed 16 of its 17 plans; 06-17 and 06-08 remain. Phase 7 plans
+are approved and follow it.
 Earlier milestone continuity is preserved in
 `inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 
@@ -867,9 +868,15 @@ together with its three bridge declaration sites. Next is 06-10.
 | Phase 06 P13 | 78 min | 3 tasks | 7 files |
 | Phase 06 P12 | 2h 54m | 7 tasks | 28 files |
 | Phase 06 P15 | 4h 20m | 7 tasks | 9 files |
+| Phase 06 P16 | 5h 5m | 5 tasks | 6 files |
 
 ## Decisions
 
+- [Phase 06]: The three new exemption categories stay separate — `satisfies-constraint`, `schema-pin` and `external-mirror` name three different artifacts and make three different refusals, and one merged category would have to accept on the weakest of the three
+- [Phase 06]: `external-mirror` claims only what was measured, that the compiler compels a mirror member's SHAPE and not its presence, and refuses a REQUIRED upstream slot by name so it cannot become a soft substitute for `external-input`
+- [Phase 06]: The arrival walk carries the key a destructuring selected, and containment alone does not answer while a key is carried — the question becomes whether the origin is what arrived in that slot, which the surrounding syntax cannot settle
+- [Phase 06]: `deepestSourceHop` was NOT raised to clear a row — the live chain was measured to need exactly eight, and a bound raised to fit is the shape of permissiveness the whole phase exists to avoid
+- [Phase 06]: A predicate no permissive mutant can break is not yet a refusal — four of this plan's thirteen mutants broke nothing until a sharper counterexample was derived for each
 - [Phase 06]: An invalid contract is an exit-2 setup failure, not an exit-1 finding, which keeps "the gate cannot answer" apart from "this member is unread" — The research fail-closed list names invalid contracts alongside a malformed tsconfig; treating a stale contract as a finding would let it be triaged away instead of fixed
 - [Phase 06]: A type-selection contract covers the filter literal own member, not the union discriminants it selects on — Measuring the inventory showed Extract<Msg, { status: K }> contributes its own status member that no runtime syntax can read, while the variants status members are ordinary discriminants real code switches on
 - [Phase 06]: Contract identity is settled through the inventory declaration map, never through the coordinate string alone — A coordinate only locates syntax; requiring the node found there to be the one byDeclaration recorded is what stops a drifted entry from being proved against the wrong member
