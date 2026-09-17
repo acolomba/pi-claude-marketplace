@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
 status: executing
-stopped_at: Completed 06-16-PLAN.md
-last_updated: "2026-09-17T03:05:00.000Z"
+stopped_at: Completed 06-17-PLAN.md
+last_updated: "2026-09-17T04:20:00.000Z"
 last_activity: 2026-09-17
-last_activity_desc: Plan 06-16 complete, adding three evidence categories and a two-part arrival correction (7 new validated contracts, 16 -> 9 unread against a predicted 9; every predicted row moved and no unpredicted row did; the residual is now exactly the 4 rows 06-17 owns plus 5 recorded decisions, and 06-08 stays blocked)
-state_head: d411e96a
+last_activity_desc: Plan 06-17 complete, collapsing the last two duplicate declarations (9 -> 6 unread against a predicted 5, zero findings gained; the if-field anchor triple and the completions state-record shape each have ONE declaration now, and the fourth owned row is left standing with the fallow dead-type-export finding that blocks its collapse quoted verbatim)
+state_head: 4824e9df
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 63
-  completed_plans: 53
+  completed_plans: 54
   percent: 63
 milestone_name: test-backlog
 ---
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 06 (Unused Type Member Gate) — EXECUTING
-Plan: 16 of 17 executed; 06-17 (four source repairs) and 06-08 (gate activation) are still outstanding
-Status: The six bounded repair plans are COMPLETE (06-09 ✅ -> 06-14 ✅ -> 06-10 ✅ -> 06-11 ✅ -> 06-13 ✅ -> 06-12 ✅), followed by the two analyzer plans 06-15 ✅ and 06-16 ✅. 06-08 remains blocked on a measured residual of 9 unread members — but the engine has no further gap to close: 4 of the 9 are source repairs 06-17 owns, and the other 5 are recorded decisions only the operator can settle.
-Last activity: 2026-09-17 — Plan 06-16 complete (three new evidence categories — `satisfies-constraint`, `schema-pin`, `external-mirror` — plus a two-part arrival correction that carries a destructured key and descends a call; 7 new validated contracts for 101 -> 108; 16 -> 9 unread against a predicted 9, with every predicted row moving and no unpredicted row doing so; thirteen permissive mutants run against the gate suites, four of which broke nothing until a sharper counterexample was derived for them)
+Plan: 17 of 17 executed; only 06-08 (gate activation) is still outstanding
+Status: The six bounded repair plans are COMPLETE (06-09 ✅ -> 06-14 ✅ -> 06-10 ✅ -> 06-11 ✅ -> 06-13 ✅ -> 06-12 ✅), followed by the two analyzer plans 06-15 ✅ and 06-16 ✅ and the final source plan 06-17 ✅. 06-08 now faces a measured residual of 6 unread members, not the 5 it was sized against. Five are the recorded decisions only the operator can settle (`enableRowDependencies.signals.partition`, `AuthAttemptResult.authAttempted` ×2, `UpdatePhaseFailure.msg`, `PLUGIN_INFO_RENDER.status`). The sixth is `edge-deps.ts:92:5`, left standing by 06-17 because aliasing the edge-side `LocationsResolver` onto the orchestrator declaration leaves `MarketplaceStateRecord` with no consumer inside the extension and `fallow dead-code` exits 1 on it; that is the only standing row removable by a bounded mechanical change (repointing three test imports) rather than by a decision.
+Last activity: 2026-09-17 — Plan 06-17 complete (the if-field anchor triple collapsed onto its single domain declaration and the completions state-record shape onto its single orchestrator declaration, each running the direction the zone allow-list already permits; 9 -> 6 unread with ZERO findings gained, measured as a `(path, owner, key)` set difference; `ResolveHookIfContext.cwd` reclassified test-only-observed -> runtime-observed; the disproved edge-deps sync comment removed; `npm run check` exit 0, negative controls 7/7, coverage 1833/1833 functions and 9049/9049 branches unchanged)
 
 Plan 06-01 landed the member gate's compiler tracer: `node
 scripts/check-unused-type-members.mjs` compiles the project once, inventories
@@ -912,3 +912,8 @@ together with its three bridge declaration sites. Next is 06-10.
 - [Phase 06]: `RemoveMarketplaceOutcome.name` stays because three `deepStrictEqual` assertions observe it, NOT because its sibling keeps one — `AddMarketplaceOutcome.name` is read at `reconcile/apply.ts:332` for a documented CR-01 reason (the add outcome's name is manifest-derived and need not match the declared key) that remove has no analogue for, so the production symmetry was measured and found not load-bearing before the row was recorded
 - [Phase 06]: A slot a rollback path populates is behaviour even with no reader today — `UpdatePhaseFailure.msg` is unread by every survey, but the phase-3 aggregation is its only writer and the surface's own header states its contract, so it is recorded rather than deleted
 - [Phase 06]: A ledger note that survives re-keying is still verified against the fresh report — nine notes named a witness coordinate, a witness count or a contract category the tree no longer held, and `--check` certifies such a note as `explained` without ever checking it
+- [Phase 06]: The architecture allow-list decides WHICH of two mirrored declarations survives a collapse — `bridges-hooks -> domain` is permitted and `domain -> bridges` is not, so the anchor triple's domain declaration had to be the survivor; `edge -> orchestrators` is permitted and the reverse is not, so the seam's orchestrator declaration had to be. The collapse never runs against the graph that created the duplicate
+- [Phase 06]: A collapse blocked by a DIFFERENT gate is left standing with the blocking finding quoted, not forced through — aliasing `edge/completions/data.ts::LocationsResolver` removes the only in-extension reference to `MarketplaceStateRecord` and `fallow dead-code` exits 1 on it; both published alias forms were measured producing the identical finding, and a `fallow-ignore`, a manufactured consumer and an edit to the three consuming test files were each refused in turn
+- [Phase 06]: A staged repair stops at the step that worked — step A (aliasing the bridge twin alone) cleared both anchor rows, so `PathAnchorContext` was left untouched and `glob.ts` appears in no commit; the phase does not churn source without a measured row to show for it
+- [Phase 06]: A coverage figure that moves is explained line-for-line before it is accepted — lcov `LF` tracks total source lines, so a net +46 comment lines is +46 `LF` and +46 `LH`, while functions (1833/1833) and branches (9049/9049) stay byte-identical, which is what a type-level change must produce
+- [Phase 06]: 06-15's grouping of the two `ResolveHookIfContext` rows under a `satisfies`-constraint category was mis-assigned — they were a duplicate declaration with a legal collapse direction and cleared with no engine change at all; only the two `hook-if-targets.ts` rows in that group were genuinely `satisfies`-constrained
