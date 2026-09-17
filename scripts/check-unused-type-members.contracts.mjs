@@ -5,8 +5,10 @@ import ts from "typescript";
 
 import {
   AnalysisSetupError,
+  implementationOf,
   propertySymbolOf,
   resolveCandidates,
+  returnExpressionsOf,
 } from "./check-unused-type-members.model.mjs";
 
 /**
@@ -527,8 +529,98 @@ function partsOf(expression) {
     : [];
 }
 
-function reaches(origin, expression, context, hops) {
-  if (contains(expression, origin)) {
+/**
+ * The expression a destructuring pattern took this name out of, and the key the
+ * pattern selected.
+ *
+ * The flow walk records no transfer into a destructured binding -- it resolves a
+ * declaration's name symbol, and an object binding pattern has none -- so the
+ * syntax is where this step has to come from. The key travels with it: the
+ * pattern named one slot, and a walk that forgot which one would accept a value
+ * that arrived in a SIBLING slot of the same pattern.
+ *
+ * A key already being carried stops this step rather than replacing it. Two
+ * selections composed would need a stack, and under-crediting keeps a member a
+ * finding rather than excusing it by its neighbour.
+ */
+function destructuredSourceOf(expression, context, selected) {
+  const symbol = selected === undefined ? placeSymbolOf(expression, context) : undefined;
+  const [declaration] = symbol?.declarations ?? [];
+
+  if (declaration === undefined || !ts.isBindingElement(declaration)) {
+    return undefined;
+  }
+
+  const pattern = declaration.parent;
+  const variable = pattern.parent;
+
+  if (
+    !ts.isObjectBindingPattern(pattern) ||
+    !ts.isVariableDeclaration(variable) ||
+    variable.initializer === undefined
+  ) {
+    return undefined;
+  }
+
+  const named = declaration.propertyName ?? declaration.name;
+  const key = ts.isIdentifier(named) || ts.isStringLiteral(named) ? named.text : undefined;
+  return key === undefined ? undefined : { node: variable.initializer, selected: key };
+}
+
+/**
+ * The expressions a call hands back, taken from the body the checker resolved
+ * for it. An overload declares a call shape but runs nothing, so the
+ * implementation it was merged with is the place a value really comes from; an
+ * installed declaration has no body at all, and `returnExpressionsOf` answers
+ * nothing for it, so such a call descends nothing.
+ */
+function calleeReturns(call, context) {
+  const implementation = implementationOf(
+    context.checker.getResolvedSignature(call)?.declaration,
+    context.checker,
+  );
+
+  return implementation === undefined ? [] : returnExpressionsOf(implementation);
+}
+
+/**
+ * The places one step back from here, each carrying the key still being looked
+ * for. An object literal reached while a key is carried is descended through
+ * that ONE property and the key is then forgotten; every other shape passes the
+ * key through unchanged.
+ */
+function nextPlaces(expression, context, selected) {
+  if (ts.isIdentifier(expression)) {
+    const destructured = destructuredSourceOf(expression, context, selected);
+    const recorded = sourcesOf(expression, context).map((node) => ({ node, selected }));
+    return destructured === undefined ? recorded : [...recorded, destructured];
+  }
+
+  if (ts.isCallExpression(expression)) {
+    return calleeReturns(expression, context).map((node) => ({ node, selected }));
+  }
+
+  if (selected !== undefined && ts.isObjectLiteralExpression(expression)) {
+    return expression.properties
+      .filter((property) => literalNameOf(property) === selected)
+      .map((property) => ({ node: objectLiteralPartOf(property), selected: undefined }))
+      .filter((place) => place.node !== undefined);
+  }
+
+  return partsOf(expression).map((node) => ({ node, selected }));
+}
+
+/**
+ * Whether a value built at the origin arrives here.
+ *
+ * `selected` is the key a destructuring picked out, when one has been crossed
+ * and not yet consumed. While it is set, containment alone does NOT answer: the
+ * question is no longer "is the origin somewhere in this expression" but "is the
+ * origin what arrived in that slot", and the surrounding syntax cannot settle
+ * that.
+ */
+function reaches(origin, expression, context, hops, selected) {
+  if (selected === undefined && contains(expression, origin)) {
     return true;
   }
 
@@ -536,8 +628,9 @@ function reaches(origin, expression, context, hops) {
     return false;
   }
 
-  const next = ts.isIdentifier(expression) ? sourcesOf(expression, context) : partsOf(expression);
-  return next.some((part) => reaches(origin, part, context, hops - 1));
+  return nextPlaces(expression, context, selected).some((place) =>
+    reaches(origin, place.node, context, hops - 1, place.selected),
+  );
 }
 
 /**
@@ -561,7 +654,7 @@ function proveExternalOutput(entry, candidate, context) {
     fail(`${entry.id} boundary ${entry.boundary} is not a return to an external declaration`);
   }
 
-  if (!reaches(originNode, returned, context, deepestSourceHop)) {
+  if (!reaches(originNode, returned, context, deepestSourceHop, undefined)) {
     fail(`${entry.id} origin ${entry.origin} never reaches boundary ${entry.boundary}`);
   }
 

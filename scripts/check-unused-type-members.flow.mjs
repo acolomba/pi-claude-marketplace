@@ -2,7 +2,13 @@ import path from "node:path";
 
 import ts from "typescript";
 
-import { propertySymbolOf, resolveCandidates } from "./check-unused-type-members.model.mjs";
+import {
+  hasBody,
+  implementationOf,
+  propertySymbolOf,
+  resolveCandidates,
+  returnExpressionsOf,
+} from "./check-unused-type-members.model.mjs";
 import {
   createOperationModel,
   readsOfOperand,
@@ -348,10 +354,6 @@ function indexAssignment(assignment, state) {
   recordTransfer(state, "assignment", assignment.right, assignment.left);
 }
 
-function hasBody(node) {
-  return ts.isFunctionLike(node) && node.body !== undefined;
-}
-
 function isAsync(node) {
   return (
     ts.canHaveModifiers(node) &&
@@ -359,27 +361,15 @@ function isAsync(node) {
   );
 }
 
-/**
- * The declaration whose body a call actually enters. An overload signature
- * declares a call shape but runs nothing, so the implementation the checker
- * merged it with is the place a value really arrives.
- */
-function implementationOf(declaration, state) {
-  if (declaration === undefined || hasBody(declaration)) {
-    return declaration;
-  }
-
-  const symbol = declaration.name === undefined ? undefined : symbolOfName(declaration.name, state);
-  const implementation = (symbol?.declarations ?? []).find((sibling) => hasBody(sibling));
-  return implementation ?? declaration;
-}
-
 function signatureTargetOf(call, state) {
   if (state.targets.has(call)) {
     return state.targets.get(call);
   }
 
-  const target = implementationOf(state.checker.getResolvedSignature(call)?.declaration, state);
+  const target = implementationOf(
+    state.checker.getResolvedSignature(call)?.declaration,
+    state.checker,
+  );
   state.targets.set(call, target);
   return target;
 }
@@ -968,20 +958,6 @@ function sourcesOfSymbol(symbol, state) {
   return sources;
 }
 
-function collectReturns(node, found) {
-  ts.forEachChild(node, (child) => {
-    if (ts.isFunctionLike(child)) {
-      return;
-    }
-
-    if (ts.isReturnStatement(child) && child.expression !== undefined) {
-      found.push(child.expression);
-    }
-
-    collectReturns(child, found);
-  });
-}
-
 /** Whether this expression already carries a promise of its own. */
 function isThenable(node, state) {
   const type = state.checker.getTypeAtLocation(node);
@@ -1015,17 +991,10 @@ function returnsOf(fn, state) {
     return known;
   }
 
-  const expressions = [];
-
-  if (fn.body !== undefined) {
-    if (ts.isBlock(fn.body)) {
-      collectReturns(fn.body, expressions);
-    } else {
-      expressions.push(fn.body);
-    }
-  }
-
-  const found = expressions.map((node) => ({ node, at: returnPositionOf(fn, node, state) }));
+  const found = returnExpressionsOf(fn).map((node) => ({
+    node,
+    at: returnPositionOf(fn, node, state),
+  }));
   state.returns.set(fn, found);
   return found;
 }

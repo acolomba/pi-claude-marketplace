@@ -859,6 +859,24 @@
       "purpose": "Keeps the local resources_discover result a faithful statement of the installed declaration the peer overload checks the handler against; upstream declares the slot optional, so widening it fails the build while nothing reads it here.",
       "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:413:5",
       "checked": "extensions/pi-claude-marketplace/index.ts:87:5"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:140:3",
+      "owner": "PluginRow",
+      "key": "marketplace",
+      "category": "external-output",
+      "purpose": "Built into the plugin-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
+      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:437:9",
+      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:524:7"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:141:3",
+      "owner": "PluginRow",
+      "key": "scope",
+      "category": "external-output",
+      "purpose": "Built into the plugin-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
+      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:438:9",
+      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:524:7"
     }
   ]
 }

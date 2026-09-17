@@ -2711,6 +2711,11 @@ test("a mirror slot corresponding in one direction only is refused", async (t) =
 // body to descend, so the origin at line 29, column 16 reaches nothing. And the
 // `rows` returned at line 46, column 7 is a different symbol that happens to
 // share the spelling.
+//
+// `inline` builds a row INSIDE the other slot of the literal it hands back, so
+// the origin at line 53, column 23 sits textually within an expression the walk
+// passes through on its way to `rows`. Containment alone must not answer while a
+// key is being carried; the boundary at line 61, column 7 returns `rows` only.
 const destructuredArrivalCases = `import { install, hostBuild } from "external-host";
 
 export interface Row {
@@ -2756,6 +2761,21 @@ export function shadowed(text: string): void {
   install({
     execute() {
       const rows: Row[] = [];
+      return { rows };
+    },
+  });
+}
+
+function inline(text: string): { spares: Row[]; rows: Row[] } {
+  const rows: Row[] = [];
+  return { spares: [{ spare: text }], rows };
+}
+
+export function inlined(text: string): void {
+  const { spares, rows } = inline(text);
+  void spares;
+  install({
+    execute() {
       return { rows };
     },
   });
@@ -2844,6 +2864,29 @@ test("a same-spelled destructured binding with another symbol does not connect",
       message:
         `Invalid contract: ${casesPath}:4:3 origin ${casesPath}:12:15 ` +
         `never reaches boundary ${casesPath}:46:7`,
+    },
+  );
+});
+
+test("an origin inside the surrounding literal is not what arrived in the selected slot", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      destructuredArrivalCases,
+      documentWith({
+        ...destructuredArrivalContract,
+        id: `${casesPath}:5:3`,
+        key: "spare",
+        origin: `${casesPath}:53:23`,
+        boundary: `${casesPath}:61:7`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:5:3 origin ${casesPath}:53:23 ` +
+        `never reaches boundary ${casesPath}:61:7`,
     },
   );
 });

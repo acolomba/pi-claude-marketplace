@@ -452,6 +452,75 @@ export function propertySymbolOf(type, key, checker) {
   return found.length === 1 ? found[0] : undefined;
 }
 
+/**
+ * Whether this node is a function that actually runs something.
+ *
+ * Exported because both halves of the analysis ask it of a call target: the
+ * transfer walk before it follows a value into a body, and the contract engine
+ * before it descends a call. An installed declaration has no body and is where
+ * both of them stop.
+ */
+export function hasBody(node) {
+  return ts.isFunctionLike(node) && node.body !== undefined;
+}
+
+/**
+ * The declaration whose body a call actually enters. An overload signature
+ * declares a call shape but runs nothing, so the implementation the checker
+ * merged it with is the place a value really arrives.
+ *
+ * Exported because the transfer walk and the contract engine's arrival walk both
+ * have to resolve a call the same way; the overload-merge rule has exactly one
+ * definition here.
+ */
+export function implementationOf(declaration, checker) {
+  if (declaration === undefined || hasBody(declaration)) {
+    return declaration;
+  }
+
+  const name = declaration.name;
+  const symbol =
+    name !== undefined && ts.isIdentifier(name) ? checker.getSymbolAtLocation(name) : undefined;
+  const implementation = (symbol?.declarations ?? []).find((sibling) => hasBody(sibling));
+  return implementation ?? declaration;
+}
+
+function collectReturns(node, found) {
+  ts.forEachChild(node, (child) => {
+    if (ts.isFunctionLike(child)) {
+      return;
+    }
+
+    if (ts.isReturnStatement(child) && child.expression !== undefined) {
+      found.push(child.expression);
+    }
+
+    collectReturns(child, found);
+  });
+}
+
+/**
+ * The expressions a function body hands back. A concise body IS its own return,
+ * and a block body's returns are collected without descending into the nested
+ * functions it happens to contain -- those hand values back to their own
+ * callers, not to this one.
+ *
+ * Exported because both walks read a body the same way.
+ */
+export function returnExpressionsOf(fn) {
+  if (fn.body === undefined) {
+    return [];
+  }
+
+  if (!ts.isBlock(fn.body)) {
+    return [fn.body];
+  }
+
+  const found = [];
+  collectReturns(fn.body, found);
+  return found;
+}
+
 // Symbol identity is stable for the life of one program, and the same symbol is
 // reached from thousands of call sites, so each one is resolved once.
 function addCandidatesOfSymbol(context, symbol, found) {
