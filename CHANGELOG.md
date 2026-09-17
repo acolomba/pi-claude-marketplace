@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- The changelog now lists one entry per pull request, ending in its number, and thanks every issue reporter and contributor. (#197)
 - In an interactive session, the `/claude:plugin` command now opens a plugin browser like Claude Code's `/plugin` picker. Thanks to @rakesh-vs. (#152)
   - Bare `/claude:plugin` or `/claude:plugin browse` opens a four-screen browser to inspect marketplaces, browse plugins, pick actions (install, enable, disable, info, uninstall), and choose install scopes.
   - In a non-interactive session, the command lists plugins as before.
