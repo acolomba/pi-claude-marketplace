@@ -4822,6 +4822,11 @@ interface DeclaringSeed {
   readonly provenance?: PluginRecord["provenance"];
   /** `false` records the plugin in state while its marketplace manifest omits it (D-05-07). */
   readonly listed?: boolean;
+  /**
+   * Raw bytes written as the plugin's own manifest in place of the JSON the
+   * seed derives, so a case can plant a present-but-unusable file (D-05-07).
+   */
+  readonly ownManifest?: string;
 }
 
 /** The one skill each seeded plugin owns, so every cascade has something to drop. */
@@ -4867,7 +4872,10 @@ async function seedDeclaringScope(
         "plugin.json",
       );
       await mkdir(path.dirname(ownManifest), { recursive: true });
-      await writeFile(ownManifest, JSON.stringify({ name: plugin, version: "1.0.0", ...declared }));
+      await writeFile(
+        ownManifest,
+        seed.ownManifest ?? JSON.stringify({ name: plugin, version: "1.0.0", ...declared }),
+      );
       const skillName = seededSkillName(marketplace, plugin);
       const skillDir = path.join(locations.skillsTargetDir, skillName);
       await mkdir(skillDir, { recursive: true });
@@ -4937,6 +4945,13 @@ const REFUSAL_CASES: readonly RefusalCase[] = [
     plugins: { helper: {}, other: { listed: false } },
     expectedRow: "⊘ helper v0.0.1 (failed) {unreadable}",
     expectedCause: "cannot read the dependencies of other@mp: not declared by its marketplace",
+  },
+  {
+    title: "D-05-07: a record whose own manifest is present but unreadable refuses the uninstall",
+    plugins: { helper: {}, other: { ownManifest: "{ truncated" } },
+    expectedRow: "⊘ helper v0.0.1 (failed) {unreadable}",
+    expectedCause:
+      "cannot read the dependencies of other@mp: its own manifest is present but cannot be read",
   },
 ];
 

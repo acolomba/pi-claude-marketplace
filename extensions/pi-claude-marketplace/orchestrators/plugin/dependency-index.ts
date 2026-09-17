@@ -27,13 +27,13 @@
 // is the one outcome the callers must never produce. A record with no usable
 // answer is never read as "declares nothing".
 //
-// The fallback is part of that read, not an exception to it: when the plugin's
-// OWN manifest cannot be read -- absent, a cold git clone, or present but
-// unusable -- its marketplace entry answers for it (D-05-06, D-01-07), and an
-// entry that carries no `dependencies` key answers "declares nothing". The
-// walk fails closed only where the entry cannot answer either. Tightening the
-// guard to refuse on an unusable own manifest is a one-line predicate change
-// that D-05-07 leaves open; it is not taken here.
+// The read tells an ABSENT own manifest from a PRESENT-BUT-UNUSABLE one. An
+// absent manifest -- no candidate file, a cold git clone, a refused root -- is
+// answered by the marketplace entry (D-05-06), and an entry that carries no
+// `dependencies` key answers "declares nothing". A present-but-unusable
+// manifest fails closed through `refuseUnusableOwnManifest` (D-05-07), because
+// a damaged file may hide a dependency the plugin really declares. The install
+// cascade keeps its own entry fallback for that case (D-01-07).
 //
 // The failure arm's `cause.message` IS the rendered cause line. It carries the
 // declarer's `name@marketplace` key and a field path, a fixed phrase, or a
@@ -89,12 +89,13 @@ export interface ScopeDeclarationIndexOptions {
  * The index and the walked records, or the first record whose declarations
  * could not be established (D-05-07). `cause.message` names the declarer and
  * says why it could not be read -- its marketplace does not list it, its
- * declaration is unusable, or its marketplace manifest failed to load. No
- * classified token rides along: the row a caller renders is about the TARGET,
- * and the declarer's read-failure token would make a false claim about the
- * target's own manifest (the row grammar's brace states a fact about the row's
- * subject). `candidates` holds every indexed record (the excluded target
- * omitted) in walk order, enabled or disabled, whatever its provenance.
+ * declaration is unusable, its marketplace manifest failed to load, or its own
+ * manifest is present but cannot be read. No classified token rides along: the
+ * row a caller renders is about the TARGET, and the declarer's read-failure
+ * token would make a false claim about the target's own manifest (the row
+ * grammar's brace states a fact about the row's subject). `candidates` holds
+ * every indexed record (the excluded target omitted) in walk order, enabled or
+ * disabled, whatever its provenance.
  */
 export type ScopeDeclarationIndexResult =
   | {
@@ -151,6 +152,7 @@ async function readRecordDeclarations(
     entry: declared.entry,
     locations: options.locations,
     ...(options.reader !== undefined && { reader: options.reader }),
+    refuseUnusableOwnManifest: true,
   });
   if (read.kind === "unusable") {
     return unreadableDeclarer(key, read.detail);

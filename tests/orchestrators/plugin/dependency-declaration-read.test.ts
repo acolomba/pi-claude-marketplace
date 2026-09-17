@@ -112,6 +112,20 @@ async function readWithFake(
   });
 }
 
+/** `readWithFake` under the dependents index's option (D-05-07). */
+async function readRefusingUnusable(
+  entry: ManifestPluginEntry,
+  fake: ReaderFake,
+): Promise<ClosureLookupResult> {
+  return readDependencyDeclaration({
+    marketplaceRoot: FAKE_ROOT,
+    entry,
+    locations: FAKE_LOCATIONS,
+    reader: fake.reader,
+    refuseUnusableOwnManifest: true,
+  });
+}
+
 /** The parsed form of the bare token `<name>@mp` every case declares. */
 function dependsOn(name: string): ClosureLookupResult {
   return { kind: "found", dependencies: [{ name, marketplace: "mp" }] };
@@ -247,6 +261,60 @@ for (const { label, payload } of [
     // assert
     assert.deepStrictEqual(result, dependsOn("from-entry"));
     assert.deepStrictEqual(fake.opened, [WRAPPED], "the walk must end at the unusable candidate");
+  });
+}
+
+for (const { label, wrapped } of [
+  { label: "an unparseable first candidate", wrapped: "{ truncated" },
+  { label: "an EACCES stat on the first candidate", wrapped: errno("EACCES") },
+  { label: "a JSON-array payload", wrapped: '["helper@mp"]' },
+]) {
+  test(`D-05-07: with refuseUnusableOwnManifest, ${label} is the unusable arm, not the entry`, async () => {
+    // arrange -- the bare sibling declares a DIFFERENT plugin, so a walk that
+    // wrongly continued past the unusable candidate would change the answer.
+    const fake = buildReader({
+      files: { [WRAPPED]: wrapped, [BARE]: '{"dependencies":["from-bare@mp"]}' },
+    });
+
+    // act
+    const declaration = await readRefusingUnusable(entryWith("./alpha", ["from-entry@mp"]), fake);
+
+    // assert
+    assert.deepStrictEqual(declaration, {
+      kind: "unusable",
+      detail: "its own manifest is present but cannot be read",
+    });
+    assert.deepStrictEqual(fake.opened, [WRAPPED], "the walk must end at the unusable candidate");
+  });
+}
+
+for (const { label, source, files, expectedOpened } of [
+  {
+    label: "no candidate present",
+    source: "./alpha",
+    files: {},
+    expectedOpened: [WRAPPED, BARE],
+  },
+  {
+    label: "a containment-refused root",
+    source: "../outside",
+    files: {
+      [candidatesUnder(path.resolve(FAKE_ROOT, "../outside")).wrapped]:
+        '{"dependencies":["escaped@mp"]}',
+    },
+    expectedOpened: [],
+  },
+]) {
+  test(`D-05-06: with refuseUnusableOwnManifest, ${label} still falls back to the entry`, async () => {
+    // arrange
+    const fake = buildReader({ files });
+
+    // act
+    const declaration = await readRefusingUnusable(entryWith(source, ["from-entry@mp"]), fake);
+
+    // assert
+    assert.deepStrictEqual(declaration, dependsOn("from-entry"));
+    assert.deepStrictEqual(fake.opened, expectedOpened);
   });
 }
 

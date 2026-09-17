@@ -25,11 +25,13 @@
 // D-01-06 / D-01-07: the candidate walk is over the SHARED manifest ordering,
 // and it falls through on ABSENCE ONLY. The first candidate that EXISTS is this
 // plugin's manifest, and a candidate that exists but cannot be used ends the
-// walk as not-readable rather than handing off to its sibling. A
-// present-but-unusable manifest therefore falls back to the entry and is NEVER
-// read as a plugin that declares nothing -- that distinction is what stops a
-// truncated or corrupted manifest from silently suppressing a dependency the
-// plugin really declares.
+// walk as unusable rather than handing off to its sibling. What happens to a
+// present-but-unusable manifest is the caller's rule: the install cascade lets
+// the entry answer for it (D-01-07), and the dependents index opts into
+// refusing it through `refuseUnusableOwnManifest` (D-05-07). Under neither
+// rule is it read as a plugin that declares nothing -- that distinction is
+// what stops a truncated or corrupted manifest from silently suppressing a
+// dependency the plugin really declares.
 //
 // NFR-10: a path source derives its root through `path.resolve` +
 // `assertPathInside`, and that re-check IS the containment guarantee for the
@@ -92,6 +94,12 @@ export interface DependencyDeclarationReadOptions {
   readonly locations: ScopedLocations;
   /** Filesystem seam; production omits it and reads real disk. */
   readonly reader?: DependencyDeclarationReader;
+  /**
+   * D-05-07: the dependents index sets this so a present-but-unusable own
+   * manifest is answered as the `unusable` arm instead of by the entry. The
+   * install cascade omits it and keeps the D-01-07 entry fallback.
+   */
+  readonly refuseUnusableOwnManifest?: true;
 }
 
 async function isRegularFile(filePath: string): Promise<boolean> {
@@ -110,16 +118,21 @@ const REAL_DEPENDENCY_DECLARATION_READER: DependencyDeclarationReader = Object.f
 });
 
 /**
- * What the plugin's OWN manifest declares, or the fact that none was readable.
+ * What the plugin's OWN manifest declares (`readable`), or why it does not:
+ * no candidate exists under a root this module may open (`absent`), or a
+ * candidate exists but cannot be used (`unusable`).
  *
  * The value stays `unknown` because the manifest schema keeps the field opaque
  * -- every question about which elements are usable belongs to
  * `parseDeclaredDependencies`, exactly as it does for the entry's copy.
  */
 type OwnManifestRead =
-  { readonly kind: "readable"; readonly dependencies: unknown } | { readonly kind: "not-readable" };
+  | { readonly kind: "readable"; readonly dependencies: unknown }
+  | { readonly kind: "absent" }
+  | { readonly kind: "unusable" };
 
-const NOT_READABLE: OwnManifestRead = { kind: "not-readable" };
+const ABSENT: OwnManifestRead = { kind: "absent" };
+const UNUSABLE: OwnManifestRead = { kind: "unusable" };
 
 /**
  * A locally resolvable source's root, or `undefined` where containment refuses
@@ -186,19 +199,19 @@ async function resolvePluginRootFsOnly(
 /**
  * Parse one candidate's bytes into the `dependencies` value it declares. A
  * parse throw, or a payload that is not a JSON object, is a
- * present-but-unusable manifest and reads as not-readable.
+ * present-but-unusable manifest and reads as the `unusable` arm.
  */
 function parseOwnManifest(raw: string): OwnManifestRead {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return NOT_READABLE;
+    return UNUSABLE;
   }
 
   return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
     ? { kind: "readable", dependencies: (parsed as Record<string, unknown>).dependencies }
-    : NOT_READABLE;
+    : UNUSABLE;
 }
 
 /**
@@ -223,7 +236,7 @@ async function readManifestCandidate(
     raw = await reader.readTextFile(absPath);
   } catch (err) {
     const code = isErrnoException(err) ? err.code : undefined;
-    return code === "ENOENT" || code === "ENOTDIR" ? undefined : NOT_READABLE;
+    return code === "ENOENT" || code === "ENOTDIR" ? undefined : UNUSABLE;
   }
 
   return parseOwnManifest(raw);
@@ -241,7 +254,7 @@ async function readOwnManifest(
     }
   }
 
-  return NOT_READABLE;
+  return ABSENT;
 }
 
 /**
@@ -252,13 +265,21 @@ async function readOwnManifest(
  * RESV-01 / RESV-02: this is the cascade's catalog read, so a dependency
  * declared ONLY in a plugin's own bare manifest reaches the closure exactly
  * like one declared in the marketplace entry.
+ *
+ * D-05-07: under `refuseUnusableOwnManifest`, a present-but-unusable own
+ * manifest is the unusable arm with a fixed detail, and the entry never
+ * answers for it.
  */
 export async function readDependencyDeclaration(
   options: DependencyDeclarationReadOptions,
 ): Promise<DeclarationLookupResult> {
   const reader = options.reader ?? REAL_DEPENDENCY_DECLARATION_READER;
   const pluginRoot = await resolvePluginRootFsOnly(reader, options);
-  const own = pluginRoot === undefined ? NOT_READABLE : await readOwnManifest(reader, pluginRoot);
+  const own = pluginRoot === undefined ? ABSENT : await readOwnManifest(reader, pluginRoot);
+  if (own.kind === "unusable" && options.refuseUnusableOwnManifest !== undefined) {
+    // T-05-04: a fixed phrase -- no path, no manifest text, no chained cause.
+    return { kind: "unusable", detail: "its own manifest is present but cannot be read" };
+  }
 
   // A readable manifest wins outright, INCLUDING when its `dependencies` key is
   // absent: that means the plugin declares nothing, not that the entry's list

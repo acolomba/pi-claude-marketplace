@@ -361,6 +361,41 @@ test("D-05-07: an unusable declaration ends the walk as invalid manifest with th
   );
 });
 
+test("D-05-07: a corrupt own manifest beside a silent entry ends the walk naming the record", async () => {
+  // arrange -- the entry carries no `dependencies`, so a read that let the
+  // entry answer for the corrupt file would index helper as declaring nothing.
+  const loadManifest = manifestLoader({
+    [MP.manifestPath]: manifestOf("mp", { app: {}, helper: {}, paused: {} }),
+  });
+  const reader = ownManifests({
+    [path.join(MP.marketplaceRoot, "plugins", "helper", ".claude-plugin", "plugin.json")]:
+      "{ truncated",
+  });
+
+  // act
+  const walk = await buildScopeDeclarationIndex({
+    state: stateOf(MP),
+    locations: FAKE_LOCATIONS,
+    exclude: "app@mp",
+    reader,
+    loadManifest,
+  });
+
+  // assert
+  assert.equal(walk.ok, false);
+  assert.deepStrictEqual(
+    walk.ok
+      ? undefined
+      : { declarer: walk.declarer, message: walk.cause.message, cause: walk.cause.cause },
+    {
+      declarer: "helper@mp",
+      message:
+        "cannot read the dependencies of helper@mp: its own manifest is present but cannot be read",
+      cause: undefined,
+    },
+  );
+});
+
 interface LoadFailureCase {
   readonly title: string;
   readonly thrown: Error;
