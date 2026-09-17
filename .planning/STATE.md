@@ -5,7 +5,7 @@ milestone_name: transitive-dependencies
 current_phase: 5
 current_phase_name: Prune on uninstall
 status: completed
-stopped_at: Phase 5 complete, all 5 phases verified, ready for milestone audit
+stopped_at: v1.20 audit tech_debt (2172348e); operator chose to address debt before complete-milestone
 last_updated: "2026-09-17T01:39:22.196Z"
 last_activity: 2026-09-16
 last_activity_desc: Phase 5 complete
@@ -818,7 +818,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 5 complete (verified 2026-09-17, human items accepted) — all 5 phases complete, ready for milestone audit/close
+**Stopped at:** Milestone audit ran 2026-09-17 — `v1.20-MILESTONE-AUDIT.md` status `tech_debt` (26/26 requirements, 5/5 seams, 2/2 flows, 0 blockers). The operator chose to address the debt before `/gsd-complete-milestone v1.20`: `/gsd-validate-phase 3|4|5`, `/gsd-secure-phase 3|4|5`, settle `05-REVIEW.md` IN-05/IN-06, and triage `PRUNE-GUARD-MR-01` + Phase 1 `deferred-items.md`. Autonomous run stopped by the operator at the audit gate.
 
 **Resume file:** None
 `HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
