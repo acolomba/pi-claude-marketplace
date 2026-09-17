@@ -590,3 +590,13 @@ The engine is measurably no more permissive than it was. Three new categories we
 
 *Phase: 06-unused-type-member-gate*
 *Completed: 2026-09-17*
+
+## Self-Check: PASSED
+
+All six modified files and the created SUMMARY exist on disk, and all ten
+commits are present in `git log` between `1119eae9` and `HEAD`. Every `<verify>`
+command in the plan was run in the foreground with its exit status captured
+directly, never through a pipe whose status belongs to another process. The
+measured commit count from the plan ledger is `git rev-list --count
+1119eae9..HEAD` = 10, one more than the nine recorded in the frontmatter, which
+was measured before this SUMMARY's own commit.
