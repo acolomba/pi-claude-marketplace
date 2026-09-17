@@ -12,7 +12,3 @@ max_depth = 1
 
 [features]
 hooks = true
-
-[mcp_servers.codegraph]
-command = "codegraph"
-args = ["serve", "--mcp"]
