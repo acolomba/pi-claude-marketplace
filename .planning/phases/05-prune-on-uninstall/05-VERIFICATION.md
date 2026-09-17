@@ -1,7 +1,7 @@
 ---
 phase: 05-prune-on-uninstall
 verified: 2026-09-17T02:30:00Z
-status: human_needed
+status: passed
 score: 6/6 must-haves verified
 covered_files:
   - .planning/BACKLOG.md
@@ -67,7 +67,7 @@ human_verification:
 
 **Phase Goal:** `uninstall --prune` removes the dependency-installed plugins that no remaining plugin needs, and nothing else, and says which ones it removed. With it the uninstall flag surface closes at exactly the two extra flags upstream defines.
 **Verified:** 2026-09-17T02:30:00Z
-**Status:** human_needed
+**Status:** passed (human validation 2026-09-17: all 4 items approved by the operator; D-05-07 stands)
 **Re-verification:** No — initial verification
 
 ## Goal Achievement
