@@ -5592,6 +5592,65 @@ test("D-05-13: a pruned member whose agents refuse to unstage renders a warning 
   });
 });
 
+test("PRUNE-03 / D-05-13: a failed member is still a declarer, so the dependency only it holds is kept while the unrelated orphan is still pruned", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-member-holds-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringScope(locations, PRUNE_SCOPE, cwd);
+      const { ctx, pi, notifications } = makeCtx();
+      const cause = new AgentsUnstageFailureError("Agents unstage refused: foreign content", [
+        { generatedName: "d1-agent", targetPath: "/agents/d1-agent.md", reason: "missing marker" },
+      ]);
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+        cascade: cascadeFailingFor("d1", cause, { skills: ["mp-d1-skill"] }),
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n" +
+            "\n" +
+            "● mp [project]\n" +
+            "  ○ x v0.0.1 (uninstalled)\n" +
+            "  ⊘ d1 v0.0.1 (failed) {source mismatch}\n" +
+            "    cause: Agents unstage refused: foreign content\n" +
+            "\n" +
+            "● mp2 [project]\n" +
+            "  ○ o v0.0.1 (uninstalled) {dependency pruned}\n" +
+            "\n" +
+            "/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
+      assert.deepStrictEqual(await recordedInventory(locations), {
+        "d1@mp": ["mp-d1-skill"],
+        "d2@mp2": ["mp2-d2-skill"],
+      });
+      assert.deepStrictEqual(await stagedSkills(locations, PRUNE_SCOPE_SKILLS), {
+        "mp-x-skill": false,
+        "mp-d1-skill": true,
+        "mp2-d2-skill": true,
+        "mp2-o-skill": false,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("D-05-13: a pruned member that partially unstaged keeps a record shrunk to what is still on disk", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-member-partial-"));

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   findDependents,
+  isHeldBy,
   pruneOrphans,
 } from "../../extensions/pi-claude-marketplace/domain/dependency-orphans.ts";
 
@@ -216,3 +217,55 @@ test("D-05-02: the candidate list, the index and the removed set are not mutated
   assert.deepStrictEqual(indexAfter, indexBefore);
   assert.deepStrictEqual([...removed], removedBefore);
 });
+
+interface HeldCase {
+  readonly title: string;
+  readonly shape: IndexShape;
+  readonly gone: readonly string[];
+  readonly key: string;
+  readonly expected: boolean;
+}
+
+const HELD_CASES: readonly HeldCase[] = [
+  {
+    title: "PRUNE-03: a key a present holder declares is held",
+    shape: { "x@mp": ["d1@mp"], "d1@mp": ["d2@mp"] },
+    gone: ["x@mp"],
+    key: "d2@mp",
+    expected: true,
+  },
+  {
+    title: "PRUNE-03: a key only a gone holder declares is not held",
+    shape: { "x@mp": ["d1@mp"], "d1@mp": ["d2@mp"] },
+    gone: ["x@mp", "d1@mp"],
+    key: "d2@mp",
+    expected: false,
+  },
+  {
+    title: "D-05-13: the answer is one-pass -- a present holder holds even when nothing holds it",
+    shape: { "d1@mp": ["d2@mp"] },
+    gone: [],
+    key: "d2@mp",
+    expected: true,
+  },
+  {
+    title: "PRUNE-03: a key nobody declares is not held",
+    shape: { "x@mp": ["d1@mp"] },
+    gone: [],
+    key: "o@mp",
+    expected: false,
+  },
+];
+
+for (const { title, shape, gone, key, expected } of HELD_CASES) {
+  test(title, () => {
+    // arrange
+    const index = indexOf(shape);
+
+    // act
+    const held = isHeldBy(index, new Set(gone), key);
+
+    // assert
+    assert.equal(held, expected);
+  });
+}

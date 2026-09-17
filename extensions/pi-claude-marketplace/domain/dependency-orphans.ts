@@ -60,8 +60,18 @@ export interface OrphanCandidate {
   readonly provenance: "explicit" | "dependency";
 }
 
-/** Whether any holder outside `gone` declares `key`. */
-function isHeldBy(index: DeclarationIndex, gone: ReadonlySet<string>, key: string): boolean {
+/**
+ * Whether any holder outside `gone` declares `key` -- the ONE-PASS question,
+ * with no fixpoint behind it: a holder in `gone` is absent, every other holder
+ * is present whatever `gone` implies about its own orphan status.
+ *
+ * `pruneOrphans` marks a whole batch gone on the assumption that every key
+ * in it will be removed; when a removal fails, that key's holder is still
+ * installed and still declares. The sweep asks this question again with the
+ * keys that ACTUALLY left before removing each member of the precomputed
+ * order, so a key only a failed member holds is kept (PRUNE-03, D-05-13).
+ */
+export function isHeldBy(index: DeclarationIndex, gone: ReadonlySet<string>, key: string): boolean {
   for (const [holder, declared] of index) {
     if (!gone.has(holder) && declared.has(key)) {
       return true;

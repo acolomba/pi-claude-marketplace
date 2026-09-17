@@ -59,7 +59,7 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 
-import { findDependents, pruneOrphans } from "../../domain/dependency-orphans.ts";
+import { findDependents, isHeldBy, pruneOrphans } from "../../domain/dependency-orphans.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -581,6 +581,14 @@ async function removeDependencyMember(args: {
  * the member body once per key in that order (dependents before their
  * dependencies). Reached only from the arm where the named plugin was
  * actually removed.
+ *
+ * PRUNE-03 / D-05-13: `pruneOrphans` marks each batch gone on the assumption
+ * that every member in it goes, but a failed member keeps its record and is
+ * still an installed declarer. So `gone` carries only the keys that actually
+ * left the snapshot, and each key is re-checked against it just before its
+ * removal: every holder of a key precedes it in the order, so the check is
+ * exact when it runs, and a key only a failed member holds is kept -- exactly
+ * as the guard would refuse it if named directly (D-05-14).
  */
 async function sweepOrphans(args: {
   readonly snapshot: DeclarationSnapshot;
@@ -592,7 +600,8 @@ async function sweepOrphans(args: {
   readonly transaction: UninstallTransaction;
 }): Promise<PrunedMember[]> {
   const { snapshot, primaryKey, ...removal } = args;
-  const order = pruneOrphans(snapshot.candidates, snapshot.index, new Set([primaryKey]));
+  const gone = new Set([primaryKey]);
+  const order = pruneOrphans(snapshot.candidates, snapshot.index, gone);
   // Every key `pruneOrphans` returns is a candidate's key, so the filter
   // yields exactly one record per key and no lookup can miss.
   const members = order.flatMap((key) =>
@@ -600,7 +609,16 @@ async function sweepOrphans(args: {
   );
   const pruned: PrunedMember[] = [];
   for (const member of members) {
-    pruned.push(await removeDependencyMember({ member, ...removal }));
+    if (isHeldBy(snapshot.index, gone, member.key)) {
+      continue;
+    }
+
+    const result = await removeDependencyMember({ member, ...removal });
+    if (result.removed) {
+      gone.add(member.key);
+    }
+
+    pruned.push(result);
   }
 
   return pruned;
