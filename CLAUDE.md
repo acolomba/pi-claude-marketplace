@@ -20,7 +20,7 @@ Before editing any file, read it first. Before modifying a function, trace its c
 
 ### TypeScript
 
-Rules for TypeScript live under `skills/` and are not registered with any runtime; read the ones that apply before editing:
+Rules for TypeScript live under `skills/` and are not registered with any runtime; read the ones that apply before editing (skip any your prompt already carries under `<agent_skills>`):
 
 - `skills/typescript-google-style-review/SKILL.md` and `skills/typescript-comments/SKILL.md` for every `.ts` file
 - `skills/typescript-unit-testing/SKILL.md` (write) and `skills/typescript-unit-testing-review/SKILL.md` (check) for `tests/**/*.ts`
