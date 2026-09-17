@@ -31,3 +31,7 @@ if ! command -v codegraph >/dev/null 2>&1; then
 fi
 
 codegraph install --target claude,codex --location local --no-permissions --init --yes
+
+# keeps codegraph changes visible to codex/pi
+[[ -f .claude/CLAUDE.md ]] && { grep -q CODEGRAPH_START CLAUDE.md || cat .claude/CLAUDE.md >>CLAUDE.md; } && rm .claude/CLAUDE.md
+rm -f AGENTS.md
