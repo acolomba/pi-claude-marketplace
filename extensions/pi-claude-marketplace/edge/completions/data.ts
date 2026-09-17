@@ -13,7 +13,10 @@
 //
 // Architecture seam: data.ts MUST NOT import from `persistence/` (ESLint
 // BLOCK C: edge/ -> persistence/ forbidden). The `LocationsResolver`
-// interface is the indirection. `register.ts` constructs the resolver from
+// interface is the indirection; the state-record shape it returns is
+// declared in `orchestrators/edge-deps.ts` and republished below under the
+// spelling this module's consumers read (the import is type-only, so edge/
+// gains no runtime dependency). `register.ts` constructs the resolver from
 // `persistence/locations.ts` + `persistence/state-io.ts` +
 // `domain/manifest.ts` and threads it through `getArgumentCompletions`.
 // Tests construct mock resolvers inline.
@@ -38,6 +41,7 @@
 import { ManifestSoftFailError } from "../../shared/completion-cache.ts";
 import { SCOPES } from "../../shared/types.ts";
 
+import type { MarketplaceStateRecordLike } from "../../orchestrators/edge-deps.ts";
 import type { CompletionCache, PluginIndexRow } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
@@ -126,6 +130,12 @@ export type PluginRefCompletionMode =
  * loadManifestForMarketplace) MUST throw to signal failure -- the cache layer
  * uses ManifestSoftFailError as the soft-fail discriminator (TC-8); any
  * other thrown error propagates verbatim (TC-9: state.json errors surface).
+ *
+ * Structurally identical to `orchestrators/edge-deps.ts::LocationsResolverLike`,
+ * which `makeLocationsResolver` returns. The two are not one declaration
+ * because collapsing this one leaves `MarketplaceStateRecord` below with no
+ * consumer inside the extension, and that name cannot move while its
+ * consumers import it from here.
  */
 export interface LocationsResolver {
   /** Cache file path for a scoped marketplace's plugin index. */
@@ -140,11 +150,13 @@ export interface LocationsResolver {
 
 /**
  * Minimal shape the completion reads need from a state record: the installed
- * plugin names, and nothing else. The full state record lives in persistence.
+ * plugin names, and nothing else. Declared once in
+ * `orchestrators/edge-deps.ts` -- BLOCK C forbids orchestrators/ from
+ * importing edge/, so the surviving declaration sits on that side and this
+ * module republishes it under the spelling its consumers read. The full
+ * state record lives in persistence.
  */
-export interface MarketplaceStateRecord {
-  readonly plugins?: Record<string, unknown>;
-}
+export type MarketplaceStateRecord = MarketplaceStateRecordLike;
 
 // ---------------------------------------------------------------------------
 // Pure helpers.
