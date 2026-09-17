@@ -68,10 +68,12 @@ const TOOL_EVENT_MEMBERS = new Set<string>(TOOL_EVENTS);
 // installable arm, not the side-Map.
 
 /**
- * Anchor context consumed by the `compileIf` callback. Mirrors the
- * shape `bridges/hooks/if-field/index.ts::CompileIfPredicateContext`
- * structurally -- duplicated here so the parser does not depend on
- * the bridge surface (D-11 import direction).
+ * Anchor context consumed by the `compileIf` callback. This is the SOLE
+ * declaration of the anchor triple; `bridges/hooks/if-field/index.ts`
+ * publishes `CompileIfPredicateContext` as an alias of it. The
+ * declaration lives here because D-11 fixes the import direction: a
+ * bridge may name a domain type, so the parser never depends on the
+ * bridge surface.
  */
 export interface ResolveHookIfContext {
   readonly homedir: string;

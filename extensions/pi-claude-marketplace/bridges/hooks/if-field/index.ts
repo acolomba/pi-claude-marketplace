@@ -31,13 +31,15 @@
 // blocks installation.
 //
 // CompileIfPredicateContext (D-61-03 substitute-cwd rule + A1
-// projectRoot fallback): the path-glob compiler consumes a homedir +
-// cwd + projectRoot triple to anchor `~`-prefixed patterns, bare
-// relative globs (`src/**`), and absolute project-root patterns
-// (`/docs/**`). Pi's `ExtensionContext` v0.73.x exposes only `cwd`
-// today; callers pass `ctx.cwd` as the `projectRoot` fallback so a
-// future Pi version exposing a separate `projectRoot` field can wire
-// it without renaming the type. Upstream Claude's permission engine
+// projectRoot fallback): an alias of `ResolveHookIfContext`, the single
+// declaration of the anchor triple, republished here under the bridge's
+// own name (D-11 puts that declaration in domain/). The path-glob
+// compiler consumes a homedir + cwd + projectRoot triple to anchor
+// `~`-prefixed patterns, bare relative globs (`src/**`), and absolute
+// project-root patterns (`/docs/**`). Pi's `ExtensionContext` v0.73.x
+// exposes only `cwd` today; callers pass `ctx.cwd` as the `projectRoot`
+// fallback so a future Pi version exposing a separate `projectRoot`
+// field can wire it without renaming the type. Upstream Claude's permission engine
 // follows the same "Grep / LS default to cwd internally" rationale,
 // so this fallback preserves byte-for-byte upstream truth-table
 // fidelity until a richer Pi context surfaces.
@@ -60,6 +62,7 @@ import {
 import type { ParseResult } from "./bash.ts";
 import type { CompiledBashGlob, CompiledPathGlob, CompiledPowerShellGlob } from "./glob.ts";
 import type { PiToolName } from "../../../domain/components/hook-tool-names.ts";
+import type { ResolveHookIfContext } from "../../../domain/components/hooks.ts";
 import type { ExtensionContext } from "../../../platform/pi-api.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -134,6 +137,10 @@ export const MATCH_ALL_IF: IfPredicate = { kind: "match-all" };
 /**
  * Anchor context consumed by `compileIfPredicate` (parse-time entry in
  * `domain/components/hooks.ts`) and the underlying `compilePathGlob`.
+ * Published as an alias of `ResolveHookIfContext`, which is the one
+ * declaration of the triple: D-11 allows a bridge to name a domain type
+ * and forbids the reverse, so the domain side owns the shape and this
+ * name stays exported for the bridge's own consumers.
  * The three fields drive `~`-prefix substitution (homedir),
  * cwd-anchored bare relative globs (cwd), and project-root-anchored
  * absolute patterns (projectRoot).
@@ -148,11 +155,7 @@ export const MATCH_ALL_IF: IfPredicate = { kind: "match-all" };
  * `projectRoot` field; production call sites pass `ctx.cwd` for both
  * `cwd` and `projectRoot` until a richer Pi surface exists.
  */
-export interface CompileIfPredicateContext {
-  readonly homedir: string;
-  readonly cwd: string;
-  readonly projectRoot: string;
-}
+export type CompileIfPredicateContext = ResolveHookIfContext;
 
 // ──────────────────────────────────────────────────────────────────────────
 // compileIfPredicate (D-61-02 / D-61-03 / D-61-04 fail-open + cross-tool)
