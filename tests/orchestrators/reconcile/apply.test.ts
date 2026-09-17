@@ -63,6 +63,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { createNodeUninstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import {
   applyReconcile as applyReconcileWithRouting,
   createApplyReconcile,
@@ -85,6 +86,10 @@ import type {
   HooksRuntime,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type {
+  UninstallPluginOptions,
+  UninstallPluginOutcome,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { ReconcileStateReader } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import type { ApplyReconcileOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -1304,6 +1309,113 @@ describe("applyReconcile", () => {
       },
     ]);
     assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["mp"]?.plugins ?? {}), []);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-05-16 / PU-5: a converged entry beside a refusal is settled in one pass", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "uninstall-converged-beside-refused");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      gone: { skill: "clean" },
+      keeper: { skill: "clean", dependencies: ["orphan"] },
+      orphan: { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "keeper@mp": {} },
+      }),
+    );
+    const orphan = pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "orphan") });
+    const keeper = pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "keeper") });
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            gone: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "gone") }),
+            orphan,
+            keeper,
+          },
+        }),
+      },
+    });
+    const competingState: ExtensionState = {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: { orphan, keeper },
+        }),
+      },
+    };
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+    const completionCache = createCompletionCache();
+    const real = createNodeUninstallPlugin(hooksRouting, completionCache);
+    const calls: string[] = [];
+    function uninstallPlugin(
+      opts: UninstallPluginOptions & { notifications: { mode: "orchestrated" } },
+    ): Promise<UninstallPluginOutcome>;
+    function uninstallPlugin(
+      opts: UninstallPluginOptions,
+    ): Promise<UninstallPluginOutcome | undefined>;
+    function uninstallPlugin(
+      opts: UninstallPluginOptions,
+    ): Promise<UninstallPluginOutcome | undefined> {
+      calls.push(`${opts.plugin}@${opts.marketplace}`);
+      return real(opts);
+    }
+
+    const applyWithRace = applyAfterSelectedStateRace(project, competingState);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyWithRace({
+      ctx,
+      pi,
+      cwd,
+      scope: "project",
+      gitOps,
+      hooksRouting,
+      completionCache,
+      uninstallPlugin,
+    });
+
+    // assert
+    assert.deepStrictEqual(calls, ["gone@mp", "orphan@mp"]);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ orphan (failed) {dependents remain}\n" +
+          "    cause: required by keeper@mp\n" +
+          "\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(
+      Object.keys((await loadState(project.extensionRoot)).marketplaces["mp"]?.plugins ?? {}),
+      ["orphan", "keeper"],
+    );
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });

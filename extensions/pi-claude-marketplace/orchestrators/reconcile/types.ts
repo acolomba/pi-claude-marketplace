@@ -47,6 +47,7 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 import type { InstallHooksRouting } from "../plugin/install-disable-cascade.ts";
+import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
 
 /** Planned addition of a marketplace declared in config but not recorded. */
 export interface PlannedMarketplaceAdd {
@@ -269,6 +270,16 @@ export interface ApplyReconcileOptions {
    * to drive the soft-fail-per-entry proof without real network.
    */
   readonly gitOps?: GitOps;
+  /**
+   * D-12-style injection seam for the uninstall child. Production callers
+   * (index.ts) omit it and `createNodeUninstallPlugin(hooksRouting,
+   * completionCache)` applies. A test injects an observing wrapper around the
+   * real operation to prove how many passes the D-05-16 retry loop takes: a
+   * refused or converged child call touches no other injectable collaborator,
+   * so the per-entry invocation count is the only observable that separates
+   * one pass from two.
+   */
+  readonly uninstallPlugin?: UninstallPluginOperation;
 }
 
 /**

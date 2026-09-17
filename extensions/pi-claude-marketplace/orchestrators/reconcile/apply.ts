@@ -416,7 +416,12 @@ function isRefusedUninstall(outcome: PerEntryOutcome): boolean {
  * remove the declarer, reporting a failure the user did not cause and leaving
  * the dependency for the next reload. A refusal is cheap and changes nothing
  * on disk, so refused entries are retried after each pass until a pass makes
- * no progress; only an entry's final outcome is reported. Reconcile still
+ * no progress; only an entry's final outcome is reported. Progress is an
+ * outcome settled in that pass. A PU-5 converge is neither refused nor
+ * progress -- the record it found absent removed no declarer -- so a pass
+ * that only converges and refuses ends the loop. The loop terminates: a
+ * settled outcome means the refused set is strictly shorter than the pass
+ * that produced it, and a pass that settles nothing returns. Reconcile still
  * never prunes (D-05-08): every entry here is one the config no longer
  * declares.
  */
@@ -425,11 +430,13 @@ async function applyPluginUninstalls(
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
-  const uninstallPlugin = createNodeUninstallPlugin(opts.hooksRouting, opts.completionCache);
+  const uninstallPlugin =
+    opts.uninstallPlugin ?? createNodeUninstallPlugin(opts.hooksRouting, opts.completionCache);
   let pending = plan.pluginsToUninstall;
   for (;;) {
     const refused: { readonly op: PlannedPluginUninstall; readonly outcome: PerEntryOutcome }[] =
       [];
+    let settled = 0;
     for (const op of pending) {
       const outcome = await applyOnePluginUninstall(uninstallPlugin, opts, op);
       if (outcome === undefined) {
@@ -440,10 +447,11 @@ async function applyPluginUninstalls(
         refused.push({ op, outcome });
       } else {
         outcomes.push(outcome);
+        settled += 1;
       }
     }
 
-    if (refused.length === 0 || refused.length === pending.length) {
+    if (refused.length === 0 || settled === 0) {
       outcomes.push(...refused.map((entry) => entry.outcome));
       return;
     }
