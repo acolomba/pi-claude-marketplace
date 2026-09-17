@@ -24,8 +24,16 @@
 // be established -- its marketplace manifest fails to load, that manifest does
 // not list it, or its declaration parses as unusable -- ends the walk with a
 // failure arm naming that record, because deleting on incomplete information
-// is the one outcome the callers must never produce. An unreadable record is
-// never read as "declares nothing".
+// is the one outcome the callers must never produce. A record with no usable
+// answer is never read as "declares nothing".
+//
+// The fallback is part of that read, not an exception to it: when the plugin's
+// OWN manifest cannot be read -- absent, a cold git clone, or present but
+// unusable -- its marketplace entry answers for it (D-05-06, D-01-07), and an
+// entry that carries no `dependencies` key answers "declares nothing". The
+// walk fails closed only where the entry cannot answer either. Tightening the
+// guard to refuse on an unusable own manifest is a one-line predicate change
+// that D-05-07 leaves open; it is not taken here.
 //
 // The failure arm's `cause.message` IS the rendered cause line. It carries the
 // declarer's `name@marketplace` key and a field path, a fixed phrase, or a
