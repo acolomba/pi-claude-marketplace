@@ -269,23 +269,40 @@ async function createHermeticWorkspace(t: TestContext, label: string): Promise<H
   };
 }
 
+/** The `alpha` manifest path every seeded record names; only `seedOrphanedDependency` writes it. */
+function alphaManifestPath(workspace: HermeticWorkspace): string {
+  return path.join(workspace.cwd, "alpha-src", ".claude-plugin", "marketplace.json");
+}
+
+const EMPTY_RESOURCES = { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] };
+
+/**
+ * Seed `demo@alpha` (installed by name) into one scope. With
+ * `withOrphanedDependency`, a second record `dep` rides beside it with
+ * `provenance: "dependency"` and no declarer anywhere in the scope -- the
+ * whole-scope orphan the `--prune` sweep exists to find (D-05-01).
+ */
 async function seedInstalledPlugin(
   workspace: HermeticWorkspace,
   scope: Scope,
   scopeRoot: string,
+  withOrphanedDependency = false,
 ): Promise<void> {
   await mergeMarketplaceIntoState(path.join(scopeRoot, "pi-claude-marketplace"), "alpha", {
     name: "alpha",
     scope,
     source: { kind: "path", raw: "./alpha-src", logical: "./alpha-src" },
     addedFromCwd: workspace.cwd,
-    manifestPath: path.join(workspace.cwd, "alpha-src", ".claude-plugin", "marketplace.json"),
+    manifestPath: alphaManifestPath(workspace),
     marketplaceRoot: path.join(workspace.cwd, "alpha-src"),
     plugins: {
-      demo: buildInstalledPluginRecord(
-        { version: "1.0.0" },
-        { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
-      ),
+      demo: buildInstalledPluginRecord({ version: "1.0.0" }, { ...EMPTY_RESOURCES }),
+      ...(withOrphanedDependency && {
+        dep: buildInstalledPluginRecord(
+          { version: "1.0.0", provenance: "dependency" },
+          { ...EMPTY_RESOURCES },
+        ),
+      }),
     },
   });
 }
@@ -336,6 +353,35 @@ async function seedBothScopes(workspace: HermeticWorkspace): Promise<void> {
   await seedInstalledPlugin(workspace, "user", workspace.userRoot);
   await seedPluginData(workspace.projectRoot);
   await seedPluginData(workspace.userRoot);
+}
+
+/**
+ * `seedBothScopes` plus, in the project scope alone, the orphaned `dep` record
+ * and the real `alpha` manifest listing `demo` and `dep`. The manifest matters
+ * twice: the dependents guard reads every OTHER record's declarations before
+ * `demo` may go, and fails closed on a record its marketplace does not list
+ * (D-05-07); and the sweep reads the same declarations to decide that nothing
+ * holds `dep`. Neither plugin tree exists, so each read falls back to its
+ * manifest entry, which declares nothing.
+ */
+async function seedOrphanedDependency(workspace: HermeticWorkspace): Promise<void> {
+  await seedInstalledPlugin(workspace, "project", workspace.projectRoot, true);
+  await seedInstalledPlugin(workspace, "user", workspace.userRoot);
+  await seedPluginData(workspace.projectRoot);
+  await seedPluginData(workspace.userRoot);
+  const manifestPath = alphaManifestPath(workspace);
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: "alpha",
+      plugins: [
+        { name: "demo", source: "./plugins/demo" },
+        { name: "dep", source: "./plugins/dep" },
+      ],
+    }),
+    "utf8",
+  );
 }
 
 /**
@@ -485,6 +531,69 @@ for (const { args, placement } of [
     verifyBoundary();
   });
 }
+
+// FLAG-01 / D-05-10: the forwarding proof the acceptance cases above cannot
+// give. With an orphaned dependency in the scope, the `{dependency pruned}` row
+// and the emptied project state are observable only if `prune: true` crossed
+// the handler-to-orchestrator seam; the plain command on the same seed is the
+// control that keeps the orphan (D-05-08's "never without the flag" at the
+// command line).
+const PROJECT_UNINSTALLED_DEPENDENCY_PRUNED = {
+  message:
+    "● alpha [project]\n  ○ demo v1.0.0 (uninstalled)\n  ○ dep v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
+};
+
+/** The named plugin and the orphan are both gone from the project scope; the user scope is whole. */
+const PROJECT_RECORD_AND_ORPHAN_REMOVED = PROJECT_RECORD_REMOVED;
+
+/** The named plugin is gone; the orphan `dep` survived the plain command. */
+const PROJECT_RECORD_REMOVED_ORPHAN_KEPT = {
+  transportCalls: 0,
+  projectPlugins: ["dep"],
+  projectData: null,
+  userPlugins: ["demo"],
+  userData: DATA_PAYLOAD,
+};
+
+test("FLAG-01 / D-05-10: a typed --prune reaches the sweep and removes the orphaned dependency beside the named plugin", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "prune-forwarded");
+  await seedOrphanedDependency(workspace);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    value: workspace.cwd,
+    reads: 1,
+  });
+  const uninstallHandler = makeHandlerUnderTest(pi);
+
+  // act
+  await uninstallHandler("demo@alpha --prune", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED_DEPENDENCY_PRUNED]);
+  assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_AND_ORPHAN_REMOVED);
+  assert.deepStrictEqual(await readInstalledPlugins(workspace.projectRoot), []);
+  verifyBoundary();
+});
+
+test("FLAG-01 / D-05-10: the same command without --prune keeps the orphaned dependency", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "prune-omitted");
+  await seedOrphanedDependency(workspace);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    value: workspace.cwd,
+    reads: 1,
+  });
+  const uninstallHandler = makeHandlerUnderTest(pi);
+
+  // act
+  await uninstallHandler("demo@alpha", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED]);
+  assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_REMOVED_ORPHAN_KEPT);
+  assert.deepStrictEqual(await readInstalledPlugins(workspace.projectRoot), ["dep"]);
+  verifyBoundary();
+});
 
 for (const { expectedEffects, expectedNotification, scopeValue } of [
   {
