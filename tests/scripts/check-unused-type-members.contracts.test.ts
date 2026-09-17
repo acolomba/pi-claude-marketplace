@@ -158,6 +158,8 @@ export interface HostDrift {
 }
 
 export declare function theme(handler: () => Promise<HostThemeResult>): void;
+
+export declare function hostBuild(text: string): { rows: HostRow[] };
 `;
 
 const hostTypesPath = "node_modules/external-host/index.d.ts";
@@ -2688,6 +2690,160 @@ test("a mirror slot corresponding in one direction only is refused", async (t) =
       message:
         `Invalid contract: ${casesPath}:34:3 mirrors loose as string, ` +
         `but ${hostTypesPath}:42:3 declares unknown`,
+    },
+  );
+});
+
+// An arrival chain that leaves a helper, is received through a destructuring
+// and is returned again nested inside the boundary literal.
+//
+// `build` collects two lists and hands both back as one literal at line 13. The
+// caller takes them apart at line 18 and returns only `rows` at line 22, column
+// 7, which is the boundary an installed declaration checks.
+//
+// `Row.label` (line 4, column 3) is built at line 12, column 15 and does reach
+// that boundary. `Row.spare` (line 5, column 3) is built at line 11, column 17
+// into the OTHER slot of the same destructuring and must NOT: a walk that
+// stepped through the destructuring without carrying the key it selected would
+// credit it, which is the whole measurement this change is judged by.
+//
+// `viaHost` destructures the result of an installed declaration, which has no
+// body to descend, so the origin at line 29, column 16 reaches nothing. And the
+// `rows` returned at line 46, column 7 is a different symbol that happens to
+// share the spelling.
+const destructuredArrivalCases = `import { install, hostBuild } from "external-host";
+
+export interface Row {
+  readonly label?: string;
+  readonly spare?: string;
+}
+
+function build(text: string): { spares: Row[]; rows: Row[] } {
+  const spares: Row[] = [];
+  const rows: Row[] = [];
+  spares.push({ spare: text });
+  rows.push({ label: text });
+  return { spares, rows };
+}
+
+export function register(text: string): void {
+  const rendered = build(text);
+  const { spares, rows } = rendered;
+  void spares;
+  install({
+    execute() {
+      return { rows };
+    },
+  });
+}
+
+export function viaHost(text: string): void {
+  const stray: Row[] = [];
+  stray.push({ label: text });
+  void stray;
+  const { rows } = hostBuild(text);
+  install({
+    execute() {
+      return { rows };
+    },
+  });
+}
+
+export function shadowed(text: string): void {
+  const rendered = build(text);
+  const { rows } = rendered;
+  void rows;
+  install({
+    execute() {
+      const rows: Row[] = [];
+      return { rows };
+    },
+  });
+}
+`;
+
+const destructuredArrivalContract = {
+  id: `${casesPath}:4:3`,
+  owner: "Row",
+  key: "label",
+  category: "external-output",
+  purpose: "Built into the payload the installed tool declaration receives.",
+  origin: `${casesPath}:12:15`,
+  boundary: `${casesPath}:22:7`,
+};
+
+test("an origin returned through a destructured selection reaches the boundary", async (t) => {
+  // arrange
+  const report = await analyzeWith(
+    t,
+    destructuredArrivalCases,
+    documentWith(destructuredArrivalContract),
+  );
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "Row", "label").status, "explicit-contract");
+  assert.deepStrictEqual(memberFor(report, "Row", "label").reasons, [
+    `external-output: ${destructuredArrivalContract.purpose} ` +
+      `(origin ${casesPath}:12:15 reaches boundary ${casesPath}:22:7)`,
+  ]);
+});
+
+test("an origin building the other slot of the destructuring reaches nothing", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      destructuredArrivalCases,
+      documentWith({
+        ...destructuredArrivalContract,
+        id: `${casesPath}:5:3`,
+        key: "spare",
+        origin: `${casesPath}:11:17`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:5:3 origin ${casesPath}:11:17 ` +
+        `never reaches boundary ${casesPath}:22:7`,
+    },
+  );
+});
+
+test("a call whose implementation has no body descends nothing", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      destructuredArrivalCases,
+      documentWith({
+        ...destructuredArrivalContract,
+        origin: `${casesPath}:29:16`,
+        boundary: `${casesPath}:34:7`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:4:3 origin ${casesPath}:29:16 ` +
+        `never reaches boundary ${casesPath}:34:7`,
+    },
+  );
+});
+
+test("a same-spelled destructured binding with another symbol does not connect", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      destructuredArrivalCases,
+      documentWith({ ...destructuredArrivalContract, boundary: `${casesPath}:46:7` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:4:3 origin ${casesPath}:12:15 ` +
+        `never reaches boundary ${casesPath}:46:7`,
     },
   );
 });
