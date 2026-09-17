@@ -1,5 +1,4 @@
 ---
-name: analyze-upstream-releases
 description: Review upstream releases (pi, pi-subagents, pi-mcp-adapter) over a given time frame and assess each changelog entry's impact on this project — bugs worth picking up, features that unblock work, and contract drift that could break us silently.
 argument-hint: "[time frame] e.g. 1w (default), 30d, since 2026-07-01, 2026-07-01..2026-08-01"
 disable-model-invocation: true

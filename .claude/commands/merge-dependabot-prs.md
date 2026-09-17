@@ -1,5 +1,4 @@
 ---
-name: merge-dependabot-prs
 description: Drive every open Dependabot PR to main, one at a time — sync from main via GitHub, wait for its checks (fixing failures until green), squash-merge, wait for CI on main, then move to the next PR. Invoke manually.
 argument-hint: "[PR number] (defaults to every open Dependabot PR, oldest first)"
 disable-model-invocation: true
