@@ -185,9 +185,11 @@ export function nestedLogicalFixture(): ProducerFixture {
         hits: [1, 0, 0],
       },
       {
+        // Istanbul's `if` branch names the whole statement as the first
+        // location; the counter is still the consequent block's.
         type: "if",
         loc: spanOf(source, "if (doubled > 10) {", "return true;\n    }"),
-        locations: [spanOf(source, "{\n      return true;\n    }"), absentLocation],
+        locations: [spanOf(source, "if (doubled > 10) {", "return true;\n    }"), absentLocation],
         hits: [0, 2],
       },
     ],

@@ -33,9 +33,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 
-// The complete identity of the delivery. Every digest is SHA-256 hex unless
-// it starts with `sha512-`, which is the registry integrity form.
-const DELIVERY = {
+/**
+ * The complete identity of the delivery. Every digest is SHA-256 hex unless
+ * it starts with `sha512-`, which is the registry integrity form. The
+ * producer adapter compares the installed package against it.
+ */
+export const DELIVERY = {
   name: "ast-v8-to-istanbul",
   upstream: {
     version: "1.0.6",
@@ -77,7 +80,8 @@ const DELIVERY = {
   provenance: "PROVENANCE.md",
 };
 
-const VENDOR_DIRECTORY = "vendor/coverage";
+/** The repository-relative directory that holds the delivery. */
+export const VENDOR_DIRECTORY = "vendor/coverage";
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 
