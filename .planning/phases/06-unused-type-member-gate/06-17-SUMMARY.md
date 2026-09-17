@@ -27,7 +27,7 @@ affects: [06-08]
 actuals:
   tokens: 12800
   tasks: 3
-  commits: 3
+  commits: 5
 plan_head_before: c45fdf049a5f16c5c594468f92a6ee982fff2a67
 
 tech-stack:
@@ -149,7 +149,7 @@ completed: 2026-09-17
 
 - **Duration:** 1h 22m
 - **Tasks:** 3
-- **Commits:** 3 (measured: `git rev-list --count c45fdf04..HEAD`)
+- **Commits:** 5 (measured: `git rev-list --count c45fdf04..HEAD` at close-out -- two source, one record, one SUMMARY, one state; a re-run after this correction reads 6)
 - **Files modified:** 6 (1 created, 5 modified)
 
 ## Predicted versus measured
