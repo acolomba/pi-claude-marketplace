@@ -11,7 +11,9 @@ The central question for every case: **would a plausible wrong implementation st
 
 ## Verify with the toolchain
 
-Run `node --test <test-path>` for the module under review, `npm run test:coverage:direct -- <path>` for the source-test pair (`:all` after a shared contract, fake, or harness change), and `npm run check` for the whole gate. A red command, or a review that never ran them, is itself a finding.
+Run `node --test <test-path>` for the module under review and `npm run test:coverage:direct -- <path>` for the source-test pair (`:all` after a shared contract, fake, or harness change). A red command, or a review that never ran them, is itself a finding.
+
+Run `npm run check` only when the change touched a shared contract, fake, harness, or gate script. Otherwise the writer's green run and CI already cover the whole gate; a third run adds nothing.
 
 ## Tools
 

@@ -24,6 +24,8 @@ skill to every entry you add or change.
 - Put rationale, internals, and rejected alternatives in the commit body or the
   PR, never here.
 - Keep the `(#NNN)` reference and any contributor credit.
+- When the PR author is not `@acolomba`, end the entry with
+  `Thanks to @<author> (#NNN).` Contributors add this line themselves.
 
 ## Do not
 

@@ -60,13 +60,11 @@
       "skills/typescript-google-style-review"
     ],
     "gsd-code-reviewer": [
+      "skills/typescript-comments",
       "skills/typescript-google-style-review",
       "skills/typescript-unit-testing-review"
     ],
-    "gsd-verifier": [
-      "skills/typescript-google-style-review",
-      "skills/typescript-unit-testing-review"
-    ]
+    "gsd-verifier": ["skills/typescript-unit-testing-review"]
   },
   "features": {},
   "mode": "yolo",
