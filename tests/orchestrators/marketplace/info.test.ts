@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -15,6 +14,7 @@ import { getMarketplaceInfo } from "../../../extensions/pi-claude-marketplace/or
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -179,30 +179,7 @@ async function snapshotEnvironment(
 async function withHermeticHome<T>(
   fn: (environment: { readonly cwd: string; readonly home: string }) => Promise<T>,
 ): Promise<T> {
-  const originalHome = process.env.HOME;
-  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const home = await mkdtemp(path.join(tmpdir(), "mp-info-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "mp-info-cwd-"));
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
-  try {
-    return await fn({ cwd, home });
-  } finally {
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
-    }
-
-    if (originalAgentDir === undefined) {
-      delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
-    }
-
-    await rm(home, { recursive: true, force: true });
-    await rm(cwd, { recursive: true, force: true });
-  }
+  return withHermeticEnvironment("mp-info-", fn);
 }
 
 async function writeMarketplaceJson(

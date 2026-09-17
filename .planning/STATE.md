@@ -4,9 +4,9 @@ milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
 status: Awaiting next milestone
 stopped_at: "Milestone closed and archived. PR #181 has since merged to main; quick tasks 260913-csn (PR #180 evaluation and suite repair, branch pr-180) and 260913-skt (SKTK-01 skill-token rewrite, branch features/skill-token-rewrite) followed, then 260913-f6a and 260913-l07 hardened the CI workflows."
-last_updated: "2026-09-14T02:47:00.000Z"
-last_activity: 2026-09-14
-last_activity_desc: Quick task 260913-uwq landed the issue-179 agent tools conversion fix
+last_updated: "2026-09-14T12:00:00.000Z"
+last_activity: 2026-09-17
+last_activity_desc: Quick task 260917-bh3 condensed the #181 unreleased CHANGELOG entries
 state_head: 6551dfbf387d166f655004ec9e0421686b86cb1d
 progress:
   total_phases: 9
@@ -114,6 +114,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
+| 260917-bh3 | Condense the #181 unreleased CHANGELOG entries | 2026-09-17 | 399dea49 | Complete | [260917-bh3-condense-the-181-unreleased-changelog-en](./quick/260917-bh3-condense-the-181-unreleased-changelog-en/) |
 | 260913-uwq | Gate and commit the issue-179 fix: agents omitting `tools:` inherit Pi's defaults, and the two dropped agent fields get targeted guidance | 2026-09-13 | a9186816 | Complete | [260913-uwq-issue-179-agent-tools-and-mcpservers-con](./quick/260913-uwq-issue-179-agent-tools-and-mcpservers-con/) |
 | 260913-ttl | Close the remaining SonarQube branch-coverage gap to reach 100% line and 100% branch coverage | 2026-09-13 | d2ef20fa..46815bd6 | Complete | [260913-ttl-close-the-remaining-sonarqube-branch-cov](./quick/260913-ttl-close-the-remaining-sonarqube-branch-cov/) |
 | 260913-r2h | Make a FIFO state-harness over-read fail loudly instead of hanging to the test timeout | 2026-09-13 | c45850af | Complete | [260913-r2h-make-a-fifo-harness-over-read-fail-loudl](./quick/260913-r2h-make-a-fifo-harness-over-read-fail-loudl/) |

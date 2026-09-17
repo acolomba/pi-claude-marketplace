@@ -64,6 +64,7 @@ import {
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { retryTree } from "../orchestrators/plugin/scope-tree-inventory.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import { buildInstalledPluginRecord } from "./handlers/marketplace-seed.ts";
 import { createNotificationBoundary } from "./notification-boundary.ts";
@@ -178,32 +179,11 @@ function installNetworkTrap(t: TestContext): void {
  * anything runs.
  */
 async function createHermeticScope(t: TestContext, label: string): Promise<HermeticScope> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `register-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `register-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   const previousCwd = process.cwd();
-  t.after(async () => {
+  t.after(() => {
     process.chdir(previousCwd);
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(cwd, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
   });
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
+  const { cwd } = await createHermeticEnvironment(t, `register-${label}-`);
   process.chdir(cwd);
   installNetworkTrap(t);
   return { cwd };

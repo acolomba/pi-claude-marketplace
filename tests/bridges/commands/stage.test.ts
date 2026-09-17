@@ -28,6 +28,7 @@ import {
   PathContainmentError,
   SymlinkRefusedError,
 } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createDelegatingRemovalOps } from "../../platform/removal-ops-fake.ts";
 
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
@@ -527,17 +528,7 @@ test("substitutes project variables and retains command-inapplicable skill varia
 
 test("retains the project variable for user scope and restores the user directory", async (t) => {
   // arrange
-  const scopeRoot = await mkdtemp(path.join(tmpdir(), "commands-stage-user-vars-"));
-  t.after(() => rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 }));
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  t.after(() => {
-    if (previousAgentDir === undefined) {
-      delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    }
-  });
-  process.env.PI_CODING_AGENT_DIR = scopeRoot;
+  const { agentDir: scopeRoot } = await createHermeticEnvironment(t, "commands-stage-user-vars-");
   const locations = locationsFor("user", scopeRoot);
   const pluginRoot = await createPluginRoot(t, "commands-source-user-vars-");
   const commandsRoot = path.join(pluginRoot, "commands");

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -30,6 +29,7 @@ import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/pl
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -325,30 +325,7 @@ async function stagingEntries(locations: ScopedLocations): Promise<readonly Tree
 async function withWorkspace<T>(
   run: (workspace: { readonly cwd: string; readonly home: string }) => Promise<T>,
 ): Promise<T> {
-  const originalHome = process.env.HOME;
-  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const home = await mkdtemp(path.join(tmpdir(), "plugin-fetch-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "plugin-fetch-cwd-"));
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
-  try {
-    return await run({ cwd, home });
-  } finally {
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
-    }
-
-    if (originalAgentDir === undefined) {
-      delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
-    }
-
-    await rm(home, { recursive: true, force: true, maxRetries: 10 });
-    await rm(cwd, { recursive: true, force: true, maxRetries: 10 });
-  }
+  return withHermeticEnvironment("plugin-fetch-", run);
 }
 
 test("exposes a required fetch status factory", async () => {

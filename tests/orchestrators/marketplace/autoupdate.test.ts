@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -12,6 +11,7 @@ import { setMarketplaceAutoupdate } from "../../../extensions/pi-claude-marketpl
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { ScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -135,30 +135,7 @@ async function configSnapshot(filePath: string): Promise<{
 async function withHermeticHome<T>(
   fn: (environment: { readonly cwd: string; readonly home: string }) => Promise<T>,
 ): Promise<T> {
-  const originalHome = process.env.HOME;
-  const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
-  const home = await mkdtemp(path.join(tmpdir(), "mp-autoupdate-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "mp-autoupdate-cwd-"));
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
-  try {
-    return await fn({ cwd, home });
-  } finally {
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
-    }
-
-    if (originalAgentDir === undefined) {
-      delete process.env.PI_CODING_AGENT_DIR;
-    } else {
-      process.env.PI_CODING_AGENT_DIR = originalAgentDir;
-    }
-
-    await rm(home, { recursive: true, force: true, maxRetries: 10 });
-    await rm(cwd, { recursive: true, force: true, maxRetries: 10 });
-  }
+  return withHermeticEnvironment("mp-autoupdate-", fn);
 }
 
 const oneRowInvocationCases = [

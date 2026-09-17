@@ -653,6 +653,12 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
     "UNSUPPORTED_COMPONENT_KINDS",
   ],
   "extensions/pi-claude-marketplace/domain/workflow-script.ts": ["fileStem"],
+  "extensions/pi-claude-marketplace/edge/browser/plugin-browser.ts": [
+    "availableActions",
+    "makeSelectListTheme",
+    "statusDescription",
+    "statusTag",
+  ],
   "extensions/pi-claude-marketplace/edge/completions/data.ts": [
     "buildItem",
     "getPluginToMarketplacesMap",
@@ -660,7 +666,6 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
   "extensions/pi-claude-marketplace/edge/flag-catalog.ts": ["CATALOG_VERBS"],
   "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts": ["parseFetchTarget"],
   "extensions/pi-claude-marketplace/edge/handlers/tools.ts": ["projectRowStatus"],
-  "extensions/pi-claude-marketplace/edge/router.ts": ["MARKETPLACE_USAGE", "TOP_LEVEL_USAGE"],
   "extensions/pi-claude-marketplace/index.ts": ["default"],
   "extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts": [
     "planMarketplaceSourcesForRefs",

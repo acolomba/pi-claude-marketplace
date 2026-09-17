@@ -34,6 +34,7 @@ import {
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type {
   AutoupdateFlipResult,
@@ -229,21 +230,7 @@ async function createHermeticScopes(
   readonly userLocations: ScopedLocations;
   readonly projectLocations: ScopedLocations;
 }> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `marketplace-shared-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `marketplace-shared-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    await rm(cwd, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
-  });
-  process.env.HOME = home;
+  const { cwd } = await createHermeticEnvironment(t, `marketplace-shared-${label}-`);
   return {
     cwd,
     userLocations: locationsFor("user", cwd),

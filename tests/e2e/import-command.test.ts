@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { cp, readFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
@@ -14,6 +13,7 @@ import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketp
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import { makeCtx, makeMockPi } from "./_helpers.ts";
 
@@ -27,50 +27,38 @@ const FIXTURE_ROOT = path.resolve(
 async function withImportFixture<T>(
   fn: (env: { root: string; home: string; cwd: string }) => Promise<T>,
 ): Promise<T> {
-  const originalHome = process.env.HOME;
-  const originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
-  const originalCwd = process.cwd();
-  const root = await mkdtemp(path.join(tmpdir(), "pi-cm-import-e2e-"));
-  const home = path.join(root, "home");
-  const cwd = path.join(root, "project");
-  const claudeConfigDir = path.join(root, "user-claude");
+  return withHermeticEnvironment("pi-cm-import-e2e-", async ({ root, home, cwd }) => {
+    const originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
+    const originalCwd = process.cwd();
+    const claudeConfigDir = path.join(root, "user-claude");
 
-  try {
-    await mkdir(home, { recursive: true });
-    await cp(path.join(FIXTURE_ROOT, "user-claude"), claudeConfigDir, { recursive: true });
-    await cp(path.join(FIXTURE_ROOT, "project"), cwd, { recursive: true });
-    await cp(
-      path.join(FIXTURE_ROOT, "directory-marketplace"),
-      path.join(cwd, "directory-marketplace"),
-      {
-        recursive: true,
-      },
-    );
-    await cp(
-      path.join(FIXTURE_ROOT, "mismatched-directory-marketplace"),
-      path.join(cwd, "mismatched-directory-marketplace"),
-      { recursive: true },
-    );
-    process.env.HOME = home;
-    process.env.CLAUDE_CONFIG_DIR = claudeConfigDir;
-    process.chdir(cwd);
-    return await fn({ root, home, cwd });
-  } finally {
-    process.chdir(originalCwd);
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
+    try {
+      await cp(path.join(FIXTURE_ROOT, "user-claude"), claudeConfigDir, { recursive: true });
+      await cp(path.join(FIXTURE_ROOT, "project"), cwd, { recursive: true });
+      await cp(
+        path.join(FIXTURE_ROOT, "directory-marketplace"),
+        path.join(cwd, "directory-marketplace"),
+        {
+          recursive: true,
+        },
+      );
+      await cp(
+        path.join(FIXTURE_ROOT, "mismatched-directory-marketplace"),
+        path.join(cwd, "mismatched-directory-marketplace"),
+        { recursive: true },
+      );
+      process.env.CLAUDE_CONFIG_DIR = claudeConfigDir;
+      process.chdir(cwd);
+      return await fn({ root, home, cwd });
+    } finally {
+      process.chdir(originalCwd);
+      if (originalClaudeConfigDir === undefined) {
+        delete process.env.CLAUDE_CONFIG_DIR;
+      } else {
+        process.env.CLAUDE_CONFIG_DIR = originalClaudeConfigDir;
+      }
     }
-
-    if (originalClaudeConfigDir === undefined) {
-      delete process.env.CLAUDE_CONFIG_DIR;
-    } else {
-      process.env.CLAUDE_CONFIG_DIR = originalClaudeConfigDir;
-    }
-
-    await rm(root, { recursive: true, force: true });
-  }
+  });
 }
 
 function fixtureGitOps(): GitOps {

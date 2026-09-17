@@ -28,6 +28,13 @@ The consequence, seen for real: 20 entries recorded against "phase 115/116/117" 
 
 Do NOT encode the milestone in `--phase` (e.g. `115@workflows-replay`) -- that field is grouped and numerically normalized by the readers. Do NOT hand-edit `.planning/WINDOWS.md` to retrofit old entries: the file carries a rendered table AND a fenced JSON block, the JSON is the source of truth, and a table-only edit is silently lost (this nearly destroyed two operator decisions).
 
+### TypeScript
+
+Rules for TypeScript live under `skills/` and are not registered with any runtime; read the ones that apply before editing (skip any your prompt already carries under `<agent_skills>`):
+
+- `skills/typescript-google-style-review/SKILL.md` and `skills/typescript-comments/SKILL.md` for every `.ts` file
+- `skills/typescript-unit-testing/SKILL.md` (write) and `skills/typescript-unit-testing-review/SKILL.md` (check) for `tests/**/*.ts`
+
 ### Versioning
 
 Before creating a PR, offer to bump the version in `package.json` and `sonar-project.properties` and update `package-lock.json`. Concisely record changes in `CHANGELOG.md`
@@ -128,3 +135,16 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
 - **Learning Style (guided, HIGH):** Guide the developer through unfamiliar concepts with concise explanations and concrete examples tied directly to the current code or tool.
 
 <!-- GSD:profile-end -->
+
+<!-- CODEGRAPH_START -->
+
+## CodeGraph
+
+In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the repo root), reach for it BEFORE grep/find or reading files when you need to understand or locate code:
+
+- **MCP tool** (when available): `codegraph_explore` answers most code questions in one call -- the relevant symbols' verbatim source plus the call paths between them, including dynamic-dispatch hops grep can't follow. Name a file or symbol in the query to read its current line-numbered source. If it's listed but deferred, load it by name via tool search.
+- **Shell** (always works): `codegraph explore "<symbol names or question>"` prints the same output.
+
+If there is no `.codegraph/` directory, skip CodeGraph entirely -- indexing is the user's decision.
+
+<!-- CODEGRAPH_END -->

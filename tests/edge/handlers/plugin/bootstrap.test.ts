@@ -92,6 +92,7 @@ import { BOOTSTRAP_MARKETPLACE_NAME } from "../../../../extensions/pi-claude-mar
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
+import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
@@ -193,28 +194,9 @@ function installNetworkCounter(t: TestContext): () => number {
  * Removal and both environment restores are registered before the handler runs.
  */
 async function createHermeticScope(t: TestContext, label: string): Promise<HermeticScope> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `plugin-bootstrap-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `plugin-bootstrap-${label}-home-`));
+  const { cwd } = await createHermeticEnvironment(t, `plugin-bootstrap-${label}-`);
   const sourceTree = await mkdtemp(path.join(tmpdir(), `plugin-bootstrap-${label}-source-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(cwd, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
     await rm(sourceTree, { recursive: true, force: true });
   });
   await mkdir(path.join(sourceTree, ".claude-plugin"), { recursive: true });
@@ -223,8 +205,6 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
     MARKETPLACE_MANIFEST,
     "utf8",
   );
-  process.env.HOME = home;
-  delete process.env.PI_CODING_AGENT_DIR;
   const networkCallCount = installNetworkCounter(t);
   return { cwd, sourceTree, networkCallCount };
 }

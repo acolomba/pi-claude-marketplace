@@ -12,8 +12,7 @@
 // with no promised call: an unpromised `notify` or `getAllTools` call throws.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 
@@ -39,6 +38,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
@@ -105,32 +105,7 @@ async function createHermeticProjectScope(
   t: TestContext,
   label: string,
 ): Promise<{ readonly cwd: string; readonly locations: ScopedLocations }> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `backfill-${label}-cwd-`));
-  const home = await mkdtemp(path.join(tmpdir(), `backfill-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  const agentDirExisted = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
-  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
-  t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    if (agentDirExisted) {
-      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
-    } else {
-      delete process.env.PI_CODING_AGENT_DIR;
-    }
-
-    await rm(cwd, { force: true, recursive: true });
-    await rm(home, { force: true, recursive: true });
-  });
-  process.env.HOME = home;
-  // SC-1: getAgentDir() reads PI_CODING_AGENT_DIR before homedir(), so an
-  // environment that sets it would defeat the hermetic HOME above.
-  delete process.env.PI_CODING_AGENT_DIR;
+  const { cwd } = await createHermeticEnvironment(t, `backfill-${label}-`);
   return { cwd, locations: locationsFor("project", cwd) };
 }
 

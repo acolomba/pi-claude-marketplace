@@ -38,7 +38,34 @@
   },
   "project_code": null,
   "phase_naming": "sequential",
-  "agent_skills": {},
+  "agent_skills": {
+    "gsd-executor": [
+      "skills/typescript-comments",
+      "skills/typescript-unit-testing",
+      "skills/typescript-google-style-review"
+    ],
+    "gsd-debugger": [
+      "skills/typescript-comments",
+      "skills/typescript-unit-testing",
+      "skills/typescript-google-style-review"
+    ],
+    "gsd-code-fixer": [
+      "skills/typescript-comments",
+      "skills/typescript-unit-testing",
+      "skills/typescript-google-style-review"
+    ],
+    "gsd-nyquist-auditor": [
+      "skills/typescript-comments",
+      "skills/typescript-unit-testing",
+      "skills/typescript-google-style-review"
+    ],
+    "gsd-code-reviewer": [
+      "skills/typescript-comments",
+      "skills/typescript-google-style-review",
+      "skills/typescript-unit-testing-review"
+    ],
+    "gsd-verifier": ["skills/typescript-unit-testing-review"]
+  },
   "features": {},
   "mode": "yolo",
   "granularity": "standard",
