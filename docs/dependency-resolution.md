@@ -137,14 +137,15 @@ To clear the refusal, uninstall the dependents first. If the plugin arrived as a
 
 A reload applies the same rule. If you remove a plugin from the configuration file while another installed plugin still declares it, the reload refuses to remove it. The reload reports the same row every time until you fix the configuration. If you remove the dependent from the configuration file too, one reload removes both, whatever order they were installed in. Claude Code documents this refusal for `disable`; this extension applies it to `uninstall`.
 
-The check reads the declarations of every other installed plugin in the scope, offline, from each plugin's own manifest or its marketplace entry (D-05-06). If any one of them cannot be read, the uninstall is refused (D-05-07). This is a deliberate choice. This extension never removes a plugin on incomplete information. A declaration cannot be read when the plugin's marketplace no longer lists it, when the marketplace manifest itself is unreadable, or when its `dependencies` value cannot be used. If only the plugin's own manifest cannot be read, its marketplace entry answers for it, and an entry with no `dependencies` value means the plugin declares nothing. The refused row reads `{unreadable}`, and the `cause:` line names which plugin could not be read and why. To repair it, update the marketplace so the manifest lists the plugin again. If the record is stale, remove the marketplace instead.
+The check reads the declarations of every other installed plugin in the scope, offline, from each plugin's own manifest or its marketplace entry (D-05-06). If any one of them cannot be read, the uninstall is refused (D-05-07). This is a deliberate choice. This extension never removes a plugin on incomplete information. A declaration cannot be read when the plugin's marketplace no longer lists it, when the marketplace manifest itself is unreadable, or when its `dependencies` value cannot be used. If only the plugin's own manifest cannot be read, its marketplace entry answers for it, and an entry with no `dependencies` value means the plugin declares nothing. The refused row reads `{unreadable}`, and the `cause:` line names which plugin could not be read and why. The simplest repair is to uninstall the plugin that cannot be read: the check never reads the plugin being removed, so that command is not refused, and the check passes for everything else afterwards. If that plugin should stay, update the marketplace so the manifest lists it again. If the whole marketplace is stale, remove it instead.
 
 ```text
+/claude:plugin uninstall <unreadable-plugin>@<marketplace>
 /claude:plugin marketplace update <name>
 /claude:plugin marketplace remove <name>
 ```
 
-This rule has one consequence to know about. Two plugins in one scope that are both missing from their marketplace manifests refuse each other's uninstall: each one is the other's unreadable declarer. `marketplace remove` is the exit, because it does not run this check.
+This rule has one consequence to know about. Two plugins in one scope that are both missing from their marketplace manifests refuse each other's uninstall: each one is the other's unreadable declarer, so neither can be uninstalled first. `marketplace remove` is the exit, because it does not run this check.
 
 ## Pruning dependencies nothing needs
 
