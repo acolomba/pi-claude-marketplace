@@ -39,6 +39,10 @@ const producerCliPath = fileURLToPath(
 const producerCliUrl = new URL("../../scripts/coverage-producer.mjs", import.meta.url).href;
 const adapterModuleUrl = new URL("../../scripts/coverage-producer.convert.mjs", import.meta.url)
   .href;
+const buildCliPath = fileURLToPath(
+  new URL("../../scripts/build-coverage-producer.mjs", import.meta.url),
+);
+const vendorDirectory = fileURLToPath(new URL("../../vendor/coverage/", import.meta.url));
 
 // The researched upstream 1.0.6 producer payload (`dist/index.mjs`) and its
 // MIT license, recorded from the registry tarball with integrity
@@ -479,4 +483,19 @@ test("is inert on import", () => {
     { status: imported.status, stdout: imported.stdout, stderr: imported.stderr },
     { status: 0, stdout: "[]", stderr: "" },
   );
+});
+
+test("verifies the vendored delivery: archive, entries, license, patch context and provenance agree", () => {
+  // arrange
+  const expectedVerdict = {
+    status: 0,
+    stdout: `Producer delivery verified: ast-v8-to-istanbul@1.0.6-project.1 in ${vendorDirectory.replace(/\/$/u, "")}\n`,
+    stderr: "",
+  };
+
+  // act
+  const verification = run([buildCliPath, "--verify"]);
+
+  // assert
+  assert.deepStrictEqual(verification, expectedVerdict);
 });
