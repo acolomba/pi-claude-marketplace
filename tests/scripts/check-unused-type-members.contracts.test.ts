@@ -146,6 +146,17 @@ export interface HostTool {
 export declare function install(tool: HostTool): void;
 
 export declare function installLoose(tool: Record<string, unknown>): void;
+
+export interface HostThemeResult {
+  themePaths?: string[];
+  tag: string;
+}
+
+export interface HostDrift {
+  ambient?: string;
+}
+
+export declare function theme(handler: () => Promise<HostThemeResult>): void;
 `;
 
 const hostTypesPath = "node_modules/external-host/index.d.ts";
@@ -2425,6 +2436,228 @@ test("a pin reaching only the member's own declaration states nothing about the 
       message:
         `Invalid contract: ${casesPath}:7:37 pin ${casesPath}:40:1 ` +
         `does not tie RowSchema to the declaration at ${casesPath}:3:37`,
+    },
+  );
+});
+
+// A local mirror of an installed declaration is the sixth place a member can
+// exist without being read. `themePaths` is never built and never read here:
+// what it does is keep the mirror a faithful statement of the shape the
+// installed overload checks the handler's return against.
+//
+// The evidence is deliberately WEAKER than `external-input`, and the boundary
+// between them is the point. Upstream declares the slot OPTIONAL, so deleting
+// the local one compels nothing -- only widening it fails. A required upstream
+// slot belongs to `external-input` and this category says so by name.
+//
+// `Mirror.themePaths` (line 4, column 3) mirrors `HostThemeResult.themePaths`
+// at line 36, column 3 of the installed declaration, and the handler the
+// installed `theme` overload checks is at line 11, column 9.
+//
+// The rest must stay refused. `Mirror.homegrown` (line 7) has no upstream slot
+// at all. `Mirror.tag` (line 5) mirrors a REQUIRED upstream slot at line 37.
+// `Mirror.ambient` (line 6) is a number where `HostDrift.ambient` at line 41 is
+// a string, so the mirror has drifted. The arrow at line 17, column 10 is
+// reached only through an assertion; the one at line 21, column 19 is checked by
+// nothing installed; and the one at line 28, column 9 hands back the upstream
+// declaration rather than the mirror.
+const externalMirrorCases = `import { theme, type HostThemeResult } from "external-host";
+
+export interface Mirror {
+  readonly themePaths?: string[];
+  readonly tag: string;
+  readonly ambient?: number;
+  readonly homegrown?: string;
+}
+
+export function start(): void {
+  theme(async (): Promise<Mirror> => {
+    return { tag: "one" };
+  });
+}
+
+export function asserted(): void {
+  theme((async () => ({ tag: "two" })) as () => Promise<Mirror>);
+}
+
+export function localOnly(): void {
+  const handler = async (): Promise<Mirror> => {
+    return { tag: "three" };
+  };
+  void handler;
+}
+
+export function elsewhere(): void {
+  theme(async (): Promise<HostThemeResult> => {
+    return { tag: "four" };
+  });
+}
+`;
+
+const externalMirrorContract = {
+  id: `${casesPath}:4:3`,
+  owner: "Mirror",
+  key: "themePaths",
+  category: "external-mirror",
+  purpose: "Keeps the local mirror a faithful statement of the installed result shape.",
+  upstream: `${hostTypesPath}:36:3`,
+  checked: `${casesPath}:11:9`,
+};
+
+test("a mirror slot an installed declaration checks the shape of keeps its role", async (t) => {
+  // arrange
+  const report = await analyzeWith(t, externalMirrorCases, documentWith(externalMirrorContract));
+
+  // act & assert
+  assert.strictEqual(memberFor(report, "Mirror", "themePaths").status, "explicit-contract");
+  assert.deepStrictEqual(memberFor(report, "Mirror", "themePaths").reasons, [
+    `external-mirror: ${externalMirrorContract.purpose} ` +
+      `(upstream ${hostTypesPath}:36:3 is checked at ${casesPath}:11:9)`,
+  ]);
+  // The neighbouring slots the mirror also declares are not covered by it.
+  assert.strictEqual(memberFor(report, "Mirror", "homegrown").status, "unread");
+});
+
+test("an upstream that does not declare the key is a stale mirror", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      externalMirrorCases,
+      documentWith({ ...externalMirrorContract, id: `${casesPath}:7:3`, key: "homegrown" }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:7:3 upstream ${hostTypesPath}:36:3 ` +
+        "does not declare homegrown in an installed declaration",
+    },
+  );
+});
+
+test("an upstream coordinate outside an installed declaration is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      externalMirrorCases,
+      documentWith({ ...externalMirrorContract, upstream: `${casesPath}:4:3` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:4:3 upstream ${casesPath}:4:3 ` +
+        "does not declare themePaths in an installed declaration",
+    },
+  );
+});
+
+test("a required upstream slot belongs to the stronger external-input evidence", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      externalMirrorCases,
+      documentWith({
+        ...externalMirrorContract,
+        id: `${casesPath}:5:3`,
+        key: "tag",
+        upstream: `${hostTypesPath}:37:3`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:5:3 upstream ${hostTypesPath}:37:3 ` +
+        "declares tag as required, so the external-input evidence applies instead",
+    },
+  );
+});
+
+test("a mirror slot whose type has drifted from the installed one is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      externalMirrorCases,
+      documentWith({
+        ...externalMirrorContract,
+        id: `${casesPath}:6:3`,
+        key: "ambient",
+        upstream: `${hostTypesPath}:41:3`,
+      }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:6:3 mirrors ambient as number, ` +
+        `but ${hostTypesPath}:41:3 declares string`,
+    },
+  );
+});
+
+test("a checked site reached only through an assertion checks nothing", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      externalMirrorCases,
+      documentWith({ ...externalMirrorContract, checked: `${casesPath}:17:10` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:4:3 checked ${casesPath}:17:10 ` +
+        "is reached only through an assertion, which checks nothing",
+    },
+  );
+});
+
+test("a checked site no installed declaration checks is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      externalMirrorCases,
+      documentWith({ ...externalMirrorContract, checked: `${casesPath}:21:19` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:4:3 checked ${casesPath}:21:19 ` +
+        "is not checked against an installed declaration",
+    },
+  );
+});
+
+test("a checked site that hands back another declaration is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      externalMirrorCases,
+      documentWith({ ...externalMirrorContract, checked: `${casesPath}:28:9` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:4:3 checked ${casesPath}:28:9 ` +
+        "does not hand back Mirror.themePaths",
+    },
+  );
+});
+
+test("a mirror entry carrying another category's key is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      externalMirrorCases,
+      documentWith({ ...externalMirrorContract, necessity: `${casesPath}:11:9` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:4:3 carries unknown key necessity`,
     },
   );
 });
