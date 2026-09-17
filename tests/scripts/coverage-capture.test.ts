@@ -95,6 +95,21 @@ interface CaptureFailure {
   readonly kind: string;
   readonly path?: string;
   readonly format?: string;
+  readonly test?: string;
+  readonly status?: number;
+}
+
+interface WorkerRecord {
+  readonly test: string;
+  readonly pid: number;
+  readonly exitCode: number | null;
+  readonly raw: readonly string[];
+}
+
+interface NestedRecord {
+  readonly pid: number;
+  readonly completed: boolean;
+  readonly raw: readonly string[];
 }
 
 interface ModuleRecord {
@@ -117,9 +132,24 @@ interface CaptureManifest {
   readonly state: string;
   readonly failures: readonly CaptureFailure[];
   readonly runtime: { readonly node: string };
+  readonly selection: { readonly patterns: readonly string[]; readonly tests: readonly string[] };
+  readonly invocation: {
+    readonly argv: readonly string[];
+    readonly cwd: string;
+    readonly env: Readonly<Record<string, string>>;
+    readonly digest: string;
+  };
+  readonly workers: readonly WorkerRecord[];
+  readonly nested: readonly NestedRecord[];
   readonly modules: readonly ModuleRecord[];
   readonly raw: readonly RawRecord[];
   readonly artifacts: { readonly lcov: { readonly path: string; readonly digest: string } };
+  readonly outcome: { readonly status: number | null } | null;
+  readonly inventory: {
+    readonly path: string;
+    readonly digest: string;
+    readonly counts: Readonly<Record<string, number>>;
+  };
 }
 
 interface ProcessRun {
@@ -280,6 +310,14 @@ function failureKinds(manifest: CaptureManifest): string[] {
   return manifest.failures.map((failure) => failure.kind).sort();
 }
 
+// A refused run publishes no pointer, so its manifest is read from the one run
+// directory the capture created.
+async function onlyRunManifest(root: string): Promise<CaptureManifest> {
+  const runs = await readdir(path.join(root, "coverage", "runs"));
+  assert.strictEqual(runs.length, 1);
+  return readManifest(path.join(root, "coverage", "runs", runs[0] ?? "", "manifest.json"));
+}
+
 test("captures LCOV, raw V8 and executed sources from one native unit run that matches ordinary execution", async (t) => {
   // arrange
   const root = await createRoot(t, unitFixture());
@@ -387,11 +425,7 @@ test("loads", () => {
   // assert
   assert.strictEqual(capture.status, 1);
   assert.strictEqual(existsSync(path.join(root, "coverage", "unit.manifest.json")), false);
-  const runs = await readdir(path.join(root, "coverage", "runs"));
-  assert.strictEqual(runs.length, 1);
-  const manifest = await readManifest(
-    path.join(root, "coverage", "runs", runs[0] ?? "", "manifest.json"),
-  );
+  const manifest = await onlyRunManifest(root);
   assert.strictEqual(manifest.status, "failed");
   assert.deepStrictEqual(failureKinds(manifest), ["tests-failed", "unsupported-format"]);
   const refusal = manifest.failures.find((failure) => failure.kind === "unsupported-format");
@@ -455,4 +489,289 @@ test("registers coverage:capture as a package script", async () => {
 
   // assert
   assert.strictEqual(script, "node scripts/coverage-capture.mjs");
+});
+
+test("selects exactly the population npm test names, one worker per file", async (t) => {
+  // arrange
+  const root = await createRoot(t, unitFixture());
+  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as {
+    scripts: Readonly<Record<string, string>>;
+  };
+  const expectedPatterns = [...(packageJson.scripts.test ?? "").matchAll(/"([^"]+)"/gu)].map(
+    (match) => match[1],
+  );
+  const expectedTests = ["tests/domain/parity.test.ts", "tests/index.test.ts"];
+
+  // act
+  const capture = runCapture(root);
+
+  // assert
+  assert.strictEqual(capture.status, 0, capture.stderr);
+  const manifest = await readManifest(path.join(root, "coverage", "unit.manifest.json"));
+  assert.deepStrictEqual(manifest.selection, { patterns: expectedPatterns, tests: expectedTests });
+  assert.deepStrictEqual(
+    manifest.workers.map((worker) => [worker.test, worker.exitCode, worker.raw.length]),
+    expectedTests.map((test) => [test, 0, 1]),
+  );
+  assert.deepStrictEqual(manifest.nested, []);
+});
+
+test("inventories every production, test and resource input with its digest before execution", async (t) => {
+  // arrange
+  const files = unitFixture();
+  const root = await createRoot(t, files);
+  const entry = (
+    filePath: string,
+    group: string,
+  ): { path: string; group: string; digest: string; size: number } => ({
+    path: filePath,
+    group,
+    digest: sha256(files[filePath] ?? ""),
+    size: Buffer.byteLength(files[filePath] ?? ""),
+  });
+  const expectedInventory = [
+    entry(paritySourcePath, "production"),
+    entry(indexSourcePath, "production"),
+    entry("package.json", "resources"),
+    entry("tests/domain/parity.test.ts", "tests"),
+    entry("tests/index.test.ts", "tests"),
+  ];
+
+  // act
+  const capture = runCapture(root);
+
+  // assert
+  assert.strictEqual(capture.status, 0, capture.stderr);
+  const manifest = await readManifest(path.join(root, "coverage", "unit.manifest.json"));
+  const runDirectory = path.join(root, "coverage", "runs", manifest.runId);
+  const inventoryText = await readFile(path.join(runDirectory, "inventory.json"), "utf8");
+  assert.deepStrictEqual(JSON.parse(inventoryText), expectedInventory);
+  assert.deepStrictEqual(manifest.inventory, {
+    path: `coverage/runs/${manifest.runId}/inventory.json`,
+    digest: sha256(inventoryText),
+    counts: { production: 2, resources: 1, tests: 2 },
+  });
+  assert.strictEqual(
+    await readFile(path.join(runDirectory, "inventory", sha256(paritySource)), "utf8"),
+    paritySource,
+  );
+});
+
+for (const { concurrency, flags } of [
+  { concurrency: "2", flags: ["--test-concurrency=2"] },
+  { concurrency: "", flags: [] },
+]) {
+  test(`records the native runner invocation with TEST_CONCURRENCY=${JSON.stringify(concurrency)}`, async (t) => {
+    // arrange
+    const root = await createRoot(t, unitFixture());
+
+    // act
+    const capture = runCapture(root, { env: { TEST_CONCURRENCY: concurrency } });
+
+    // assert
+    assert.strictEqual(capture.status, 0, capture.stderr);
+    const manifest = await readManifest(path.join(root, "coverage", "unit.manifest.json"));
+    assert.deepStrictEqual(manifest.invocation.argv, [
+      "--test",
+      ...flags,
+      "--experimental-test-coverage",
+      "--test-coverage-include=extensions/**",
+      "--test-reporter=spec",
+      "--test-reporter-destination=stdout",
+      "--test-reporter=lcov",
+      `--test-reporter-destination=coverage/runs/${manifest.runId}/unit.lcov`,
+      ...unitTestPatterns,
+    ]);
+    assert.strictEqual(
+      manifest.invocation.env.NODE_V8_COVERAGE,
+      `coverage/runs/${manifest.runId}/raw`,
+    );
+    assert.strictEqual(manifest.invocation.cwd, ".");
+    assert.match(manifest.invocation.digest, /^[0-9a-f]{64}$/u);
+  });
+}
+
+test("rejects a failing test population and removes the previous public success", async (t) => {
+  // arrange
+  const root = await createRoot(t, unitFixture());
+  const first = runCapture(root);
+  assert.strictEqual(first.status, 0, first.stderr);
+  await mkdir(path.join(root, "tests/shared"), { recursive: true });
+  await writeFile(
+    path.join(root, "tests/shared/failing.test.ts"),
+    `import assert from "node:assert/strict";
+import test from "node:test";
+
+test("fails", () => {
+  assert.equal(1, 2);
+});
+`,
+  );
+
+  // act
+  const second = runCapture(root);
+
+  // assert
+  assert.strictEqual(second.status, 1);
+  assert.strictEqual(existsSync(path.join(root, "coverage", "unit.manifest.json")), false);
+  assert.strictEqual(existsSync(path.join(root, "coverage", "unit.lcov")), false);
+  const runs = (await readdir(path.join(root, "coverage", "runs"))).sort();
+  assert.strictEqual(runs.length, 2);
+  const failed = await readManifest(
+    path.join(root, "coverage", "runs", runs[1] ?? "", "manifest.json"),
+  );
+  assert.strictEqual(failed.status, "failed");
+  assert.deepStrictEqual(failed.failures, [{ kind: "tests-failed", status: 1 }]);
+  assert.strictEqual(failed.workers.length, 3);
+  assert.strictEqual(
+    (await readdir(path.join(root, "coverage", "runs", runs[1] ?? "", "raw"))).length,
+    3,
+  );
+});
+
+// A process that signals itself still flushes its own coverage before dying;
+// only an external SIGKILL leaves the worker without an exit record and
+// without a raw file, so the fixture has a child kill its parent.
+test("rejects a worker that dies by signal as interrupted and uncaptured", async (t) => {
+  // arrange
+  const root = await createRoot(t, {
+    ...unitFixture(),
+    "tests/shared/killed.test.ts": `import { spawnSync } from "node:child_process";
+
+spawnSync(process.execPath, ["-e", 'process.kill(process.ppid, "SIGKILL");']);
+`,
+  });
+
+  // act
+  const capture = runCapture(root);
+
+  // assert
+  assert.strictEqual(capture.status, 1);
+  const manifest = await onlyRunManifest(root);
+  assert.deepStrictEqual(failureKinds(manifest), [
+    "interrupted-worker",
+    "missing-capture",
+    "tests-failed",
+  ]);
+  assert.deepStrictEqual(
+    manifest.failures
+      .filter((failure) => failure.kind !== "tests-failed")
+      .map((failure) => failure.test),
+    ["tests/shared/killed.test.ts", "tests/shared/killed.test.ts"],
+  );
+});
+
+test("rejects an empty production inventory before running any test", async (t) => {
+  // arrange
+  const {
+    [indexSourcePath]: _index,
+    [paritySourcePath]: _parity,
+    ...withoutProduction
+  } = unitFixture();
+  const root = await createRoot(t, withoutProduction);
+
+  // act
+  const capture = runCapture(root);
+
+  // assert
+  assert.strictEqual(capture.status, 1);
+  const manifest = await onlyRunManifest(root);
+  assert.deepStrictEqual(manifest.failures, [{ kind: "empty-production-inventory" }]);
+  assert.deepStrictEqual(manifest.workers, []);
+  assert.strictEqual(manifest.outcome, null);
+});
+
+test("rejects a loaded module the inventory does not list", async (t) => {
+  // arrange
+  const root = await createRoot(t, {
+    ...unitFixture(),
+    "outside.ts": "export const outside = 1;\n",
+    "tests/shared/outside.test.ts": `import test from "node:test";
+
+import { outside } from "../../outside.ts";
+
+test("loads a module outside the inventory", () => {
+  void outside;
+});
+`,
+  });
+
+  // act
+  const capture = runCapture(root);
+
+  // assert
+  assert.strictEqual(capture.status, 1);
+  const manifest = await onlyRunManifest(root);
+  assert.deepStrictEqual(manifest.failures, [{ kind: "unlisted-module", path: "outside.ts" }]);
+});
+
+test("records nested subprocesses under the run and keeps a child's override out of it", async (t) => {
+  // arrange
+  const root = await createRoot(t, {
+    ...unitFixture(),
+    "tests/shared/nested.test.ts": `import { spawnSync } from "node:child_process";
+import { mkdirSync } from "node:fs";
+import path from "node:path";
+import test from "node:test";
+
+test("spawns an inheriting child and an overriding child", () => {
+  const override = path.join(process.cwd(), "override-run");
+  mkdirSync(override, { recursive: true });
+  const inheriting = spawnSync(process.execPath, ["-e", "process.exitCode = 0;"], { encoding: "utf8" });
+  const overriding = spawnSync(process.execPath, ["-e", "process.exitCode = 0;"], {
+    encoding: "utf8",
+    env: { ...process.env, NODE_V8_COVERAGE: path.join(override, "raw"), PI_CM_COVERAGE_RUN_DIR: override },
+  });
+
+  if (inheriting.status !== 0 || overriding.status !== 0) {
+    throw new Error(inheriting.stderr + overriding.stderr);
+  }
+});
+`,
+  });
+
+  // act
+  const capture = runCapture(root);
+
+  // assert
+  assert.strictEqual(capture.status, 0, capture.stderr);
+  const manifest = await readManifest(path.join(root, "coverage", "unit.manifest.json"));
+  assert.deepStrictEqual(
+    manifest.nested.map((nested) => [nested.completed, nested.raw.length]),
+    [[true, 1]],
+  );
+  const overrideWorkers = (await readdir(path.join(root, "override-run", "workers"))).filter(
+    (name) => name.endsWith(".start.json"),
+  );
+  assert.strictEqual(overrideWorkers.length, 1);
+  assert.strictEqual((await readdir(path.join(root, "override-run", "raw"))).length, 1);
+});
+
+test("rejects a raw capture from a process the run never registered", async (t) => {
+  // arrange
+  const root = await createRoot(t, {
+    ...unitFixture(),
+    "tests/shared/unregistered.test.ts": `import { spawnSync } from "node:child_process";
+import test from "node:test";
+
+test("spawns a child without the capture runtime", () => {
+  const child = spawnSync(process.execPath, ["-e", "process.exitCode = 0;"], {
+    encoding: "utf8",
+    env: { ...process.env, NODE_OPTIONS: "" },
+  });
+
+  if (child.status !== 0) {
+    throw new Error(child.stderr);
+  }
+});
+`,
+  });
+
+  // act
+  const capture = runCapture(root);
+
+  // assert
+  assert.strictEqual(capture.status, 1);
+  const manifest = await onlyRunManifest(root);
+  assert.deepStrictEqual(failureKinds(manifest), ["unregistered-capture"]);
 });
