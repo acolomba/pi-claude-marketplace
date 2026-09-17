@@ -663,10 +663,30 @@ test("refuses a conversion whose endpoints are not finite instead of writing nul
     {
       status: 1,
       rows: [
-        { kind: "position", part: "statementMap[3]", location: endOfLine(skipInit.loc) },
-        { kind: "position", part: "statementMap[4]", location: endOfLine(skipBody.loc) },
-        { kind: "position", part: "fnMap[1].loc", location: endOfLine(skipFunction.loc) },
-        { kind: "position", part: "fnMap[2].loc", location: endOfLine(widthFunction.loc) },
+        {
+          kind: "position",
+          part: "statementMap[3]",
+          location: endOfLine(skipInit.loc),
+          path: captured.modulePath,
+        },
+        {
+          kind: "position",
+          part: "statementMap[4]",
+          location: endOfLine(skipBody.loc),
+          path: captured.modulePath,
+        },
+        {
+          kind: "position",
+          part: "fnMap[1].loc",
+          location: endOfLine(skipFunction.loc),
+          path: captured.modulePath,
+        },
+        {
+          kind: "position",
+          part: "fnMap[2].loc",
+          location: endOfLine(widthFunction.loc),
+          path: captured.modulePath,
+        },
       ],
     },
   );

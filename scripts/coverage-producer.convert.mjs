@@ -243,7 +243,9 @@ async function convertScript(producer, script) {
 /**
  * Converts every script record and merges them through Istanbul's merger,
  * so two workers that ran the same module sum their counters under one
- * identity. Returns the merged coverage map as plain JSON data.
+ * identity. Returns the merged coverage map as plain data: the merger's own
+ * `toJSON` yields `FileCoverage` instances, which keep their maps under
+ * `data`, so each is unwrapped to the record a consumer reads directly.
  */
 export async function convertScripts(producer, scripts) {
   const map = libCoverage.createCoverageMap({});
@@ -252,5 +254,7 @@ export async function convertScripts(producer, scripts) {
     map.merge(await convertScript(producer, script));
   }
 
-  return map.toJSON();
+  return Object.fromEntries(
+    Object.entries(map.toJSON()).map(([filePath, file]) => [filePath, file.toJSON()]),
+  );
 }

@@ -15,12 +15,19 @@
 // line plus the column equal to the line length, so a node that ends at the
 // end of a line resolves to a finite endpoint instead of the producer's
 // `Infinity` sentinel. Lines the trailer adds have no mapping.
+//
+// Two checks on the producer's output live here as well. Function names come
+// from the declaration the executed text carries at exactly the reported
+// spans, never from the producer's numbered labels or a nearby line. And
+// every location must be a concrete position inside the source text, so an
+// invalid sentinel is refused before it can serialize to JSON `null`.
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { encode } from "@jridgewell/sourcemap-codec";
+import { parse } from "acorn";
 
 import {
   canonicalJson,
@@ -238,4 +245,240 @@ export function recordedModule(run, modulePath) {
     original: source.text,
     executed: executed.text,
   };
+}
+
+const PARSE_OPTIONS = { ecmaVersion: "latest", sourceType: "module" };
+
+function isNode(value) {
+  return typeof value === "object" && value !== null && typeof value.type === "string";
+}
+
+function* childNodes(node) {
+  for (const [key, value] of Object.entries(node)) {
+    if (key === "type") {
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      yield* value.filter(isNode);
+    } else if (isNode(value)) {
+      yield value;
+    }
+  }
+}
+
+// The identifier a method, accessor, constructor or property declares, when
+// its key is a plain identifier; computed and literal keys declare none.
+function keyName(node) {
+  return node.computed || node.key.type !== "Identifier" ? undefined : node.key.name;
+}
+
+// One function the source declares: the identifier span the producer reports
+// as `decl` (the key of a method, the id of a function, or the first
+// character of an anonymous function or arrow), its body span, and the
+// declared identifier name when there is one.
+function declaredFunction(node, consumed) {
+  if (
+    (node.type === "MethodDefinition" || node.type === "Property") &&
+    node.value?.type === "FunctionExpression"
+  ) {
+    consumed.add(node.value);
+    return { decl: [node.key.start, node.key.end], body: node.value.body, name: keyName(node) };
+  }
+
+  if (node.type === "ArrowFunctionExpression") {
+    return { decl: [node.start, node.start + 1], body: node.body, name: undefined };
+  }
+
+  if (
+    (node.type === "FunctionDeclaration" || node.type === "FunctionExpression") &&
+    !consumed.has(node)
+  ) {
+    const decl = node.id === null ? [node.start, node.start + 1] : [node.id.start, node.id.end];
+    return { decl, body: node.body, name: node.id?.name };
+  }
+
+  return undefined;
+}
+
+function collectDeclared(node, consumed, declared) {
+  const declaration = declaredFunction(node, consumed);
+
+  if (declaration !== undefined) {
+    declared.push(declaration);
+  }
+
+  for (const child of childNodes(node)) {
+    collectDeclared(child, consumed, declared);
+  }
+}
+
+function lineStartsOf(text) {
+  const starts = [0];
+
+  for (let offset = 0; offset < text.length; offset += 1) {
+    if (text[offset] === "\n") {
+      starts.push(offset + 1);
+    }
+  }
+
+  return starts;
+}
+
+function locate(lineStarts, offset) {
+  let low = 0;
+  let high = lineStarts.length - 1;
+
+  while (low < high) {
+    const middle = (low + high + 1) >> 1;
+
+    if (lineStarts[middle] <= offset) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+
+  return { line: low + 1, column: offset - lineStarts[low] };
+}
+
+function locationKey(location) {
+  return `${location.start.line}:${location.start.column}-${location.end.line}:${location.end.column}`;
+}
+
+function spanKey(lineStarts, [start, end]) {
+  return locationKey({ start: locate(lineStarts, start), end: locate(lineStarts, end) });
+}
+
+// Every function the executed text declares, keyed by its exact `decl` and
+// `loc` spans in line/column form, from a fresh parse.
+function declaredFunctions(executed) {
+  const declared = [];
+  collectDeclared(parse(executed, PARSE_OPTIONS), new WeakSet(), declared);
+  const lineStarts = lineStartsOf(executed);
+  const byKey = new Map();
+
+  for (const declaration of declared) {
+    const key = `${spanKey(lineStarts, declaration.decl)}|${spanKey(lineStarts, [declaration.body.start, declaration.body.end])}`;
+    byKey.set(key, declaration.name);
+  }
+
+  return byKey;
+}
+
+/**
+ * The file coverage with every function's name taken from the declaration
+ * the executed text carries at exactly its `decl` and `loc` spans. A function
+ * the source declares without an identifier keeps the producer's label. A
+ * function whose spans match no declaration is unproven and throws
+ * `SourceMapError`; nothing is matched by name or by nearby position.
+ */
+export function restoreSourceNames(file, executed) {
+  const declared = declaredFunctions(executed);
+  const fnMap = {};
+  const failures = [];
+
+  for (const [id, fn] of Object.entries(file.fnMap)) {
+    const key = `${locationKey(fn.decl)}|${locationKey(fn.loc)}`;
+
+    if (!declared.has(key)) {
+      failures.push({ kind: "function-unproven", id, name: fn.name, decl: fn.decl, loc: fn.loc });
+      continue;
+    }
+
+    const name = declared.get(key);
+    fnMap[id] = name === undefined ? fn : { ...fn, name };
+  }
+
+  if (failures.length > 0) {
+    throw new SourceMapError(
+      `${file.path} reports functions the source does not declare`,
+      failures,
+    );
+  }
+
+  return { ...file, fnMap };
+}
+
+function isAbsent(location) {
+  return [location?.start, location?.end].every(
+    (position) =>
+      position !== undefined &&
+      position !== null &&
+      position.line === undefined &&
+      position.column === undefined,
+  );
+}
+
+function isConcretePosition(position, lineLengths) {
+  const { line, column } = position ?? {};
+
+  return (
+    Number.isInteger(line) &&
+    line >= 1 &&
+    line <= lineLengths.length &&
+    Number.isInteger(column) &&
+    column >= 0 &&
+    column <= lineLengths[line - 1]
+  );
+}
+
+function isConcrete(location, lineLengths) {
+  return (
+    isConcretePosition(location?.start, lineLengths) &&
+    isConcretePosition(location?.end, lineLengths) &&
+    (location.start.line < location.end.line ||
+      (location.start.line === location.end.line && location.start.column <= location.end.column))
+  );
+}
+
+function* locationParts(file) {
+  for (const [id, location] of Object.entries(file.statementMap)) {
+    yield { part: `statementMap[${id}]`, location };
+  }
+
+  for (const [id, fn] of Object.entries(file.fnMap)) {
+    yield { part: `fnMap[${id}].decl`, location: fn.decl };
+    yield { part: `fnMap[${id}].loc`, location: fn.loc, line: fn.line };
+  }
+
+  for (const [id, branch] of Object.entries(file.branchMap)) {
+    yield { part: `branchMap[${id}].loc`, location: branch.loc, line: branch.line };
+
+    for (const [index, location] of branch.locations.entries()) {
+      yield { part: `branchMap[${id}].locations[${index}]`, location, absentAllowed: true };
+    }
+  }
+}
+
+/**
+ * Every location of `file` that is not a concrete position inside `text`:
+ * both endpoints integer lines within the text, columns within the line
+ * length (the line length itself included), start not after end, and the
+ * `line` field of a function or branch equal to its start line. A branch
+ * location with no coordinates at all is the producer's implicit-else
+ * representation and is accepted only there. Nothing is clamped.
+ */
+export function positionFailures(file, text) {
+  const lineLengths = text.split("\n").map((line) => line.length);
+  const failures = [];
+
+  for (const { part, location, line, absentAllowed } of locationParts(file)) {
+    if (absentAllowed && isAbsent(location)) {
+      continue;
+    }
+
+    if (!isConcrete(location, lineLengths)) {
+      failures.push({ kind: "position", part, location });
+    } else if (line !== undefined && line !== location.start.line) {
+      failures.push({
+        kind: "position",
+        part: `${part.replace(/\.loc$/u, "")}.line`,
+        line,
+        location,
+      });
+    }
+  }
+
+  return failures;
 }
