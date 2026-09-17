@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
 milestone: test-backlog
-current_phase: 06
-current_phase_name: Unused Type Member Gate
-status: ready_for_verification
-stopped_at: Completed 06-08-PLAN.md
+current_phase: 07
+current_phase_name: Reliable Coverage Metrics
+status: executing
+stopped_at: "Phase 06 verified and complete. Resume file: none."
 last_updated: "2026-09-17T06:17:23.520Z"
 last_activity: 2026-09-17
-last_activity_desc: Plan 06-08 complete, activating the unused type member gate (both scripts in the mandatory npm check chain CI already runs, two pre-commit hooks on deliberately different triggers, and a per-row recorded-decision layer that carries the five remaining unread members by exact coordinate and measured mechanism; T0 cleared the sixth, taking the live population 6 -> 5 with zero findings gained). Phase 6 has 17 of 17 plans complete and is ready for verification.
+last_activity_desc: Phase 06 verified 2/2 and marked complete; the member gate runs in the mandatory chain carrying five recorded decisions. Phase 07 begins.
 state_head: 4ec3b7d4ca0385ddbc98e5b499d67710aac5df4c
 progress:
   total_phases: 8
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 63
-  completed_plans: 55
-  percent: 63
+  completed_plans: 63
+  percent: 75
 milestone_name: test-backlog
 ---
 
@@ -31,426 +31,40 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 06 (Unused Type Member Gate) — ALL PLANS COMPLETE, READY FOR VERIFICATION
-Plan: 17 of 17 executed; 06-08 (gate activation) landed last
-Status: The gate is MANDATORY. `npm run lint:type-members` and `npm run lint:type-members:negative` are both in the `npm run check` chain, which is what CI runs, and two local pre-commit hooks invoke the same pair with `pass_filenames: false` on deliberately different triggers — the gate on every input that can change what it reports, the 7-minute negative runner only on the gate's own machinery. Activation needed a residual form, so a per-row recorded-decision layer was added (`scripts/check-unused-type-members.exceptions.json`): one exact `path:line:column` plus owner, key, the decision that accepted it and a measured mechanism, with no count, threshold or path glob expressible and an entry that matches no finding refusing the run. T0 cleared the sixth row by repointing three test imports and collapsing the resolver mirror, so the live population is 3344 candidates with **5** unread, all five carried by a named decision. The two that a human still owns are D-32-05 (`AuthAttemptResult.authAttempted` ×2) and the three orchestrator rows. NEXT: `/gsd-verify-work 06` — no verification report exists yet, which is why the roadmap row reads In Progress at 17/17.
-Last activity: 2026-09-17 — Plan 06-08 complete (`npm run check` exit 0 in 14m21s with 6555 unit tests and 0 failures, the gate reporting `passed with 5 recorded exception(s)` and the negative controls 7 of 7; coverage 1833/1833 functions, 9049/9049 branches, 0 modules below 100 percent; 236 direct pairs with both pinned shortfalls matched and the pin file unmodified; 19 new controls, one of which plants a new unread member into the real tree and requires the real gate to fail on it alone)
+Phase: 07 (Reliable Coverage Metrics) — STARTING
+Plan: 0 of 8
+Status: Phase 06 complete and verified
+Last activity: 2026-09-17 — Phase 06 verified 2/2
 
-Plan 06-01 landed the member gate's compiler tracer: `node
-scripts/check-unused-type-members.mjs` compiles the project once, inventories
-production member declarations, and matches runtime observations back to those
-exact declarations through checker symbols. Classification is by syntax before
-symbol. Exit 0 is clean, 1 is unread or unsupported members, 2 is a setup or
-internal analysis failure, and a budget cutoff takes the third path so it can
-never read as clean.
+Phase 06 shipped an automated gate for type members nothing reads — a class
+no existing tool caught here: typecheck, lint and fallow all pass with a
+planted unread member.
 
-Plan 06-02 added directed value transfers in
-`scripts/check-unused-type-members.flow.mjs`. Each recorded read is traced
-backwards through edges that exist only where a value actually moved: arguments
-to resolved parameters, initializers, assignments, object and array
-construction, returns, callbacks in both directions, and containers — arrays,
-tuples, promise fulfillment and Map/WeakMap values. Structural compatibility
-alone transfers nothing, edges are one-way, and a tuple neighbour or a map key
-receives no credit. A call whose target is invisible and a container operation
-with no directed semantics each raise a bounded gap rather than reading clean.
+The live population went 614 -> 468 -> 261 -> 138 through analyzer
+corrections, -> 33 through six bounded source repairs, -> 16 and -> 9 through
+two analyzer-engine plans, -> 5 through a duplicate-declaration collapse and
+the activation plan's own cleanup. Every one of those steps measured its
+delta as a (path, owner, key) set difference and recorded ZERO findings
+gained.
 
-Plan 06-03 added the contract engine in
-`scripts/check-unused-type-members.contracts.mjs`, supplied to the analysis
-through 06-01's `contractEvaluator` seam by the real command-line tool. An
-exemption has to be earned: the entry names one exact declaration, settled
-against the inventory's declaration map rather than its coordinate string, and
-brings the evidence its category demands. An external output must be built at
-the named origin and arrive at a return the compiler checks against an installed
-declaration, directly or along 06-02's transfers. An external input needs a
-required upstream slot and a callback the compiler really checks; an optional
-slot or an asserted cast proves nothing. A nominal brand needs a key symbol no
-other module can spell plus a type no ordinary value satisfies. A type selection
-covers the filter literal's own member and needs a source that discriminates on
-that key. Stale, contradictory, duplicate, wildcard, unknown-key, wrong-version
-and read-redundant entries are refused as exit-2 setup failures, which keeps "we
-cannot answer" apart from "this member is unread".
+Five members remain and each is a recorded decision, not a defect: the
+WR-01 `partition?: never` refusal marker, the D-32-05 `authAttempted` pair,
+`UpdatePhaseFailure.msg`'s rollback-populated surface, and the single-variant
+`PLUGIN_INFO_RENDER.status` filter. The exception layer lives in the CLI, not
+the analyzer, so `--inventory` and `--check` still count all five as unread;
+a decision changes exit status and nothing else. Counts, thresholds and path
+globs are unwritable rather than discouraged, and an entry matching no
+finding exits 2, so the list self-expires.
 
-`scripts/check-unused-type-members.contracts.json` ships with no entries by
-design; live ones are 06-06's after the tree is reconciled.
+`npm run check` now runs the gate and its negative controls: seven
+whole-program analyses, 14m21s. Pre-commit splits them across two hooks so an
+ordinary `extensions/` commit costs ~85s.
 
-Plan 06-04 added whole-object operations in
-`scripts/check-unused-type-members.operations.mjs`. An operation is settled by
-the declaration the checker resolved -- a default-library interface for
-`JSON.stringify` and the `Object` enumerators, an ambient `assert` module for the
-deep comparisons -- so a local function carrying the name summarises nothing. A
-local wrapper earns the same summary only by passing one of its own parameters
-into an already-summarised operation, and the summary is applied at the call site
-against the argument written there, which is what carries a caller's record
-through an `unknown`-typed parameter. A body changed to discard or return its
-input loses the summary with it. Copies are shallow and a rest copy omits the
-keys the pattern named; a deep comparison credits only the operand whose value
-came out of production code, so a typed fixture a test wrote for itself proves
-nothing. Two refusals replace credit rather than shrinking it:
-`unmodeled-serializer-options` for a run-time replacer or a `toJSON` member, and
-`unproven-own-properties` where an accessor or a class constituent makes
-own-enumerability unprovable. All 76 of 06-02's unmodeled container rows are now
-explained: 73 were `array.push`, which is a directed element write and not a
-bulk read, and `sort`, `reverse`, `splice`, `flat` and `entries` are modelled by
-their real result semantics. `reduce` stays unmodeled and still raises its gap.
-
-Live run now 3,464 candidates, 2,981 runtime-observed, 222 test-only, 0
-explicit-contract, 261 unread, 0 unsupported -- 468 findings down to 261. The run
-takes 80.2 s and peaks at 2.05 GiB, spending 2,889,809 of a 12,000,000-step
-transfer budget over 82,164 traced reads and 939,556 operation reads. Still
-interim: 06-06 reconciles every remaining row. `lint:type-members` exists as a
-package alias but is deliberately NOT in `npm run check` until 06-08.
-
-Plan 06-05 added the closure audit in
-`scripts/check-unused-type-members.audit.mjs` and recorded the live population.
-It separates two answers a single count cannot give. `--inventory` records the
-complete current population, always succeeds, and says in its own output that it
-is not a clean-gate verdict. `--check` re-runs the analysis, recomputes the
-source digest from disk, and fails eight distinct ways: `unread`,
-`unsupported`, `missing`, `duplicate`, `stale-source`, `stale-record`,
-`incomplete` and `invalid`. Neither command can change an analyzer verdict.
-A recorded explanation is carried across a regeneration only when its row's status
-did not move.
-
-`06-LIVE-TRIAGE.md` records 3,464 candidates over 236 production files, bound to
-digest `08023619` over 602 hashed source files at revision `0dc3666b`. 483 of
-those rows need a disposition -- 261 unread plus 222 test-only -- and every one is
-still pending, which is exactly what `--check` reports today: exit 1 with 744
-problems and zero stale, missing, duplicate or invalid rows. The inherited
-261 / 0 / 261 baseline holds exactly; the inventory takes 77.4 s at 2.00 GiB and
-the check 81.7 s at 2.04 GiB.
-
-All four current `EdgeDeps` members are runtime-observed, including the optional
-`importClaudeSettings`, which a directed transfer settles through
-`edge/register.ts:103`. Leads handed to 06-06: `kind` is the largest unread key
-at 46 rows and a window scan puts 76 of the 261 inside an `Extract<>`/`Exclude<>`
-selection filter, which is the contract engine's `type-selection` category.
-`lint:type-members:audit` is a real package entry and is deliberately not in
-`npm run check`.
-
-All five analyzer suites pass together at 134/134 (06-03's 101 plus 33 new).
-
-Plan 06-06 reconciled the live population. Two directed-flow corrections came
-first, both found by reading diagnostics against source. An async body that
-hands back another promise hands back what that promise fulfils, so its value
-sits where its own awaited value does; placing it one await deeper consumed the
-reader's await twice and dropped the rest of the chain. And a key exactly one
-arm of a union declares can only have come from that arm, so it now resolves
-there -- the checker answers a union only when every arm has the key, which left
-the success-beside-failure relay shape unanswered. Two arms spelling one key
-stay unsettled and resolve to nothing. Together they moved 42 rows out of unread
-and upgraded 10 test-only rows to runtime-observed, with nothing moving the
-other way.
-
-The contract engine gained two proofs. A selection resolves a type-parameter
-source through its bound, because the bound is the set the filter selects
-within. `type-refinement` is a fifth category, separate from `type-selection`: a
-member earns it by sitting in an operand of the named intersection, naming a
-slot the rest of the intersection already declares, and writing a type there
-that admits strictly less -- including a refinement nested one level inside a
-refined slot, and including insisting on a slot the rest lets a value omit. An
-intersection that adds a slot, or restates one unchanged, is refused by name. A
-discriminant proof now needs two spellings to differ rather than every spelling
-to be unique, and a filter site descends through a node that shares its start.
-
-`scripts/check-unused-type-members.contracts.json` now carries 81 live entries --
-62 selections, 17 refinements, 2 brands -- each accepted by the engine against
-this tree before being written. Of 88 drafted, 7 were refused and all 7 stayed
-findings.
-
-Live run now 3,464 candidates, 3,009 runtime-observed, 236 test-only, 81
-explicit-contract, 138 unread, 0 unsupported. 82.1 s at 2.05 GiB, spending
-3,001,672 of a 12,000,000-step transfer budget -- four times the measured cost,
-recorded with its rationale beside the constant. `06-LIVE-TRIAGE.md` is bound to
-digest `ba06bb95` over 603 hashed files at revision `77629eb2`, and all 455 rows
-that need a reader to agree with them carry recorded evidence. `--check` exits 1
-with exactly 138 problems, all `unread`: zero stale, missing, duplicate,
-incomplete or invalid.
-
-The 138 are named findings with owners, not an unexplained baseline. Six bounded
-repair plans are required before 06-08 can activate the gate: 06-09
-(`bridges/hooks`, 26 rows, the `AsyncRewakeEntry` duplicate), 06-10
-(`bridges/{agents,commands,skills}` plus `shared/fs-utils.ts`, 13 rows, the
-`renamed[].from` dead field), 06-11 (`edge`, 17), 06-12 (`orchestrators`, 49),
-06-13 (`domain`, `persistence`, `platform`, 23, including the locally asserted
-Pi mirrors) and 06-14 (`shared`, 10). Closure then has to be re-run and reach
-zero.
-
-06-06 also repaired an inherited break: `tests/architecture/partial-vocabulary-guard.test.ts`
-had been red since 06-05's audit test spelled the retired `"unsupported"` status
-literal as the name of one of the audit's own refusal categories. A fourth
-`homonym` waiver, the guard's designed mechanism, brings `npm run check` back to
-exit 0. No production source under `extensions/` was touched by this plan.
-Typecheck, lint, format, all four fallow links and both corresponding-test gates
-are green. No production source under `extensions/` changed in 06-02, 06-03 or
-06-04, so the wave's aggregate production unit coverage snapshot still holds.
-
-Plan 06-07 proved the gate on the declaration the project ships.
-`scripts/check-unused-type-members.negative.mjs` plants an unread optional
-member into the REAL `EdgeDeps` interface through a compiler read overlay,
-taking the insertion point from the interface's own last member and counting the
-expected identity out of the overlay text rather than reading it back from the
-analyzer. The real command-line tool then reports
-`extensions/pi-claude-marketplace/edge/types.ts:31:3` by exact declaration
-record, over and above the honest 138-row baseline; an optional-chain read from
-the owner test turns the same declaration `test-only-observed` with one witness
-at the probe's exact site; removing the overlay reproduces the baseline report;
-and a same-spelling member on an unrelated type, read from production, leaves the
-offender a finding while coming back `runtime-observed` itself. Two further
-controls require a run the gate cannot complete -- an unparsable input and a
-refused option -- to exit 2 with no report and a reason naming what it could not
-read, which is what keeps exit 1 meaning a member verdict. Seven of seven
-controls pass in 6 m 49 s at 2.11 GiB over five whole-program analyses.
-
-The baseline the plan assumed does not exist: 06-06 closed at 138 unread, so
-every control measures a delta against that recorded baseline instead of against
-a clean run. `baseline` checks the gate's exit status against its own finding
-count rather than against a literal 1, so the controls keep working unchanged
-once the repair plans drain the population to zero.
-
-The runner is itself measured. `--gate` points the controls at any executable,
-and 21 suite controls drive stand-in gates that answer by invocation index: an
-always-clean gate, one that always reports the same findings, one that describes
-a different member at the planted coordinates, an unparsable report, an
-executable that cannot be launched, a refusal where a finding belongs, a finding
-where a refusal belongs, a refusal naming nothing, an unexplained diagnostic, and
-one that clears the offender on an unrelated read. Each is rejected by name, and
-the always-clean case is rejected on report content rather than on an exit
-status. `tests/architecture/unused-type-member-gate.test.ts` adds the four guards
-the executable controls cannot see from inside: the planted key must stay absent
-from the real declaration, the benign probe's receiver type must stay importable
-in the owner test, every gate script must stay reachable from a `package.json`
-entry, and every capability the printed help claims must stay bound to a named
-landed control.
-
-The live population is unchanged -- 3,464 candidates, 138 unread, 0 unsupported,
-81 contracts -- and `git diff 06ec0723..HEAD -- extensions/` is empty. The two new
-suites are analysed input, so the triage digest moved from `ba06bb95` to
-`671cb0ae` over 605 hashed files; `--inventory` re-recorded it and `--check`
-reconciles again at exactly 138 `unread` with nothing stale, missing, duplicate,
-incomplete or invalid. `npm run check` is exit 0 at 6,473 unit and 32 integration
-tests. `lint:type-members:negative` is a real package entry and, like
-`lint:type-members` and `lint:type-members:audit`, is deliberately NOT in
-`npm run check`; 06-08 activates all three after the six repair plans land.
-
-Plan 06-09 is the first of the six bounded repair plans and cleared the
-`bridges/hooks` owner group by source repair alone. `AsyncRewakeEntry` became an
-alias of `HooksRuntimeChildEntry` rather than a second declaration of the same
-fifteen members; the four mirrored hooks-registration option bags became one
-exported `RegisterHooksBridgeOptions`, which took the never-read `ctx` field with
-it along with the extension factory's `{} as unknown as ExtensionContext`
-placeholder and ~37 call sites; the `tool_result` patch now writes through the
-event's own slots behind a `Partial<Pick<ToolResultEvent, "content" | "isError">>`
-view instead of minting a single-member cast literal per write, with the CR-01
-whitelist guards unchanged; and `HydratedScope.state` and `ChildLike.pid` were
-removed.
-
-25 of the 26 rows cleared. The live population is a measured 138 -> 113 unread,
-0 unsupported, 81 contracts, at digest `c285cdee` over 605 hashed files, and the
-delta was taken as a `(path, owner, key)` set difference against a pre-edit
-baseline: 25 lost, **0 gained**. The candidate count moved 3,464 -> 3,434 and all
-30 declarations are accounted for. `--check` reports 113 problems that are ALL
-`unread`, with nothing stale, missing, duplicate, incomplete or invalid.
-`npm run check` is exit 0, the seven negative controls still pass, aggregate
-production unit coverage is 1,834/1,834 functions and 9,050/9,050 branches with
-zero modules below 100%, and the two direct pins matched exactly.
-
-The twenty-sixth row, `WriteHookConfigResult.written`, was deliberately left
-standing. Nine `assert.deepStrictEqual` sites read the whole result, so the
-inherited disposition's "no witness of any kind" is wrong about the tree; the
-`--json` report shows neither member credited through those nine sites while the
-sibling `RemoveHookConfigResult.removed` carries two `deep-comparison` witnesses
-from the same file. The difference is that `writeHookConfig` is the closure
-`createWriteHookConfig` returns, and `isProductionDerived`'s bounded backward
-search does not reach production through a factory-returned closure. That is an
-analyzer under-credit for its own bounded plan, not a source repair, and the row
-is recorded that way in `06-LIVE-TRIAGE.md`.
-
-Plan 06-10 is the third repair plan and cleared all 13 rows across the three
-artifact bridges and the rollback helper. Ten of them were one dead field --
-`renamed[].from` -- spread across four declaration sites: the input interface of
-`rollbackReplacementCommon` in `shared/fs-utils.ts`, and in each bridge the
-`*ReplacementInternals` handle, the local ledger array and the rollback-internal
-parameter. All four narrowed in ONE commit, because `{ from, to }[]` is
-assignable to `{ to }[]`: narrowing the helper alone compiles while leaving three
-bridges describing a value it no longer declares, and nothing fails. Each rename
-loop now pushes a fresh `{ to: pair.to }` rather than forwarding the wider
-iterated element, and that the boundary is still guarded was exercised --
-reinstating the source key is refused TS2353.
-
-The remaining three were surplus slots on the staging input bundles:
-`StageAgentsInput.resolved` and `marketplaceName` on both the commands and skills
-inputs. These are the rows the triage marked "needs the owner to confirm", so the
-confirmation is the load-bearing part. The decisive evidence is sibling
-comparison: every OTHER member of all three interfaces carries a production
-witness at its destructure site, so the model reaches these declarations and the
-empty witness list is an absence of readers, not an absence of reach. The check
-for 06-09's factory-closure under-credit came back negative. Excess-property
-checking then named 120 sites across nine files, every one fixed by deletion --
-no cast, no assertion, no widened parameter anywhere in the diff.
-
-`update-swap.ts:177`'s vestigial `Omit<Phase3Failure, "cause">`, handed off
-conditionally by 06-14, WAS simplified: the compiler-forced deletions put this
-plan in that file anyway. It landed as its own commit.
-
-Live population is a measured 103 -> 90 unread, taken as a `(path, owner, key)`
-set difference against a pre-edit baseline at two points: 13 lost, **0 gained**.
-Candidates 3,426 -> 3,413, runtime-observed held at 3,002, contracts held at 85.
-All four owner areas now read 0 unread. `--check` reports 90 problems that are
-ALL `unread`, none naming this plan's areas, with nothing stale, missing,
-duplicate, incomplete or invalid, at digest `59f0fa76`.
-
-Eight contract coordinate fields across four entries were re-anchored, and that a
-mis-anchor is loud rather than quiet was exercised: re-introducing one pre-repair
-coordinate makes the gate exit 2 with `names no declaration in this program`. The
-`install-outcome.ts` direct pin was re-measured to `branches 109/111, lines
-1040/1046` -- only the reading string, finding ids and reasons byte-identical, and
-the uncovered branch count held at 2. `npm run check` is exit 0 with all four
-fallow sub-gates, the seven negative controls pass, and aggregate production unit
-coverage is 1,834/1,834 functions and 9,050/9,050 branches with zero modules below
-100%; lines moved 62,919 -> 62,910, exactly the nine covered property lines
-deleted from the three orchestrator build sites.
-
-Sixteen disposition rows were re-keyed by the line shifts and restored from the
-fresh report rather than transcribed -- eight of them carry a witness coordinate
-that genuinely moved, so transcription would have written eight addresses nothing
-is at.
-
-Two measured defects were recorded in a new `deferred-items.md` rather than fixed,
-neither in a file this plan owns. `tests/orchestrators/marketplace/remove.test.ts`
-makes a `scope: "user"` call without a hermetic home and reads the operator's real
-`~/.pi/agent/` state; with `schemaVersion: 3` there it fails 1 of 24, and passes
-24 of 24 under an empty `HOME`. CI has no such directory, so it stays latent
-there, but every gate in this plan was run with a hermetic `HOME`. Separately, six
-ledger notes name a witness coordinate the fresh report no longer holds -- three
-`bridges/hooks/routing-state.ts` rows and three `orchestrators/types.ts` rows, off
-by 4 and 2 lines from earlier repairs in this phase. `--check` does not compare
-note text against the report, so it is silent about them.
-
-Plan 06-11 is the fourth repair plan and closed the `edge` owner group, the one
-owner carrying zero validated contracts. Of its 17 rows, 10 were repaired, 0 were
-contracted and 7 stay findings with a recorded reason — 90 -> 80 unread, 10 lost,
-**0 gained**, measured as a `(path, owner, key)` difference at each task boundary.
-
-Two rows were deleted outright after the triage's recorded disposition was checked
-and found wrong: it filed `LocationsResolver.marketplaceNamesCachePath` and
-`MarketplaceStateRecord.manifestPath` as delegate mirrors, but neither has any
-production reader and the only calling syntax in the tree lands on the
-orchestrator-side twin. The other eight were genuine mirrors:
-`SingleNameMarketplaceRun` now names `GetMarketplaceInfoOptions`, the option bag
-its one implementation reads, and `loadToolPluginPayload`'s parameter declares only
-the two slots its body reads, with the filter decision left to `ToolFilterBuckets`
-where it already lives.
-
-This was the `external-output` category's first live use, and it refused all six
-drafts. The refusal is diagnostic, not merely negative: `proveExternalOutput`
-checks the origin first and accepted all six, so the engine agrees the named site
-builds each member; only the boundary half fails. A compiler probe measured why —
-a Pi tool's `execute` is a method shorthand, so `getContextualType` on the
-`MethodDeclaration` answers `undefined` even though the enclosing object literal
-resolves to `ToolDefinition` and its `execute` is declared in the installed
-package. A second limit stands behind it: `reaches` follows only an identifier
-chain or an origin textually inside the returned expression, and both returns here
-are object literals carrying the rows nested under `details`. Neither limit was
-worked around and no slot left either shipped payload.
-
-`ParsedCommandArgs.required` was submitted once as a `type-selection` entry and
-refused — a conditional-type `extends` clause is not a two-argument selection. The
-`Extract`-based rewrite that would satisfy the engine was deliberately not taken.
-
-Two hand-offs are recorded. To 06-12: the now-unreachable
-`LocationsResolverLike.marketplaceNamesCachePath` at `orchestrators/edge-deps.ts:63:3`
-(`test-only-observed`, so no finding was gained), its implementation at line 149,
-and its two witnesses at `tests/orchestrators/edge-deps.test.ts:235:32` and `:256:32`.
-Shared with 06-13: one bounded engine plan adding a conditional-clause proof clears
-`ParsedCommandArgs.required` and `PiToolName.toolName` together.
-
-`npm run check` is exit 0, the seven negative controls pass, and aggregate
-production unit coverage holds at 1,834/1,834 functions and 9,050/9,050 branches
-with zero modules below 100%; lines moved 62,910 -> 62,904, exactly the six
-physical type-only lines the diff removed. `--check` reports 80 problems that are
-ALL `unread`, at digest `219319ca`. No contract coordinate needed re-anchoring —
-none of the 85 entries names an edge file or any test this plan touched.
-
-Plan 06-12 closed the repair wave on the largest owner group. The 49
-`orchestrators` rows end as 36 source repairs, 3 validated contracts and 10
-outstanding with a written mechanism each; the live population moved 72 -> 33
-with zero findings gained at all six measurement points. The repairs are the
-familiar three: name a shape once where it was spelled at four sites (the
-marketplace cascade-failure pair, the four reinstall scope resolvers, the
-reconcile source-disagreement detail), point a seam at the type its own
-implementation reads (`ClaudeSettingsReadOptions`, `MarketplaceManifest`,
-`Partial<MarketplaceConfigEntry>`, `ImportConfigPatch["marketplaces"]`), and
-delete eleven slots with no reader anywhere. 06-11's stranded resolver twin was
-resolved by removing the accessor, its implementation and its two witnesses
-together — `marketplaceNamesCacheFile` is reached directly by `marketplace/add.ts`
-and `marketplace/remove.ts`, so the method wrapped a capability every consumer
-already had.
-
-Three contract entries were accepted and one retired by name: `RemoveDataDirFn`
-now narrows Node's own `RmOptions`, and `PartialableUpdateShapeError` selects the
-single shape-error arm its marker targets, which turns the hand-written `kind`
-pin into the arm's own literal.
-
-Three drafts were refused and recorded rather than accommodated. One is a filter
-over `PluginInfoCascadeMsg`, a single-variant type that discriminates nothing.
-The other two are a SECOND prover limit, measured past the one 06-06 recorded:
-the R4 restatements got the `never` markers past `widerSlotFor`, and `narrows`
-then refused them because `constituentsOf` returns a one-element array for a
-non-union, so `never` counts as one constituent against `string`'s one. Both
-restatements were REVERTED rather than shipped — `update-swap.ts` is
-byte-identical to its pre-plan state — because reshaping production source to
-satisfy a refused proof is what this phase forbids. `enableRowDependencies`'s
-`{ partition?: never }` was not touched: no left operand declares the slot, so
-no restatement can reach the prover at all.
-
-`RemoveMarketplaceOutcome.name` was kept after answering the sibling-symmetry
-question in writing. The symmetry is NOT what keeps it: `AddMarketplaceOutcome.name`
-is read for a documented CR-01 reason (the add outcome's name is manifest-derived)
-that remove has no analogue for. It stays because three `deepStrictEqual`
-assertions observe it, and at `remove.test.ts:596` the compared name IS the case's
-whole claim — the same whole-object under-credit 06-09 and 06-13 measured.
-
-The record was regenerated at digest `feb875b4` and reconciles with 33 problems
-that are ALL `unread`. Fifty-four re-keyed dispositions were restored from the
-fresh report, never transcribed, with the `witnesses[0]` convention established
-empirically (188 of 196 surviving notes match it). A further nine notes that
-survived re-keying were corrected because the same derivation showed them stale —
-this closes 06-10's hand-off, and both `reasons` coordinates on the
-`install-outcome.ts` direct pin were among them, one already stale by three lines
-before this plan ran. `npm run check` is exit 0, the seven negative controls
-pass, both direct pins matched exactly, and aggregate production unit coverage
-holds at 100% on all three axes with zero modules below it (functions
-1,833/1,833, branches 9,049/9,049, lines 62,922/62,922); the one retired function
-is the single production callable the plan removed.
-
-**The six-plan repair wave is complete and 06-08 is still blocked.** The residual
-is 33 unread, 0 unsupported, 90 validated contracts, 3,352 candidates —
-`orchestrators` 10, `domain` 7, `edge` 7, `platform` 5, `persistence` 3,
-`bridges/hooks` 1. Every row carries a measured reason, and they sort into four
-bounded engine gaps (the `narrows` `never` limit; whole-object `deepStrictEqual`
-under-credit; conditional-clause filters; `external-output` origin and boundary)
-plus one product decision (`enableRowDependencies`'s marker). The operator now
-has the full picture 06-08's fate depends on.
-
-Phase 05 closed: all 28 plans landed and the production
-dead-code census drained from 111 to 0 with zero net additions at every step.
-Independent verification re-measured the start population from a clean archive
-of `a8ef0dac` (111, matching the first committed pin), confirmed the pins are
-empty because the tree measures empty rather than because identities were
-allowlisted, and proved the gates discriminate with seven planted violations.
-Aggregate production unit coverage held at exactly 100%: 62,889 lines,
-1,834 functions, 9,050 branches, zero modules below 100%.
-
-Independent code review of waves 5-11 returned 0 blockers and 5 warnings; four
-were closed in `dfe78c9e`, `e2285f73`, `bf7584da`, `dcb16d40`. The one that
-mattered: `production.deadCode` scoped cycle detection to the production entry
-graph, so a cycle under `tests/` or `scripts/` was reported by nothing — measured
-both ways, then fixed by adding a second `--no-production --circular-deps
---re-export-cycles` link to `npm run fallow` and pinning the split with a planted
-offender. The credential scan re-aimed after `buildAuthCallbacks` moved was also
-measurably inert; it now fails when its subject set is empty. The fifth warning
-(persistence validation's `Errors()`-based fail-open shape) is the operator's
-approved design and was recorded, not reverted.
+Verification ran the 7-control negative suite live and planted a new unread
+member into the real `EdgeDeps` declaration, confirming the exception list
+excuses exactly five coordinates and nothing else. Coverage recomputed
+independently from unit.lcov: 1833/1833 functions, 9049/9049 branches, 0
+modules below 100%. The direct-coverage pin was renumbered, never loosened.
 
 ### Historical refine-unit-tests closeout: `override_closeout`
 

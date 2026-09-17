@@ -16,7 +16,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 - [x] **Phase 3: Reachable Agent Collision Contract** — AGCOL-01
 - [x] **Phase 4: Strict Command Arguments** — ARGS-01
 - [x] **Phase 5: Production Export Ownership** — FLOW-09
-- [ ] **Phase 6: Unused Type Member Gate** — 2026-09-02-detect-unused-code-and-type-members.md
+- [x] **Phase 6: Unused Type Member Gate** — 2026-09-02-detect-unused-code-and-type-members.md
 - [ ] **Phase 7: Reliable Coverage Metrics** — FLOW-05
 - [ ] **Phase 8: Final Verification and Reconciliation** — All authorized items
 
@@ -147,6 +147,6 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 | 3. Reachable Agent Collision Contract | 4/4 | Complete | 2026-09-14 |
 | 4. Strict Command Arguments | 3/3 | Complete | 2026-09-14 |
 | 5. Production Export Ownership | 28/28 | Complete | 2026-09-15 |
-| 6. Unused Type Member Gate | 17/17 | In Progress|  |
+| 6. Unused Type Member Gate | 17/17 | Complete | 2026-09-17 |
 | 7. Reliable Coverage Metrics | 0/8 | Plans approved | - |
 | 8. Final Verification and Reconciliation | 0/TBD | Not started | - |
