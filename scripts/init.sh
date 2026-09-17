@@ -31,3 +31,6 @@ if ! command -v codegraph >/dev/null 2>&1; then
 fi
 
 codegraph install --target claude,codex --location local --no-permissions --init --yes
+
+# prevents shadowing of CLAUDE.md in codex/pi
+rm -f AGENTS.md .claude/CLAUDE.md
