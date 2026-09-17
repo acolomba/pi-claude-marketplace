@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 milestone: test-backlog
 current_phase: 06
 current_phase_name: Unused Type Member Gate
-status: executing
-stopped_at: Completed 06-17-PLAN.md
-last_updated: "2026-09-17T04:20:00.000Z"
+status: ready_for_verification
+stopped_at: Completed 06-08-PLAN.md
+last_updated: "2026-09-17T06:17:23.520Z"
 last_activity: 2026-09-17
-last_activity_desc: Plan 06-17 complete, collapsing the last two duplicate declarations (9 -> 6 unread against a predicted 5, zero findings gained; the if-field anchor triple and the completions state-record shape each have ONE declaration now, and the fourth owned row is left standing with the fallow dead-type-export finding that blocks its collapse quoted verbatim)
-state_head: 4824e9df
+last_activity_desc: Plan 06-08 complete, activating the unused type member gate (both scripts in the mandatory npm check chain CI already runs, two pre-commit hooks on deliberately different triggers, and a per-row recorded-decision layer that carries the five remaining unread members by exact coordinate and measured mechanism; T0 cleared the sixth, taking the live population 6 -> 5 with zero findings gained). Phase 6 has 17 of 17 plans complete and is ready for verification.
+state_head: 4ec3b7d4ca0385ddbc98e5b499d67710aac5df4c
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 63
-  completed_plans: 54
+  completed_plans: 55
   percent: 63
 milestone_name: test-backlog
 ---
@@ -31,10 +31,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 06 (Unused Type Member Gate) — EXECUTING
-Plan: 17 of 17 executed; only 06-08 (gate activation) is still outstanding
-Status: The six bounded repair plans are COMPLETE (06-09 ✅ -> 06-14 ✅ -> 06-10 ✅ -> 06-11 ✅ -> 06-13 ✅ -> 06-12 ✅), followed by the two analyzer plans 06-15 ✅ and 06-16 ✅ and the final source plan 06-17 ✅. 06-08 now faces a measured residual of 6 unread members, not the 5 it was sized against. Five are the recorded decisions only the operator can settle (`enableRowDependencies.signals.partition`, `AuthAttemptResult.authAttempted` ×2, `UpdatePhaseFailure.msg`, `PLUGIN_INFO_RENDER.status`). The sixth is `edge-deps.ts:92:5`, left standing by 06-17 because aliasing the edge-side `LocationsResolver` onto the orchestrator declaration leaves `MarketplaceStateRecord` with no consumer inside the extension and `fallow dead-code` exits 1 on it; that is the only standing row removable by a bounded mechanical change (repointing three test imports) rather than by a decision.
-Last activity: 2026-09-17 — Plan 06-17 complete (the if-field anchor triple collapsed onto its single domain declaration and the completions state-record shape onto its single orchestrator declaration, each running the direction the zone allow-list already permits; 9 -> 6 unread with ZERO findings gained, measured as a `(path, owner, key)` set difference; `ResolveHookIfContext.cwd` reclassified test-only-observed -> runtime-observed; the disproved edge-deps sync comment removed; `npm run check` exit 0, negative controls 7/7, coverage 1833/1833 functions and 9049/9049 branches unchanged)
+Phase: 06 (Unused Type Member Gate) — ALL PLANS COMPLETE, READY FOR VERIFICATION
+Plan: 17 of 17 executed; 06-08 (gate activation) landed last
+Status: The gate is MANDATORY. `npm run lint:type-members` and `npm run lint:type-members:negative` are both in the `npm run check` chain, which is what CI runs, and two local pre-commit hooks invoke the same pair with `pass_filenames: false` on deliberately different triggers — the gate on every input that can change what it reports, the 7-minute negative runner only on the gate's own machinery. Activation needed a residual form, so a per-row recorded-decision layer was added (`scripts/check-unused-type-members.exceptions.json`): one exact `path:line:column` plus owner, key, the decision that accepted it and a measured mechanism, with no count, threshold or path glob expressible and an entry that matches no finding refusing the run. T0 cleared the sixth row by repointing three test imports and collapsing the resolver mirror, so the live population is 3344 candidates with **5** unread, all five carried by a named decision. The two that a human still owns are D-32-05 (`AuthAttemptResult.authAttempted` ×2) and the three orchestrator rows. NEXT: `/gsd-verify-work 06` — no verification report exists yet, which is why the roadmap row reads In Progress at 17/17.
+Last activity: 2026-09-17 — Plan 06-08 complete (`npm run check` exit 0 in 14m21s with 6555 unit tests and 0 failures, the gate reporting `passed with 5 recorded exception(s)` and the negative controls 7 of 7; coverage 1833/1833 functions, 9049/9049 branches, 0 modules below 100 percent; 236 direct pairs with both pinned shortfalls matched and the pin file unmodified; 19 new controls, one of which plants a new unread member into the real tree and requires the real gate to fail on it alone)
 
 Plan 06-01 landed the member gate's compiler tracer: `node
 scripts/check-unused-type-members.mjs` compiles the project once, inventories
@@ -526,7 +526,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-17T03:05:00.000Z
+**Last session:** 2026-09-17T06:16:39.067Z
 **Resume file:** None
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–5 are complete.
@@ -547,7 +547,7 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 
 ### Phase 6 Plan 1 complete
 
-Stopped at: Completed 06-12-PLAN.md
+Stopped at: Completed 06-08-PLAN.md
 (directed value transfers) and 06-03 (validated contracts), which the plan
 graph runs together in Wave 2 over disjoint files.
 
@@ -869,6 +869,7 @@ together with its three bridge declaration sites. Next is 06-10.
 | Phase 06 P12 | 2h 54m | 7 tasks | 28 files |
 | Phase 06 P15 | 4h 20m | 7 tasks | 9 files |
 | Phase 06 P16 | 5h 5m | 5 tasks | 6 files |
+| Phase 06 P08 | 3h 52m | 3 tasks | 16 files |
 
 ## Decisions
 
@@ -917,3 +918,7 @@ together with its three bridge declaration sites. Next is 06-10.
 - [Phase 06]: A staged repair stops at the step that worked — step A (aliasing the bridge twin alone) cleared both anchor rows, so `PathAnchorContext` was left untouched and `glob.ts` appears in no commit; the phase does not churn source without a measured row to show for it
 - [Phase 06]: A coverage figure that moves is explained line-for-line before it is accepted — lcov `LF` tracks total source lines, so a net +46 comment lines is +46 `LF` and +46 `LH`, while functions (1833/1833) and branches (9049/9049) stay byte-identical, which is what a type-level change must produce
 - [Phase 06]: 06-15's grouping of the two `ResolveHookIfContext` rows under a `satisfies`-constraint category was mis-assigned — they were a duplicate declaration with a legal collapse direction and cleared with no engine change at all; only the two `hook-if-targets.ts` rows in that group were genuinely `satisfies`-constrained
+- [Phase 06]: The analyzer never excuses a member and the record never stops counting one — a separate per-row recorded-decision layer in the CLI applies exact member coordinates to the exit status alone, so `--inventory` and `--check` still report all five as unread
+- [Phase 06]: A residual allowance is made un-widenable by the SHAPE of its file — the identity field admits no glob metacharacter and any sixth field is a setup failure, so a count, a threshold or a path pattern cannot be written down at all
+- [Phase 06]: An allowance that matches no reported finding refuses the run — the list self-expires instead of outliving its reason, so a repaired member takes its own allowance with it and a drifted coordinate fails rather than excusing whatever moved there
+- [Phase 06]: The gate and its negative controls both ride the mandatory npm check chain, but pre-commit splits them across two triggers — the negative runner costs five whole-program analyses (6m50s, 2.12 GiB) and its subject is the gate machinery rather than the tree, so no ordinary edit under extensions/ can change its answer

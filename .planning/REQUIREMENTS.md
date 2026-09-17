@@ -24,8 +24,8 @@ Started 2026-09-14 on `features/test-backlog`.
 - [x] **ARGS-03**: Extend the flag catalog and discriminating drift gate to marketplace verbs.
 - [x] **EXPORT-01**: Triage all current Fallow production findings; remove ordinary test-only exports through coherent ownership and public tests.
 - [x] **EXPORT-02**: Enable and validate Fallow production mode while retaining completed explicit-seam protections.
-- [ ] **MEMBER-01**: Add a static gate that detects unused interface/type members, including an unread optional EdgeDeps member.
-- [ ] **MEMBER-02**: Validate read-site analysis with offender and benign controls and document justified external/structural contracts.
+- [x] **MEMBER-01**: Add a static gate that detects unused interface/type members, including an unread optional EdgeDeps member.
+- [x] **MEMBER-02**: Validate read-site analysis with offender and benign controls and document justified external/structural contracts.
 - [ ] **METRIC-01**: Reliably convert current unit coverage to Fallow-compatible Istanbul JSON and verify measurement fidelity.
 - [ ] **METRIC-02**: Select and validate a CRAP metric policy using real measurements and negative controls.
 - [ ] **FINAL-01**: Preserve 100% aggregate unit production coverage, assertion strength, direct-pair requirements, and all required quality checks.
@@ -47,8 +47,8 @@ Started 2026-09-14 on `features/test-backlog`.
 | ARGS-03 | 4 | Complete |
 | EXPORT-01 | 5 | Complete |
 | EXPORT-02 | 5 | Complete |
-| MEMBER-01 | 6 | Pending |
-| MEMBER-02 | 6 | Pending |
+| MEMBER-01 | 6 | Complete |
+| MEMBER-02 | 6 | Complete |
 | METRIC-01 | 7 | Pending |
 | METRIC-02 | 7 | Pending |
 | FINAL-01 | 8 | Pending |
