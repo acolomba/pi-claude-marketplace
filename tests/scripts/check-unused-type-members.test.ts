@@ -81,11 +81,21 @@ interface MemberRecord {
   readonly reasons: readonly string[];
 }
 
+interface ExceptionRecord {
+  readonly id: string;
+  readonly owner: string;
+  readonly key: string;
+  readonly decision: string;
+  readonly mechanism: string;
+  readonly status: string;
+}
+
 interface GateReport {
   readonly schemaVersion: number;
   readonly status: string;
   readonly members: readonly MemberRecord[];
   readonly findings: readonly MemberRecord[];
+  readonly exceptions: readonly ExceptionRecord[];
   readonly diagnostics: readonly string[];
 }
 
@@ -530,5 +540,284 @@ test("the help text states the bounded claim the gate makes and the claims it do
   assert.ok(
     run.stdout.includes(expectedScope),
     `The help text does not state the bounded claim:\n${run.stdout}`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Recorded decisions (scripts/check-unused-type-members.exceptions.json).
+//
+// MEMBER-02: the list is the ONLY sanctioned residual form, so the cases below
+// are written against the ways it could quietly become a mute button rather than
+// against the way it is meant to be used. Each one plants the abuse and requires
+// a refusal: a pattern instead of a coordinate, a count instead of a member, a
+// word instead of a measured mechanism, an entry that outlived its finding, and
+// an entry pointed at an `unsupported-analysis` verdict the analyzer never made.
+// ---------------------------------------------------------------------------
+
+const exceptionsPath = "scripts/check-unused-type-members.exceptions.json";
+
+/** The member `offenderTypes` leaves unread, which the entries below name. */
+const unreadId = `${typesPath}:3:3`;
+
+/**
+ * A mechanism long enough to state what was tried and what was observed. The
+ * cases that check the floor shorten it; the ones that check anything else must
+ * not trip the floor by accident, so they all share this one.
+ */
+const measuredMechanism =
+  "Measured: the member is written by the rollback aggregation and read by nothing today, and deleting it would force a future consumer of the structured surface to re-parse the per-phase text back out of prose. Recorded rather than repaired.";
+
+const recordedDecision = "A recorded decision in the plan that accepted this row.";
+
+function exceptionsFile(entries: readonly Readonly<Record<string, unknown>>[]): string {
+  return `${JSON.stringify({ schemaVersion: 1, exceptions: entries }, undefined, 2)}\n`;
+}
+
+/** One well-formed entry for the member `offenderTypes` leaves unread. */
+function validEntry(
+  overrides: Readonly<Record<string, unknown>> = {},
+): Readonly<Record<string, unknown>> {
+  return {
+    id: unreadId,
+    owner: "EdgeDeps",
+    key: "neverReadAnywhere",
+    decision: recordedDecision,
+    mechanism: measuredMechanism,
+    ...overrides,
+  };
+}
+
+test("a recorded decision clears its own member without moving the population", async (t) => {
+  // arrange
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    [typesPath]: offenderTypes,
+    [exceptionsPath]: exceptionsFile([validEntry()]),
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+  const report = parseReport(run.stdout);
+
+  // assert
+  assert.strictEqual(run.status, 0);
+  assert.deepStrictEqual(report.findings, []);
+  assert.deepStrictEqual(report.exceptions, [
+    {
+      id: unreadId,
+      owner: "EdgeDeps",
+      key: "neverReadAnywhere",
+      decision: recordedDecision,
+      mechanism: measuredMechanism,
+      status: "unread",
+    },
+  ]);
+  // The member is still unread in the population the record is built from: a
+  // decision changes the exit status and nothing else.
+  assert.strictEqual(memberById(report, unreadId).status, "unread");
+  assert.match(run.stderr, /^excepted: .*:3:3 EdgeDeps\.neverReadAnywhere -- /m);
+});
+
+test("a member outside the recorded decisions still fails the gate", async (t) => {
+  // arrange
+  const secondPath = "extensions/pi-claude-marketplace/shared/second.ts";
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    [typesPath]: offenderTypes,
+    [secondPath]: `export interface Second {
+  readonly alsoNeverRead?: string;
+}
+`,
+    [exceptionsPath]: exceptionsFile([validEntry()]),
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+
+  // assert
+  assert.strictEqual(run.status, 1);
+  assert.deepStrictEqual(
+    parseReport(run.stdout).findings.map((finding) => finding.id),
+    [`${secondPath}:2:3`],
+  );
+  assert.match(run.stderr, /Unused type member gate failed with 1 finding\(s\)\./);
+});
+
+test("a recorded decision that matches no finding refuses the run", async (t) => {
+  // arrange: the member the entry names is read, so the entry outlived its row.
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    [typesPath]: benignTypes,
+    [exceptionsPath]: exceptionsFile([validEntry()]),
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+
+  // assert
+  assert.strictEqual(run.status, 2);
+  assert.strictEqual(run.stdout, "");
+  assert.match(run.stderr, /is not reported by this run/);
+});
+
+test("a recorded decision at drifted coordinates refuses rather than excusing what now sits there", async (t) => {
+  // arrange: line 2 holds the member that IS read, so no finding sits there.
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    [typesPath]: offenderTypes,
+    [exceptionsPath]: exceptionsFile([validEntry({ id: `${typesPath}:2:3`, key: "gitOps" })]),
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+
+  // assert
+  assert.strictEqual(run.status, 2);
+  assert.strictEqual(run.stdout, "");
+  assert.match(run.stderr, /:2:3 EdgeDeps\.gitOps is not reported by this run/);
+});
+
+test("a recorded decision naming a different member at the right coordinates refuses the run", async (t) => {
+  // arrange
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    [typesPath]: offenderTypes,
+    [exceptionsPath]: exceptionsFile([validEntry({ owner: "SomethingElse" })]),
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+
+  // assert
+  assert.strictEqual(run.status, 2);
+  assert.match(run.stderr, /SomethingElse\.neverReadAnywhere is not reported by this run/);
+});
+
+test("an unsupported finding can never be excused by a recorded decision", async (t) => {
+  // arrange: a run-time replacer leaves the serialized keys unresolved, so the
+  // analyzer reports that it could not decide rather than that nothing read it.
+  const unresolvedPath = "extensions/pi-claude-marketplace/shared/unresolved.ts";
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    [unresolvedPath]: `export interface Filtered {
+  readonly kept: string;
+}
+
+export function write(filtered: Filtered): string {
+  return JSON.stringify(filtered, (key: string, value: unknown) => (key === "" ? value : value));
+}
+`,
+    [exceptionsPath]: exceptionsFile([
+      validEntry({ id: `${unresolvedPath}:2:3`, owner: "Filtered", key: "kept" }),
+    ]),
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+
+  // assert
+  assert.strictEqual(run.status, 2);
+  assert.strictEqual(run.stdout, "");
+  assert.match(run.stderr, /is unsupported-analysis, not unread/);
+});
+
+test("an identity carrying a pattern character is refused", async (t) => {
+  // arrange
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    [typesPath]: offenderTypes,
+    [exceptionsPath]: exceptionsFile([
+      validEntry({ id: "extensions/pi-claude-marketplace/**/*.ts:3:3" }),
+    ]),
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+
+  // assert
+  assert.strictEqual(run.status, 2);
+  assert.match(run.stderr, /is not one exact member identity of the form path:line:column/);
+});
+
+test("an unknown field is refused, so a count or a threshold cannot be recorded", async (t) => {
+  // arrange
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    [typesPath]: offenderTypes,
+    [exceptionsPath]: exceptionsFile([validEntry({ maximumUnread: 6 })]),
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+
+  // assert
+  assert.strictEqual(run.status, 2);
+  assert.match(run.stderr, /carries an unknown field maximumUnread/);
+});
+
+test("a mechanism too short to state what was measured is refused", async (t) => {
+  // arrange
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    [typesPath]: offenderTypes,
+    [exceptionsPath]: exceptionsFile([validEntry({ mechanism: "intentional" })]),
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+
+  // assert
+  assert.strictEqual(run.status, 2);
+  assert.match(run.stderr, /states a 11-character mechanism/);
+});
+
+test("the same member listed twice is refused", async (t) => {
+  // arrange
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    [typesPath]: offenderTypes,
+    [exceptionsPath]: exceptionsFile([validEntry(), validEntry()]),
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+
+  // assert
+  assert.strictEqual(run.status, 2);
+  assert.match(run.stderr, /is listed twice; one member carries one decision/);
+});
+
+test("a decision list declaring another schema version is refused", async (t) => {
+  // arrange
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    [typesPath]: offenderTypes,
+    [exceptionsPath]: `${JSON.stringify({ schemaVersion: 2, exceptions: [] })}\n`,
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+
+  // assert
+  assert.strictEqual(run.status, 2);
+  assert.match(run.stderr, /declares schemaVersion 2 rather than 1/);
+});
+
+test("no decision list at all excuses no member", async (t) => {
+  // arrange
+  const root = await createFixture(t, {
+    "tsconfig.json": fixtureTsconfig,
+    [typesPath]: offenderTypes,
+  });
+
+  // act
+  const run = runGate(["--root", root, "--json"]);
+
+  // assert
+  assert.strictEqual(run.status, 1);
+  assert.deepStrictEqual(parseReport(run.stdout).exceptions, []);
+  assert.deepStrictEqual(
+    parseReport(run.stdout).findings.map((finding) => finding.id),
+    [unreadId],
   );
 });

@@ -545,6 +545,7 @@ export const UNUSED_TYPE_MEMBER_GATE_TARGETS = [
   "tests/edge/types.test.ts",
   "scripts/check-unused-type-members.mjs",
   "scripts/check-unused-type-members.negative.mjs",
+  "scripts/check-unused-type-members.exceptions.json",
   "tests/scripts/check-unused-type-members.test.ts",
   "tests/scripts/check-unused-type-members.model.test.ts",
   "tests/scripts/check-unused-type-members.operations.test.ts",
@@ -565,6 +566,15 @@ export const TYPE_MEMBER_GATE_REL: (typeof UNUSED_TYPE_MEMBER_GATE_TARGETS)[numb
 /** The executable offender and benign controls around that entry point. */
 export const TYPE_MEMBER_NEGATIVE_REL: (typeof UNUSED_TYPE_MEMBER_GATE_TARGETS)[number] =
   "scripts/check-unused-type-members.negative.mjs";
+
+/**
+ * The recorded decisions the gate's exit status accepts: one entry per member,
+ * each naming exact coordinates and the mechanism that was measured. This is a
+ * target in the sense this file means -- a gate that cannot open it accepts
+ * whatever it happens to contain.
+ */
+export const TYPE_MEMBER_EXCEPTIONS_REL: (typeof UNUSED_TYPE_MEMBER_GATE_TARGETS)[number] =
+  "scripts/check-unused-type-members.exceptions.json";
 
 /**
  * D-07-17: the records that carry a finding's disposition when the evidence for

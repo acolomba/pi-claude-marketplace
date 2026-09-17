@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { analyzeProject } from "./check-unused-type-members.analysis.mjs";
 import { createContractEvaluator } from "./check-unused-type-members.contracts.mjs";
+import { applyExceptions, readExceptions } from "./check-unused-type-members.exceptions.mjs";
 import { AnalysisSetupError } from "./check-unused-type-members.model.mjs";
 
 /**
@@ -18,6 +19,7 @@ import { AnalysisSetupError } from "./check-unused-type-members.model.mjs";
 
 const defaultProjectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const contractsFileName = "check-unused-type-members.contracts.json";
+const exceptionsFileName = "check-unused-type-members.exceptions.json";
 
 const helpText = `Usage: node scripts/check-unused-type-members.mjs [options]
 
@@ -33,8 +35,21 @@ const helpText = `Usage: node scripts/check-unused-type-members.mjs [options]
 Exit status: 0 no findings, 1 unread or unsupported members, 2 setup failure.
 
 Contracts: scripts/${contractsFileName} under the analysed root, when it exists,
-is the only source of accepted exceptions. An invalid entry is a setup failure,
-never a quiet allowance; with no such file no member is excused at all.
+is the only source of evidence-backed exceptions. An invalid entry is a setup
+failure, never a quiet allowance; with no such file no member is excused at all.
+
+Recorded decisions: scripts/${exceptionsFileName} under the analysed
+root, when it exists, lists individual unread members a recorded decision
+accepts. Each entry names ONE member by exact path, line, column, owner and key,
+and states where the decision is recorded and the mechanism that was measured.
+There is no count, no threshold and no path pattern, and the identity field
+admits no pattern character, so the list cannot be widened by one row. An entry
+that matches no reported finding refuses the run, so a repaired member takes its
+allowance with it and a drifted coordinate fails instead of excusing whatever now
+sits there. An unsupported finding can never be excused: that status is the
+analyzer saying it could not decide. Every excused member is named on every run,
+and it stays in the report and in the recorded population -- only the exit status
+changes.
 
 Scope: this is a bounded may-observe analysis. It reports that some run-time
 syntax could read a declared member: property and optional-chain access, element
@@ -148,6 +163,17 @@ function reportFindings(findings) {
 }
 
 /**
+ * Names every excused member on every run, passing or failing alike. A residual
+ * nobody is shown is a residual nobody revisits, so the decision that accepted
+ * each row is printed beside it rather than left in a file.
+ */
+function reportExceptions(excused) {
+  for (const one of excused) {
+    process.stderr.write(`excepted: ${one.id} ${one.owner}.${one.key} -- ${one.decision}\n`);
+  }
+}
+
+/**
  * The contract validator for the analysed root, or nothing when that root ships
  * no contract file. Nothing is the safe absence: with no validator no member is
  * excused, so a missing file can never widen what the gate accepts.
@@ -165,24 +191,35 @@ function main() {
     return;
   }
 
-  const report = analyzeProject({
+  // Validated before the analysis rather than after it: a malformed decision
+  // list is cheap to refuse and a whole-program walk is not.
+  const exceptions = readExceptions(options.root);
+  const analyzed = analyzeProject({
     ...options,
     contractEvaluator: contractEvaluatorFor(options.root),
   });
+  const { excused, outstanding } = applyExceptions(analyzed.findings, exceptions);
+  // `members` and `counts` are left exactly as the analyzer measured them, so a
+  // recorded decision never moves the population. Only `findings`, which is what
+  // the exit status answers for, is narrowed.
+  const report = { ...analyzed, findings: outstanding, exceptions: excused };
 
   if (options.json) {
     process.stdout.write(`${JSON.stringify(report, undefined, 2)}\n`);
   }
 
-  if (report.findings.length === 0) {
+  reportExceptions(excused);
+
+  if (outstanding.length === 0) {
     if (!options.json) {
-      process.stdout.write("Unused type member gate passed.\n");
+      const accepted = excused.length === 0 ? "" : ` with ${excused.length} recorded exception(s)`;
+      process.stdout.write(`Unused type member gate passed${accepted}.\n`);
     }
 
     return;
   }
 
-  reportFindings(report.findings);
+  reportFindings(outstanding);
   process.exitCode = 1;
 }
 
