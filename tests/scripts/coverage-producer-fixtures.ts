@@ -184,10 +184,14 @@ export function nestedLogicalFixture(): ProducerFixture {
   };
 }
 
-/** The functions and statements the unmodified producer omits: the nested callback and its body. */
+/**
+ * What the unmodified producer omits: the callback nested in the left operand,
+ * every statement of its body, and the `if` branch inside it.
+ */
 export function nestedLogicalOmission(): {
   readonly functions: readonly SourceSpan[];
   readonly statements: readonly SourceSpan[];
+  readonly branches: readonly SourceSpan[];
 } {
   const source = nestedLogicalSource;
 
@@ -199,5 +203,6 @@ export function nestedLogicalOmission(): {
       spanOf(source, "return true;"),
       spanOf(source, "return false;"),
     ],
+    branches: [spanOf(source, "if (doubled > 10) {", "return true;\n    }")],
   };
 }

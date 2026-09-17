@@ -36,7 +36,9 @@ const captureCliPath = fileURLToPath(
 const producerCliPath = fileURLToPath(
   new URL("../../scripts/coverage-producer.mjs", import.meta.url),
 );
-const producerModuleUrl = new URL("../../scripts/coverage-producer.mjs", import.meta.url).href;
+const producerCliUrl = new URL("../../scripts/coverage-producer.mjs", import.meta.url).href;
+const adapterModuleUrl = new URL("../../scripts/coverage-producer.convert.mjs", import.meta.url)
+  .href;
 
 // The researched upstream 1.0.6 producer payload (`dist/index.mjs`) and its
 // MIT license, recorded from the registry tarball with integrity
@@ -381,8 +383,8 @@ test("rejects the unmodified upstream producer: the nested logical callback and 
 
   // assert
   assert.strictEqual(conversion.run.status, 0, conversion.run.stderr);
-  const producerModule = (await import(producerModuleUrl)) as unknown as ProducerModule;
-  const identity = producerModule.producerIdentity(await producerModule.loadProducer());
+  const adapter = (await import(adapterModuleUrl)) as unknown as ProducerModule;
+  const identity = adapter.producerIdentity(await adapter.loadProducer());
   assert.strictEqual(identity.producer.version, "1.0.6");
   assert.strictEqual(identity.producer.payloadDigest, upstreamPayloadDigest);
   assert.strictEqual(identity.producer.licenseDigest, upstreamLicenseDigest);
@@ -399,10 +401,16 @@ test("rejects the unmodified upstream producer: the nested logical callback and 
   const missingStatements = expected.statements
     .filter((statement) => !actualStatementKeys.has(spanKey(statement.loc)))
     .map((statement) => statement.loc);
+  const actualBranchKeys = new Set(actual.branches.map((branch) => spanKey(branch.loc)));
+  const missingBranches = expected.branches
+    .filter((branch) => !actualBranchKeys.has(spanKey(branch.loc)))
+    .map((branch) => branch.loc);
   assert.deepStrictEqual(missingFunctions, [...omission.functions]);
   assert.deepStrictEqual(missingStatements, [...omission.statements]);
+  assert.deepStrictEqual(missingBranches, [...omission.branches]);
   const omittedFunctionKeys = new Set(omission.functions.map(spanKey));
   const omittedStatementKeys = new Set(omission.statements.map(spanKey));
+  const omittedBranchKeys = new Set(omission.branches.map(spanKey));
   assert.deepStrictEqual(
     actual.functions.map((fn) => ({
       ...fn,
@@ -416,7 +424,10 @@ test("rejects the unmodified upstream producer: the nested logical callback and 
     actual.statements,
     expected.statements.filter((statement) => !omittedStatementKeys.has(spanKey(statement.loc))),
   );
-  assert.deepStrictEqual(actual.branches, expected.branches);
+  assert.deepStrictEqual(
+    actual.branches,
+    expected.branches.filter((branch) => !omittedBranchKeys.has(spanKey(branch.loc))),
+  );
 });
 
 test("fails explicitly when the raw file holds no record for the requested url", async (t) => {
@@ -454,18 +465,18 @@ test("refuses a request without --out and writes nothing", async (t) => {
 
 test("is inert on import", () => {
   // arrange
-  const specifier = JSON.stringify(producerModuleUrl);
+  const specifier = JSON.stringify(producerCliUrl);
 
   // act
   const imported = run([
     "--input-type=module",
     "-e",
-    `const loaded = await import(${specifier}); process.stdout.write(typeof loaded.convertScripts);`,
+    `const loaded = await import(${specifier}); process.stdout.write(JSON.stringify(Object.keys(loaded)));`,
   ]);
 
   // assert
   assert.deepStrictEqual(
-    { status: imported.status, stdout: imported.stdout },
-    { status: 0, stdout: "function" },
+    { status: imported.status, stdout: imported.stdout, stderr: imported.stderr },
+    { status: 0, stdout: "[]", stderr: "" },
   );
 });
