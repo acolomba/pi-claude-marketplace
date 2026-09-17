@@ -32,6 +32,7 @@ fi
 
 codegraph install --target claude,codex --location local --no-permissions --init --yes
 
-# keeps codegraph changes visible to codex/pi
-[[ -f .claude/CLAUDE.md ]] && { grep -q CODEGRAPH_START CLAUDE.md || cat .claude/CLAUDE.md >>CLAUDE.md; } && rm .claude/CLAUDE.md
-rm -f AGENTS.md
+# CLAUDE.md carries the committed codegraph block. The codex copy in AGENTS.md
+# would shadow CLAUDE.md, and the claude copy in .claude/CLAUDE.md would
+# duplicate it, so drop both.
+rm -f AGENTS.md .claude/CLAUDE.md
