@@ -27,7 +27,7 @@ affects: []
 actuals:
   tokens: 29333
   tasks: 3
-  commits: 5
+  commits: 7
 plan_head_before: a0e96bae3b2410796f92f28747580237a3b99b7a
 
 tech-stack:
@@ -168,6 +168,8 @@ completed: 2026-09-17
 **The gate becomes mandatory: `lint:type-members` and `lint:type-members:negative` join the `npm run check` chain CI already runs, two pre-commit hooks invoke the same pair over the whole project, and the tree's last mechanical row is repaired so that the residual is five named members -- each carried by a per-row recorded decision stating its exact coordinate and its measured mechanism, and none of it expressible as a count, a threshold or a path pattern.**
 
 ## The trajectory, end to end
+
+**Commits:** 7, measured as `git rev-list --count a0e96bae..HEAD` at close-out -- two source, three record, one SUMMARY, one state. The `tokens` figure is `chars/4` over the realized diff; `17920` of it is source and the rest is the two regenerated planning records, against a plan estimate of `19000`.
 
 | Stage | Unread members |
 | --- | --- |
