@@ -4,11 +4,11 @@ milestone: test-backlog
 current_phase: 07
 current_phase_name: Reliable Coverage Metrics
 status: executing
-stopped_at: "Phase 06 verified and complete. Resume file: none."
-last_updated: "2026-09-17T06:17:23.520Z"
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-09-17T17:12:58.395Z"
 last_activity: 2026-09-17
-last_activity_desc: Phase 06 verified 2/2 and marked complete; the member gate runs in the mandatory chain carrying five recorded decisions. Phase 07 begins.
-state_head: 4ec3b7d4ca0385ddbc98e5b499d67710aac5df4c
+last_activity_desc: Phase 07 execution started
+state_head: 09f31285bb5d11f41232c436d4644e2db37aebd4
 progress:
   total_phases: 8
   completed_phases: 6
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-09-13 after the refine-unit-tests mile
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 06 — Unused Type Member Gate
+**Current focus:** Phase 07 — Reliable Coverage Metrics
 
 ## Current Position
 
-Phase: 07 (Reliable Coverage Metrics) — STARTING
-Plan: 0 of 8
-Status: Phase 06 complete and verified
-Last activity: 2026-09-17 — Phase 06 verified 2/2
+Phase: 07 (Reliable Coverage Metrics) — EXECUTING
+Plan: 2 of 8
+Status: Ready to execute
+Last activity: 2026-09-17 — Phase 07 execution started
 
 Phase 06 shipped an automated gate for type members nothing reads — a class
 no existing tool caught here: typecheck, lint and fallow all pass with a
@@ -141,7 +141,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-09-17T06:16:39.067Z
+**Last session:** 2026-09-17T17:12:58.089Z
 **Resume file:** None
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–5 are complete.
@@ -485,6 +485,7 @@ together with its three bridge declaration sites. Next is 06-10.
 | Phase 06 P15 | 4h 20m | 7 tasks | 9 files |
 | Phase 06 P16 | 5h 5m | 5 tasks | 6 files |
 | Phase 06 P08 | 3h 52m | 3 tasks | 16 files |
+| Phase 07 P01 | 1h 26m | 3 tasks | 6 files |
 
 ## Decisions
 
