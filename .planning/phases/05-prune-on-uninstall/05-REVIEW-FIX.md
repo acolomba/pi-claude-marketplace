@@ -58,6 +58,31 @@ status: all_fixed
 
 None.
 
+## Operator decisions settled (2026-09-17)
+
+The two decisions iteration 1 left open (carried as IN-05 and IN-06 in `05-REVIEW.md`) are settled by the operator: IN-05 = tighten, IN-06 = accept. Quick task `260917-cqc`.
+
+### IN-05: fixed
+
+**Commit:** 8a17e159 (`fix(uninstall): refuse when a declarer's own manifest cannot be read`)
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-declaration-read.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts`, `tests/orchestrators/plugin/dependency-declaration-read.test.ts`, `tests/orchestrators/plugin/dependency-index.test.ts`, `tests/orchestrators/plugin/uninstall.test.ts`, `docs/dependency-resolution.md`, `docs/output-catalog.md`
+**Applied change:** `OwnManifestRead` now has `readable | absent | unusable` arms, so the read no longer collapses an absent own manifest (no candidate file, a cold git clone, a refused root) into the same value as a present-but-unusable one (parse throw, non-object payload, a stat failure other than ENOENT/ENOTDIR). `readDependencyDeclaration` takes an index-only `refuseUnusableOwnManifest` option; under it a present-but-unusable own manifest is returned as the RESV-02 `unusable` arm with the fixed detail `its own manifest is present but cannot be read` (no path, no manifest text, no chained cause -- T-05-04). `dependency-index.ts` passes the option, so `assertNoDependents` and the `--prune` sweep fail closed on it instead of letting a silent marketplace entry answer "declares nothing". The install cascade omits the option and keeps the D-01-07 entry fallback unchanged; `install-flow.ts` is not edited, and every option-off case in the read suite and `tests/architecture/manifest-read-agreement.test.ts` is unchanged.
+
+Test cases added: `D-05-07: with refuseUnusableOwnManifest, <an unparseable first candidate | an EACCES stat on the first candidate | a JSON-array payload> is the unusable arm, not the entry` plus the negative controls `D-05-06: with refuseUnusableOwnManifest, <no candidate present | a containment-refused root> still falls back to the entry` (read suite); `D-05-07: a corrupt own manifest beside a silent entry ends the walk naming the record` (index suite, asserts the exact message and `cause.cause === undefined`); `D-05-07: a record whose own manifest is present but unreadable refuses the uninstall` (owner suite, one `REFUSAL_CASES` row, `{unreadable}` at error severity, state bytes and mtime untouched, data dir kept). Docs amended: the "The check reads the declarations" paragraph in `docs/dependency-resolution.md` (four unreadable conditions, absent-vs-present distinction, repair-the-manifest remedy) and the `refused-declarer-unreadable` prose in `docs/output-catalog.md` (trigger list, cause-trailer list, remedy); the rendered example block and the catalog byte lock are unchanged.
+
+**Accepted cost:** a corrupt or unreadable `plugin.json` in ONE installed plugin now holds every other plugin's uninstall in that scope until the file is repaired or that plugin is uninstalled (the uninstall target is never indexed, so `uninstall <declarer>` always passes). This is the same D-05-07 cost already accepted for an unreadable marketplace manifest, chosen over the silent-entry fallback because the alternative is a removal on incomplete information. The install cascade is not held. The remedy is documented in `docs/dependency-resolution.md` and in the catalog state `refused-declarer-unreadable`.
+
+### IN-06: accepted, no code change
+
+`unreadable` stays the refusal token on the target's row. Rationale:
+
+1. `unreadable` is a truthful existing closed-set member: "we could not read on-disk state" makes no claim about the target's own manifest, and the target's manifest is fine.
+2. The cause line always names the declarer and why it could not be read, on both the command surface and the reconcile surface (D-05-16), so the specific information the token omits is on the next line.
+3. No consumer branches on the bare reason value. `grep -rn '"unreadable"' extensions/` finds: in `uninstall.ts`, the D-05-07 stamp (`throw new UninstallRefusedError("unreadable", ...)`, line 255), the `narrowCascadeFailure` pass-through of `cause.reason` (line 288) and the ATTR-09 fallback return (line 318); the closed-set catalog entries in `shared/notification-types.ts` and `shared/notify-reasons.ts`; and hits in other verbs (`enable-disable`, `reinstall`, `install-cascade`, `list-flow`, `info`, `marketplace/update.messaging`, `probe-classifiers`) that stamp their own rows or test a different discriminant (`selection.kind === "unreadable"` is a config-probe kind, not the notify reason). `reconcile/apply.ts::isRefusedUninstall` narrows on `instanceof UninstallRefusedError` and forwards `reason` to the renderer untouched. Nothing reads the uninstall row's reason to decide behavior.
+4. `05-CONTEXT.md` prefers reusing an existing truthful member over a new token; a `dependents unknown` token is a ten-surface closed-set amendment (catalog, fixtures, byte lock, `REASONS`, `notify-reasons`, grammar, and their tests) for no behavioral gain.
+
+**Re-open trigger:** a programmatic consumer of the bare reason value appears (code that branches on `reason === "unreadable"` to distinguish a dependents-guard refusal from a manifest read failure). At that point the token is no longer only presentation, and option (a) from iteration 1 should be reconsidered.
+
 ---
 
 _Fixed: 2026-09-17T01:40:00Z_
