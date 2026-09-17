@@ -463,6 +463,25 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
       },
     },
 
+    "remote-single-scope-with-dependencies": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "remote",
+          name: "git-helper",
+          version: "0.5.0",
+          description: "Git-source helper plugin; not yet fetched.",
+          componentsResolved: false,
+          // Pre-rendered from the marketplace entry, the only offline source for a cold clone (D-01-32).
+          dependencies: ["helper@community-mp"],
+        },
+      },
+    },
+
     "missing-plugin-not-in-manifest": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",

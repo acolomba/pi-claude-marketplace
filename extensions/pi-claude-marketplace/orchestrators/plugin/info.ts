@@ -18,7 +18,8 @@
 // RSTA-01 / RSTA-04 / RSTA-05 / RSTA-06 / D-80-04: a git source (url /
 // git-subdir / github) is classified from its fs-only clone/mirror
 // presence via `makePresenceProbe`. A COLD clone renders `(remote)` +
-// `components: not resolved`; a WARM one resolves fs-only via the
+// `components: not resolved`, plus the entry-declared `dependencies:` line
+// when the entry declares one (D-01-32); a WARM one resolves fs-only via the
 // three-way resolver against the on-disk tree (available /
 // partially-available / unavailable) and enumerates components from
 // that warm `pluginRoot`. Reading the warm clone is fs-only -- never a
@@ -2158,7 +2159,10 @@ async function buildNotInstalledPathRow(
  * `componentsResolved: false` renders the existing `components: not resolved`
  * marker (D-80-04 preserves that wording). The entry is still a valid install
  * target (install performs the fetch); `(remote)` replaces the manifest-only
- * `(available)` over-claim.
+ * `(available)` over-claim. `dependencies` is the entry-declared list
+ * (D-01-32): the plugin's own `plugin.json` is not readable without a fetch,
+ * NFR-5 forbids one, so the entry is the only offline source, and the row
+ * carries the list so the `dependencies:` line renders after the marker.
  */
 function buildRemoteNotInstalledRow(
   pluginName: string,

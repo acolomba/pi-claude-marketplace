@@ -60,8 +60,10 @@ const EXPECTED_SECTION_COUNT = 20;
 // the same under `--keep-data` with `{dependency pruned, data kept}`, and the
 // partial failure where one pruned member's warning row sits beside the
 // removals that stood (209 -> 212).
-const EXPECTED_STATE_COUNT = 212;
-const EXPECTED_UTF8_BYTES = 28_543;
+// D-01-32: +1 state for the cold git-source `(remote)` row that carries the
+// entry-declared `dependencies:` line after the unresolved marker (212 -> 213).
+const EXPECTED_STATE_COUNT = 213;
+const EXPECTED_UTF8_BYTES = 28_729;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -350,7 +352,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 212 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 213 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

@@ -454,6 +454,49 @@ for (const [status, glyph] of [
   });
 }
 
+test("renders the entry-declared dependencies line after the unresolved marker (D-01-32)", () => {
+  // arrange
+  const message = {
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "remote",
+      name: "alpha",
+      componentsResolved: false,
+      dependencies: ["helper@mp"],
+    },
+  };
+
+  // act
+  const rendered = renderPluginInfo(message as never, bothLoadedProbe());
+
+  // assert
+  assert.equal(
+    rendered,
+    "● official [user] <no autoupdate>\n  ◌ alpha (remote)\n    components: not resolved\n    dependencies: helper@mp",
+  );
+});
+
+test("renders no dependencies line for an unresolved row whose list is empty", () => {
+  // arrange
+  const message = {
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: { status: "remote", name: "alpha", componentsResolved: false, dependencies: [] },
+  };
+
+  // act
+  const rendered = renderPluginInfo(message as never, bothLoadedProbe());
+
+  // assert
+  assert.equal(
+    rendered,
+    "● official [user] <no autoupdate>\n  ◌ alpha (remote)\n    components: not resolved",
+  );
+});
+
 test("renders resolved plugin components and wraps descriptions without ellipsis", () => {
   // arrange
   const description = `${"word ".repeat(20)}supercalifragilisticexpialidocious`.trim();

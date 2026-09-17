@@ -680,9 +680,17 @@ export interface PluginInfoComponentsResolved {
   readonly dependencies?: readonly string[];
 }
 
-/** Marker arm for plugin information whose components are not resolved. */
+/**
+ * Marker arm for plugin information whose components are not resolved.
+ *
+ * `dependencies` is the pre-rendered, name-sorted list the cold git-source
+ * `(remote)` row carries from its marketplace entry (D-01-32): the plugin's
+ * own `plugin.json` is not readable without a fetch and NFR-5 forbids one.
+ * The renderer emits it after the `components: not resolved` marker.
+ */
 export interface PluginInfoComponentsUnresolved {
   readonly componentsResolved: false;
+  readonly dependencies?: readonly string[];
 }
 
 /** Non-empty marketplace information fan-out. */

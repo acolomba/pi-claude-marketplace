@@ -7885,17 +7885,18 @@ test("D-01-32 / NFR-5: a COLD git source renders the entry's list and creates no
     // fetching, so this is the arm that must NOT read a manifest at all.
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
 
-    // assert -- the `(remote)` row is byte-unchanged. It carries no dependency
-    // line by its own contract (a row with no materialized tree renders no
-    // component block), so what the entry declared cannot be read off it; the
-    // load-bearing half is that nothing was cloned to make the manifest
-    // readable.
+    // assert -- the `(remote)` row carries the entry-declared list because the
+    // cold clone leaves no manifest readable without a fetch (D-01-32); the
+    // line renders after the `components: not resolved` marker. The
+    // load-bearing half is still that nothing was cloned to make the manifest
+    // readable (NFR-5).
     assert.deepEqual(notifications, [
       {
         message:
           "● mp [user] <no autoupdate>\n" +
           "  ◌ gplug v1.0.0 (remote)\n" +
-          "    components: not resolved",
+          "    components: not resolved\n" +
+          "    dependencies: from-entry@mp",
       },
     ]);
     assert.equal(fs.existsSync(clonesDir), false, "info must not create plugin-clones/ (NFR-5)");

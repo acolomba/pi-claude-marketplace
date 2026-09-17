@@ -2116,7 +2116,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin info <plugin>@<marketplace>`
 
-Read-only detail surface (Phase 44). Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`) with an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05). Phase 44 / INFO-02 + INFO-05 + INFO-07 lock the full state set below.
+Read-only detail surface (Phase 44). Renders the install-cascade always-marketplace-header form (mirrors `install`'s shape per INFO-02) with a per-plugin row at 2-space indent, optional description block hard-wrapped at col 4 / 66-col text width, then either per-kind component lists (sorted: `agents`, `commands`, `mcp`, `skills`) with an optional `dependencies:` line LAST, OR the `components: not resolved` marker (INFO-05), itself followed by the same optional `dependencies:` line on the cold git-source row (D-01-32). Phase 44 / INFO-02 + INFO-05 + INFO-07 lock the full state set below.
 
 Severity routing: every success state (installed / available / unavailable / installed-both-scopes / state-only-installed-both-scopes / components-not-resolved / state-only-installed / state-only-partially-installed / state-only-disabled-with-components) is `info` severity (no second arg to `ctx.ui.notify`); the `state-only-fetch-skipped` and `disabled-fetch-skipped` notes are the two `warning` states on this surface (the user asked for a fetch and the command did not do it); the three `(failed)` states (`{marketplace not added}` missing-marketplace, `{marketplace not added}` --scope mismatch, `{not in manifest}` missing-plugin with NO installation record) route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
 
@@ -2303,6 +2303,20 @@ Triggered by `plugin info <plugin>@<marketplace>` against a not-installed git-so
   ◌ git-helper v0.5.0 (remote)
     Git-source helper plugin; not yet fetched.
     components: not resolved
+```
+
+### Success -- remote single scope with dependencies (D-01-32)
+
+The same not-installed git-source plugin as the state above, whose marketplace ENTRY declares `dependencies`. The clone is cold, so the plugin's own `plugin.json` cannot be read without a fetch, and NFR-5 forbids the fetch; the entry's list is therefore the source (D-01-32). The `dependencies:` line renders LAST, after the `components: not resolved` marker, so its position matches the resolved arm. Only this cold-clone row carries the line: a `(remote)` row that reports a fetch or read failure, and every `(unavailable)` / `(partially-available)` row, renders no dependency line. Severity `info`.
+
+<!-- catalog-state: remote-single-scope-with-dependencies -->
+
+```text
+● community-mp [user] <no autoupdate>
+  ◌ git-helper v0.5.0 (remote)
+    Git-source helper plugin; not yet fetched.
+    components: not resolved
+    dependencies: helper@community-mp
 ```
 
 ### Disabled inventory row (D-54-01 / ENBL-04 / ENBL-17)
