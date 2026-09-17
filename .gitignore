@@ -1,6 +1,5 @@
 # ai harnesses
-**/.claude/settings.local.json
-/.claude/jobs/
+/.agents/skills/herdr/
 
 # pi
 /.pi/git/
@@ -13,6 +12,7 @@
 /.planning/research/.cache/
 
 # claude
+**/.claude/settings.local.json
 /.claude/.gsd-profile
 /.claude/agents/gsd-*
 /.claude/commands/gsd-*
@@ -24,8 +24,10 @@
 /.claude/hooks/lib/
 /.claude/hooks/managed-hooks-registry.cjs
 /.claude/hooks/package.json
+/.claude/jobs/
 /.claude/package.json
 /.claude/scripts/*
+/.claude/skills/herdr
 /.claude/skills/spike-findings-*/
 
 # codex
@@ -62,6 +64,9 @@
 /dist/
 /build/
 /coverage/
+
+# codegraph
+/.codegraph/
 
 # dependencies
 node_modules/
