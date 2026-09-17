@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { appendFile, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -9,9 +10,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { encode } from "@jridgewell/sourcemap-codec";
 
 import {
+  conformanceCorpus,
   fixturePackageJson,
   nestedLogicalFixture,
   nestedLogicalOmission,
+  tallyFixture,
+  tallyWorkerHits,
 } from "./coverage-producer-fixtures.ts";
 
 import type {
@@ -43,12 +47,28 @@ const buildCliPath = fileURLToPath(
   new URL("../../scripts/build-coverage-producer.mjs", import.meta.url),
 );
 const vendorDirectory = fileURLToPath(new URL("../../vendor/coverage/", import.meta.url));
+const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
+const adapterPath = fileURLToPath(adapterModuleUrl);
 
 // The researched upstream 1.0.6 producer payload (`dist/index.mjs`) and its
 // MIT license, recorded from the registry tarball with integrity
 // sha512-fvpl29helSO2w/z7utIbrkNXILdrLwDwAMH2I/zPKlGf5244+gf+B4cyS1sANcrPY2h+hWCGSgC8N61s/+AF9A==.
 const upstreamPayloadDigest = "0ce3ec436049c66fff8757450230369156ee2126f52d06b41f99780e497d0a79";
 const upstreamLicenseDigest = "7771f0b6f55e76efe99cb8e6fdbff583193c9bdfd74d41620d330cc3db6b913a";
+
+// The delivered 1.0.6-project.1 payload and archive, recorded from the
+// vendored tarball when it was built.
+const deliveredVersion = "1.0.6-project.1";
+const deliveredArchive = "vendor/coverage/ast-v8-to-istanbul-1.0.6-project.1.tgz";
+const deliveredIntegrity =
+  "sha512-6KzTeECN1o+Xo9KtrN78sK5gWF37nL1vZYxrVTj/iBCE2qPGC/si5KnuDfDYV6KihNMwlMdjWciZMnsrI93fEg==";
+const deliveredPayloadDigest = "29377dc2bb113e40525edb050434420b0d071122c9aa382174a8d622a35c8874";
+
+// The one walker line the patch changes, so the upstream payload can be
+// reconstructed from the installed bytes without any network access.
+const patchedWalkerLine =
+  '\t\t\t\tswitch (isSkipped(e) && e.type !== "LogicalExpression" && onIgnore(e), e.type) {';
+const upstreamWalkerLine = "\t\t\t\tswitch (isSkipped(e) && onIgnore(e), e.type) {";
 
 interface ProcessRun {
   readonly status: number;
@@ -143,15 +163,47 @@ interface ProducerIdentity {
   readonly codec: { readonly name: string; readonly version: string };
   readonly runtime: { readonly node: string; readonly v8: string };
   readonly adapter: Readonly<Record<string, string>>;
+  readonly delivery: {
+    readonly version: string;
+    readonly archive: string;
+    readonly integrity: string;
+    readonly qualified: boolean;
+    readonly failures: ReadonlyArray<Readonly<Record<string, unknown>>>;
+  };
 }
 
 interface LoadedProducer {
   readonly identity: ProducerIdentity["producer"];
 }
 
+interface ConversionScript {
+  readonly code: string;
+  readonly coverage: V8ScriptCoverage;
+  readonly sourceMap: IdentitySourceMap;
+}
+
 interface ProducerModule {
-  loadProducer(entry?: string): Promise<LoadedProducer>;
+  loadProducer(entry?: string, options?: { readonly root?: string }): Promise<LoadedProducer>;
   producerIdentity(producer: LoadedProducer): ProducerIdentity;
+  convertScripts(
+    producer: LoadedProducer,
+    scripts: readonly ConversionScript[],
+  ): Promise<IstanbulCoverageMap>;
+}
+
+interface ProducerFailure {
+  readonly kind: string;
+  readonly entry?: string;
+  readonly expected?: unknown;
+  readonly actual?: unknown;
+}
+
+// One worker's raw V8 record for the captured module and the test that
+// worker ran.
+interface CapturedRecord {
+  readonly test: string;
+  readonly rawPath: string;
+  readonly coverage: V8ScriptCoverage;
 }
 
 // The executed JavaScript of one captured module together with every raw V8
@@ -160,8 +212,7 @@ interface CapturedScript {
   readonly modulePath: string;
   readonly url: string;
   readonly code: string;
-  readonly records: readonly V8ScriptCoverage[];
-  readonly rawFiles: readonly string[];
+  readonly records: readonly CapturedRecord[];
 }
 
 interface ProjectedCoverage {
@@ -221,8 +272,7 @@ async function captureFixture(root: string, fixture: ProducerFixture): Promise<C
   assert.ok(record, `capture did not load ${fixture.sourcePath}`);
   const modulePath = path.join(root, fixture.sourcePath);
   const url = pathToFileURL(modulePath).href;
-  const records: V8ScriptCoverage[] = [];
-  const rawFiles: string[] = [];
+  const records: CapturedRecord[] = [];
 
   for (const worker of manifest.workers) {
     for (const rawFile of worker.raw) {
@@ -231,8 +281,7 @@ async function captureFixture(root: string, fixture: ProducerFixture): Promise<C
       const script = raw.result.find((candidate) => candidate.url === url);
 
       if (script !== undefined) {
-        records.push(script);
-        rawFiles.push(rawPath);
+        records.push({ test: worker.test, rawPath, coverage: script });
       }
     }
   }
@@ -242,7 +291,6 @@ async function captureFixture(root: string, fixture: ProducerFixture): Promise<C
     url,
     code: await readFile(path.join(runDirectory, "executed", record.executed), "utf8"),
     records,
-    rawFiles,
   };
 }
 
@@ -279,7 +327,7 @@ async function convertThroughCli(
   t: TestContext,
   captured: CapturedScript,
   extraArgs: readonly string[] = [],
-): Promise<{ run: ProcessRun; outputPath: string }> {
+): Promise<{ run: ProcessRun; outputPath: string; receiptPath: string }> {
   const workspace = await mkdtemp(path.join(tmpdir(), "coverage-producer-request-"));
 
   t.after(async () => {
@@ -293,20 +341,68 @@ async function convertThroughCli(
     sourceMapPath,
     JSON.stringify(identitySourceMap(captured.modulePath, captured.code)),
   );
-  const scripts: ConversionRequestScript[] = captured.rawFiles.map((rawPath) => ({
+  const scripts: ConversionRequestScript[] = captured.records.map((record) => ({
     url: captured.url,
     code: "executed.js",
     sourceMap: "identity.map.json",
-    coverage: rawPath,
+    coverage: record.rawPath,
   }));
   const requestPath = path.join(workspace, "request.json");
   await writeFile(requestPath, JSON.stringify({ scripts }));
   const outputPath = path.join(workspace, "out", "istanbul.json");
+  const receiptPath = path.join(workspace, "out", "receipt.json");
 
   return {
-    run: run([producerCliPath, "--request", requestPath, "--out", outputPath, ...extraArgs]),
+    run: run([
+      producerCliPath,
+      "--request",
+      requestPath,
+      "--out",
+      outputPath,
+      "--receipt",
+      receiptPath,
+      ...extraArgs,
+    ]),
     outputPath,
+    receiptPath,
   };
+}
+
+function sha256(bytes: Buffer | string): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+async function readJson<T>(filePath: string): Promise<T> {
+  return JSON.parse(await readFile(filePath, "utf8")) as T;
+}
+
+// A package directory holding the upstream 1.0.6 payload, reconstructed by
+// undoing the one patched line of the installed payload, with the
+// repository's node_modules linked in so the producer's own dependencies
+// resolve. The reconstruction must hash to the recorded upstream digest.
+async function upstreamProducerEntry(t: TestContext): Promise<string> {
+  const installedEntry = fileURLToPath(import.meta.resolve("ast-v8-to-istanbul"));
+  const reconstructed = (await readFile(installedEntry, "utf8")).replace(
+    patchedWalkerLine,
+    upstreamWalkerLine,
+  );
+  assert.strictEqual(sha256(reconstructed), upstreamPayloadDigest);
+  const workspace = await mkdtemp(path.join(tmpdir(), "coverage-producer-upstream-"));
+
+  t.after(async () => {
+    await rm(workspace, { force: true, recursive: true });
+  });
+
+  const packageDirectory = path.join(workspace, "ast-v8-to-istanbul");
+  await mkdir(path.join(packageDirectory, "dist"), { recursive: true });
+  await writeFile(path.join(packageDirectory, "dist", "index.mjs"), reconstructed);
+  await writeFile(
+    path.join(packageDirectory, "package.json"),
+    JSON.stringify({ name: "ast-v8-to-istanbul", version: "1.0.6", type: "module" }),
+  );
+  await cp(path.join(vendorDirectory, "LICENSE"), path.join(packageDirectory, "LICENSE"));
+  await symlink(path.join(repositoryRoot, "node_modules"), path.join(workspace, "node_modules"));
+  return path.join(packageDirectory, "dist", "index.mjs");
 }
 
 function spanKey(span: SourceSpan): string {
@@ -374,63 +470,353 @@ async function readCoverageMap(outputPath: string): Promise<IstanbulCoverageMap>
   return JSON.parse(await readFile(outputPath, "utf8")) as IstanbulCoverageMap;
 }
 
-test("rejects the unmodified upstream producer: the nested logical callback and its body statements are absent", async (t) => {
+function omittedFrom(actual: ProjectedCoverage, expected: ProjectedCoverage): ProjectedCoverage {
+  const keys = {
+    functions: new Set(actual.functions.map((fn) => spanKey(fn.loc))),
+    statements: new Set(actual.statements.map((statement) => spanKey(statement.loc))),
+    branches: new Set(actual.branches.map((branch) => spanKey(branch.loc))),
+  };
+
+  return {
+    functions: expected.functions.filter((fn) => !keys.functions.has(spanKey(fn.loc))),
+    statements: expected.statements.filter(
+      (statement) => !keys.statements.has(spanKey(statement.loc)),
+    ),
+    branches: expected.branches.filter((branch) => !keys.branches.has(spanKey(branch.loc))),
+  };
+}
+
+async function projectedOutput(
+  outputPath: string,
+  captured: CapturedScript,
+): Promise<ProjectedCoverage> {
+  const coverage = await readCoverageMap(outputPath);
+  assert.deepStrictEqual(Object.keys(coverage), [captured.modulePath]);
+  const file = coverage[captured.modulePath];
+  assert.ok(file);
+  return projectCoverage(file);
+}
+
+for (const fixture of conformanceCorpus()) {
+  test(`reproduces the ${fixture.name} corpus exactly through the installed delivery`, async (t) => {
+    // arrange
+    const root = await createRoot(t, fixtureFiles(fixture));
+    const captured = await captureFixture(root, fixture);
+    const expected = expectedCoverage(fixture);
+
+    // act
+    const conversion = await convertThroughCli(t, captured);
+
+    // assert
+    assert.strictEqual(conversion.run.status, 0, conversion.run.stderr);
+    assert.deepStrictEqual(await projectedOutput(conversion.outputPath, captured), expected);
+    const receipt = await readJson<ProducerIdentity>(conversion.receiptPath);
+    assert.deepStrictEqual(
+      { version: receipt.producer.version, qualified: receipt.delivery.qualified },
+      { version: deliveredVersion, qualified: true },
+    );
+  });
+}
+
+test("sums the two workers' records under one identity, in either order, from a fresh AST each", async (t) => {
+  // arrange
+  const fixture = tallyFixture();
+  const root = await createRoot(t, fixtureFiles(fixture));
+  const captured = await captureFixture(root, fixture);
+  const sourceMap = identitySourceMap(captured.modulePath, captured.code);
+  const scripts = captured.records.map((record) => ({
+    test: record.test,
+    script: { code: captured.code, coverage: record.coverage, sourceMap },
+  }));
+  const adapter = (await import(adapterModuleUrl)) as unknown as ProducerModule;
+  const producer = await adapter.loadProducer();
+  const expected = expectedCoverage(fixture);
+  const project = (coverage: IstanbulCoverageMap): ProjectedCoverage => {
+    const file = coverage[captured.modulePath];
+    assert.ok(file);
+    return projectCoverage(file);
+  };
+
+  // act
+  const perWorker = new Map<string, ProjectedCoverage>();
+
+  for (const { test: workerTest, script } of scripts) {
+    perWorker.set(workerTest, project(await adapter.convertScripts(producer, [script])));
+  }
+
+  const forward = project(
+    await adapter.convertScripts(
+      producer,
+      scripts.map((s) => s.script),
+    ),
+  );
+  const reversed = project(
+    await adapter.convertScripts(
+      producer,
+      [...scripts].reverse().map((s) => s.script),
+    ),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    new Map(
+      [...perWorker].map(([workerTest, projected]) => [workerTest, projected.functions[0]?.hits]),
+    ),
+    new Map(Object.entries(tallyWorkerHits)),
+  );
+  assert.deepStrictEqual(forward, expected);
+  assert.deepStrictEqual(reversed, expected);
+});
+
+test("rejects the reconstructed upstream 1.0.6 producer: the nested logical callback, its body and its branch are absent", async (t) => {
   // arrange
   const fixture = nestedLogicalFixture();
   const root = await createRoot(t, fixtureFiles(fixture));
   const captured = await captureFixture(root, fixture);
   const expected = expectedCoverage(fixture);
   const omission = nestedLogicalOmission();
+  const upstreamEntry = await upstreamProducerEntry(t);
+
+  // act
+  const conversion = await convertThroughCli(t, captured, ["--producer", upstreamEntry]);
+
+  // assert
+  assert.strictEqual(conversion.run.status, 0, conversion.run.stderr);
+  const receipt = await readJson<ProducerIdentity>(conversion.receiptPath);
+  assert.deepStrictEqual(receipt.producer, {
+    name: "ast-v8-to-istanbul",
+    version: "1.0.6",
+    entry: upstreamEntry,
+    payloadDigest: upstreamPayloadDigest,
+    licenseDigest: upstreamLicenseDigest,
+  });
+  assert.deepStrictEqual(
+    { qualified: receipt.delivery.qualified, failures: receipt.delivery.failures },
+    {
+      qualified: false,
+      failures: [
+        { kind: "producer-location", entry: upstreamEntry },
+        { kind: "producer-version", expected: deliveredVersion, actual: "1.0.6" },
+        {
+          kind: "producer-payload",
+          expected: deliveredPayloadDigest,
+          actual: upstreamPayloadDigest,
+        },
+      ],
+    },
+  );
+  const actual = await projectedOutput(conversion.outputPath, captured);
+  const omitted = omittedFrom(actual, expected);
+  assert.deepStrictEqual(
+    {
+      functions: omitted.functions.map((fn) => fn.loc),
+      statements: omitted.statements.map((statement) => statement.loc),
+      branches: omitted.branches.map((branch) => branch.loc),
+    },
+    { functions: omission.functions, statements: omission.statements, branches: omission.branches },
+  );
+  const omittedKeys = new Set(
+    [...omission.functions, ...omission.statements, ...omission.branches].map(spanKey),
+  );
+  const anonymous = (fn: ExpectedFunction): ExpectedFunction => ({
+    ...fn,
+    name: fn.name.replace(/^\(anonymous_\d+\)$/u, "(anonymous)"),
+  });
+  assert.deepStrictEqual(
+    { ...actual, functions: actual.functions.map(anonymous) },
+    {
+      functions: expected.functions
+        .filter((fn) => !omittedKeys.has(spanKey(fn.loc)))
+        .map(anonymous),
+      statements: expected.statements.filter(
+        (statement) => !omittedKeys.has(spanKey(statement.loc)),
+      ),
+      branches: expected.branches.filter((branch) => !omittedKeys.has(spanKey(branch.loc))),
+    },
+  );
+});
+
+test("records a producer identity receipt bound to the delivery, the tool versions and the runtime", async (t) => {
+  // arrange
+  const fixture = tallyFixture();
+  const root = await createRoot(t, fixtureFiles(fixture));
+  const captured = await captureFixture(root, fixture);
+  const expectedReceipt: ProducerIdentity = {
+    producer: {
+      name: "ast-v8-to-istanbul",
+      version: deliveredVersion,
+      entry: path.join(repositoryRoot, "node_modules", "ast-v8-to-istanbul", "dist", "index.mjs"),
+      payloadDigest: deliveredPayloadDigest,
+      licenseDigest: upstreamLicenseDigest,
+    },
+    parser: { name: "acorn", version: "8.18.0" },
+    merger: { name: "istanbul-lib-coverage", version: "3.2.2" },
+    codec: { name: "@jridgewell/sourcemap-codec", version: "1.6.0" },
+    runtime: { node: process.version, v8: process.versions.v8 },
+    adapter: { "coverage-producer.convert.mjs": sha256(await readFile(adapterPath)) },
+    delivery: {
+      version: deliveredVersion,
+      archive: deliveredArchive,
+      integrity: deliveredIntegrity,
+      qualified: true,
+      failures: [],
+    },
+  };
 
   // act
   const conversion = await convertThroughCli(t, captured);
 
   // assert
   assert.strictEqual(conversion.run.status, 0, conversion.run.stderr);
+  assert.deepStrictEqual(await readJson<ProducerIdentity>(conversion.receiptPath), expectedReceipt);
+});
+
+test("refuses the installed producer when the lockfile no longer resolves it to the delivery", async (t) => {
+  // arrange
+  const lockfile = await readJson<{
+    packages: Record<string, { version: string; resolved: string; integrity: string }>;
+  }>(path.join(repositoryRoot, "package-lock.json"));
+  const recorded = lockfile.packages["node_modules/ast-v8-to-istanbul"];
+  assert.ok(recorded);
+  const drifted = { ...recorded, integrity: "sha512-AAAA" };
+  const otherRoot = await mkdtemp(path.join(tmpdir(), "coverage-producer-lock-"));
+  t.after(async () => {
+    await rm(otherRoot, { force: true, recursive: true });
+  });
+  await writeFile(
+    path.join(otherRoot, "package-lock.json"),
+    JSON.stringify({
+      ...lockfile,
+      packages: { ...lockfile.packages, "node_modules/ast-v8-to-istanbul": drifted },
+    }),
+  );
   const adapter = (await import(adapterModuleUrl)) as unknown as ProducerModule;
-  const identity = adapter.producerIdentity(await adapter.loadProducer());
-  assert.strictEqual(identity.producer.version, "1.0.6");
-  assert.strictEqual(identity.producer.payloadDigest, upstreamPayloadDigest);
-  assert.strictEqual(identity.producer.licenseDigest, upstreamLicenseDigest);
-  const coverage = await readCoverageMap(conversion.outputPath);
-  assert.deepStrictEqual(Object.keys(coverage), [captured.modulePath]);
-  const file = coverage[captured.modulePath];
-  assert.ok(file);
-  const actual = projectCoverage(file);
-  const actualFunctionKeys = new Set(actual.functions.map((fn) => spanKey(fn.loc)));
-  const actualStatementKeys = new Set(actual.statements.map((statement) => spanKey(statement.loc)));
-  const missingFunctions = expected.functions
-    .filter((fn) => !actualFunctionKeys.has(spanKey(fn.loc)))
-    .map((fn) => fn.loc);
-  const missingStatements = expected.statements
-    .filter((statement) => !actualStatementKeys.has(spanKey(statement.loc)))
-    .map((statement) => statement.loc);
-  const actualBranchKeys = new Set(actual.branches.map((branch) => spanKey(branch.loc)));
-  const missingBranches = expected.branches
-    .filter((branch) => !actualBranchKeys.has(spanKey(branch.loc)))
-    .map((branch) => branch.loc);
-  assert.deepStrictEqual(missingFunctions, [...omission.functions]);
-  assert.deepStrictEqual(missingStatements, [...omission.statements]);
-  assert.deepStrictEqual(missingBranches, [...omission.branches]);
-  const omittedFunctionKeys = new Set(omission.functions.map(spanKey));
-  const omittedStatementKeys = new Set(omission.statements.map(spanKey));
-  const omittedBranchKeys = new Set(omission.branches.map(spanKey));
-  assert.deepStrictEqual(
-    actual.functions.map((fn) => ({
-      ...fn,
-      name: fn.name.replace(/^\(anonymous_\d+\)$/u, "(anonymous)"),
-    })),
-    expected.functions
-      .filter((fn) => !omittedFunctionKeys.has(spanKey(fn.loc)))
-      .map((fn) => ({ ...fn, name: fn.name.replace(/^\(anonymous_\d+\)$/u, "(anonymous)") })),
+  const installedEntry = fileURLToPath(import.meta.resolve("ast-v8-to-istanbul"));
+
+  // act & assert
+  await assert.rejects(
+    () => adapter.loadProducer(undefined, { root: otherRoot }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.strictEqual(error.name, "ProducerError");
+      assert.deepStrictEqual((error as Error & { failures: ProducerFailure[] }).failures, [
+        { kind: "producer-location", entry: installedEntry },
+        {
+          kind: "lock-resolution",
+          expected: {
+            version: deliveredVersion,
+            resolved: `file:${deliveredArchive}`,
+            integrity: deliveredIntegrity,
+          },
+          actual: drifted,
+        },
+      ]);
+      return true;
+    },
   );
+});
+
+interface DeliveryMutant {
+  readonly name: string;
+  readonly mutate: (vendor: string) => Promise<void>;
+  readonly kinds: readonly string[];
+}
+
+const deliveryMutants: readonly DeliveryMutant[] = [
+  {
+    name: "a patch whose context no longer matches the delivered bytes",
+    mutate: async (vendor) => {
+      const patchPath = path.join(vendor, "ast-v8-to-istanbul-1.0.6.patch");
+      const patch = await readFile(patchPath, "utf8");
+      await writeFile(
+        patchPath,
+        patch.replace(" \t\t\t\tlet n = getIgnoreHint(e);", " \t\t\t\tlet n = getIgnoreHint(x);"),
+      );
+    },
+    kinds: ["patch-digest", "patch-context"],
+  },
+  {
+    name: "an archive with one extra byte",
+    mutate: async (vendor) => {
+      await appendFile(path.join(vendor, "ast-v8-to-istanbul-1.0.6-project.1.tgz"), "x");
+    },
+    kinds: ["archive-integrity", "archive-digest", "archive-unreadable"],
+  },
+  {
+    name: "a missing license",
+    mutate: async (vendor) => {
+      await rm(path.join(vendor, "LICENSE"));
+    },
+    kinds: ["missing-license"],
+  },
+  {
+    name: "a provenance record that no longer names the delivered payload digest",
+    mutate: async (vendor) => {
+      const provenancePath = path.join(vendor, "PROVENANCE.md");
+      const provenance = await readFile(provenancePath, "utf8");
+      await writeFile(
+        provenancePath,
+        provenance.replaceAll(deliveredPayloadDigest, "0".repeat(64)),
+      );
+    },
+    kinds: ["provenance-missing-value"],
+  },
+];
+
+function refusalKinds(stderr: string): string[] {
+  return stderr
+    .split("\n")
+    .filter((line) => line.startsWith("  {"))
+    .map((line) => (JSON.parse(line) as { kind: string }).kind);
+}
+
+for (const mutant of deliveryMutants) {
+  test(`refuses ${mutant.name}`, async (t) => {
+    // arrange
+    const vendor = await mkdtemp(path.join(tmpdir(), "coverage-producer-vendor-"));
+    t.after(async () => {
+      await rm(vendor, { force: true, recursive: true });
+    });
+    await cp(vendorDirectory, vendor, { recursive: true });
+    await mutant.mutate(vendor);
+
+    // act
+    const verification = run([buildCliPath, "--verify", "--vendor", vendor]);
+
+    // assert
+    assert.deepStrictEqual(
+      { status: verification.status, kinds: refusalKinds(verification.stderr) },
+      { status: 1, kinds: [...mutant.kinds] },
+    );
+  });
+}
+
+test("refuses to build from an upstream tarball whose integrity is not the pinned one", async (t) => {
+  // arrange
+  const vendor = await mkdtemp(path.join(tmpdir(), "coverage-producer-vendor-"));
+  t.after(async () => {
+    await rm(vendor, { force: true, recursive: true });
+  });
+  await cp(vendorDirectory, vendor, { recursive: true });
+  const bogusUpstream = path.join(vendor, "bogus.tgz");
+  await writeFile(bogusUpstream, "not the upstream tarball");
+  const archiveBefore = await readFile(path.join(vendor, "ast-v8-to-istanbul-1.0.6-project.1.tgz"));
+
+  // act
+  const build = run([buildCliPath, "--build", "--upstream", bogusUpstream, "--vendor", vendor]);
+
+  // assert
   assert.deepStrictEqual(
-    actual.statements,
-    expected.statements.filter((statement) => !omittedStatementKeys.has(spanKey(statement.loc))),
+    { status: build.status, stderr: build.stderr.split("\n")[0] },
+    {
+      status: 1,
+      stderr: `{"kind":"upstream-integrity","actual":"sha512-${createHash("sha512").update("not the upstream tarball").digest("base64")}"}`,
+    },
   );
-  assert.deepStrictEqual(
-    actual.branches,
-    expected.branches.filter((branch) => !omittedBranchKeys.has(spanKey(branch.loc))),
+  assert.ok(
+    archiveBefore.equals(
+      await readFile(path.join(vendor, "ast-v8-to-istanbul-1.0.6-project.1.tgz")),
+    ),
   );
 });
 
