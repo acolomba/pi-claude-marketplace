@@ -443,33 +443,35 @@ function lcovArtifact(run) {
   };
 }
 
+// `state` is `captured` for every run this CLI writes. Conversion to Istanbul
+// is a separate acceptance that promotes a bundle to `accepted`; a successful
+// test process alone never certifies converted output.
 function assembleManifest(run, parts) {
-  const { failures, ...rest } = parts;
   const { actualEnvironment: _actual, ...invocation } = parts.invocation;
 
   return {
     schemaVersion: MANIFEST_SCHEMA_VERSION,
     kind: MANIFEST_KIND,
     runId: run.runId,
-    status: failures.length === 0 ? "captured" : "failed",
+    status: parts.failures.length === 0 ? "captured" : "failed",
     state: "captured",
-    failures,
+    failures: parts.failures,
     startedAt: run.startedAt,
     completedAt: new Date().toISOString(),
     runtime: runtimeIdentity(),
     tooling: toolingIdentity(),
-    selection: { patterns: UNIT_TEST_PATTERNS, tests: rest.tests },
+    selection: { patterns: UNIT_TEST_PATTERNS, tests: parts.tests },
     invocation,
-    inventory: rest.inventoryRecord,
-    workers: rest.evidence.workers,
-    nested: rest.evidence.nested,
-    raw: rest.evidence.raw,
-    modules: rest.evidence.modules,
+    inventory: parts.inventoryRecord,
+    workers: parts.evidence.workers,
+    nested: parts.evidence.nested,
+    raw: parts.evidence.raw,
+    modules: parts.evidence.modules,
     artifacts: {
-      lcov: rest.lcov,
+      lcov: parts.lcov,
       public: { lcov: PUBLIC_LCOV_PATH, manifest: PUBLIC_MANIFEST_PATH },
     },
-    outcome: rest.outcome,
+    outcome: parts.outcome,
   };
 }
 

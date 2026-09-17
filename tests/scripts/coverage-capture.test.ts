@@ -451,10 +451,13 @@ test("loads", () => {
   });
 });
 
+// The foreign-import row replaces NODE_OPTIONS, which also sheds any outer
+// capture's runtime; NODE_V8_COVERAGE is emptied with it so the refusing
+// process does not leave an unregistered raw record in that outer run.
 for (const { label, options, flag } of [
   {
     label: "a foreign --import in NODE_OPTIONS",
-    options: { env: { NODE_OPTIONS: "--import=data:text/javascript," } },
+    options: { env: { NODE_OPTIONS: "--import=data:text/javascript,", NODE_V8_COVERAGE: "" } },
     flag: "--import=data:text/javascript,",
   },
   {
