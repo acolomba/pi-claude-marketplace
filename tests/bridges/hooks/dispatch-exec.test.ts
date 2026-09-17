@@ -13,6 +13,7 @@ import { dispatchHookExec } from "../../../extensions/pi-claude-marketplace/brid
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type { StopFailureEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts";
@@ -35,21 +36,17 @@ import type { SpawnOptions } from "node:child_process";
 test("executes a blocking hook through the portable process boundary", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
-  const caseRoot = await mkdtemp(path.join(tmpdir(), "dispatch-exec-portable-"));
-  const agentDir = path.join(caseRoot, "agent");
+  const { root: caseRoot, agentDir } = await createHermeticEnvironment(
+    t,
+    "dispatch-exec-portable-",
+  );
   const cwd = path.join(caseRoot, "workspace");
   const pluginRoot = path.join(caseRoot, "plugin");
   const stdoutCapturePath = path.join(caseRoot, "stdout.txt");
   const stderrCapturePath = path.join(caseRoot, "stderr.txt");
-  await Promise.all([
-    mkdir(agentDir, { recursive: true }),
-    mkdir(cwd, { recursive: true }),
-    mkdir(pluginRoot, { recursive: true }),
-  ]);
-  t.after(() => rm(caseRoot, { recursive: true, force: true }));
+  await Promise.all([mkdir(cwd, { recursive: true }), mkdir(pluginRoot, { recursive: true })]);
 
   const ownedEnvironmentKeys = [
-    "PI_CODING_AGENT_DIR",
     "PI_CLAUDE_MARKETPLACE_DEBUG",
     "PORTABLE_HOOK_PROBE",
     "CLAUDE_CODE_REMOTE",
@@ -69,7 +66,6 @@ test("executes a blocking hook through the portable process boundary", async (t)
       }
     }
   });
-  process.env.PI_CODING_AGENT_DIR = agentDir;
   process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
   process.env.PORTABLE_HOOK_PROBE = "case-owned";
   delete process.env.CLAUDE_CODE_REMOTE;

@@ -31,6 +31,7 @@ import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type {
   DeviceCodeResponse,
@@ -852,62 +853,50 @@ test("MA-4: tilde paths are preserved verbatim in stored source.raw", async () =
   assert.equal(source.raw, "~/projects/local-mp"); // verbatim
 });
 
-test("CR-02 / MA-4: ~/path is expanded against $HOME for the on-disk probe; source.raw stays verbatim", async () => {
+test("CR-02 / MA-4: ~/path is expanded against $HOME for the on-disk probe; source.raw stays verbatim", async (t) => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
     // Stand up a hermetic HOME containing the fixture so that
     // "~/projects/local-mp" resolves to a real directory.
-    const originalHome = process.env.HOME;
-    const home = await mkdtemp(path.join(tmpdir(), "mp-add-home-"));
-    process.env.HOME = home;
-    try {
-      const tildeRelDir = path.join("projects", "local-mp");
-      const localMpDir = path.join(home, tildeRelDir);
-      await mkdir(path.dirname(localMpDir), { recursive: true });
-      await cp(fixtureMarketplaceDir("valid-marketplace"), localMpDir, { recursive: true });
+    const { home } = await createHermeticEnvironment(t, "mp-add-home-");
+    const tildeRelDir = path.join("projects", "local-mp");
+    const localMpDir = path.join(home, tildeRelDir);
+    await mkdir(path.dirname(localMpDir), { recursive: true });
+    await cp(fixtureMarketplaceDir("valid-marketplace"), localMpDir, { recursive: true });
 
-      const { gitOps, state } = createGitOps();
-      // act
-      await addMarketplace({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        rawSource: `~/${tildeRelDir}`,
-        gitOps,
-      });
+    const { gitOps, state } = createGitOps();
+    // act
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: `~/${tildeRelDir}`,
+      gitOps,
+    });
 
-      // NFR-5: path source MUST NOT touch gitOps.
-      // assert
-      assert.equal(state.cloneCalls.length, 0);
-      assert.equal(state.fetchCalls.length, 0);
+    // NFR-5: path source MUST NOT touch gitOps.
+    // assert
+    assert.equal(state.cloneCalls.length, 0);
+    assert.equal(state.fetchCalls.length, 0);
 
-      // State updated; success notification emitted.
-      const persisted = await loadState(locations.extensionRoot);
-      assert.ok("valid-marketplace" in persisted.marketplaces);
-      const recorded = persisted.marketplaces["valid-marketplace"];
-      assert.ok(recorded);
-      // SP-7 / MA-4: source.raw must keep the verbatim "~" form.
-      const src = recorded.source as { kind: string; raw: string };
-      assert.equal(src.raw, `~/${tildeRelDir}`);
-      // marketplaceRoot is the EXPANDED on-disk path so update/list can read it.
-      assert.equal(recorded.marketplaceRoot, localMpDir);
+    // State updated; success notification emitted.
+    const persisted = await loadState(locations.extensionRoot);
+    assert.ok("valid-marketplace" in persisted.marketplaces);
+    const recorded = persisted.marketplaces["valid-marketplace"];
+    assert.ok(recorded);
+    // SP-7 / MA-4: source.raw must keep the verbatim "~" form.
+    const src = recorded.source as { kind: string; raw: string };
+    assert.equal(src.raw, `~/${tildeRelDir}`);
+    // marketplaceRoot is the EXPANDED on-disk path so update/list can read it.
+    assert.equal(recorded.marketplaceRoot, localMpDir);
 
-      const note = notifications[0];
-      assert.ok(note);
-      // SNM-33 / D-22-01: path-source collapses onto the canonical
-      // `(added)` shape; empty-plugins add never emits the reload-hint.
-      assert.equal(note.message, "● valid-marketplace [project] (added)");
-    } finally {
-      if (originalHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = originalHome;
-      }
-
-      await rm(home, { recursive: true, force: true });
-    }
+    const note = notifications[0];
+    assert.ok(note);
+    // SNM-33 / D-22-01: path-source collapses onto the canonical
+    // `(added)` shape; empty-plugins add never emits the reload-hint.
+    assert.equal(note.message, "● valid-marketplace [project] (added)");
   });
 });
 
@@ -1437,101 +1426,77 @@ test("MA-8 (path source) / ATTR-07: duplicate name in same scope renders (failed
 });
 
 // expandTildePath returns os.homedir() exactly when rawSource is bare '~'.
-test("CR-02 / expandTildePath: bare '~' resolves to os.homedir() exactly", async () => {
+test("CR-02 / expandTildePath: bare '~' resolves to os.homedir() exactly", async (t) => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, pi } = makeCtx();
-    const originalHome = process.env.HOME;
-    const home = await mkdtemp(path.join(tmpdir(), "mp-add-baretilde-"));
-    process.env.HOME = home;
-    try {
-      // Copy valid-marketplace fixture directly into the hermetic HOME
-      // so '~' (which resolves to home) is the marketplace root.
-      await cp(fixtureMarketplaceDir("valid-marketplace"), home, { recursive: true });
+    const { home } = await createHermeticEnvironment(t, "mp-add-baretilde-");
+    // Copy valid-marketplace fixture directly into the hermetic HOME
+    // so '~' (which resolves to home) is the marketplace root.
+    await cp(fixtureMarketplaceDir("valid-marketplace"), home, { recursive: true });
 
-      const { gitOps } = createGitOps();
-      // act
-      await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: "~", gitOps });
+    const { gitOps } = createGitOps();
+    // act
+    await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: "~", gitOps });
 
-      const persisted = await loadState(locations.extensionRoot);
-      // assert
-      assert.ok("valid-marketplace" in persisted.marketplaces);
-      const recorded = persisted.marketplaces["valid-marketplace"];
-      assert.ok(recorded);
-      // marketplaceRoot must be the hermetic HOME (os.homedir() at call time).
-      assert.equal(recorded.marketplaceRoot, home);
-    } finally {
-      if (originalHome === undefined) {
-        delete process.env.HOME;
-      } else {
-        process.env.HOME = originalHome;
-      }
-
-      await rm(home, { recursive: true, force: true });
-    }
+    const persisted = await loadState(locations.extensionRoot);
+    // assert
+    assert.ok("valid-marketplace" in persisted.marketplaces);
+    const recorded = persisted.marketplaces["valid-marketplace"];
+    assert.ok(recorded);
+    // marketplaceRoot must be the hermetic HOME (os.homedir() at call time).
+    assert.equal(recorded.marketplaceRoot, home);
   });
 });
 
 // CMP-1: same marketplace name may exist independently in user and project scopes.
 // The duplicate-name guard (MA-8) is scope-local only.
-test("CMP-1: same marketplace name in user scope and project scope are independent (cross-scope add succeeds)", async () => {
-  const hermeticHome = await mkdtemp(path.join(tmpdir(), "mp-add-cmp1-home-"));
-  const prevHome = process.env.HOME;
-  process.env.HOME = hermeticHome;
-  try {
-    await withTmpScope(async ({ cwd }) => {
-      // arrange
-      const { ctx: ctx1, pi: pi1, notifications: n1 } = makeCtx();
-      const { gitOps: gitOps1 } = createGitOps({
-        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-      });
-      // act
-      await addMarketplace({
-        ctx: ctx1,
-        pi: pi1,
-        scope: "project",
-        cwd,
-        rawSource: "anthropics/claude-plugins-official",
-        gitOps: gitOps1,
-      });
-      // assert
-      assert.equal(n1[0]?.severity, undefined, "project-scope add emits no error");
-
-      const { ctx: ctx2, pi: pi2, notifications: n2 } = makeCtx();
-      const { gitOps: gitOps2 } = createGitOps({
-        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-      });
-      // Same marketplace name but user scope -- MUST NOT throw MarketplaceDuplicateNameError.
-      await addMarketplace({
-        ctx: ctx2,
-        pi: pi2,
-        scope: "user",
-        cwd,
-        rawSource: "anthropics/claude-plugins-official",
-        gitOps: gitOps2,
-      });
-      assert.equal(n2[0]?.severity, undefined, "user-scope add of same name emits no error");
-
-      const projectState = await loadState(locationsFor("project", cwd).extensionRoot);
-      const userState = await loadState(locationsFor("user", cwd).extensionRoot);
-      assert.ok(
-        projectState.marketplaces["valid-marketplace"] !== undefined,
-        "project scope has record",
-      );
-      assert.ok(
-        userState.marketplaces["valid-marketplace"] !== undefined,
-        "user scope has independent record",
-      );
+test("CMP-1: same marketplace name in user scope and project scope are independent (cross-scope add succeeds)", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-cmp1-home-");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx: ctx1, pi: pi1, notifications: n1 } = makeCtx();
+    const { gitOps: gitOps1 } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
-  } finally {
-    if (prevHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = prevHome;
-    }
+    // act
+    await addMarketplace({
+      ctx: ctx1,
+      pi: pi1,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps: gitOps1,
+    });
+    // assert
+    assert.equal(n1[0]?.severity, undefined, "project-scope add emits no error");
 
-    await rm(hermeticHome, { recursive: true, force: true });
-  }
+    const { ctx: ctx2, pi: pi2, notifications: n2 } = makeCtx();
+    const { gitOps: gitOps2 } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    // Same marketplace name but user scope -- MUST NOT throw MarketplaceDuplicateNameError.
+    await addMarketplace({
+      ctx: ctx2,
+      pi: pi2,
+      scope: "user",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps: gitOps2,
+    });
+    assert.equal(n2[0]?.severity, undefined, "user-scope add of same name emits no error");
+
+    const projectState = await loadState(locationsFor("project", cwd).extensionRoot);
+    const userState = await loadState(locationsFor("user", cwd).extensionRoot);
+    assert.ok(
+      projectState.marketplaces["valid-marketplace"] !== undefined,
+      "project scope has record",
+    );
+    assert.ok(
+      userState.marketplaces["valid-marketplace"] !== undefined,
+      "user scope has independent record",
+    );
+  });
 });
 
 // -----------------------------------------------------------------------

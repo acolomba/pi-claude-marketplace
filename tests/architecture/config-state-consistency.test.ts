@@ -43,6 +43,7 @@ import { writeMarketplaceConfigEntry } from "../../extensions/pi-claude-marketpl
 import { DEFAULT_STATE } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 
@@ -481,7 +482,7 @@ test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entrie
   }
 });
 
-test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-scope marketplace fallback declares the adopted marketplace -- reconcile is a no-op", async () => {
+test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-scope marketplace fallback declares the adopted marketplace -- reconcile is a no-op", async (t) => {
   // CR-02 regression: a project-scope install resolving
   // the marketplace via the CMP-3 user-scope fallback clones the record into
   // PROJECT state. The write-back must declare BOTH the plugin key AND the
@@ -493,13 +494,10 @@ test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-sco
     await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
   const { loadState, saveState } =
     await import("../../extensions/pi-claude-marketplace/persistence/state-io.ts");
-  const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
-  const { tmpdir: osTmpdir } = await import("node:os");
+  const { writeFile } = await import("node:fs/promises");
 
   // Hermetic HOME so the user-scope marketplace lives under a tmp root.
-  const hermeticHome = await mkdtemp(path.join(osTmpdir(), "pi-cm-cr02-home-"));
-  const prevHome = process.env.HOME;
-  process.env.HOME = hermeticHome;
+  const { home: hermeticHome } = await createHermeticEnvironment(t, "pi-cm-cr02-");
 
   const { scopeRoot, cleanup } = await tmpScopeRoot();
   try {
@@ -578,13 +576,6 @@ test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-sco
     const plan = planReconcile(merged, stateAfter, "project");
     assert.deepEqual(plan, emptyReconcilePlan("project"));
   } finally {
-    if (prevHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = prevHome;
-    }
-
-    await rm(hermeticHome, { recursive: true, force: true });
     await cleanup();
   }
 });
