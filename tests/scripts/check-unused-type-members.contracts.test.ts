@@ -2206,3 +2206,202 @@ test("a constraint spelling the key on another declaration does not constrain it
     },
   );
 });
+
+// A compiler-enforced type-level assertion is the fifth place a member can
+// exist purely to be checked. Nothing reads a schema key that is only there so
+// a hand-written counterpart and a generated one stay the same shape.
+//
+// `RowSchema.matcher` sits on two arms -- line 7, column 37 and line 8, column
+// 39 -- and its counterpart is `Row.matcher` at line 3, column 37. The pin is
+// the alias at line 26, which instantiates `AssertTrue<T extends true>`, so the
+// compiler is what refuses a drift rather than a comment.
+//
+// The rest must stay refused. `Row.event` at line 2, column 22 is a counterpart
+// that does not declare the key. Line 8, column 39 is the OTHER arm of the
+// candidate's own declaration, so a pin named against it compares a thing with
+// itself. `LoosePin` at line 28 instantiates an unconstrained generic and checks
+// nothing. `BrokenPin` at line 30 instantiates a constrained one with an
+// argument that does not satisfy it, so the pin does not hold. `NarrowPin` at
+// line 32 is compiler-enforced but reaches neither declaration. `NotAnAlias` at
+// line 34 is not a type alias at all.
+const schemaPinCases = `export type Row =
+  | { kind: "event"; event: string }
+  | { kind: "group"; event: string; matcher: string };
+
+type RowSchema =
+  | { kind: "event"; event: string }
+  | { kind: "group"; event: string; matcher: string }
+  | { kind: "handler"; event: string; matcher: string };
+
+type AssertTrue<T extends true> = T;
+
+type Loose<T> = T;
+
+type RowKeysMatch = [keyof Extract<Row, { kind: "group" }>] extends [
+  keyof Extract<RowSchema, { kind: "group" }>,
+]
+  ? true
+  : false;
+
+type RowKeysBroken = [keyof Extract<Row, { kind: "group" }>] extends [
+  keyof Extract<RowSchema, { kind: "event" }>,
+]
+  ? true
+  : false;
+
+export type RowKeysCheck = AssertTrue<RowKeysMatch>;
+
+export type LoosePin = Loose<RowKeysMatch>;
+
+export type BrokenPin = AssertTrue<RowKeysBroken>;
+
+export type NarrowPin = AssertTrue<true>;
+
+export interface NotAnAlias {
+  readonly spare: string;
+}
+`;
+
+const schemaPinContract = {
+  id: `${casesPath}:7:37`,
+  owner: "RowSchema",
+  key: "matcher",
+  category: "schema-pin",
+  purpose: "Pinned key-for-key against the hand-written row this schema mirrors.",
+  pin: `${casesPath}:26:1`,
+  counterpart: `${casesPath}:3:37`,
+};
+
+test("a member a compiler-enforced pin holds equal to a counterpart keeps its role", async (t) => {
+  // arrange
+  const report = await analyzeWith(
+    t,
+    schemaPinCases,
+    documentWith(schemaPinContract, { ...schemaPinContract, id: `${casesPath}:8:39` }),
+  );
+
+  // act & assert
+  assert.deepStrictEqual(
+    report.members
+      .filter((member) => member.owner === "RowSchema" && member.key === "matcher")
+      .map((member) => member.status),
+    ["explicit-contract", "explicit-contract"],
+  );
+  assert.deepStrictEqual(memberFor(report, "RowSchema", "matcher").reasons, [
+    `schema-pin: ${schemaPinContract.purpose} ` +
+      `(pin ${casesPath}:26:1 holds matcher equal to ${casesPath}:3:37)`,
+  ]);
+});
+
+test("a counterpart that does not declare the key is a stale pin", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      schemaPinCases,
+      documentWith({ ...schemaPinContract, counterpart: `${casesPath}:2:22` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:7:37 counterpart ${casesPath}:2:22 ` +
+        "does not declare matcher",
+    },
+  );
+});
+
+test("a counterpart on the member's own declaration compares it with itself", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      schemaPinCases,
+      documentWith({ ...schemaPinContract, counterpart: `${casesPath}:8:39` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:7:37 counterpart ${casesPath}:8:39 ` +
+        "is declared by RowSchema itself, so the pin compares it with itself",
+    },
+  );
+});
+
+test("a pin instantiating an unconstrained generic checks nothing", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      schemaPinCases,
+      documentWith({ ...schemaPinContract, pin: `${casesPath}:28:1` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:7:37 pin ${casesPath}:28:1 ` +
+        "instantiates no constrained type parameter, so the compiler checks nothing",
+    },
+  );
+});
+
+test("a pin whose argument does not satisfy its constraint does not hold", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      schemaPinCases,
+      documentWith({ ...schemaPinContract, pin: `${casesPath}:30:1` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:7:37 pin ${casesPath}:30:1 does not hold today`,
+    },
+  );
+});
+
+test("a pin that reaches only one side ties the two declarations together by nothing", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      schemaPinCases,
+      documentWith({ ...schemaPinContract, pin: `${casesPath}:32:1` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:7:37 pin ${casesPath}:32:1 ` +
+        `does not tie RowSchema to the declaration at ${casesPath}:3:37`,
+    },
+  );
+});
+
+test("a named pin that is not a type alias is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      schemaPinCases,
+      documentWith({ ...schemaPinContract, pin: `${casesPath}:34:1` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:7:37 pin ${casesPath}:34:1 is not a type alias`,
+    },
+  );
+});
+
+test("a pin entry carrying another category's key is refused", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      schemaPinCases,
+      documentWith({ ...schemaPinContract, refines: `${casesPath}:26:1` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message: `Invalid contract: ${casesPath}:7:37 carries unknown key refines`,
+    },
+  );
+});
