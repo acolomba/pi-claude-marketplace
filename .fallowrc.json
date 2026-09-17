@@ -1,5 +1,5 @@
 {
-  "entry": ["extensions/pi-claude-marketplace/index.ts"],
+  "entry": ["extensions/pi-claude-marketplace/index.ts", "scripts/coverage-capture.runtime.mjs"],
   "production": {
     "deadCode": true,
     "health": false,
