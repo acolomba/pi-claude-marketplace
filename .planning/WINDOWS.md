@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 6
+open_count: 8
 waived_count: 18
 fixed_count: 19
-total_count: 43
-last_updated: 2026-09-17T19:11:00.326Z
+total_count: 45
+last_updated: 2026-09-17T20:09:28.640Z
 ---
 
 # Broken Windows Ledger
@@ -58,6 +58,8 @@ last_updated: 2026-09-17T19:11:00.326Z
 | 41 | 07 | deviation | scripts/coverage-producer.convert.mjs |  | Producer adapter split into coverage-producer.convert.mjs (library) and coverage-producer.mjs (CLI) so fallow's unused-export gate has a static consumer; plan named one file | open |  | 2026-09-17T19:10:51.585Z |  |
 | 42 | 07 | deviation | .gitignore |  | Added !vendor/coverage/*.tgz so the delivered producer archive is tracked despite the repository-wide *.tgz ignore; .gitignore was not in the plan's file list | open |  | 2026-09-17T19:10:59.969Z |  |
 | 43 | 07 | deviation | package.json |  | coverage:producer:build script alias added with the delivery tool (Task 2) instead of Task 3 because fallow reports an unreferenced script as an unused file | open |  | 2026-09-17T19:11:00.326Z |  |
+| 44 | 07 | deviation | scripts/coverage-producer.convert.mjs |  | convertScripts now unwraps the merger's FileCoverage instances into plain records (their maps sat under data, hidden by JSON.stringify); the file was not in the plan's file list | open |  | 2026-09-17T20:09:28.277Z |  |
+| 45 | 07 | deviation | tests/scripts/coverage-source-map-fixtures.ts |  | Mapping fixtures (endpoints, declarations, crlf) live in a sibling support module mirroring coverage-producer-fixtures.ts instead of the test file; the module was not in the plan's file list | open |  | 2026-09-17T20:09:28.640Z |  |
 
 ````json
 [
@@ -586,6 +588,32 @@ last_updated: 2026-09-17T19:11:00.326Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-17T19:11:00.326Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 44,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "scripts/coverage-producer.convert.mjs",
+    "line": null,
+    "description": "convertScripts now unwraps the merger's FileCoverage instances into plain records (their maps sat under data, hidden by JSON.stringify); the file was not in the plan's file list",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-17T20:09:28.277Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 45,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "tests/scripts/coverage-source-map-fixtures.ts",
+    "line": null,
+    "description": "Mapping fixtures (endpoints, declarations, crlf) live in a sibling support module mirroring coverage-producer-fixtures.ts instead of the test file; the module was not in the plan's file list",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-17T20:09:28.640Z",
     "resolved_at": null,
     "milestone": null
   }
