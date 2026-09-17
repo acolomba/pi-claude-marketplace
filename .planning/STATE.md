@@ -820,7 +820,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 **Stopped at:** Milestone audit ran 2026-09-17 — `v1.20-MILESTONE-AUDIT.md` status `tech_debt` (26/26 requirements, 5/5 seams, 2/2 flows, 0 blockers). The operator chose to address the debt before `/gsd-complete-milestone v1.20`: `/gsd-validate-phase 3|4|5`, `/gsd-secure-phase 3|4|5`, settle `05-REVIEW.md` IN-05/IN-06, and triage `PRUNE-GUARD-MR-01` + Phase 1 `deferred-items.md`. Autonomous run stopped by the operator at the audit gate.
 
-**Resume file:** None
+**Resume file:** `.planning/HANDOFF.md` (ordered to-do to close v1.20 — run secure-phase and validate-phase on 3/4/5 BEFORE complete-milestone)
 `HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
 content was folded into `04-CONTEXT.md`: the supersession warning and the
 ordering constraint into `<decisions>`, and the operational anti-patterns
