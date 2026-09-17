@@ -1,9 +1,10 @@
 // orchestrators/edge-deps.ts
 //
 // D-04: registration-glue helper that constructs a
-// `LocationsResolver` (interface declared in edge/completions/data.ts;
-// the state-record shape it returns is declared HERE and republished
-// there) from the persistence/state-io + persistence/locations +
+// `LocationsResolver` (both the resolver surface and the state-record
+// shape it returns are declared HERE; edge/completions/data.ts
+// republishes the resolver under that spelling) from the
+// persistence/state-io + persistence/locations +
 // domain/manifest + domain/resolver surfaces. This file lives in `orchestrators/` so that
 // `edge/register.ts` (which legally imports from `orchestrators/`) can
 // reach all four underlying modules without violating BLOCK C
@@ -12,10 +13,9 @@
 // Architectural seam:
 //   - shared/completion-cache.ts: pure paths + rebuild callbacks
 //     (shared/ MUST NOT import persistence/).
-//   - edge/completions/data.ts: declares the LocationsResolver interface
-//     and republishes `MarketplaceStateRecordLike` below as
-//     `MarketplaceStateRecord` (edge/ MUST NOT import persistence/, and
-//     the republish is type-only, so it does not).
+//   - edge/completions/data.ts: republishes `LocationsResolverLike` below
+//     as `LocationsResolver` (edge/ MUST NOT import persistence/, and the
+//     republish is type-only, so it does not).
 //   - orchestrators/edge-deps.ts: IMPLEMENTS the resolver by closing over
 //     loadState + manifest read + resolveStrict (orchestrators/ MAY
 //     import persistence/ and domain/).
@@ -50,24 +50,26 @@ import type { Scope } from "../shared/types.ts";
 // importing edge/, so whatever the two sides share has to be declared
 // here and named from the edge side, never the reverse.
 //
-// `MarketplaceStateRecordLike` is the single declaration of the
-// state-record shape: edge/completions/data.ts imports it type-only and
-// republishes it as `MarketplaceStateRecord`, so that shape cannot drift.
+// Both shapes are declared here exactly once.
+// `MarketplaceStateRecordLike` is the state-record shape and
+// `LocationsResolverLike` is the resolver surface;
+// edge/completions/data.ts imports the resolver type-only and republishes
+// it as `LocationsResolver`, and every other consumer -- production and
+// test alike -- names these declarations. Neither shape can drift, because
+// there is no second declaration of either to drift from.
 //
-// `LocationsResolverLike` is still a second declaration of
-// `edge/completions/data.ts::LocationsResolver`, and the two DO have to
-// stay in sync by hand. Do not restate the old claim that a rename would
-// be caught by the edge-side compile: both declarations make every member
-// optional-free but the mirrors are compared structurally, so a
-// single-field rename on one side still compiles (measured, and the same
-// optional-field silent-omission class the repo has hit before). What
-// actually guards the pair is `tests/edge/register.test.ts`, which hands
-// `makeLocationsResolver`'s result to the edge consumer.
+// Do not reintroduce an edge-side mirror of either one. The old mirror
+// carried a claim that a rename would be caught by the edge-side compile,
+// and that claim was measured false: the mirrors were compared
+// structurally, so a single-field rename on one side still compiled (the
+// same optional-field silent-omission class this repo has hit before).
 // ---------------------------------------------------------------------------
 
 /**
  * Minimal shape the completion reads need from a state record: the installed
- * plugin names, and nothing else. The full state record lives in persistence.
+ * plugin names, and nothing else. The full state record lives in
+ * persistence; the completion consumers in edge/ and their tests name this
+ * declaration directly.
  */
 export interface MarketplaceStateRecordLike {
   readonly plugins?: Record<string, unknown>;
@@ -77,7 +79,9 @@ export interface MarketplaceStateRecordLike {
  * Injection surface that lets edge/completions reach into persistence/state
  * + domain/manifest WITHOUT importing them (D-11 / ESLint BLOCK C keeps
  * edge/ from importing persistence/). Constructed by `makeLocationsResolver`
- * below and threaded through getArgumentCompletions by edge/register.ts.
+ * below and threaded through getArgumentCompletions by edge/register.ts,
+ * which reaches it through the `LocationsResolver` republish in
+ * edge/completions/data.ts.
  *
  * The two rebuild-callback resolvers (loadStateForScope,
  * loadManifestForMarketplace) MUST throw to signal failure -- the cache layer

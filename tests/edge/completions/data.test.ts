@@ -60,9 +60,9 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 
 import type {
   LocationsResolver,
-  MarketplaceStateRecord,
   PluginRefCompletionMode,
 } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
+import type { MarketplaceStateRecordLike } from "../../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
 import type { PluginIndexRow } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
@@ -70,7 +70,7 @@ type PluginMapOptions = Omit<Parameters<typeof getPluginRefCompletions>[5], "all
 
 /** Marketplace records and manifest rows a single case makes visible per scope. */
 interface ResolverSeed {
-  readonly marketplaces?: Partial<Record<Scope, Record<string, MarketplaceStateRecord>>>;
+  readonly marketplaces?: Partial<Record<Scope, Record<string, MarketplaceStateRecordLike>>>;
   readonly manifests?: Partial<Record<Scope, Record<string, readonly PluginIndexRow[]>>>;
   /** Scopes whose state read rejects, so a propagation case can seed one side. */
   readonly stateFailures?: Partial<Record<Scope, Error>>;
@@ -138,7 +138,7 @@ async function seedResolver(
 
     loadStateForScope: (
       scope: Scope,
-    ): Promise<{ marketplaces: Record<string, MarketplaceStateRecord> }> => {
+    ): Promise<{ marketplaces: Record<string, MarketplaceStateRecordLike> }> => {
       const failure = seed.stateFailures?.[scope];
       if (failure !== undefined) {
         return Promise.reject(failure);

@@ -50,11 +50,9 @@ import {
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
-import type {
-  LocationsResolver,
-  MarketplaceStateRecord,
-} from "../../extensions/pi-claude-marketplace/edge/completions/data.ts";
+import type { LocationsResolver } from "../../extensions/pi-claude-marketplace/edge/completions/data.ts";
 import type { CatalogVerb } from "../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
+import type { MarketplaceStateRecordLike } from "../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 
 // The flag-completion branch never consults the resolver (it returns before any
@@ -63,7 +61,7 @@ const EMPTY_RESOLVER: LocationsResolver = {
   pluginCachePath(scope: Scope, marketplace: string): Promise<string> {
     return Promise.resolve(`/nonexistent/${scope}/${marketplace}.json`);
   },
-  loadStateForScope(): Promise<{ marketplaces: Record<string, MarketplaceStateRecord> }> {
+  loadStateForScope(): Promise<{ marketplaces: Record<string, MarketplaceStateRecordLike> }> {
     return Promise.resolve({ marketplaces: {} });
   },
   loadManifestForMarketplace(): Promise<readonly never[]> {

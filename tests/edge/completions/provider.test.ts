@@ -73,10 +73,8 @@ import test, { type TestContext } from "node:test";
 import { getArgumentCompletions } from "../../../extensions/pi-claude-marketplace/edge/completions/provider.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
-import type {
-  LocationsResolver,
-  MarketplaceStateRecord,
-} from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
+import type { LocationsResolver } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
+import type { MarketplaceStateRecordLike } from "../../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
 import type { PluginIndexRow } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
@@ -116,7 +114,7 @@ function labManifest(): readonly PluginIndexRow[] {
   ];
 }
 
-function marketplacesForScope(scope: Scope): Record<string, MarketplaceStateRecord> {
+function marketplacesForScope(scope: Scope): Record<string, MarketplaceStateRecordLike> {
   return scope === "user" ? { hub: { plugins: {} } } : { lab: { plugins: {} } };
 }
 
@@ -183,7 +181,7 @@ async function seedResolver(t: TestContext, label: string): Promise<SeededResolv
 
     loadStateForScope: (
       scope: Scope,
-    ): Promise<{ marketplaces: Record<string, MarketplaceStateRecord> }> =>
+    ): Promise<{ marketplaces: Record<string, MarketplaceStateRecordLike> }> =>
       Promise.resolve({ marketplaces: marketplacesForScope(scope) }),
 
     loadManifestForMarketplace: (
