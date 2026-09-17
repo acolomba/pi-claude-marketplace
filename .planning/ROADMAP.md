@@ -127,7 +127,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 **Plans:** 07-01 through 07-08 approved after independent plan review; producer qualification and production acceptance wait for the stable Phase 5/6 tree.
 
 - [x] 07-01-PLAN.md
-- [ ] 07-02-PLAN.md
+- [x] 07-02-PLAN.md
 - [ ] 07-03-PLAN.md
 - [ ] 07-04-PLAN.md
 - [ ] 07-05-PLAN.md
@@ -157,5 +157,5 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 | 4. Strict Command Arguments | 3/3 | Complete | 2026-09-14 |
 | 5. Production Export Ownership | 28/28 | Complete | 2026-09-15 |
 | 6. Unused Type Member Gate | 17/17 | Complete | 2026-09-17 |
-| 7. Reliable Coverage Metrics | 1/8 | In Progress|  |
+| 7. Reliable Coverage Metrics | 2/8 | In Progress|  |
 | 8. Final Verification and Reconciliation | 0/TBD | Not started | - |
