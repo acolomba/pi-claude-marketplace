@@ -1276,6 +1276,60 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
+  test("D-05-16: dropping a plugin and its dependent together converges in ONE pass when the dependency is recorded first, as the install cascade writes it", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "uninstall-refused-order");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      keeper: { skill: "clean", dependencies: ["orphan"] },
+      orphan: { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({ marketplaces: { mp: { source: marketplaceRoot } }, plugins: {} }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          // D-03-07 post-order: the dependency's record precedes its declarer's.
+          plugins: {
+            orphan: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "orphan") }),
+            keeper: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "keeper") }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+    const afterFirst = await loadState(project.extensionRoot);
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ○ keeper v1.0.0 (uninstalled)\n" +
+          "  ○ orphan v1.0.0 (uninstalled)\n" +
+          "\n" +
+          "Reconcile: 2 successes",
+      },
+    ]);
+    assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["mp"]?.plugins ?? {}), []);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
   test("WR-06: a plugin whose declaration is deleted is uninstalled while its marketplace stays recorded, and the next pass is silent", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "uninstall-direct");

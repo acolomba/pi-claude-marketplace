@@ -77,7 +77,12 @@ import { planReconcile } from "./plan.ts";
 import { RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
-import type { ApplyReconcileOptions, ReconcilePlan, ScopeReadResult } from "./types.ts";
+import type {
+  ApplyReconcileOptions,
+  PlannedPluginUninstall,
+  ReconcilePlan,
+  ScopeReadResult,
+} from "./types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   EnableDegradationSignals,
@@ -339,60 +344,111 @@ async function applyMarketplaceAdds(
   }
 }
 
+/**
+ * One config-driven uninstall folded to its reconcile row. `undefined` is the
+ * PU-5 silent converge (WR-06): the record was already gone -- another process
+ * won the race or there was never an install -- so no row is rendered, because
+ * reporting it would claim work this reconcile did not perform.
+ */
+async function applyOnePluginUninstall(
+  uninstallPlugin: ReturnType<typeof createNodeUninstallPlugin>,
+  opts: ApplyReconcileOptions,
+  op: PlannedPluginUninstall,
+): Promise<PerEntryOutcome | undefined> {
+  try {
+    const result = await uninstallPlugin({
+      ctx: opts.ctx,
+      pi: opts.pi,
+      scope: op.scope,
+      cwd: opts.cwd,
+      marketplace: op.marketplace,
+      plugin: op.plugin,
+      notifications: { mode: "orchestrated" },
+    });
+    if (result.status === "converged") {
+      return undefined;
+    }
+
+    if (result.status === "uninstalled") {
+      return {
+        kind: "plugin-uninstalled",
+        scope: op.scope,
+        marketplace: op.marketplace,
+        plugin: op.plugin,
+        ...(result.version !== undefined && { version: result.version }),
+      };
+    }
+
+    return {
+      kind: "plugin-uninstall-failed",
+      scope: op.scope,
+      marketplace: op.marketplace,
+      plugin: op.plugin,
+      reason: result.reason,
+      // D-05-16: only a refusal carries its cause onto the reconcile row.
+      // Every other failed uninstall keeps the cause-less row, so no errno
+      // message ever reaches this surface.
+      ...(result.error instanceof UninstallRefusedError && { cause: result.error }),
+    };
+  } catch (err) {
+    return {
+      kind: "plugin-uninstall-failed",
+      scope: op.scope,
+      marketplace: op.marketplace,
+      plugin: op.plugin,
+      reason: classifyOrchestratorThrow(err),
+    };
+  }
+}
+
+/** A D-05-14 / D-05-07 refusal: nothing left disk and nothing was saved. */
+function isRefusedUninstall(outcome: PerEntryOutcome): boolean {
+  return (
+    outcome.kind === "plugin-uninstall-failed" && outcome.cause instanceof UninstallRefusedError
+  );
+}
+
+/**
+ * D-05-16: the uninstall bucket arrives in `state.json` record order, which
+ * is the order the install cascade writes -- a dependency BEFORE the plugin
+ * that declares it (D-03-07 post-order). Dropping both from config in one
+ * edit would then refuse the dependency (its declarer is still recorded) and
+ * remove the declarer, reporting a failure the user did not cause and leaving
+ * the dependency for the next reload. A refusal is cheap and changes nothing
+ * on disk, so refused entries are retried after each pass until a pass makes
+ * no progress; only an entry's final outcome is reported. Reconcile still
+ * never prunes (D-05-08): every entry here is one the config no longer
+ * declares.
+ */
 async function applyPluginUninstalls(
   opts: ApplyReconcileOptions,
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
   const uninstallPlugin = createNodeUninstallPlugin(opts.hooksRouting, opts.completionCache);
-  for (const op of plan.pluginsToUninstall) {
-    try {
-      const result = await uninstallPlugin({
-        ctx: opts.ctx,
-        pi: opts.pi,
-        scope: op.scope,
-        cwd: opts.cwd,
-        marketplace: op.marketplace,
-        plugin: op.plugin,
-        notifications: { mode: "orchestrated" },
-      });
-      // WR-06: the PU-5 silent converge (record already gone -- another
-      // process won the race or there was never an install) renders NO row;
-      // reporting it would claim work this reconcile did not perform.
-      if (result.status === "converged") {
+  let pending = plan.pluginsToUninstall;
+  for (;;) {
+    const refused: { readonly op: PlannedPluginUninstall; readonly outcome: PerEntryOutcome }[] =
+      [];
+    for (const op of pending) {
+      const outcome = await applyOnePluginUninstall(uninstallPlugin, opts, op);
+      if (outcome === undefined) {
         continue;
       }
 
-      if (result.status === "uninstalled") {
-        outcomes.push({
-          kind: "plugin-uninstalled",
-          scope: op.scope,
-          marketplace: op.marketplace,
-          plugin: op.plugin,
-          ...(result.version !== undefined && { version: result.version }),
-        });
+      if (isRefusedUninstall(outcome)) {
+        refused.push({ op, outcome });
       } else {
-        outcomes.push({
-          kind: "plugin-uninstall-failed",
-          scope: op.scope,
-          marketplace: op.marketplace,
-          plugin: op.plugin,
-          reason: result.reason,
-          // D-05-16: only a refusal carries its cause onto the reconcile row.
-          // Every other failed uninstall keeps the cause-less row, so no errno
-          // message ever reaches this surface.
-          ...(result.error instanceof UninstallRefusedError && { cause: result.error }),
-        });
+        outcomes.push(outcome);
       }
-    } catch (err) {
-      outcomes.push({
-        kind: "plugin-uninstall-failed",
-        scope: op.scope,
-        marketplace: op.marketplace,
-        plugin: op.plugin,
-        reason: classifyOrchestratorThrow(err),
-      });
     }
+
+    if (refused.length === 0 || refused.length === pending.length) {
+      outcomes.push(...refused.map((entry) => entry.outcome));
+      return;
+    }
+
+    pending = refused.map((entry) => entry.op);
   }
 }
 
