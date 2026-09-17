@@ -4,17 +4,17 @@ milestone: v1.20
 milestone_name: transitive-dependencies
 current_phase: 5
 current_phase_name: Prune on uninstall
-status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-09-16T23:48:03.536Z"
+status: verifying
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-09-17T00:13:37.153Z"
 last_activity: 2026-09-16
 last_activity_desc: Phase 05 execution started
-state_head: c026bc0498b5de0bd1410e40a703bbd82bc02f5c
+state_head: 4041f3ea993c496b70401917d0623c010e3d1aa0
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 22
-  completed_plans: 21
+  completed_plans: 22
   percent: 80
 ---
 
@@ -36,7 +36,7 @@ is archived under `.planning/milestones/v1.19-*`.
 
 Phase: 05 (Prune on uninstall) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 
 **Phase 4 closed 2026-09-16**, verified 9/9 must-haves; the one human item
 (the promoted row's legibility in a live session) was accepted on the pinned
@@ -459,6 +459,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 03 P06 | 72 min | 2 tasks | 16 files |
 | Phase 05 P01 | 47 min | 3 tasks | 26 files |
 | Phase 05 P02 | 54min | 3 tasks | 24 files |
+| Phase 05 P03 | 19 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -703,6 +704,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 05]: Index candidates carry the snapshot's own marketplace/record objects (IndexedRecord) so the prune member body needs no state lookup and no unreachable undefined arm
 - [Phase 05]: The prune member body is total: AG-5 and every other cascade failure become a warning row; the one save runs after the sweep, so a member fault cannot ghost the primary's record (NFR-3)
 - [Phase 05]: Pruned rows render in fixpoint removal order: each pass is sorted by key, so a same-pass orphan precedes a next-pass dependency within a marketplace block (A-8 measured)
+- [Phase 05]: marketplace remove keeps bypassing the dependents guard (PRUNE-GUARD-MR-01 backlogged); it is the documented exit for the two-stale-records refusal, so any future guard there must keep that exit open
 
 ### Pending Todos
 
@@ -789,7 +791,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 05-02-PLAN.md
+**Stopped at:** Completed 05-03-PLAN.md
 
 **Resume file:** None
 `HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
@@ -801,7 +803,7 @@ carried-notes block under `<specifics>`.
 
 **Read beside it:** `.planning/phases/04-install-provenance/04-CONTEXT.md`
 
-Last session: 2026-09-16T23:47:34.439Z
+Last session: 2026-09-17T00:13:18.540Z
 resumed a paused Phase 4 discussion, answered its two open questions (the
 config-write reversal lands entirely in Phase 4 in a fixed order; reconcile
 keeps sweeping genuine orphans with one exemption), wrote `04-CONTEXT.md` and

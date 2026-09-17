@@ -74,14 +74,14 @@ New scope. The record `--prune` reads.
 
 New scope. Consumes PROV.
 
-- [ ] **PRUNE-01**: `uninstall --prune` also removes dependency-installed
+- [x] **PRUNE-01**: `uninstall --prune` also removes dependency-installed
   plugins that no remaining installed plugin declares.
 - [x] **PRUNE-02**: `--prune` never removes a plugin the user installed
   directly.
 - [x] **PRUNE-03**: `--prune` never removes a dependency that another installed
   plugin still declares.
-- [ ] **PRUNE-04**: The user learns which plugins `--prune` removed.
-- [ ] **PRUNE-05**: `uninstall` refuses to remove a plugin that another
+- [x] **PRUNE-04**: The user learns which plugins `--prune` removed.
+- [x] **PRUNE-05**: `uninstall` refuses to remove a plugin that another
   installed plugin in the same scope still declares, and names the dependents.
   (Folded into Phase 5 by the operator on 2026-09-16; D-05-14..16.)
 
@@ -100,7 +100,7 @@ to opt out.
 
 ### Uninstall flag surface (FLAG)
 
-- [ ] **FLAG-01**: `uninstall` accepts exactly `--keep-data` and `--prune` as
+- [x] **FLAG-01**: `uninstall` accepts exactly `--keep-data` and `--prune` as
   its extra flags, and the flag-catalog drift guard pins that set.
 
 ## Future Requirements
@@ -151,15 +151,15 @@ this milestone.
 | PROV-02 | Phase 4 | Complete |
 | PROV-03 | Phase 4 | Complete |
 | PROV-04 | Phase 4 | Complete |
-| PRUNE-01 | Phase 5 | Pending |
+| PRUNE-01 | Phase 5 | Complete |
 | PRUNE-02 | Phase 5 | Complete |
 | PRUNE-03 | Phase 5 | Complete |
-| PRUNE-04 | Phase 5 | Pending |
-| PRUNE-05 | Phase 5 | Pending |
+| PRUNE-04 | Phase 5 | Complete |
+| PRUNE-05 | Phase 5 | Complete |
 | DATA-01 | Phase 2 | Complete |
 | DATA-02 | Phase 2 | Complete |
 | DATA-03 | Phase 2 | Complete |
-| FLAG-01 | Phase 5 | Pending |
+| FLAG-01 | Phase 5 | Complete |
 
 **Coverage:**
 

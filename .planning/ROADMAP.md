@@ -260,7 +260,7 @@ Six waves, strictly sequential: every plan touches files an earlier one changed,
 5. `uninstall` accepts exactly `--keep-data` and `--prune` as its extra flags — the shared `--local` and the global `--scope` unchanged — and the flag-catalog drift guard (`tests/architecture/flag-catalog-drift.test.ts`) pins that set, so a later flag cannot be added silently. (FLAG-01)
 6. `uninstall <plugin>` refuses to remove a plugin that another installed plugin in the same scope still declares — a disabled declarer included — and names the dependents; nothing is removed, and the load-time reconcile path refuses the same way. (PRUNE-05, folded in during the Phase 5 discussion — D-05-14..16)
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans executed
 
 Plans:
 **Wave 1**
@@ -273,7 +273,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 05-03-PLAN.md — Edge-to-sweep end-to-end proof, user docs for prune and the guard, backlog entry for `marketplace remove`, phase gate
+- [x] 05-03-PLAN.md — Edge-to-sweep end-to-end proof, user docs for prune and the guard, backlog entry for `marketplace remove`, phase gate
 
 **Notes.** `uninstall`'s handler hard-rejects unknown long flags inline rather than consuming `edge/flag-catalog.ts`, so FLAG-01 has two sides to reconcile: the handler's accepted set and the catalog entry the completions are derived from. Today the catalog lists only the shared write-target flag for `uninstall`. The reconcile path is the other obligation here: `applyPluginUninstalls()` runs from `resources_discover` / `session_start` with no command line and therefore takes `--prune`'s default, whatever open decision 4 settles it to be — and that default must hold there as firmly as DATA-02's does, or the operation acquires two behaviors depending on which entry point reached it.
 
@@ -304,7 +304,7 @@ plugin names — so plan these phases with the UI gate skipped.
 | 2. Uninstall data disposition and the uninstall option seam | v1.20 | 2/2 | Complete    | 2026-09-14 |
 | 3. Dependency resolution | v1.20 | 7/7 | Complete    | 2026-09-15 |
 | 4. Install provenance | v1.20 | 6/6 | Complete    | 2026-09-16 |
-| 5. Prune on uninstall | v1.20 | 2/3 | In Progress|  |
+| 5. Prune on uninstall | v1.20 | 3/3 | In Progress|  |
 
 ## Carried Forward
 
