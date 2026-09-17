@@ -2,7 +2,16 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { stripTypeScriptTypes } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -97,6 +106,12 @@ interface CaptureFailure {
   readonly format?: string;
   readonly test?: string;
   readonly status?: number;
+  readonly expected?: string;
+  readonly actual?: string;
+  readonly stage?: string;
+  readonly added?: readonly string[];
+  readonly removed?: readonly string[];
+  readonly changed?: readonly string[];
 }
 
 interface WorkerRecord {
@@ -774,4 +789,307 @@ test("spawns a child without the capture runtime", () => {
   assert.strictEqual(capture.status, 1);
   const manifest = await onlyRunManifest(root);
   assert.deepStrictEqual(failureKinds(manifest), ["unregistered-capture"]);
+});
+
+const mutableSourcePath = "extensions/pi-claude-marketplace/shared/mutable.ts";
+const mutableSource = "export const mutable = 1;\n";
+
+test("rejects a module whose loaded bytes differ from the pre-run inventory even after it is restored", async (t) => {
+  // arrange
+  const root = await createRoot(t, {
+    ...unitFixture(),
+    [mutableSourcePath]: mutableSource,
+    "tests/shared/mutable.test.ts": `import { readFileSync, writeFileSync } from "node:fs";
+import test from "node:test";
+
+const target = new URL("../../extensions/pi-claude-marketplace/shared/mutable.ts", import.meta.url);
+const original = readFileSync(target, "utf8");
+writeFileSync(target, \`\${original}// edited while loading\\n\`);
+const loaded = await import("../../extensions/pi-claude-marketplace/shared/mutable.ts");
+writeFileSync(target, original);
+
+test("restores the module after loading it", () => {
+  if (loaded.mutable !== 1) {
+    throw new Error("mutable changed");
+  }
+});
+`,
+  });
+
+  // act
+  const capture = runCapture(root);
+
+  // assert
+  assert.strictEqual(capture.status, 1);
+  const manifest = await onlyRunManifest(root);
+  assert.deepStrictEqual(manifest.failures, [
+    {
+      kind: "loaded-bytes-differ",
+      path: mutableSourcePath,
+      expected: sha256(mutableSource),
+      actual: sha256(`${mutableSource}// edited while loading\n`),
+    },
+  ]);
+});
+
+const removableSourcePath = "extensions/pi-claude-marketplace/shared/removable.ts";
+const addedSourcePath = "extensions/pi-claude-marketplace/shared/added.ts";
+
+for (const { kind, mutation, difference } of [
+  {
+    kind: "added",
+    mutation: `writeFileSync(new URL("../../${addedSourcePath}", import.meta.url), "export const added = 1;\\n");`,
+    difference: { added: [addedSourcePath], removed: [], changed: [] },
+  },
+  {
+    kind: "removed",
+    mutation: `unlinkSync(new URL("../../${removableSourcePath}", import.meta.url));`,
+    difference: { added: [], removed: [removableSourcePath], changed: [] },
+  },
+  {
+    kind: "changed",
+    mutation: `appendFileSync(new URL("../../${removableSourcePath}", import.meta.url), "// changed\\n");`,
+    difference: { added: [], removed: [], changed: [removableSourcePath] },
+  },
+]) {
+  test(`rejects a production source ${kind} during execution as drift`, async (t) => {
+    // arrange
+    const root = await createRoot(t, {
+      ...unitFixture(),
+      [removableSourcePath]: "export const removable = 1;\n",
+      "tests/shared/drift.test.ts": `import { appendFileSync, unlinkSync, writeFileSync } from "node:fs";
+import test from "node:test";
+
+${mutation}
+
+test("mutated the tree", () => {
+  void [appendFileSync, unlinkSync, writeFileSync];
+});
+`,
+    });
+
+    // act
+    const capture = runCapture(root);
+
+    // assert
+    assert.strictEqual(capture.status, 1);
+    const manifest = await onlyRunManifest(root);
+    assert.deepStrictEqual(manifest.failures, [
+      { kind: "drift", stage: "after-execution", ...difference },
+    ]);
+  });
+}
+
+test("verifies a published bundle on readback and refuses it once a source changes", async (t) => {
+  // arrange
+  const root = await createRoot(t, unitFixture());
+  const capture = runCapture(root);
+  assert.strictEqual(capture.status, 0, capture.stderr);
+
+  // act
+  const verified = runCapture(root, { args: ["--verify"] });
+  await appendFile(path.join(root, paritySourcePath), "// edited after capture\n");
+  const stale = runCapture(root, { args: ["--verify"] });
+
+  // assert
+  assert.strictEqual(verified.status, 0, verified.stderr);
+  assert.match(verified.stdout, /^Coverage capture verified: /u);
+  assert.strictEqual(stale.status, 1);
+  assert.match(stale.stderr, /"kind": "stale-input"/u);
+  assert.match(stale.stderr, new RegExp(paritySourcePath, "u"));
+});
+
+// The tooling identity is read next to the scripts, so a copied tool set
+// describes itself; changing one copied file after the capture is a tool
+// change the readback must refuse.
+test("refuses a bundle on readback when the capture tooling changed", async (t) => {
+  // arrange
+  const root = await createRoot(t, unitFixture());
+  const tools = await mkdtemp(path.join(tmpdir(), "coverage-tools-"));
+
+  t.after(async () => {
+    await rm(tools, { force: true, recursive: true });
+  });
+
+  for (const name of [
+    "coverage-capture.mjs",
+    "coverage-capture.manifest.mjs",
+    "coverage-capture.runtime.mjs",
+  ]) {
+    await copyFile(
+      fileURLToPath(new URL(`../../scripts/${name}`, import.meta.url)),
+      path.join(tools, name),
+    );
+  }
+
+  const env = {
+    ...outerEnvironment(),
+    NODE_OPTIONS: "",
+    NODE_V8_COVERAGE: path.join(tools, "raw"),
+  };
+  const runTools = (args: readonly string[]): ProcessRun => {
+    const completed = spawnSync(
+      process.execPath,
+      [path.join(tools, "coverage-capture.mjs"), "--root", root, ...args],
+      { encoding: "utf8", env },
+    );
+    return { status: completed.status ?? -1, stdout: completed.stdout, stderr: completed.stderr };
+  };
+
+  const capture = runTools([]);
+  assert.strictEqual(capture.status, 0, capture.stderr);
+
+  // act
+  const verified = runTools(["--verify"]);
+  await appendFile(path.join(tools, "coverage-capture.runtime.mjs"), "// changed\n");
+  const changed = runTools(["--verify"]);
+
+  // assert
+  assert.strictEqual(verified.status, 0, verified.stderr);
+  assert.strictEqual(changed.status, 1);
+  assert.match(changed.stderr, /"kind": "tool-changed"/u);
+});
+
+async function writeBothManifests(root: string, manifest: CaptureManifest): Promise<void> {
+  const text = `${JSON.stringify(manifest, undefined, 2)}\n`;
+  await writeFile(path.join(root, "coverage", "unit.manifest.json"), text);
+  await writeFile(path.join(root, "coverage", "runs", manifest.runId, "manifest.json"), text);
+}
+
+const readbackTampers: ReadonlyArray<{
+  readonly label: string;
+  readonly kind: string;
+  readonly tamper: (root: string, manifest: CaptureManifest) => Promise<void>;
+}> = [
+  {
+    label: "the public pointer is missing",
+    kind: "missing-manifest",
+    tamper: (root) => rm(path.join(root, "coverage", "unit.manifest.json")),
+  },
+  {
+    label: "the public LCOV is missing",
+    kind: "missing-artifact",
+    tamper: (root) => rm(path.join(root, "coverage", "unit.lcov")),
+  },
+  {
+    label: "a raw record is missing",
+    kind: "missing-artifact",
+    tamper: (root, manifest) =>
+      rm(path.join(root, "coverage", "runs", manifest.runId, "raw", manifest.raw[0]?.file ?? "")),
+  },
+  {
+    label: "a recorded executed-source capture is missing",
+    kind: "missing-artifact",
+    tamper: (root, manifest) =>
+      rm(
+        path.join(
+          root,
+          "coverage",
+          "runs",
+          manifest.runId,
+          "executed",
+          manifest.modules[0]?.executed ?? "",
+        ),
+      ),
+  },
+  {
+    label: "the public LCOV is swapped for another report",
+    kind: "artifact-digest",
+    tamper: (root) =>
+      writeFile(
+        path.join(root, "coverage", "unit.lcov"),
+        "TN:\nSF:tests/integration/end-to-end.test.ts\nend_of_record\n",
+      ),
+  },
+  {
+    label: "the manifest schema version is unknown",
+    kind: "unsupported-version",
+    tamper: (root, manifest) => writeBothManifests(root, { ...manifest, schemaVersion: 0 }),
+  },
+  {
+    label: "the manifest names a path outside the run",
+    kind: "foreign-path",
+    tamper: (root, manifest) =>
+      writeBothManifests(root, {
+        ...manifest,
+        artifacts: { lcov: { ...manifest.artifacts.lcov, path: "../escape/unit.lcov" } },
+      }),
+  },
+  {
+    label: "the pointer and the run manifest disagree",
+    kind: "manifest-mismatch",
+    tamper: (root, manifest) =>
+      writeFile(
+        path.join(root, "coverage", "unit.manifest.json"),
+        JSON.stringify({ ...manifest, completedAt: "1970-01-01T00:00:00.000Z" }),
+      ),
+  },
+  {
+    label: "the recorded runtime differs",
+    kind: "runtime-changed",
+    tamper: (root, manifest) =>
+      writeBothManifests(root, { ...manifest, runtime: { ...manifest.runtime, node: "v0.0.0" } }),
+  },
+  {
+    label: "a module is recorded twice",
+    kind: "duplicate-record",
+    tamper: (root, manifest) =>
+      writeBothManifests(root, {
+        ...manifest,
+        modules: [...manifest.modules, ...manifest.modules.slice(0, 1)],
+      }),
+  },
+  {
+    label: "the run was not captured",
+    kind: "not-captured",
+    tamper: (root, manifest) => writeBothManifests(root, { ...manifest, status: "failed" }),
+  },
+];
+
+for (const { label, kind, tamper } of readbackTampers) {
+  test(`refuses a bundle on readback when ${label}`, async (t) => {
+    // arrange
+    const root = await createRoot(t, unitFixture());
+    const capture = runCapture(root);
+    assert.strictEqual(capture.status, 0, capture.stderr);
+    await tamper(root, await readManifest(path.join(root, "coverage", "unit.manifest.json")));
+
+    // act
+    const verify = runCapture(root, { args: ["--verify"] });
+
+    // assert
+    assert.strictEqual(verify.status, 1);
+    assert.match(verify.stderr, new RegExp(`"kind": "${kind}"`, "u"));
+  });
+}
+
+test("starting a replacement run removes only the previous public pointer and report", async (t) => {
+  // arrange
+  const root = await createRoot(t, unitFixture());
+  const first = runCapture(root);
+  assert.strictEqual(first.status, 0, first.stderr);
+  const firstManifest = await readManifest(path.join(root, "coverage", "unit.manifest.json"));
+  await writeFile(path.join(root, "coverage", "integration.lcov"), "TN:\nend_of_record\n");
+  await writeFile(path.join(root, "coverage", "notes.txt"), "keep\n");
+
+  // act
+  const second = runCapture(root);
+
+  // assert
+  assert.strictEqual(second.status, 0, second.stderr);
+  const secondManifest = await readManifest(path.join(root, "coverage", "unit.manifest.json"));
+  assert.deepStrictEqual(
+    (await readdir(path.join(root, "coverage", "runs"))).sort(),
+    [firstManifest.runId, secondManifest.runId].sort(),
+  );
+  assert.strictEqual(
+    (await readManifest(path.join(root, "coverage", "runs", firstManifest.runId, "manifest.json")))
+      .status,
+    "captured",
+  );
+  assert.strictEqual(
+    await readFile(path.join(root, "coverage", "integration.lcov"), "utf8"),
+    "TN:\nend_of_record\n",
+  );
+  assert.strictEqual(await readFile(path.join(root, "coverage", "notes.txt"), "utf8"), "keep\n");
 });
