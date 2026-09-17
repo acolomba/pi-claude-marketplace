@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 4
-waived_count: 13
-fixed_count: 18
-total_count: 35
-last_updated: 2026-09-17T04:14:48.891Z
+open_count: 3
+waived_count: 18
+fixed_count: 19
+total_count: 40
+last_updated: 2026-09-17T06:03:22.673Z
 ---
 
 # Broken Windows Ledger
@@ -49,7 +49,12 @@ last_updated: 2026-09-17T04:14:48.891Z
 | 32 | 06 | deviation | scripts/check-unused-type-members.contracts.json |  | Live gate closes with 138 unread members, each recorded in 06-LIVE-TRIAGE.md with evidence and one of six bounded owner repair plans (06-09..06-14); 06-08 activation is blocked on them | open |  | 2026-09-15T18:22:05.279Z |  |
 | 33 | 06 | deviation | extensions/pi-claude-marketplace/bridges/hooks/stage.ts | 227 | WriteHookConfigResult.written left unread on purpose: nine deepStrictEqual sites read the whole result, so the row is an analyzer lineage under-credit through a factory-returned closure, not a dead member | open |  | 2026-09-15T22:02:05.511Z |  |
 | 34 | 06 | deviation | extensions/pi-claude-marketplace/edge/handlers/tools.ts | 140 | PluginRow.marketplace and .scope stay unread: an external-output arrival chain breaks at a destructured binding, which the flow walk records no transfer into | open |  | 2026-09-16T22:12:40.622Z |  |
-| 35 | 06 | deviation | extensions/pi-claude-marketplace/orchestrators/edge-deps.ts | 92 | LocationsResolverLike.loadStateForScope.marketplaces stays unread: aliasing edge/completions/data.ts::LocationsResolver onto it leaves MarketplaceStateRecord with no consumer inside the extension and fallow dead-code exits 1; the clean fix moves three test imports | open |  | 2026-09-17T04:14:48.891Z |  |
+| 35 | 06 | deviation | extensions/pi-claude-marketplace/orchestrators/edge-deps.ts | 92 | LocationsResolverLike.loadStateForScope.marketplaces stays unread: aliasing edge/completions/data.ts::LocationsResolver onto it leaves MarketplaceStateRecord with no consumer inside the extension and fallow dead-code exits 1; the clean fix moves three test imports | fixed |  | 2026-09-17T04:14:48.891Z | 2026-09-17T06:03:02.798Z |
+| 36 | 06 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts | 68 | PLUGIN_INFO_RENDER.status stays unread by a recorded decision the gate carries as a per-row exception: A type-selection contract was drafted for this filter, submitted to the real contract engine against this tree, and refused: "filter ...:68:37 selects over a type that does not discriminate on status". PluginInfoCascadeMsg is PluginSkippedMessage, a single variant, so the selected-over type is not a union and discriminates nothing. The draft was withdrawn rather than reshaped. The filter itself was NOT dropped: every sibling render map in the family carries the same Extract<Msg, { status: K }> shape with an accepted entry, and dropping it here hands each arm the whole union the moment info gains a second cascade status -- a widening the as const satisfies pin cannot catch. | waived | Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one. | 2026-09-17T06:03:12.118Z | 2026-09-17T06:03:21.334Z |
+| 37 | 06 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts | 129 | enableRowDependencies.signals.partition stays unread by a recorded decision the gate carries as a per-row exception: A partition?: never refusal marker. LedgerDegradationSignals declares no partition and the Pick<...> left operand declares none either, so there is no slot to narrow and every restatement ADDS a key; the type-refinement prover refuses it by construction rather than by coordinate, so no contract entry can reach it. Its documented job (WR-01) is to refuse PluginUpdateUpdatedOutcome, which declares the same two optional facts and would otherwise match structurally and silently return an empty dependency list for every update. Weakening the refusal to clear this row reintroduces exactly that bug. | waived | Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one. | 2026-09-17T06:03:12.782Z | 2026-09-17T06:03:21.649Z |
+| 38 | 06 | deviation | extensions/pi-claude-marketplace/orchestrators/types.ts | 155 | UpdatePhaseFailure.msg stays unread by a recorded decision the gate carries as a per-row exception: The reader survey agrees the slot has no reader today -- the only syntax naming this declaration is the write at update-swap.ts:929, and the f.msg reads at :921 and :929 land on Phase3Failure.msg through UpdatePhase3Failure, a different declaration. The removal is still refused: phaseFailures is populated by exactly one path, the phase-3 rollback aggregation, and its own header states the contract, to surface failures structurally so the cascade renderer can build the rollback-partial parent plus indented children. A slot a rollback path populates is behaviour even with no reader today, and deleting it forces a future consumer to re-parse the per-phase text back out of notes prose. | waived | Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one. | 2026-09-17T06:03:13.396Z | 2026-09-17T06:03:21.958Z |
+| 39 | 06 | deviation | extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts | 41 | AuthAttemptResult.authAttempted stays unread by a recorded decision the gate carries as a per-row exception: D-32-05 put authAttempted: true on BOTH arms deliberately, as a reference-only future-proofing marker, and the declaration own comment states the implementation never branches on it: onAuthFailure(url, cred) is called with only the credential and never receives this value. The analyzer is not involved -- there is no read to find. Its structural twin DeviceFlowResult.authAttempted in domain/github-auth.ts is test-only-observed with 36 witnesses; this platform copy exists only because platform/README.md forbids a platform to domain import, so it carries no witness of its own and the orchestrators rely on structural typing to pass initiateDeviceFlow across. Clearing this row means revisiting D-32-05, not repairing source. | waived | Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one. | 2026-09-17T06:03:14.040Z | 2026-09-17T06:03:22.325Z |
+| 40 | 06 | deviation | extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts | 42 | AuthAttemptResult.authAttempted stays unread by a recorded decision the gate carries as a per-row exception: D-32-05 put authAttempted: true on BOTH arms deliberately, as a reference-only future-proofing marker, and the declaration own comment states the implementation never branches on it: onAuthFailure(url, cred) is called with only the credential and never receives this value. The analyzer is not involved -- there is no read to find. Its structural twin DeviceFlowResult.authAttempted in domain/github-auth.ts is test-only-observed with 36 witnesses; this platform copy exists only because platform/README.md forbids a platform to domain import, so it carries no witness of its own and the orchestrators rely on structural typing to pass initiateDeviceFlow across. Clearing this row means revisiting D-32-05, not repairing source. | waived | Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one. | 2026-09-17T06:03:14.703Z | 2026-09-17T06:03:22.673Z |
 
 ````json
 [
@@ -471,10 +476,75 @@ last_updated: 2026-09-17T04:14:48.891Z
     "file": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts",
     "line": 92,
     "description": "LocationsResolverLike.loadStateForScope.marketplaces stays unread: aliasing edge/completions/data.ts::LocationsResolver onto it leaves MarketplaceStateRecord with no consumer inside the extension and fallow dead-code exits 1; the clean fix moves three test imports",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-17T04:14:48.891Z",
-    "resolved_at": null,
+    "resolved_at": "2026-09-17T06:03:02.798Z",
+    "milestone": null
+  },
+  {
+    "id": 36,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts",
+    "line": 68,
+    "description": "PLUGIN_INFO_RENDER.status stays unread by a recorded decision the gate carries as a per-row exception: A type-selection contract was drafted for this filter, submitted to the real contract engine against this tree, and refused: \"filter ...:68:37 selects over a type that does not discriminate on status\". PluginInfoCascadeMsg is PluginSkippedMessage, a single variant, so the selected-over type is not a union and discriminates nothing. The draft was withdrawn rather than reshaped. The filter itself was NOT dropped: every sibling render map in the family carries the same Extract<Msg, { status: K }> shape with an accepted entry, and dropping it here hands each arm the whole union the moment info gains a second cascade status -- a widening the as const satisfies pin cannot catch.",
+    "status": "waived",
+    "reason": "Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one.",
+    "recorded_at": "2026-09-17T06:03:12.118Z",
+    "resolved_at": "2026-09-17T06:03:21.334Z",
+    "milestone": null
+  },
+  {
+    "id": 37,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts",
+    "line": 129,
+    "description": "enableRowDependencies.signals.partition stays unread by a recorded decision the gate carries as a per-row exception: A partition?: never refusal marker. LedgerDegradationSignals declares no partition and the Pick<...> left operand declares none either, so there is no slot to narrow and every restatement ADDS a key; the type-refinement prover refuses it by construction rather than by coordinate, so no contract entry can reach it. Its documented job (WR-01) is to refuse PluginUpdateUpdatedOutcome, which declares the same two optional facts and would otherwise match structurally and silently return an empty dependency list for every update. Weakening the refusal to clear this row reintroduces exactly that bug.",
+    "status": "waived",
+    "reason": "Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one.",
+    "recorded_at": "2026-09-17T06:03:12.782Z",
+    "resolved_at": "2026-09-17T06:03:21.649Z",
+    "milestone": null
+  },
+  {
+    "id": 38,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "extensions/pi-claude-marketplace/orchestrators/types.ts",
+    "line": 155,
+    "description": "UpdatePhaseFailure.msg stays unread by a recorded decision the gate carries as a per-row exception: The reader survey agrees the slot has no reader today -- the only syntax naming this declaration is the write at update-swap.ts:929, and the f.msg reads at :921 and :929 land on Phase3Failure.msg through UpdatePhase3Failure, a different declaration. The removal is still refused: phaseFailures is populated by exactly one path, the phase-3 rollback aggregation, and its own header states the contract, to surface failures structurally so the cascade renderer can build the rollback-partial parent plus indented children. A slot a rollback path populates is behaviour even with no reader today, and deleting it forces a future consumer to re-parse the per-phase text back out of notes prose.",
+    "status": "waived",
+    "reason": "Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one.",
+    "recorded_at": "2026-09-17T06:03:13.396Z",
+    "resolved_at": "2026-09-17T06:03:21.958Z",
+    "milestone": null
+  },
+  {
+    "id": 39,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts",
+    "line": 41,
+    "description": "AuthAttemptResult.authAttempted stays unread by a recorded decision the gate carries as a per-row exception: D-32-05 put authAttempted: true on BOTH arms deliberately, as a reference-only future-proofing marker, and the declaration own comment states the implementation never branches on it: onAuthFailure(url, cred) is called with only the credential and never receives this value. The analyzer is not involved -- there is no read to find. Its structural twin DeviceFlowResult.authAttempted in domain/github-auth.ts is test-only-observed with 36 witnesses; this platform copy exists only because platform/README.md forbids a platform to domain import, so it carries no witness of its own and the orchestrators rely on structural typing to pass initiateDeviceFlow across. Clearing this row means revisiting D-32-05, not repairing source.",
+    "status": "waived",
+    "reason": "Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one.",
+    "recorded_at": "2026-09-17T06:03:14.040Z",
+    "resolved_at": "2026-09-17T06:03:22.325Z",
+    "milestone": null
+  },
+  {
+    "id": 40,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts",
+    "line": 42,
+    "description": "AuthAttemptResult.authAttempted stays unread by a recorded decision the gate carries as a per-row exception: D-32-05 put authAttempted: true on BOTH arms deliberately, as a reference-only future-proofing marker, and the declaration own comment states the implementation never branches on it: onAuthFailure(url, cred) is called with only the credential and never receives this value. The analyzer is not involved -- there is no read to find. Its structural twin DeviceFlowResult.authAttempted in domain/github-auth.ts is test-only-observed with 36 witnesses; this platform copy exists only because platform/README.md forbids a platform to domain import, so it carries no witness of its own and the orchestrators rely on structural typing to pass initiateDeviceFlow across. Clearing this row means revisiting D-32-05, not repairing source.",
+    "status": "waived",
+    "reason": "Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one.",
+    "recorded_at": "2026-09-17T06:03:14.703Z",
+    "resolved_at": "2026-09-17T06:03:22.673Z",
     "milestone": null
   }
 ]
