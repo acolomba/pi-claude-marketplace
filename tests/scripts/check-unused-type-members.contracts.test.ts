@@ -2222,8 +2222,10 @@ test("a constraint spelling the key on another declaration does not constrain it
 // itself. `LoosePin` at line 28 instantiates an unconstrained generic and checks
 // nothing. `BrokenPin` at line 30 instantiates a constrained one with an
 // argument that does not satisfy it, so the pin does not hold. `NarrowPin` at
-// line 32 is compiler-enforced but reaches neither declaration. `NotAnAlias` at
-// line 34 is not a type alias at all.
+// line 32 is compiler-enforced but reaches neither declaration. `OneSidedPin`
+// at line 40 reaches the candidate's own declaration and not its counterpart's,
+// which is the shape a reach check asking about one side would let through.
+// `NotAnAlias` at line 34 is not a type alias at all.
 const schemaPinCases = `export type Row =
   | { kind: "event"; event: string }
   | { kind: "group"; event: string; matcher: string };
@@ -2260,6 +2262,10 @@ export type NarrowPin = AssertTrue<true>;
 export interface NotAnAlias {
   readonly spare: string;
 }
+
+type SchemaOnly = [keyof Extract<RowSchema, { kind: "group" }>] extends [string] ? true : false;
+
+export type OneSidedPin = AssertTrue<SchemaOnly>;
 `;
 
 const schemaPinContract = {
@@ -2402,6 +2408,23 @@ test("a pin entry carrying another category's key is refused", async (t) => {
     {
       name: "AnalysisSetupError",
       message: `Invalid contract: ${casesPath}:7:37 carries unknown key refines`,
+    },
+  );
+});
+
+test("a pin reaching only the member's own declaration states nothing about the other", async (t) => {
+  // arrange & act & assert
+  await assert.rejects(
+    analyzeWith(
+      t,
+      schemaPinCases,
+      documentWith({ ...schemaPinContract, pin: `${casesPath}:40:1` }),
+    ),
+    {
+      name: "AnalysisSetupError",
+      message:
+        `Invalid contract: ${casesPath}:7:37 pin ${casesPath}:40:1 ` +
+        `does not tie RowSchema to the declaration at ${casesPath}:3:37`,
     },
   );
 });

@@ -832,6 +832,24 @@
       "category": "satisfies-constraint",
       "purpose": "The prefix table is checked against this interface, so every entry has to name the runtime field its predicate consults; nothing in the project holds a value typed as the interface, so no read can land on this slot.",
       "constraint": "extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:86:34"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:19:7",
+      "owner": "DroppedHookSchema",
+      "key": "matcher",
+      "category": "schema-pin",
+      "purpose": "Pinned key-for-key against the hand-written dropped-hook group arm, so a key dropped from either side fails the build; nothing reads the schema slot itself.",
+      "pin": "extensions/pi-claude-marketplace/domain/resolver-types.ts:67:1",
+      "counterpart": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:19:7"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/domain/resolver-types.ts:32:7",
+      "owner": "DroppedHookSchema",
+      "key": "matcher",
+      "category": "schema-pin",
+      "purpose": "Pinned key-for-key against the hand-written dropped-hook handler arm, so a key dropped from either side fails the build; nothing reads the schema slot itself.",
+      "pin": "extensions/pi-claude-marketplace/domain/resolver-types.ts:67:1",
+      "counterpart": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:22:45"
     }
   ]
 }

@@ -48,12 +48,21 @@ const categoryKeys = {
   "type-refinement": ["refines"],
   "conditional-clause": ["clause"],
   "satisfies-constraint": ["constraint"],
+  "schema-pin": ["pin", "counterpart"],
 };
 
 // A refinement is followed one slot at a time into the shape it narrows. A
 // chain longer than this is not something a maintainer reads as one narrowing,
 // and stopping early refuses a contract rather than accepting an unproven one.
 const deepestRefinement = 4;
+
+// A pin is followed from the alias it names into the aliases that one mentions,
+// one step at a time. Four is what the live pin needs -- the assertion, the
+// fold over its arms, the per-arm comparison, and the two declarations that
+// comparison names -- and a longer chain is not a correspondence a maintainer
+// reads as one statement. Stopping early refuses a contract rather than
+// accepting an unproven one.
+const deepestPinReference = 4;
 
 const projectPathOf = (projectRoot, fileName) =>
   path.relative(projectRoot, fileName).split(path.sep).join("/");
@@ -1305,6 +1314,198 @@ function proveSatisfiesConstraint(entry, candidate, context) {
   return `(satisfies ${entry.constraint} compels ${candidate.key})`;
 }
 
+/** The alias or interface a member belongs to. */
+function owningDeclarationOf(node) {
+  let current = node.parent;
+
+  while (current !== undefined) {
+    if (ts.isTypeAliasDeclaration(current) || ts.isInterfaceDeclaration(current)) {
+      return current;
+    }
+
+    current = current.parent;
+  }
+
+  return undefined;
+}
+
+/**
+ * The aliases and interfaces one type reference names.
+ *
+ * Import and re-export hops are followed to the declaration that really holds
+ * the shape, because a pin written in one file routinely names a type declared
+ * in another and re-exported through a third. This resolves a TYPE reference,
+ * which is a different question from the flow walk's `calleeSymbolOf` -- that
+ * one resolves a call's callee and takes a single alias hop.
+ */
+function targetDeclarationsOf(reference, context) {
+  let symbol = context.checker.getSymbolAtLocation(reference.typeName);
+  const seen = new Set();
+
+  while (symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0 && !seen.has(symbol)) {
+    seen.add(symbol);
+    symbol = context.checker.getAliasedSymbol(symbol);
+  }
+
+  return (symbol?.declarations ?? []).filter(
+    (declaration) =>
+      ts.isTypeAliasDeclaration(declaration) || ts.isInterfaceDeclaration(declaration),
+  );
+}
+
+/**
+ * Every declaration a pin's type names, following one alias into the next for a
+ * bounded number of steps. This is what ties the two sides of a correspondence
+ * together: a pin that reaches only one of them states nothing about the other.
+ */
+function referencedDeclarations(typeNode, context) {
+  const found = new Set();
+
+  const walk = (start, left) => {
+    if (left <= 0) {
+      return;
+    }
+
+    const visit = (child) => {
+      if (ts.isTypeReferenceNode(child)) {
+        for (const declaration of targetDeclarationsOf(child, context)) {
+          if (!found.has(declaration)) {
+            found.add(declaration);
+            walk(ts.isTypeAliasDeclaration(declaration) ? declaration.type : declaration, left - 1);
+          }
+        }
+      }
+
+      ts.forEachChild(child, visit);
+    };
+
+    visit(start);
+  };
+
+  walk(typeNode, deepestPinReference);
+  return found;
+}
+
+/**
+ * Whether the compiler -- rather than a comment -- is what makes this pin hold.
+ *
+ * The alias has to instantiate a generic whose type parameter carries a
+ * constraint, because an unconstrained parameter accepts anything however
+ * true-looking the argument written for it is. `undefined` means no constrained
+ * parameter was instantiated at all; `false` means one was and the argument
+ * written for it does not satisfy it, so the pin is already broken.
+ */
+function pinHolds(alias, context) {
+  const reference = alias.type;
+
+  if (!ts.isTypeReferenceNode(reference)) {
+    return undefined;
+  }
+
+  const [target] = targetDeclarationsOf(reference, context);
+  const parameters =
+    target !== undefined && ts.isTypeAliasDeclaration(target) ? (target.typeParameters ?? []) : [];
+  let constrained = false;
+
+  for (const [index, parameter] of parameters.entries()) {
+    const written = reference.typeArguments?.[index];
+
+    if (parameter.constraint === undefined || written === undefined) {
+      continue;
+    }
+
+    constrained = true;
+
+    if (
+      !context.checker.isTypeAssignableTo(
+        context.checker.getTypeFromTypeNode(written),
+        context.checker.getTypeFromTypeNode(parameter.constraint),
+      )
+    ) {
+      return false;
+    }
+  }
+
+  return constrained ? true : undefined;
+}
+
+function assertPinEnforced(entry, pin, context) {
+  if (!ts.isTypeAliasDeclaration(pin)) {
+    fail(`${entry.id} pin ${entry.pin} is not a type alias`);
+  }
+
+  const holds = pinHolds(pin, context);
+
+  if (holds === undefined) {
+    fail(
+      `${entry.id} pin ${entry.pin} instantiates no constrained type parameter, so the compiler checks nothing`,
+    );
+  }
+
+  if (!holds) {
+    fail(`${entry.id} pin ${entry.pin} does not hold today`);
+  }
+}
+
+function assertCounterpart(entry, candidate, counterpart, owner) {
+  if (!ts.isPropertySignature(counterpart) || literalNameOf(counterpart) !== candidate.key) {
+    fail(`${entry.id} counterpart ${entry.counterpart} does not declare ${candidate.key}`);
+  }
+
+  const counterpartOwner = owningDeclarationOf(counterpart);
+
+  if (counterpartOwner === undefined || counterpartOwner === owner) {
+    fail(
+      `${entry.id} counterpart ${entry.counterpart} is declared by ${candidate.owner} itself, so the pin compares it with itself`,
+    );
+  }
+
+  return counterpartOwner;
+}
+
+/**
+ * Proves a member exists to keep two declarations the same shape rather than to
+ * be read. A generated schema and the hand-written type it mirrors are pinned
+ * key-for-key by a type-level assertion, so a key dropped from either side stops
+ * the build -- which is the whole reason the key is written down.
+ *
+ * This is deliberately NOT a widening of `nominal-brand`. That category proves a
+ * member no module outside the branding one can supply, through a `unique
+ * symbol` key and a type no ordinary value satisfies; neither holds here, and
+ * admitting a pinned schema key there would weaken the proof the accepted brand
+ * entries rest on.
+ *
+ * The evidence has to tie three things together, and each alone is worthless. A
+ * pin the compiler does not enforce states nothing. A counterpart that does not
+ * declare the key is a correspondence that has already drifted. And a pin that
+ * reaches only one of the two declarations connects them by nothing at all -- a
+ * category admitting any member of any type an assertion happens to mention
+ * would be a standing hole in the gate.
+ */
+function proveSchemaPin(entry, candidate, context) {
+  const node = declarationOf(entry, candidate, context);
+  const pin = resolveNode(parseSite(entry.pin, `${entry.id} pin`), `${entry.id} pin`, context);
+  const counterpart = resolveNode(
+    parseSite(entry.counterpart, `${entry.id} counterpart`),
+    `${entry.id} counterpart`,
+    context,
+  );
+
+  assertPinEnforced(entry, pin, context);
+
+  const owner = owningDeclarationOf(node);
+  const counterpartOwner = assertCounterpart(entry, candidate, counterpart, owner);
+  const reached = referencedDeclarations(pin.type, context);
+
+  if (owner === undefined || !reached.has(owner) || !reached.has(counterpartOwner)) {
+    fail(
+      `${entry.id} pin ${entry.pin} does not tie ${candidate.owner} to the declaration at ${entry.counterpart}`,
+    );
+  }
+
+  return `(pin ${entry.pin} holds ${candidate.key} equal to ${entry.counterpart})`;
+}
+
 const provers = {
   "external-output": proveExternalOutput,
   "external-input": proveExternalInput,
@@ -1313,6 +1514,7 @@ const provers = {
   "type-refinement": proveTypeRefinement,
   "conditional-clause": proveConditionalClause,
   "satisfies-constraint": proveSatisfiesConstraint,
+  "schema-pin": proveSchemaPin,
 };
 
 function decisionFor(entry, context) {
