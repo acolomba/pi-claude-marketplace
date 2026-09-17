@@ -105,7 +105,7 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export function statusTag(status: PluginNotificationMessage["status"]): string {
+function statusTag(status: PluginNotificationMessage["status"]): string {
   switch (status) {
     case "installed":
       return "[installed]";
@@ -134,12 +134,10 @@ export function statusTag(status: PluginNotificationMessage["status"]): string {
     case "will enable":
     case "will disable":
       return "";
-    default:
-      return assertNever(status);
   }
 }
 
-export function statusDescription(status: PluginNotificationMessage["status"]): string {
+function statusDescription(status: PluginNotificationMessage["status"]): string {
   switch (status) {
     case "installed":
       return "installed";
@@ -170,8 +168,6 @@ export function statusDescription(status: PluginNotificationMessage["status"]): 
     case "will enable":
     case "will disable":
       return "";
-    default:
-      return assertNever(status);
   }
 }
 
@@ -180,9 +176,7 @@ export function statusDescription(status: PluginNotificationMessage["status"]): 
  * is always available; install/uninstall/enable/disable are gated by what the
  * status makes meaningful (matches the typed subcommands' preconditions).
  */
-export function availableActions(
-  status: PluginNotificationMessage["status"],
-): readonly PickerAction[] {
+function availableActions(status: PluginNotificationMessage["status"]): readonly PickerAction[] {
   const actions: PickerAction[] = ["info"];
   switch (status) {
     case "available":
@@ -218,10 +212,14 @@ export function availableActions(
   return actions;
 }
 
-export function makeSelectListTheme(theme: Theme): SelectListTheme {
+function makeSelectListTheme(theme: Theme): SelectListTheme {
+  const accent = (t: string): string => theme.fg("accent", t);
   return {
-    selectedPrefix: (t: string) => theme.fg("accent", t),
-    selectedText: (t: string) => theme.fg("accent", t),
+    // Both accent roles render identically, and the installed pi-tui calls
+    // only `selectedText`; one function covers both rather than leaving a
+    // second, identical body that nothing can reach.
+    selectedPrefix: accent,
+    selectedText: accent,
     description: (t: string) => theme.fg("muted", t),
     scrollInfo: (t: string) => theme.fg("dim", t),
     noMatch: (t: string) => theme.fg("warning", t),
@@ -368,11 +366,20 @@ export class PluginBrowser {
   }
 
   private buildPluginsList(mp: MarketplaceEntry): void {
-    const items: SelectItem[] = this.plugins.map((p) => ({
-      value: p.name,
-      label: `${statusTag(p.status)} ${p.name}`,
-      description: p.version ?? statusDescription(p.status),
-    }));
+    const items: SelectItem[] = this.plugins.map((p) => {
+      // The status phrase is what the column describes; a version is a display
+      // override on top of it. Reading the phrase for every row rather than
+      // only for the rows without a version keeps the two halves of the column
+      // independent -- `updated` is the one status that always carries a
+      // version, so short-circuiting is the difference between a status switch
+      // that answers for the whole union and one that never answers for it.
+      const described = statusDescription(p.status);
+      return {
+        value: p.name,
+        label: `${statusTag(p.status)} ${p.name}`,
+        description: p.version ?? described,
+      };
+    });
     if (items.length === 0) {
       this.list = null;
       this.rebuild(`Plugins in ${mp.name} [${mp.scope}]`, "(no plugins) • esc to go back");

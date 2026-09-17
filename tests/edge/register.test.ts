@@ -1485,6 +1485,30 @@ describe("registerClaudeMarketplaceTools", () => {
   });
 });
 
+/**
+ * A verb's diagnostic for one rejection kind: a fixed sentence, or one derived
+ * from the token that was rejected when the verb echoes it back.
+ */
+type ArgumentDiagnostic = string | ((invalid: string) => string);
+
+function diagnosticFor(
+  stated: ArgumentDiagnostic | undefined,
+  shared: string,
+  invalid: string,
+): string {
+  if (stated === undefined) {
+    return shared;
+  }
+
+  return typeof stated === "string" ? stated : stated(invalid);
+}
+
+/**
+ * Verbs that reject `--scope` itself, so the empty-scope rejection below has no
+ * valid spelling to exercise on them.
+ */
+const SCOPELESS_VERBS = new Set(["bootstrap", "browse", "help", "marketplace help"]);
+
 /** Complete public spellings with independently stated argument and error contracts. */
 const COMMAND_ARGUMENT_CASES = [
   {
@@ -1560,6 +1584,29 @@ const COMMAND_ARGUMENT_CASES = [
     unknown: "import does not accept positional arguments.",
   },
   {
+    verb: "browse",
+    operand: "",
+    usage: "browse",
+    surplus: "browse takes no arguments.",
+    unknown: "browse takes no arguments.",
+  },
+  {
+    // `help` reads whatever follows as a topic name rather than parsing it, so
+    // the rejected token is echoed back and every kind gets its own sentence.
+    verb: "help",
+    operand: "",
+    usage: "help [marketplace]",
+    surplus: (invalid: string) => `Unknown help topic: "${invalid}".`,
+    unknown: (invalid: string) => `Unknown help topic: "${invalid}".`,
+  },
+  {
+    verb: "marketplace help",
+    operand: "",
+    usage: "marketplace help",
+    surplus: "marketplace help takes no arguments.",
+    unknown: "marketplace help takes no arguments.",
+  },
+  {
     verb: "marketplace add",
     operand: "./fixture-marketplace",
     usage: "marketplace add <source> [--scope user|project] [--local]",
@@ -1616,22 +1663,22 @@ for (const { verb, aliases = [], operand, usage, surplus, unknown } of COMMAND_A
       {
         kind: "unknown flag",
         invalid: "--bogus",
-        diagnostic: unknown ?? 'Unknown flag: "--bogus".',
+        diagnostic: diagnosticFor(unknown, 'Unknown flag: "--bogus".', "--bogus"),
       },
       {
         kind: "surplus positional",
         invalid: "surplus",
-        diagnostic: surplus ?? "Too many arguments.",
+        diagnostic: diagnosticFor(surplus, "Too many arguments.", "surplus"),
       },
       {
         kind: "empty double-quoted surplus",
         invalid: '""',
-        diagnostic: surplus ?? "Too many arguments.",
+        diagnostic: diagnosticFor(surplus, "Too many arguments.", '""'),
       },
       {
         kind: "empty single-quoted surplus",
         invalid: "''",
-        diagnostic: surplus ?? "Too many arguments.",
+        diagnostic: diagnosticFor(surplus, "Too many arguments.", "''"),
       },
     ]) {
       test(`registered ${spelling} rejects ${kind} before reading runtime context`, async (t) => {
@@ -1659,7 +1706,7 @@ for (const { verb, aliases = [], operand, usage, surplus, unknown } of COMMAND_A
 }
 
 for (const { verb, aliases = [], operand, usage } of COMMAND_ARGUMENT_CASES.filter(
-  ({ verb }) => verb !== "bootstrap",
+  ({ verb }) => !SCOPELESS_VERBS.has(verb),
 )) {
   for (const spelling of [verb, ...aliases]) {
     for (const emptyValue of ['""', "''"]) {

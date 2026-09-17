@@ -86,6 +86,9 @@ const EXPECTED_CATALOG_VERBS = [
   "pending",
   "import",
   "bootstrap",
+  "browse",
+  "help",
+  "marketplace help",
   "marketplace add",
   "marketplace remove",
   "marketplace info",
@@ -148,6 +151,11 @@ const HANDLER_ACCEPTED_PARSE_SETS: Record<CatalogVerb, readonly string[]> = {
   pending: [],
   import: [],
   bootstrap: [],
+  // The documentation/navigation verbs parse no flag of their own, and
+  // completions/provider.ts keeps the global `--scope` off them too.
+  browse: [],
+  help: [],
+  "marketplace help": [],
   "marketplace add": ["--local"],
   "marketplace remove": ["--local"],
   "marketplace info": ["--local"],
@@ -192,7 +200,7 @@ test("catalog and alias completions cover the complete router inventory", () => 
   );
   assert.deepStrictEqual(
     EXPECTED_CATALOG_VERBS.map((verb) => isCatalogVerb(verb)),
-    Array.from({ length: 19 }, () => true),
+    Array.from({ length: 22 }, () => true),
   );
 });
 

@@ -99,17 +99,30 @@ function catalogVerbForPositionals(positionals: readonly string[]): CatalogVerb 
   return isCatalogVerb(key) ? key : null;
 }
 
+/**
+ * Verbs that accept no flag at all, not even the global `--scope`. `bootstrap`,
+ * `browse` and `marketplace help` reject every argument; `help` reads what
+ * follows as a topic name rather than parsing flags. Suggesting `--scope` for
+ * any of them would offer a token its handler answers with a usage error.
+ */
+const NO_FLAG_VERBS: ReadonlySet<CatalogVerb> = new Set([
+  "bootstrap",
+  "browse",
+  "help",
+  "marketplace help",
+]);
+
 function flagCompletions(
   current: string,
   positionals: readonly string[],
   headPrefix: string,
 ): AutocompleteItem[] {
   const verb = catalogVerbForPositionals(positionals);
-  if (verb === "bootstrap") {
+  if (verb !== null && NO_FLAG_VERBS.has(verb)) {
     return [];
   }
 
-  // Bootstrap rejects scope; all other commands use the global base flag.
+  // The no-flag verbs reject scope; all other commands use the global base flag.
   const flags: { name: string; description: string }[] = [
     { name: "--scope", description: "Scope: user or project" },
   ];

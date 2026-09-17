@@ -1,3 +1,4 @@
+// fallow-ignore-file unused-file -- standalone operator-run demo driver: an engineer invokes it from the command line and no module ever imports it, so being unreachable from the import graph is its intended shape, not a defect.
 /**
  * Standalone interactive demo for the `/claude:plugin browse` picker.
  *
