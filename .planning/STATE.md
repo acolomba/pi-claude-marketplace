@@ -301,7 +301,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-17 — Completed quick task 260917-g97: window #32 resolved, cold-git `(remote)` info row renders its dependencies line (D-01-32)
+Last activity: 2026-09-17 — Completed quick task 260917-hfp: phase 5 review Info items IN-01..04, IN-07, IN-08 settled (the v1.20 audit tech-debt list is now clear except BACKLOG `PRUNE-GUARD-MR-01`)
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 5 of 5 phases complete (100%).
@@ -765,10 +765,11 @@ session that must settle it:
 
 ### Quick Tasks Completed
 
-Latest implementation: `260917-g97` — window #32 resolved: the cold-git
-`(remote)` info row now renders its entry-declared `dependencies:` line after
-the `components: not resolved` marker (D-01-32), 2026-09-17.
-See [task summary](./quick/260917-g97-resolve-window-32-give-the-componentsres/260917-g97-SUMMARY.md).
+Latest implementation: `260917-hfp` — the phase 5 review's Info items are
+all settled: IN-01/02/03/08 fixed (prune sweeps only in standalone mode, the
+reconcile retry loop counts settled outcomes), IN-07 catalog prose fixed,
+IN-04 carried to BACKLOG `PRUNE-GUARD-MR-01`, 2026-09-17.
+See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/260917-hfp-SUMMARY.md).
 
 | #          | Description                                                                                                 | Date       | Commit   | Directory                                                                                            |
 | ---------- | ----------------------------------------------------------------------------------------------------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------- |
@@ -783,6 +784,7 @@ See [task summary](./quick/260917-g97-resolve-window-32-give-the-componentsres/2
 | 260909-g1l | correct UDISP-01 backlog entry and add bare plugin.json manifest-path entry | 2026-09-09 | 9a8f740b | [260909-g1l-correct-udisp-01-backlog-entry-and-add-b](./quick/260909-g1l-correct-udisp-01-backlog-entry-and-add-b/) |
 | 260917-cqc | Tighten dependents guard on unusable own manifest (IN-05); accept unreadable token (IN-06) | 2026-09-17 | fda3bc8e | [260917-cqc-tighten-dependents-guard-on-unusable-own](./quick/260917-cqc-tighten-dependents-guard-on-unusable-own/) |
 | 260917-g97 | Resolve window #32: the cold-git `(remote)` info row renders its entry-declared dependencies line (D-01-32) | 2026-09-17 | 975e6236 | [260917-g97-resolve-window-32-give-the-componentsres](./quick/260917-g97-resolve-window-32-give-the-componentsres/) |
+| 260917-hfp | Clear the phase 5 review nits IN-01, IN-02, IN-03, IN-07, IN-08; IN-04 carried to BACKLOG `PRUNE-GUARD-MR-01` | 2026-09-17 | 97c9ce14 | [260917-hfp-clear-the-phase-5-review-nits-in-01-in-0](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/) |
 
 ## Deferred Items
 
