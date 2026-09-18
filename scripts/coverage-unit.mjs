@@ -24,9 +24,10 @@
 //
 // A refusal at any step removes every public artifact, keeps the run
 // directory as evidence and exits 1 with one `{ kind, ... }` row per finding;
-// a usage error exits 2. The LCOV is the runner's own output and is never
-// rewritten (D-01). No test runs twice: the raw snapshots of the one native
-// run feed the conversion (D-10).
+// a crash removes the same artifacts and exits 1 with its message; a usage
+// error exits 2. The LCOV is the runner's own output and is never rewritten
+// (D-01). No test runs twice: the raw snapshots of the one native run feed
+// the conversion (D-10).
 //
 // `--reuse-current` is the orchestration step the pre-commit hooks run
 // (D-10). When the published bundle is accepted and `coverage-validate.mjs`
@@ -371,12 +372,16 @@ function verifiedRun(root) {
   return accepted;
 }
 
+// The public artifacts go first on every failure, so a crash between the
+// capture's publication and the acceptance leaves no half bundle behind;
+// only a refusal has rows to print.
 function refuse(root, error) {
+  removePublicArtifacts(root);
+
   if (!Array.isArray(error.failures)) {
     throw error;
   }
 
-  removePublicArtifacts(root);
   const rows = error.failures.map((failure) => `  ${JSON.stringify(failure)}`).join("\n");
   process.stderr.write(`${error.message}:\n${rows}\nEvidence retained under ${RUNS_DIRECTORY}\n`);
 }

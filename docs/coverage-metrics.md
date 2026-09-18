@@ -65,7 +65,7 @@ Each run also keeps its evidence under `coverage/runs/<runId>/`: the inventory o
 | 1      | A refusal. Standard error carries the message and one `{ "kind": ... }` row per finding. |
 | 2      | A usage error: an unknown option, or a root that is not a directory.                     |
 
-A refusal at any step of `coverage:unit:verified` removes every public artifact. A public LCOV without an accepted map is a half bundle, and no consumer sees one.
+A refusal or a crash at any step of `coverage:unit:verified` removes every public artifact. A public LCOV without an accepted map is a half bundle, and no consumer sees one.
 
 ## What an accepted bundle proves
 

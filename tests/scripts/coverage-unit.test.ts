@@ -353,6 +353,41 @@ test("publishes nothing and keeps the failed run's evidence when a test fails", 
   );
 });
 
+// A unit test that plants a directory where the conversion writes its
+// request file, so the pipeline crashes after the capture published its
+// half bundle and before any step has a refusal row.
+const plantingTest = `import { mkdirSync } from "node:fs";
+import path from "node:path";
+import test from "node:test";
+
+test("plants a directory at the conversion request path", () => {
+  mkdirSync(path.join(process.env.PI_CM_COVERAGE_RUN_DIR ?? "", "unit.request.json"));
+});
+`;
+
+test("removes the captured half bundle when a step crashes without a refusal row", async (t) => {
+  // arrange
+  const fixture = tallyFixture();
+  const root = await createRoot(t, {
+    ...fixtureFiles(fixture),
+    "tests/domain/planting.test.ts": plantingTest,
+  });
+
+  // act
+  const crashed = verify(root);
+
+  // assert
+  assert.deepStrictEqual(verdict(crashed), { status: 1, rows: [] });
+  assert.match(crashed.stderr, /EISDIR/u);
+  assert.deepStrictEqual(publicFilesPresent(root), {
+    lcov: false,
+    istanbul: false,
+    validation: false,
+    manifest: false,
+  });
+  assert.strictEqual((await readdir(path.join(root, "coverage", "runs"))).length, 1);
+});
+
 test("removes the previous acceptance before a replacement run publishes anything", async (t) => {
   // arrange
   const { root } = await verifiedRoot(t, tallyFixture());
