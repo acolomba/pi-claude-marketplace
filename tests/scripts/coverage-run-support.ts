@@ -284,9 +284,9 @@ export async function writeMap(root: string, map: IstanbulCoverageMap): Promise<
 }
 
 // One production function as the installed Fallow reports it when given a
-// coverage map: the coverage it joined to the function and where that
-// coverage came from (`istanbul` when a record matched, `estimated` when
-// none did).
+// coverage map: the coverage it joined to the function, `null` when the
+// report carries none, and where that coverage came from (`istanbul` when a
+// record matched, `estimated` when none did).
 export interface FallowFunction {
   readonly path: string;
   readonly name: string;
@@ -301,7 +301,7 @@ interface FallowHealthReport {
     readonly path: string;
     readonly name: string;
     readonly line: number;
-    readonly coverage_pct: number | null;
+    readonly coverage_pct?: number;
     readonly coverage_source: string;
   }>;
 }
@@ -342,7 +342,7 @@ export function fallowHealth(root: string, mapPath: string): FallowHealth {
         path: finding.path,
         name: finding.name,
         line: finding.line,
-        coveragePct: finding.coverage_pct,
+        coveragePct: finding.coverage_pct ?? null,
         coverageSource: finding.coverage_source,
       })),
   };
