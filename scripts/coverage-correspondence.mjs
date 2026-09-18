@@ -260,6 +260,26 @@ export function syntaxInventory(executed) {
   };
 }
 
+/**
+ * What the executed text `executed` is, once its types are gone: `type-only`
+ * when the program has no statement at all, so nothing of it can execute and
+ * an empty map is its faithful record, and `executable` otherwise, even when
+ * the surviving statements (an import kept for its side effect, a re-export)
+ * declare no function, statement or branch of the model. The counts are the
+ * syntax inventory's, so a consumer can label a zero-execution record by what
+ * it holds (D-04, D-07).
+ */
+export function classifySyntax(executed) {
+  const inventory = syntaxInventory(executed);
+
+  return {
+    syntax: parseExecuted(executed).body.length === 0 ? "type-only" : "executable",
+    functions: inventory.functions.length,
+    statements: inventory.statements.length,
+    branches: inventory.branches.length,
+  };
+}
+
 // The rows for one record kind: a declared construct with no record is
 // missing, one with several records is duplicated, and a record matching no
 // declared construct is unproven. Identity is the exact key and nothing else.

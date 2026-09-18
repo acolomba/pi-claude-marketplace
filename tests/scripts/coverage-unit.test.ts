@@ -169,8 +169,8 @@ test("publishes the LCOV unchanged, the validated Istanbul map and an accepted m
   assert.strictEqual(verified.status, 0, verified.stderr);
   const manifest = await readJson<AcceptedManifest>(path.join(root, PUBLIC.manifest));
   assert.strictEqual(
-    verified.stdout,
-    `Coverage unit verified: ${manifest.runId}: 1 production file(s), 1 loaded, 0 unloaded (0 type-only, 0 executable); native 3/3 line(s), 1/1 function(s), 2/2 branch(es); syntax 1/1 function(s), 1/1 statement(s), 0/0 branch arm(s) -> ${PUBLIC.manifest}\n`,
+    verified.stdout.split("\n").at(-2),
+    `Coverage unit verified: ${manifest.runId}: 1 production file(s), 1 loaded, 0 unloaded (0 type-only, 0 executable); native 3/3 line(s), 1/1 function(s), 2/2 branch(es); syntax 1/1 function(s), 1/1 statement(s), 0/0 branch arm(s) -> ${PUBLIC.manifest}`,
   );
   assert.deepStrictEqual(
     { status: manifest.status, state: manifest.state },
@@ -329,7 +329,10 @@ test("publishes nothing and keeps the failed run's evidence when a test fails", 
   const verified = verify(root);
 
   // assert
-  assert.deepStrictEqual(verdict(verified), { status: 1, rows: [{ kind: "capture", status: 1 }] });
+  assert.deepStrictEqual(verdict(verified), {
+    status: 1,
+    rows: [{ kind: "capture", status: 1, failures: [{ kind: "tests-failed", status: 1 }] }],
+  });
   assert.deepStrictEqual(publicFilesPresent(root), {
     lcov: false,
     istanbul: false,

@@ -3,7 +3,10 @@
 // `npm run coverage:capture` runs the existing unit selection exactly once under
 // the ordinary native runner flags and, from that same run, keeps the LCOV the
 // runner writes, the raw V8 coverage its workers emit, and the source and
-// executed-JavaScript bytes the loader actually evaluated. Every input is
+// executed-JavaScript bytes the loader actually evaluated. A production source
+// no test loads is still represented: its inventory snapshot is stripped the
+// way the loader strips a `.ts` module and recorded beside the loaded ones, so
+// every production source has an executed text under the run. Every input is
 // inventoried and hashed before execution, after execution and again before
 // publication; a loaded module whose bytes differ from the pre-run inventory, a
 // worker that did not finish, a raw record from a process the run did not
@@ -33,8 +36,9 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   canonicalJson,
@@ -414,23 +418,82 @@ function reconcileModules(run, records, inventory) {
   return { modules: [...modules.values()].sort((a, b) => a.path.localeCompare(b.path)), failures };
 }
 
+// A `.ts` source strips to the same text the loader would have evaluated:
+// Node's own strip mode with the module URL as the sourceURL trailer. Any
+// other extension evaluates as written.
+function executedTextOf(run, projectPath, original) {
+  if (!/\.m?ts$/u.test(projectPath)) {
+    return original;
+  }
+
+  const url = pathToFileURL(path.join(run.root, projectPath)).href;
+  return Buffer.from(
+    stripTypeScriptTypes(original.toString("utf8"), { mode: "strip", sourceUrl: url }),
+  );
+}
+
+function storeExecuted(run, digest, bytes) {
+  const target = path.join(run.runDirectory, "executed", digest);
+
+  if (!existsSync(target)) {
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeBytesAtomically(bytes, target);
+  }
+}
+
+// Every production source the run never loaded gets its executed text from the
+// inventory snapshot, under this same runtime, so a consumer finds each
+// production source in the run and none can vanish from a denominator (D-04,
+// D-07). A source the runtime cannot strip is a failure, not an omission.
+function recordUnloaded(run, inventory, modules) {
+  const loaded = new Set(modules.map((record) => record.path));
+  const unloaded = [];
+  const failures = [];
+
+  for (const entry of inventory) {
+    if (entry.group !== "production" || loaded.has(entry.path)) {
+      continue;
+    }
+
+    const original = readFileSync(path.join(run.runDirectory, "inventory", entry.digest));
+
+    try {
+      const executed = executedTextOf(run, entry.path, original);
+      const digest = sha256(executed);
+      storeExecuted(run, digest, executed);
+      unloaded.push({ path: entry.path, source: entry.digest, executed: digest });
+    } catch (error) {
+      failures.push({ kind: "unstrippable-source", path: entry.path, error: error.message });
+    }
+  }
+
+  return { unloaded, failures };
+}
+
 function reconcile(run, runnerPid, tests, inventory) {
   const records = readProcessRecords(run);
   const rawRecords = readRawRecords(run);
   const processes = reconcileProcesses(run, records, rawRecords.raw, runnerPid, tests);
   const modules = reconcileModules(run, records, inventory);
+  const unloaded = recordUnloaded(run, inventory, modules.modules);
 
   return {
     workers: processes.workers,
     nested: processes.nested,
     raw: rawRecords.raw,
     modules: modules.modules,
-    failures: [...rawRecords.failures, ...processes.failures, ...modules.failures],
+    unloaded: unloaded.unloaded,
+    failures: [
+      ...rawRecords.failures,
+      ...processes.failures,
+      ...modules.failures,
+      ...unloaded.failures,
+    ],
   };
 }
 
 function emptyEvidence() {
-  return { workers: [], nested: [], raw: [], modules: [], failures: [] };
+  return { workers: [], nested: [], raw: [], modules: [], unloaded: [], failures: [] };
 }
 
 function lcovArtifact(run) {
@@ -467,6 +530,7 @@ function assembleManifest(run, parts) {
     nested: parts.evidence.nested,
     raw: parts.evidence.raw,
     modules: parts.evidence.modules,
+    unloaded: parts.evidence.unloaded,
     artifacts: {
       lcov: parts.lcov,
       public: { lcov: PUBLIC_LCOV_PATH, manifest: PUBLIC_MANIFEST_PATH },
@@ -475,9 +539,9 @@ function assembleManifest(run, parts) {
   };
 }
 
-function copyAtomically(sourcePath, targetPath) {
+function writeBytesAtomically(bytes, targetPath) {
   const temporaryPath = `${targetPath}.${process.pid}.tmp`;
-  writeFileSync(temporaryPath, readFileSync(sourcePath));
+  writeFileSync(temporaryPath, bytes);
   renameSync(temporaryPath, targetPath);
 }
 
@@ -493,19 +557,22 @@ function publish(run, manifest) {
   }
 
   const publicLcovPath = path.join(run.root, PUBLIC_LCOV_PATH);
-  copyAtomically(path.join(run.root, manifest.artifacts.lcov.path), publicLcovPath);
+  writeBytesAtomically(
+    readFileSync(path.join(run.root, manifest.artifacts.lcov.path)),
+    publicLcovPath,
+  );
 
   if (sha256(readFileSync(publicLcovPath)) !== manifest.artifacts.lcov.digest) {
     throw new Error(`Published LCOV does not match the captured digest: ${PUBLIC_LCOV_PATH}`);
   }
 
-  copyAtomically(runManifestPath, path.join(run.root, PUBLIC_MANIFEST_PATH));
+  writeBytesAtomically(readFileSync(runManifestPath), path.join(run.root, PUBLIC_MANIFEST_PATH));
 }
 
 function report(run, manifest) {
   if (manifest.status === "captured") {
     process.stdout.write(
-      `Coverage capture ${run.runId}: ${manifest.workers.length} worker(s), ${manifest.raw.length} raw record(s), ${manifest.modules.length} module(s) -> ${PUBLIC_MANIFEST_PATH}\n`,
+      `Coverage capture ${run.runId}: ${manifest.workers.length} worker(s), ${manifest.raw.length} raw record(s), ${manifest.modules.length} module(s), ${manifest.unloaded.length} unloaded production source(s) -> ${PUBLIC_MANIFEST_PATH}\n`,
     );
     return 0;
   }

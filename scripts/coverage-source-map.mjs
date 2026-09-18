@@ -220,22 +220,43 @@ function storedText(run, store, record, digest, staleKind) {
   return { text: bytes.toString("utf8") };
 }
 
+// A run records a module it loaded under `modules`, with its source in the
+// `sources` store, and a production source it never loaded under `unloaded`,
+// with its source in the pre-run `inventory` snapshot; both keep the executed
+// text in the `executed` store.
+function moduleRecord(run, modulePath) {
+  const loaded = run.manifest.modules.find((candidate) => candidate.path === modulePath);
+
+  if (loaded !== undefined) {
+    return { record: loaded, sourceStore: "sources", loaded: true };
+  }
+
+  const unloaded = (run.manifest.unloaded ?? []).find((candidate) => candidate.path === modulePath);
+  return unloaded === undefined
+    ? undefined
+    : { record: unloaded, sourceStore: "inventory", loaded: false };
+}
+
 /**
  * The module `modulePath` (repository-relative) as the run recorded it: its
  * absolute path and URL, the original source text and the executed text,
  * each read from the run's content-addressed store and required to hash to
- * the digest the manifest names. Throws `SourceMapError` otherwise.
+ * the digest the manifest names, and `loaded` telling whether the run
+ * evaluated it or recorded its executed text from the inventory snapshot.
+ * Throws `SourceMapError` for a module the run did not record or whose
+ * stores no longer match.
  */
 export function recordedModule(run, modulePath) {
-  const record = run.manifest.modules.find((candidate) => candidate.path === modulePath);
+  const found = moduleRecord(run, modulePath);
 
-  if (record === undefined) {
-    throw new SourceMapError(`${modulePath} was not loaded by run ${run.manifest.runId}`, [
+  if (found === undefined) {
+    throw new SourceMapError(`${modulePath} was not recorded by run ${run.manifest.runId}`, [
       { kind: "module-not-captured", path: modulePath },
     ]);
   }
 
-  const source = storedText(run, "sources", record, record.source, "stale-source");
+  const { record, sourceStore, loaded } = found;
+  const source = storedText(run, sourceStore, record, record.source, "stale-source");
   const executed = storedText(run, "executed", record, record.executed, "stale-executed");
   const failures = [source.failure, executed.failure].filter((failure) => failure !== undefined);
 
@@ -250,6 +271,7 @@ export function recordedModule(run, modulePath) {
     url: pathToFileURL(absolutePath).href,
     original: source.text,
     executed: executed.text,
+    loaded,
   };
 }
 

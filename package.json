@@ -81,6 +81,7 @@
     "coverage:producer": "node scripts/coverage-producer.mjs",
     "coverage:producer:build": "node scripts/build-coverage-producer.mjs",
     "coverage:producer:check": "node --test tests/scripts/coverage-producer.test.ts",
+    "coverage:unit:verified": "node scripts/coverage-unit.mjs",
     "coverage:validate": "node scripts/coverage-validate.mjs",
     "check": "npm run typecheck && npm run lint && npm run lint:workflows && npm run lint:workflows:negative && npm run fallow && npm run format:check && npm run test:corresponding && npm run test:corresponding:negative && npm run test:coverage:direct:negative && npm test && npm run test:integration && npm run lint:type-members && npm run lint:type-members:negative",
     "fallow": "fallow dead-code --fail-on-issues --format human && fallow dead-code --no-production --circular-deps --re-export-cycles --fail-on-issues --format human && fallow health --fail-on-issues --format human && fallow dupes --fail-on-issues --format human",

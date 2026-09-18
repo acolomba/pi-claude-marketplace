@@ -47,7 +47,14 @@ export const NATIVE_COVERAGE_FLAGS = [
 
 export const PUBLIC_LCOV_PATH = "coverage/unit.lcov";
 export const PUBLIC_MANIFEST_PATH = "coverage/unit.manifest.json";
+export const PUBLIC_ISTANBUL_PATH = "coverage/unit.istanbul.json";
+export const PUBLIC_VALIDATION_PATH = "coverage/unit.validation.json";
 export const RUNS_DIRECTORY = "coverage/runs";
+
+// A bundle is `captured` when the capture CLI published it and `accepted`
+// once the conversion acceptance promoted it; `status` stays the capture's
+// own outcome in both.
+const BUNDLE_STATES = new Set(["captured", "accepted"]);
 
 const PRODUCTION_ROOT = "extensions";
 const TESTS_ROOT = "tests";
@@ -69,6 +76,21 @@ const TOOLING_FILES = [
   "coverage-capture.mjs",
   "coverage-capture.manifest.mjs",
   "coverage-capture.runtime.mjs",
+];
+
+// The scripts whose bytes decide an accepted conversion: the orchestration,
+// the producer adapter and CLI, the mapping and syntax primitives and the
+// validators. An accepted bundle records their digests and a consumer
+// requires the same bytes in use.
+const ACCEPTANCE_FILES = [
+  "coverage-unit.mjs",
+  "coverage-producer.mjs",
+  "coverage-producer.convert.mjs",
+  "coverage-source-map.mjs",
+  "coverage-syntax.mjs",
+  "coverage-correspondence.mjs",
+  "coverage-schema.mjs",
+  "coverage-validate.mjs",
 ];
 
 // Loader and transform flags whose presence would put another party's output
@@ -201,18 +223,27 @@ export function selectedTests(root) {
     .sort();
 }
 
+function scriptDigests(fileNames) {
+  const identity = {};
+
+  for (const fileName of fileNames) {
+    identity[fileName] = sha256(readFileSync(fileURLToPath(new URL(fileName, import.meta.url))));
+  }
+
+  return identity;
+}
+
 /**
  * Digests of the three capture scripts themselves, keyed by file name. They
  * are read next to this module, so a copied tool set describes itself.
  */
 export function toolingIdentity() {
-  const identity = {};
+  return scriptDigests(TOOLING_FILES);
+}
 
-  for (const fileName of TOOLING_FILES) {
-    identity[fileName] = sha256(readFileSync(fileURLToPath(new URL(fileName, import.meta.url))));
-  }
-
-  return identity;
+/** Digests of the conversion and validation scripts an acceptance binds. */
+export function acceptanceToolingIdentity() {
+  return scriptDigests(ACCEPTANCE_FILES);
 }
 
 export function runtimeIdentity() {
@@ -279,6 +310,25 @@ function digestFailures(root, expected, kind) {
   return failures;
 }
 
+// The record the public pointer must be a byte copy of: the run manifest for
+// a captured bundle, the acceptance record for an accepted one.
+function bundleRecordPath(manifest, runPrefix) {
+  return manifest.state === "accepted"
+    ? `${runPrefix}/accepted.json`
+    : `${runPrefix}/manifest.json`;
+}
+
+function acceptanceRecords(manifest) {
+  const acceptance = manifest.acceptance ?? {};
+
+  return {
+    istanbul: acceptance.artifacts?.istanbul,
+    validation: acceptance.validation,
+    producer: acceptance.producer,
+    captured: acceptance.captured,
+  };
+}
+
 function readPublicManifest(root) {
   const manifestPath = path.join(root, PUBLIC_MANIFEST_PATH);
 
@@ -286,21 +336,29 @@ function readPublicManifest(root) {
     return { failures: [{ kind: "missing-manifest", path: PUBLIC_MANIFEST_PATH }] };
   }
 
-  const manifest = readJson(manifestPath);
+  let manifest;
+
+  try {
+    manifest = readJson(manifestPath);
+  } catch {
+    return { failures: [{ kind: "malformed-manifest", path: PUBLIC_MANIFEST_PATH }] };
+  }
 
   if (manifest.schemaVersion !== MANIFEST_SCHEMA_VERSION || manifest.kind !== MANIFEST_KIND) {
     return { failures: [{ kind: "unsupported-version", path: PUBLIC_MANIFEST_PATH }] };
   }
 
-  if (manifest.status !== "captured" || manifest.state !== "captured") {
+  if (manifest.status !== "captured" || !BUNDLE_STATES.has(manifest.state)) {
     return { failures: [{ kind: "not-captured", status: manifest.status, state: manifest.state }] };
   }
 
   const runPrefix = `${RUNS_DIRECTORY}/${manifest.runId}`;
+  const acceptance = manifest.state === "accepted" ? acceptanceRecords(manifest) : {};
   const recordedPaths = [
     manifest.inventory?.path,
     manifest.artifacts?.lcov?.path,
     ...(manifest.raw ?? []).map((record) => record.path),
+    ...Object.values(acceptance).map((record) => record?.path),
   ];
   const foreign = recordedPaths.filter((recorded) => !runContained(runPrefix, recorded));
 
@@ -314,10 +372,11 @@ function readPublicManifest(root) {
 function identityFailures(root, manifest, runPrefix, expected) {
   const failures = [];
   const publicBytes = readFileSync(path.join(root, PUBLIC_MANIFEST_PATH));
-  const runManifestPath = path.join(root, runPrefix, "manifest.json");
+  const recordPath = bundleRecordPath(manifest, runPrefix);
+  const absoluteRecordPath = path.join(root, recordPath);
 
-  if (!existsSync(runManifestPath) || !readFileSync(runManifestPath).equals(publicBytes)) {
-    failures.push({ kind: "manifest-mismatch", path: `${runPrefix}/manifest.json` });
+  if (!existsSync(absoluteRecordPath) || !readFileSync(absoluteRecordPath).equals(publicBytes)) {
+    failures.push({ kind: "manifest-mismatch", path: recordPath });
   }
 
   if (manifest.runtime?.node !== expected.runtime.node) {
@@ -326,6 +385,13 @@ function identityFailures(root, manifest, runPrefix, expected) {
 
   if (canonicalJson(manifest.tooling) !== canonicalJson(expected.tooling)) {
     failures.push({ kind: "tool-changed" });
+  }
+
+  if (
+    manifest.state === "accepted" &&
+    canonicalJson(manifest.acceptance.tooling) !== canonicalJson(acceptanceToolingIdentity())
+  ) {
+    failures.push({ kind: "tool-changed", stage: "acceptance" });
   }
 
   return failures;
@@ -340,16 +406,57 @@ function inventoryFailures(root, manifest) {
   );
 
   if (failures.length > 0) {
-    return failures;
+    return { failures };
   }
 
-  const difference = inventoryDifference(readJson(inventoryPath), enumerateInventory(root));
+  const inventory = readJson(inventoryPath);
+  const difference = inventoryDifference(inventory, enumerateInventory(root));
 
   if ([difference.added, difference.removed, difference.changed].some((list) => list.length > 0)) {
     failures.push({ kind: "stale-input", ...difference });
   }
 
+  return { failures, inventory };
+}
+
+// Every production source the run inventoried is either a loaded module or an
+// unloaded record, and no path is recorded twice; a source the bundle does not
+// represent has no place in any converted map (D-04, D-07).
+function populationFailures(manifest, inventory) {
+  const failures = [];
+  const seen = new Set();
+
+  for (const record of [...manifest.modules, ...(manifest.unloaded ?? [])]) {
+    if (seen.has(record.path)) {
+      failures.push({ kind: "duplicate-record", path: record.path });
+    }
+
+    seen.add(record.path);
+  }
+
+  for (const entry of inventory) {
+    if (entry.group === "production" && !seen.has(entry.path)) {
+      failures.push({ kind: "unrepresented-source", path: entry.path });
+    }
+  }
+
   return failures;
+}
+
+// The artifacts an accepted bundle adds to a captured one: the captured
+// manifest it promoted, the map in the run and in public, the validation
+// receipt in the run and in public, and the producer identity receipt.
+function acceptanceArtifacts(manifest, runPrefix) {
+  const { istanbul, validation, producer, captured } = acceptanceRecords(manifest);
+
+  return [
+    [`${runPrefix}/manifest.json`, captured.digest],
+    [istanbul.path, istanbul.digest],
+    [PUBLIC_ISTANBUL_PATH, istanbul.digest],
+    [validation.path, validation.digest],
+    [PUBLIC_VALIDATION_PATH, validation.digest],
+    [producer.path, producer.digest],
+  ];
 }
 
 function artifactFailures(root, manifest, runPrefix) {
@@ -361,17 +468,13 @@ function artifactFailures(root, manifest, runPrefix) {
       [`${runPrefix}/sources/${record.source}`, record.source],
       [`${runPrefix}/executed/${record.executed}`, record.executed],
     ]),
+    ...(manifest.unloaded ?? []).flatMap((record) => [
+      [`${runPrefix}/inventory/${record.source}`, record.source],
+      [`${runPrefix}/executed/${record.executed}`, record.executed],
+    ]),
+    ...(manifest.state === "accepted" ? acceptanceArtifacts(manifest, runPrefix) : []),
   ];
   const failures = digestFailures(root, expected, "artifact-digest");
-  const seen = new Set();
-
-  for (const record of manifest.modules) {
-    if (seen.has(record.path)) {
-      failures.push({ kind: "duplicate-record", path: record.path });
-    }
-
-    seen.add(record.path);
-  }
 
   if (manifest.raw.length === 0 || manifest.workers.length === 0) {
     failures.push({ kind: "not-captured", status: "no worker evidence" });
@@ -396,9 +499,11 @@ export function verifyCaptureBundle(root, expected) {
   }
 
   const { manifest, runPrefix } = read;
+  const inventory = inventoryFailures(root, manifest);
   const failures = [
     ...identityFailures(root, manifest, runPrefix, expected),
-    ...inventoryFailures(root, manifest),
+    ...inventory.failures,
+    ...(inventory.inventory === undefined ? [] : populationFailures(manifest, inventory.inventory)),
     ...artifactFailures(root, manifest, runPrefix),
   ];
 
