@@ -243,9 +243,11 @@ async function convertScript(producer, script) {
 /**
  * A merger over Istanbul's own `CoverageMap`: `merge` folds a plain coverage
  * map in, summing counters of records that share a file and a location, and
- * `toJSON` returns the merged map as plain data (the merger's own `toJSON`
- * yields `FileCoverage` instances, which keep their maps under `data`, so
- * each is unwrapped to the record a consumer reads directly).
+ * `toJSON` returns the merged map as plain data with its files in path order,
+ * so the bytes do not depend on the order the records arrived in (the
+ * merger's own `toJSON` yields `FileCoverage` instances, which keep their
+ * maps under `data`, so each is unwrapped to the record a consumer reads
+ * directly).
  */
 export function createCoverageMerger() {
   const map = libCoverage.createCoverageMap({});
@@ -256,7 +258,9 @@ export function createCoverageMerger() {
     },
     toJSON() {
       return Object.fromEntries(
-        Object.entries(map.toJSON()).map(([filePath, file]) => [filePath, file.toJSON()]),
+        Object.entries(map.toJSON())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([filePath, file]) => [filePath, file.toJSON()]),
       );
     },
   };
