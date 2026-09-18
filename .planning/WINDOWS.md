@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 18
+open_count: 19
 waived_count: 18
 fixed_count: 19
-total_count: 55
-last_updated: 2026-09-18T15:10:44.507Z
+total_count: 56
+last_updated: 2026-09-18T16:56:44.890Z
 ---
 
 # Broken Windows Ledger
@@ -70,6 +70,7 @@ last_updated: 2026-09-18T15:10:44.507Z
 | 53 | 07 | deviation | tests/scripts/coverage-projection.ts |  | The projection helpers the producer corpus and the unit-bundle controls share live in a support module that was not in the plan's file list | open |  | 2026-09-18T14:53:46.812Z |  |
 | 54 | 07 | deviation | tests/scripts/coverage-unit-fixtures.ts |  | The four-source production population fixture lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list | open |  | 2026-09-18T14:53:47.434Z |  |
 | 55 | 07 | deviation | tests/scripts/coverage-source-map.test.ts |  | The strip proof admits the two- and three-byte blanks (U+00A0, U+2002) strip mode writes for removed characters, found by the full-population conversion; the control was added to a test file outside the plan's list | open |  | 2026-09-18T15:10:44.507Z |  |
+| 56 | 07 | deviation | tests/scripts/check-coverage-risk-fixtures.ts |  | The production CRAP policy corpus (classify, grade, below, twins, unicode fixtures with anchors, complexities and statement counts written from the source text) lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list | open |  | 2026-09-18T16:56:44.890Z |  |
 
 ````json
 [
@@ -754,6 +755,19 @@ last_updated: 2026-09-18T15:10:44.507Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-18T15:10:44.507Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 56,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "tests/scripts/check-coverage-risk-fixtures.ts",
+    "line": null,
+    "description": "The production CRAP policy corpus (classify, grade, below, twins, unicode fixtures with anchors, complexities and statement counts written from the source text) lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-18T16:56:44.890Z",
     "resolved_at": null,
     "milestone": null
   }
