@@ -156,17 +156,16 @@ void ({
   marketplace: "official",
   plugin: "deploy-kit",
   version: "1.2.3",
-  dependency: "secrets-vault@official",
-  unsatisfied: "out-of-range",
-  range: "^2.0.0",
+  reasons: ["dependency unsatisfied"],
+  cause: new Error('Install "secrets-vault@official" or uninstall "deploy-kit@official"'),
 } satisfies PluginDependencyDisabledOutcome);
 void ({
   kind: "plugin-dependency-disabled",
   scope: "user",
   marketplace: "official",
   plugin: "deploy-kit",
-  dependency: "secrets-vault@official",
-  unsatisfied: "missing",
+  reasons: ["dependency unsatisfied"],
+  cause: new Error('Install "secrets-vault@official" or uninstall "deploy-kit@official"'),
 } satisfies PluginDependencyDisabledOutcome);
 void ({
   kind: "plugin-disable-failed",
@@ -356,17 +355,16 @@ void ({
   scope: "user",
   marketplace: "official",
   plugin: "deploy-kit",
-  dependency: "secrets-vault@official",
-  // @ts-expect-error a held-down plugin names why its declaration is unsatisfied
+  reasons: ["dependency unsatisfied"],
+  // @ts-expect-error a held-down plugin always carries the remedy its row renders
 } satisfies PluginDependencyDisabledOutcome);
 void ({
   kind: "plugin-dependency-disabled",
   scope: "user",
   marketplace: "official",
   plugin: "deploy-kit",
-  dependency: "secrets-vault@official",
-  // @ts-expect-error unsatisfied declarations use a closed three-member vocabulary
-  unsatisfied: "unreadable",
+  cause: new Error("remedy"),
+  // @ts-expect-error the row's brace is stamped by the producer, never the renderer
 } satisfies PluginDependencyDisabledOutcome);
 void ({
   kind: "plugin-disable-failed",
@@ -803,10 +801,71 @@ describe("dependenciesFromInstall", () => {
 });
 
 describe("dependencyDisabledOutcome", () => {
-  test("carries the recorded version and the declared range of an out-of-range dependency", () => {
+  test("names the install remedy and the recorded version for a missing dependency", () => {
     // arrange
     const held = {
       scope: "project",
+      marketplace: "official",
+      plugin: "deploy-kit",
+      dependency: "secrets-vault@official",
+      kind: "missing",
+    } as const;
+
+    // act
+    const outcome = dependencyDisabledOutcome(held, "1.2.3");
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        ...outcome,
+        cause: { message: outcome.cause.message, cause: outcome.cause.cause },
+      },
+      {
+        kind: "plugin-dependency-disabled",
+        scope: "project",
+        marketplace: "official",
+        plugin: "deploy-kit",
+        version: "1.2.3",
+        reasons: ["dependency unsatisfied"],
+        cause: {
+          message: 'Install "secrets-vault@official" or uninstall "deploy-kit@official"',
+          cause: undefined,
+        },
+      },
+    );
+  });
+
+  test("names the enable remedy and omits the version a disabled dependency has none of", () => {
+    // arrange
+    const held = {
+      scope: "user",
+      marketplace: "official",
+      plugin: "deploy-kit",
+      dependency: "secrets-vault@official",
+      kind: "disabled",
+    } as const;
+
+    // act
+    const outcome = dependencyDisabledOutcome(held, undefined);
+
+    // assert
+    assert.deepStrictEqual(
+      { ...outcome, cause: outcome.cause.message },
+      {
+        kind: "plugin-dependency-disabled",
+        scope: "user",
+        marketplace: "official",
+        plugin: "deploy-kit",
+        reasons: ["dependency unsatisfied"],
+        cause: 'Enable "secrets-vault@official" or uninstall "deploy-kit@official"',
+      },
+    );
+  });
+
+  test("names the declared range in the update remedy of an out-of-range dependency", () => {
+    // arrange
+    const held = {
+      scope: "user",
       marketplace: "official",
       plugin: "deploy-kit",
       dependency: "secrets-vault@official",
@@ -815,42 +874,53 @@ describe("dependencyDisabledOutcome", () => {
     } as const;
 
     // act
-    const outcome = dependencyDisabledOutcome(held, "1.2.3");
+    const outcome = dependencyDisabledOutcome(held, "1.0.0");
 
     // assert
-    assert.deepStrictEqual(outcome, {
-      kind: "plugin-dependency-disabled",
-      scope: "project",
-      marketplace: "official",
-      plugin: "deploy-kit",
-      version: "1.2.3",
-      dependency: "secrets-vault@official",
-      unsatisfied: "out-of-range",
-      range: "^2.0.0",
-    });
+    assert.strictEqual(
+      outcome.cause.message,
+      'Update "secrets-vault@official" to satisfy ^2.0.0, or uninstall "deploy-kit@official"',
+    );
   });
 
-  test("omits the version and the range a missing dependency has neither of", () => {
+  test("bounds a declared range too long to render", () => {
     // arrange
     const held = {
       scope: "user",
       marketplace: "official",
       plugin: "deploy-kit",
       dependency: "secrets-vault@official",
-      kind: "missing",
+      kind: "out-of-range",
+      range: `>=${"1".repeat(210)}`,
+    } as const;
+
+    // act
+    const outcome = dependencyDisabledOutcome(held, "1.0.0");
+
+    // assert
+    assert.strictEqual(
+      outcome.cause.message,
+      `Update "secrets-vault@official" to satisfy >=${"1".repeat(198)}... (+12 chars), or uninstall "deploy-kit@official"`,
+    );
+  });
+
+  test("names both parties without a constraint when an out-of-range entry carries no range", () => {
+    // arrange
+    const held = {
+      scope: "user",
+      marketplace: "official",
+      plugin: "deploy-kit",
+      dependency: "secrets-vault@official",
+      kind: "out-of-range",
     } as const;
 
     // act
     const outcome = dependencyDisabledOutcome(held, undefined);
 
     // assert
-    assert.deepStrictEqual(outcome, {
-      kind: "plugin-dependency-disabled",
-      scope: "user",
-      marketplace: "official",
-      plugin: "deploy-kit",
-      dependency: "secrets-vault@official",
-      unsatisfied: "missing",
-    });
+    assert.strictEqual(
+      outcome.cause.message,
+      'Update "secrets-vault@official" or uninstall "deploy-kit@official"',
+    );
   });
 });

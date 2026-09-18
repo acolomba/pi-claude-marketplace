@@ -3737,7 +3737,8 @@ describe("applyReconcile", () => {
           "A plugin operation needs attention.\n" +
           "\n" +
           "\u25cf mp [project]\n" +
-          "  \u25cd deploy-kit v1.0.0 (disabled)\n" +
+          "  \u25cd deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
           "Reconcile: 1 warning",
         severity: "warning",

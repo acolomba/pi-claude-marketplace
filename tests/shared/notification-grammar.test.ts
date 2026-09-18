@@ -306,6 +306,46 @@ test("composes descriptions, hints, causes, leaks, and rollback failures in orde
   ]);
 });
 
+test("renders the remedy cause trailer on a disabled row that carries one", () => {
+  // arrange
+  const plugin = {
+    status: "disabled",
+    name: "alpha",
+    reasons: ["dependency unsatisfied"],
+    cause: new Error('Install "vault@mp" or uninstall "alpha@mp"'),
+  };
+
+  // act
+  const lines = composePluginLinesWith(
+    plugin as never,
+    bothLoadedProbe(),
+    "user",
+    () => "◍ alpha (disabled) {dependency unsatisfied}",
+  );
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "  ◍ alpha (disabled) {dependency unsatisfied}",
+    '    cause: Install "vault@mp" or uninstall "alpha@mp"',
+  ]);
+});
+
+test("renders no trailer on a disabled row that carries no cause", () => {
+  // arrange
+  const plugin = { status: "disabled", name: "alpha" };
+
+  // act
+  const lines = composePluginLinesWith(
+    plugin as never,
+    bothLoadedProbe(),
+    "user",
+    () => "◍ alpha (disabled)",
+  );
+
+  // assert
+  assert.deepStrictEqual(lines, ["  ◍ alpha (disabled)"]);
+});
+
 for (const { plugin, trailer } of [
   {
     plugin: { status: "partially-available", name: "alpha", partialHint: true },

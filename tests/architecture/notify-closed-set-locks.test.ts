@@ -26,7 +26,7 @@ import {
   STATUS_TOKENS,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
-test("OUT-08: REASONS is the closed 56-entry reason set", () => {
+test("OUT-08: REASONS is the closed 57-entry reason set", () => {
   // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
   // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
   // MCPR-03 / D-02: +1 for the malformed mcp failure-class member (34 -> 35).
@@ -73,7 +73,12 @@ test("OUT-08: REASONS is the closed 56-entry reason set", () => {
   // --prune` stamps on each orphaned dependency record it removed after the
   // named plugin. An ordinary `uninstalled` row whose brace says why a plugin
   // the user did not name went (55 -> 56).
-  assert.equal(REASONS.length, 56);
+  // LOAD-01: +1 for `dependency unsatisfied` -- the load-time check's marker
+  // for a recorded plugin it disabled because a dependency it declares is not
+  // satisfied in the scope. It names the CONDITION; the remedy naming both
+  // parties rides the row's cause line, which no closed-set token could carry
+  // (56 -> 57).
+  assert.equal(REASONS.length, 57);
 });
 
 test("SNM-02: STATUS_TOKENS is the closed 24-entry token set", () => {

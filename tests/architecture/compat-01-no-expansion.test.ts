@@ -227,6 +227,7 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
     // installed declared any more, swept out by `--prune` after the named
     // plugin. It rides an ordinary `uninstalled` row.
     "dependency pruned",
+    "dependency unsatisfied",
   ];
 
   // act
