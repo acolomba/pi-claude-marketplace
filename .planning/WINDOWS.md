@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 20
+open_count: 21
 waived_count: 18
 fixed_count: 19
-total_count: 57
-last_updated: 2026-09-18T18:18:32.642Z
+total_count: 58
+last_updated: 2026-09-18T20:55:54.554Z
 ---
 
 # Broken Windows Ledger
@@ -72,6 +72,7 @@ last_updated: 2026-09-18T18:18:32.642Z
 | 55 | 07 | deviation | tests/scripts/coverage-source-map.test.ts |  | The strip proof admits the two- and three-byte blanks (U+00A0, U+2002) strip mode writes for removed characters, found by the full-population conversion; the control was added to a test file outside the plan's list | open |  | 2026-09-18T15:10:44.507Z |  |
 | 56 | 07 | deviation | tests/scripts/check-coverage-risk-fixtures.ts |  | The production CRAP policy corpus (classify, grade, below, twins, unicode fixtures with anchors, complexities and statement counts written from the source text) lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list | open |  | 2026-09-18T16:56:44.890Z |  |
 | 57 | 07 | deviation | scripts/coverage-acceptance.mjs |  | 07-07 Task 1 touched five files outside the plan's list (Rule 2, T-07-07-01): scripts/coverage-acceptance.mjs (new), scripts/coverage-unit.mjs, scripts/coverage-validate.mjs, scripts/coverage-capture.manifest.mjs and tests/scripts/check-coverage-risk-fixtures.ts, so the accepted-bundle readback recomputes the recorded population and denominators and refuses copied counts (summary-mismatch) | open |  | 2026-09-18T18:18:32.642Z |  |
+| 58 | 07 | deviation | tests/architecture/pre-commit-hooks.ts |  | 07-08 Task 1 touched five files outside the plan's list: scripts/coverage-capture.mjs (--plain mode the plan names as its example), tests/architecture/pre-commit-hooks.ts (new; the hook reader moved out of unused-type-member-gate.test.ts so both gates share one parser), tests/architecture/unused-type-member-gate.test.ts, tests/architecture/unit-suite-glob-completeness.test.ts and tests/scripts/coverage-capture.test.ts (both scraped the unit glob out of package.json and now read the one authoritative selection); no production source changed | open |  | 2026-09-18T20:55:54.554Z |  |
 
 ````json
 [
@@ -782,6 +783,19 @@ last_updated: 2026-09-18T18:18:32.642Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-18T18:18:32.642Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 58,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "tests/architecture/pre-commit-hooks.ts",
+    "line": null,
+    "description": "07-08 Task 1 touched five files outside the plan's list: scripts/coverage-capture.mjs (--plain mode the plan names as its example), tests/architecture/pre-commit-hooks.ts (new; the hook reader moved out of unused-type-member-gate.test.ts so both gates share one parser), tests/architecture/unused-type-member-gate.test.ts, tests/architecture/unit-suite-glob-completeness.test.ts and tests/scripts/coverage-capture.test.ts (both scraped the unit glob out of package.json and now read the one authoritative selection); no production source changed",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-18T20:55:54.554Z",
     "resolved_at": null,
     "milestone": null
   }
