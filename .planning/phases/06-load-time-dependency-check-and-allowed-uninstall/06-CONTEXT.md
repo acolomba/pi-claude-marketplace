@@ -41,8 +41,7 @@ written down — not assumptions.
 
 ### The consequence-disable marker
 
-- **D-06-01: Add `dependencyDisabled?: boolean` to `PLUGIN_INSTALL_RECORD_SCHEMA`
-  — optional, additive, no schemaVersion bump.** Follows the `resolvedSha` /
+- **D-06-01: Add an optional boolean `dependencyDisabled` field to `PLUGIN_INSTALL_RECORD_SCHEMA`, additive, with no schemaVersion bump.** Follows the `resolvedSha` /
   `hookEntries` precedent (D-100-01): a legacy record without it loads
   unchanged, absence needs no migrate fill, and it is orthogonal to the
   required `enabled` boolean it modifies the meaning of, not replaces. A
@@ -56,7 +55,7 @@ written down — not assumptions.
   migrate fill costs nothing to drop or rename later; no persisted value
   depends on the field surviving.
 
-- **D-06-02: The check sets `dependencyDisabled: true` ONLY at the instant it
+- **D-06-02: The check sets the `dependencyDisabled` marker ONLY at the instant it
   performs the enabled→disabled transition itself.** If a record is already
   disabled for any other reason (the user's own `disable` command, or a
   config-declared `enabled: false`), the check leaves it disabled and does
