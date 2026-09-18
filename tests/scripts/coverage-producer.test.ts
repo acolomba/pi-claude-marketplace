@@ -17,14 +17,10 @@ import {
   tallyFixture,
   tallyWorkerHits,
 } from "./coverage-producer-fixtures.ts";
+import { expectedCoverage, projectCoverage, spanKey } from "./coverage-projection.ts";
 
-import type {
-  ExpectedBranch,
-  ExpectedFunction,
-  ExpectedStatement,
-  ProducerFixture,
-  SourceSpan,
-} from "./coverage-producer-fixtures.ts";
+import type { ExpectedFunction, ProducerFixture } from "./coverage-producer-fixtures.ts";
+import type { ProjectedCoverage } from "./coverage-projection.ts";
 import type { TestContext } from "node:test";
 
 // Every case executes a fixture module for real: the capture CLI runs the
@@ -215,12 +211,6 @@ interface CapturedScript {
   readonly records: readonly CapturedRecord[];
 }
 
-interface ProjectedCoverage {
-  readonly functions: readonly ExpectedFunction[];
-  readonly statements: readonly ExpectedStatement[];
-  readonly branches: readonly ExpectedBranch[];
-}
-
 async function createRoot(
   t: TestContext,
   files: Readonly<Record<string, string>>,
@@ -403,67 +393,6 @@ async function upstreamProducerEntry(t: TestContext): Promise<string> {
   await cp(path.join(vendorDirectory, "LICENSE"), path.join(packageDirectory, "LICENSE"));
   await symlink(path.join(repositoryRoot, "node_modules"), path.join(workspace, "node_modules"));
   return path.join(packageDirectory, "dist", "index.mjs");
-}
-
-function spanKey(span: SourceSpan): string {
-  return `${span.start.line}:${span.start.column}-${span.end.line}:${span.end.column}`;
-}
-
-function compareSpans(a: SourceSpan, b: SourceSpan): number {
-  return (
-    a.start.line - b.start.line ||
-    a.start.column - b.start.column ||
-    a.end.line - b.end.line ||
-    a.end.column - b.end.column
-  );
-}
-
-function asSpan(location: IstanbulLocation): SourceSpan {
-  return {
-    start: { line: location.start.line ?? -1, column: location.start.column ?? -1 },
-    end: { line: location.end.line ?? -1, column: location.end.column ?? -1 },
-  };
-}
-
-// The converter output for one file in the corpus's own vocabulary, sorted by
-// position so it can be compared whole against a fixture's expectations.
-function projectCoverage(file: IstanbulFileCoverage): ProjectedCoverage {
-  const functions = Object.entries(file.fnMap)
-    .map(([id, fn]) => ({
-      name: fn.name,
-      decl: asSpan(fn.decl),
-      loc: asSpan(fn.loc),
-      hits: file.f[id] ?? -1,
-    }))
-    .sort((a, b) => compareSpans(a.decl, b.decl));
-  const statements = Object.entries(file.statementMap)
-    .map(([id, loc]) => ({ loc: asSpan(loc), hits: file.s[id] ?? -1 }))
-    .sort((a, b) => compareSpans(a.loc, b.loc));
-  const branches = Object.entries(file.branchMap)
-    .map(([id, branch]) => ({
-      type: branch.type,
-      loc: asSpan(branch.loc),
-      locations: branch.locations.map((location) =>
-        location.start.line === undefined
-          ? {
-              start: { line: undefined, column: undefined },
-              end: { line: undefined, column: undefined },
-            }
-          : asSpan(location),
-      ),
-      hits: [...(file.b[id] ?? [])],
-    }))
-    .sort((a, b) => compareSpans(a.loc, b.loc));
-
-  return { functions, statements, branches };
-}
-
-function expectedCoverage(fixture: ProducerFixture): ProjectedCoverage {
-  return {
-    functions: [...fixture.functions].sort((a, b) => compareSpans(a.decl, b.decl)),
-    statements: [...fixture.statements].sort((a, b) => compareSpans(a.loc, b.loc)),
-    branches: [...fixture.branches].sort((a, b) => compareSpans(a.loc, b.loc)),
-  };
 }
 
 async function readCoverageMap(outputPath: string): Promise<IstanbulCoverageMap> {
