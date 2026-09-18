@@ -27,7 +27,6 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { encode } from "@jridgewell/sourcemap-codec";
-import { parse } from "acorn";
 
 import {
   canonicalJson,
@@ -38,6 +37,13 @@ import {
   toolingIdentity,
   toProjectPath,
 } from "./coverage-capture.manifest.mjs";
+import {
+  childNodes,
+  declaredFunction,
+  lineStartsOf,
+  locate,
+  parseExecuted,
+} from "./coverage-syntax.mjs";
 
 // Strip mode blanks a removed character with a space, and pads the second
 // unit of a removed surrogate pair with U+FEFF so the UTF-16 length holds.
@@ -247,60 +253,6 @@ export function recordedModule(run, modulePath) {
   };
 }
 
-const PARSE_OPTIONS = { ecmaVersion: "latest", sourceType: "module" };
-
-function isNode(value) {
-  return typeof value === "object" && value !== null && typeof value.type === "string";
-}
-
-function* childNodes(node) {
-  for (const [key, value] of Object.entries(node)) {
-    if (key === "type") {
-      continue;
-    }
-
-    if (Array.isArray(value)) {
-      yield* value.filter(isNode);
-    } else if (isNode(value)) {
-      yield value;
-    }
-  }
-}
-
-// The identifier a method, accessor, constructor or property declares, when
-// its key is a plain identifier; computed and literal keys declare none.
-function keyName(node) {
-  return node.computed || node.key.type !== "Identifier" ? undefined : node.key.name;
-}
-
-// One function the source declares: the identifier span the producer reports
-// as `decl` (the key of a method, the id of a function, or the first
-// character of an anonymous function or arrow), its body span, and the
-// declared identifier name when there is one.
-function declaredFunction(node, consumed) {
-  if (
-    (node.type === "MethodDefinition" || node.type === "Property") &&
-    node.value?.type === "FunctionExpression"
-  ) {
-    consumed.add(node.value);
-    return { decl: [node.key.start, node.key.end], body: node.value.body, name: keyName(node) };
-  }
-
-  if (node.type === "ArrowFunctionExpression") {
-    return { decl: [node.start, node.start + 1], body: node.body, name: undefined };
-  }
-
-  if (
-    (node.type === "FunctionDeclaration" || node.type === "FunctionExpression") &&
-    !consumed.has(node)
-  ) {
-    const decl = node.id === null ? [node.start, node.start + 1] : [node.id.start, node.id.end];
-    return { decl, body: node.body, name: node.id?.name };
-  }
-
-  return undefined;
-}
-
 function collectDeclared(node, consumed, declared) {
   const declaration = declaredFunction(node, consumed);
 
@@ -311,35 +263,6 @@ function collectDeclared(node, consumed, declared) {
   for (const child of childNodes(node)) {
     collectDeclared(child, consumed, declared);
   }
-}
-
-function lineStartsOf(text) {
-  const starts = [0];
-
-  for (let offset = 0; offset < text.length; offset += 1) {
-    if (text[offset] === "\n") {
-      starts.push(offset + 1);
-    }
-  }
-
-  return starts;
-}
-
-function locate(lineStarts, offset) {
-  let low = 0;
-  let high = lineStarts.length - 1;
-
-  while (low < high) {
-    const middle = (low + high + 1) >> 1;
-
-    if (lineStarts[middle] <= offset) {
-      low = middle;
-    } else {
-      high = middle - 1;
-    }
-  }
-
-  return { line: low + 1, column: offset - lineStarts[low] };
 }
 
 function locationKey(location) {
@@ -354,7 +277,7 @@ function spanKey(lineStarts, [start, end]) {
 // `loc` spans in line/column form, from a fresh parse.
 function declaredFunctions(executed) {
   const declared = [];
-  collectDeclared(parse(executed, PARSE_OPTIONS), new WeakSet(), declared);
+  collectDeclared(parseExecuted(executed), new WeakSet(), declared);
   const lineStarts = lineStartsOf(executed);
   const byKey = new Map();
 

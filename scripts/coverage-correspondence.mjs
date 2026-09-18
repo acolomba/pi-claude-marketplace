@@ -54,11 +54,15 @@
 // initializers); the inventory records each declared function's node offsets
 // so a consumer can set those roots apart instead of counting them.
 
-import { parse } from "acorn";
+import {
+  childNodes,
+  declaredFunction,
+  lineStartsOf,
+  locate,
+  parseExecuted,
+} from "./coverage-syntax.mjs";
 
 export const CORRESPONDENCE_SYNTAX_VERSION = 1;
-
-const PARSE_OPTIONS = { ecmaVersion: "latest", sourceType: "module" };
 
 const STATEMENT_TYPES = new Set([
   "BreakStatement",
@@ -81,86 +85,12 @@ const STATEMENT_TYPES = new Set([
 // The implicit else once serialized: positions with no coordinates.
 const ABSENT_LOCATION = { start: {}, end: {} };
 
-function isNode(value) {
-  return typeof value === "object" && value !== null && typeof value.type === "string";
-}
-
-function* childNodes(node) {
-  for (const [key, value] of Object.entries(node)) {
-    if (key === "type") {
-      continue;
-    }
-
-    if (Array.isArray(value)) {
-      yield* value.filter(isNode);
-    } else if (isNode(value)) {
-      yield value;
-    }
-  }
-}
-
-function lineStartsOf(text) {
-  const starts = [0];
-
-  for (let offset = 0; offset < text.length; offset += 1) {
-    if (text[offset] === "\n") {
-      starts.push(offset + 1);
-    }
-  }
-
-  return starts;
-}
-
-function positionAt(lineStarts, offset) {
-  let low = 0;
-  let high = lineStarts.length - 1;
-
-  while (low < high) {
-    const middle = (low + high + 1) >> 1;
-
-    if (lineStarts[middle] <= offset) {
-      low = middle;
-    } else {
-      high = middle - 1;
-    }
-  }
-
-  return { line: low + 1, column: offset - lineStarts[low] };
-}
-
 function locationOf(lineStarts, start, end) {
-  return { start: positionAt(lineStarts, start), end: positionAt(lineStarts, end) };
+  return { start: locate(lineStarts, start), end: locate(lineStarts, end) };
 }
 
 function nodeLocation(lineStarts, node) {
   return locationOf(lineStarts, node.start, node.end);
-}
-
-// The function a node declares, if any: the decl offsets, the body node and
-// the outer node whose offsets V8 reports. A method or property consumes its
-// FunctionExpression value so the value is not declared twice.
-function declaredFunction(node, consumed) {
-  if (
-    (node.type === "MethodDefinition" || node.type === "Property") &&
-    node.value?.type === "FunctionExpression"
-  ) {
-    consumed.add(node.value);
-    return { decl: [node.key.start, node.key.end], body: node.value.body, outer: node };
-  }
-
-  if (node.type === "ArrowFunctionExpression") {
-    return { decl: [node.start, node.start + 1], body: node.body, outer: node };
-  }
-
-  if (
-    (node.type === "FunctionDeclaration" || node.type === "FunctionExpression") &&
-    !consumed.has(node)
-  ) {
-    const decl = node.id === null ? [node.start, node.start + 1] : [node.id.start, node.id.end];
-    return { decl, body: node.body, outer: node };
-  }
-
-  return undefined;
 }
 
 function isUseStrict(statement) {
@@ -315,7 +245,7 @@ export function syntaxInventory(executed) {
     statements: [],
     branches: [],
   };
-  collect(parse(executed, PARSE_OPTIONS), {
+  collect(parseExecuted(executed), {
     lineStarts: lineStartsOf(executed),
     consumed: new WeakSet(),
     skipped: new WeakSet(),
