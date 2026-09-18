@@ -455,6 +455,7 @@ test("COMPAT-01: the persisted install record holds exactly its inherited key se
   // arrange
   const expected = [
     "compatibility",
+    "dependencyDisabled",
     "enabled",
     "hookEntries",
     "installedAt",

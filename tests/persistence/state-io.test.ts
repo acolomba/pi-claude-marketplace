@@ -113,6 +113,7 @@ test("clones every plugin field without retaining nested aliases", () => {
     resolvedSource: "https://github.com/acme/plugin",
     resolvedSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
     hookEntries: [{ event: "PreToolUse", matcher: "Bash" }, { event: "SessionStart" }],
+    dependencyDisabled: true,
     compatibility: {
       installable: false,
       notes: ["partial"],
@@ -136,6 +137,7 @@ test("clones every plugin field without retaining nested aliases", () => {
     resolvedSource: "https://github.com/acme/plugin",
     resolvedSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
     hookEntries: [{ event: "PreToolUse", matcher: "Bash" }, { event: "SessionStart" }],
+    dependencyDisabled: true,
     compatibility: {
       installable: false,
       notes: ["partial"],
@@ -198,6 +200,7 @@ test("clones a legacy plugin without inventing optional fields", () => {
   });
   assert.strictEqual(Object.hasOwn(clonedRecord, "resolvedSha"), false);
   assert.strictEqual(Object.hasOwn(clonedRecord, "hookEntries"), false);
+  assert.strictEqual(Object.hasOwn(clonedRecord, "dependencyDisabled"), false);
 });
 
 test("disables a plugin while preserving its complete inventory", () => {
@@ -353,6 +356,66 @@ test("validates complete hook and resolved-sha plugin records", () => {
   // assert
   assert.strictEqual(valid, true);
 });
+
+/** A stored document whose one plugin record carries the given extra keys. */
+function storedStateWithPluginKeys(extra: Readonly<Record<string, unknown>>): unknown {
+  return {
+    schemaVersion: 3,
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: { kind: "path", raw: "./catalog", logical: "./catalog" },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        plugins: {
+          plugin: {
+            version: "1.0.0",
+            resolvedSource: "/catalog/plugin",
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            enabled: false,
+            provenance: "explicit",
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+            ...extra,
+          },
+        },
+      },
+    },
+  };
+}
+
+for (const { name, extra, accepted } of [
+  {
+    name: "a record held down by the dependency check",
+    extra: { dependencyDisabled: true },
+    accepted: true,
+  },
+  {
+    name: "a record the check is not holding down",
+    extra: { dependencyDisabled: false },
+    accepted: true,
+  },
+  { name: "a legacy record with no consequence-disable marker", extra: {}, accepted: true },
+  {
+    name: "a non-boolean consequence-disable marker",
+    extra: { dependencyDisabled: "yes" },
+    accepted: false,
+  },
+]) {
+  test(`validates ${name}`, () => {
+    // arrange
+    const storedState = storedStateWithPluginKeys(extra);
+
+    // act
+    const valid = STATE_VALIDATOR.Check(storedState);
+
+    // assert
+    assert.strictEqual(valid, accepted);
+  });
+}
 
 test("returns the exact default for a missing state file", async (t) => {
   // arrange

@@ -12,6 +12,7 @@ import {
   emptyReconcilePlan,
   plannedSourceMismatchSubject,
   type ApplyReconcileOptions,
+  type PlannedDependencyDisable,
   type PlannedMarketplaceAdd,
   type PlannedMarketplaceRemove,
   type PlannedPluginDisable,
@@ -84,6 +85,13 @@ const plannedPluginDisable = {
   plugin: "linter",
   marketplace: "official",
 } satisfies PlannedPluginDisable;
+const plannedDependencyDisable = {
+  scope: "project",
+  plugin: "deploy-kit",
+  marketplace: "official",
+  dependency: "secrets-vault@official",
+  kind: "missing",
+} satisfies PlannedDependencyDisable;
 const sourceMismatch = {
   scope: "project",
   cause: "source-mismatch",
@@ -123,6 +131,7 @@ void ({
   pluginsToUninstall: [plannedPluginUninstall],
   pluginsToEnable: [plannedPluginEnable],
   pluginsToDisable: [plannedPluginDisable],
+  pluginsToDependencyDisable: [plannedDependencyDisable],
   sourceMismatches: [sourceMismatch, unknownStoredSource, danglingReference, malformedPluginKey],
 } satisfies ReconcilePlan);
 
@@ -247,6 +256,21 @@ void ({
 } satisfies PlannedPluginDisable);
 void ({
   scope: "project",
+  plugin: "deploy-kit",
+  marketplace: "official",
+  kind: "missing",
+  // @ts-expect-error a dependency disable always names the declaration it could not satisfy
+} satisfies PlannedDependencyDisable);
+void ({
+  scope: "project",
+  plugin: "deploy-kit",
+  marketplace: "official",
+  dependency: "secrets-vault@official",
+  // @ts-expect-error unsatisfied declarations use a closed three-member vocabulary
+  kind: "unreadable",
+} satisfies PlannedDependencyDisable);
+void ({
+  scope: "project",
   cause: "source-mismatch",
   marketplace: "official",
   declaredSource: "https://github.com/example/official.git",
@@ -299,6 +323,7 @@ void ({
   pluginsToUninstall: [],
   pluginsToEnable: [],
   pluginsToDisable: [],
+  pluginsToDependencyDisable: [],
   // @ts-expect-error reconcile plans always expose their mismatch bucket
 } satisfies ReconcilePlan);
 void ({
@@ -436,6 +461,7 @@ describe("emptyReconcilePlan", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
     assert.deepStrictEqual(Object.keys(plan), [
@@ -446,6 +472,7 @@ describe("emptyReconcilePlan", () => {
       "pluginsToUninstall",
       "pluginsToEnable",
       "pluginsToDisable",
+      "pluginsToDependencyDisable",
       "sourceMismatches",
     ]);
   });
@@ -466,6 +493,7 @@ describe("emptyReconcilePlan", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
   });
@@ -487,6 +515,7 @@ describe("emptyReconcilePlan", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
     assert.deepStrictEqual(secondPlan, {
@@ -497,6 +526,7 @@ describe("emptyReconcilePlan", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
     assert.notStrictEqual(firstPlan, secondPlan);

@@ -13,6 +13,7 @@ import {
 import { planReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
 import { mergeScopeConfigs } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 
+import type { ScopeSatisfactionVerdict } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
 import type {
   MarketplaceConfigEntry,
   PluginConfigEntry,
@@ -155,6 +156,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
   });
@@ -192,6 +194,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
   });
@@ -220,6 +223,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
   });
@@ -244,6 +248,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [
         {
           scope: "project",
@@ -284,6 +289,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [
         {
           scope: "project",
@@ -328,6 +334,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
   });
@@ -384,6 +391,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
   });
@@ -414,6 +422,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [
         {
           scope: "project",
@@ -450,6 +459,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
   });
@@ -483,6 +493,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [{ scope: "project", plugin: "plugin", marketplace: "marketplace" }],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
     assert.deepStrictEqual(second, {
@@ -493,6 +504,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [{ scope: "project", plugin: "plugin", marketplace: "marketplace" }],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
   });
@@ -528,6 +540,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [
         {
           scope: "project",
@@ -583,6 +596,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [{ scope: "project", plugin: "enable", marketplace: "marketplace" }],
       pluginsToDisable: [{ scope: "project", plugin: "disable", marketplace: "marketplace" }],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
   });
@@ -627,6 +641,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
   });
@@ -665,6 +680,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [
         { scope: "project", cause: "malformed-plugin-key", rawKey: "missing-at" },
         { scope: "project", cause: "malformed-plugin-key", rawKey: "@leading" },
@@ -745,6 +761,7 @@ describe("planReconcile", () => {
       ],
       pluginsToEnable: [{ scope: "project", plugin: "enable", marketplace: "keep" }],
       pluginsToDisable: [{ scope: "project", plugin: "disable", marketplace: "keep" }],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [
         {
           scope: "project",
@@ -782,6 +799,7 @@ describe("planReconcile", () => {
       ],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
   });
@@ -803,6 +821,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [{ scope: "project", plugin: "orphan", marketplace: "keep" }],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
   });
@@ -827,6 +846,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [{ scope: "project", plugin: "orphan", marketplace: "keep" }],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
   });
@@ -850,6 +870,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
   });
@@ -874,6 +895,7 @@ describe("planReconcile", () => {
       pluginsToUninstall: [{ scope: "project", plugin: "orphan", marketplace: "adopted" }],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
   });
@@ -895,6 +917,215 @@ describe("planReconcile", () => {
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
+      sourceMismatches: [],
+    });
+  });
+  // LOAD-01: the load-time verdict arrives as precomputed data (D-06-04), so
+  // every case below states the whole verdict rather than deriving one.
+  test("buckets a held-down declarer and plans no enable for it", () => {
+    // arrange
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "deploy-kit@keep": {} });
+    const state = stateWith({
+      keep: marketplaceRecord("keep", githubSource("acme/keep"), {
+        "deploy-kit": pluginRecord(false),
+      }),
+    });
+    const verdict: ScopeSatisfactionVerdict = {
+      ok: true,
+      unsatisfied: [
+        { dependent: "deploy-kit@keep", dependency: "secrets-vault@keep", kind: "missing" },
+      ],
+    };
+
+    // act
+    const plan = planReconcile(merged, state, "project", verdict);
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      pluginsToDependencyDisable: [
+        {
+          scope: "project",
+          plugin: "deploy-kit",
+          marketplace: "keep",
+          dependency: "secrets-vault@keep",
+          kind: "missing",
+        },
+      ],
+      sourceMismatches: [],
+    });
+  });
+
+  test("carries the declared range of an out-of-range dependency onto the bucket entry", () => {
+    // arrange
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "deploy-kit@keep": {} });
+    const state = stateWith({
+      keep: marketplaceRecord("keep", githubSource("acme/keep"), {
+        "deploy-kit": pluginRecord(true),
+      }),
+    });
+    const verdict: ScopeSatisfactionVerdict = {
+      ok: true,
+      unsatisfied: [
+        {
+          dependent: "deploy-kit@keep",
+          dependency: "secrets-vault@keep",
+          kind: "out-of-range",
+          range: "^2.0.0",
+        },
+      ],
+    };
+
+    // act
+    const plan = planReconcile(merged, state, "project", verdict);
+
+    // assert
+    assert.deepStrictEqual(plan.pluginsToDependencyDisable, [
+      {
+        scope: "project",
+        plugin: "deploy-kit",
+        marketplace: "keep",
+        dependency: "secrets-vault@keep",
+        kind: "out-of-range",
+        range: "^2.0.0",
+      },
+    ]);
+  });
+
+  test("buckets one entry per held-down declarer however many of its declarations are unsatisfied", () => {
+    // arrange
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "deploy-kit@keep": {} });
+    const state = stateWith({
+      keep: marketplaceRecord("keep", githubSource("acme/keep"), {
+        "deploy-kit": pluginRecord(true),
+      }),
+    });
+    const verdict: ScopeSatisfactionVerdict = {
+      ok: true,
+      unsatisfied: [
+        { dependent: "deploy-kit@keep", dependency: "secrets-vault@keep", kind: "missing" },
+        { dependent: "deploy-kit@keep", dependency: "logger@keep", kind: "missing" },
+      ],
+    };
+
+    // act
+    const plan = planReconcile(merged, state, "project", verdict);
+
+    // assert
+    assert.deepStrictEqual(plan.pluginsToDependencyDisable, [
+      {
+        scope: "project",
+        plugin: "deploy-kit",
+        marketplace: "keep",
+        dependency: "secrets-vault@keep",
+        kind: "missing",
+      },
+    ]);
+  });
+
+  test("plans the ordinary enable when the declaration walk could not reach a verdict", () => {
+    // arrange
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "deploy-kit@keep": {} });
+    const state = stateWith({
+      keep: marketplaceRecord("keep", githubSource("acme/keep"), {
+        "deploy-kit": pluginRecord(false),
+      }),
+    });
+    const verdict: ScopeSatisfactionVerdict = {
+      ok: false,
+      declarer: "deploy-kit@keep",
+      cause: new Error("cannot read the dependencies of deploy-kit@keep: unusable"),
+    };
+
+    // act
+    const plan = planReconcile(merged, state, "project", verdict);
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [],
+      pluginsToEnable: [{ scope: "project", plugin: "deploy-kit", marketplace: "keep" }],
+      pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
+      sourceMismatches: [],
+    });
+  });
+
+  test("leaves a plugin another bucket already claims out of the dependency-disable bucket", () => {
+    // arrange -- `retired` is uninstalled, `paused` is disabled by the config,
+    // and `gone`'s whole marketplace is removed.
+    const merged = mergedConfig(
+      { keep: { source: "acme/keep" } },
+      { "paused@keep": { enabled: false } },
+    );
+    const state = stateWith({
+      keep: marketplaceRecord("keep", githubSource("acme/keep"), {
+        paused: pluginRecord(true),
+        retired: pluginRecord(true),
+      }),
+      dropped: marketplaceRecord("dropped", githubSource("acme/dropped"), {
+        gone: pluginRecord(true),
+      }),
+    });
+    const verdict: ScopeSatisfactionVerdict = {
+      ok: true,
+      unsatisfied: [
+        { dependent: "paused@keep", dependency: "secrets-vault@keep", kind: "missing" },
+        { dependent: "retired@keep", dependency: "secrets-vault@keep", kind: "missing" },
+        { dependent: "gone@dropped", dependency: "secrets-vault@keep", kind: "missing" },
+      ],
+    };
+
+    // act
+    const plan = planReconcile(merged, state, "project", verdict);
+
+    // assert
+    assert.deepStrictEqual(plan.pluginsToDependencyDisable, []);
+    assert.deepStrictEqual(plan.pluginsToDisable, [
+      { scope: "project", plugin: "paused", marketplace: "keep" },
+    ]);
+    assert.deepStrictEqual(plan.pluginsToUninstall, [
+      { scope: "project", plugin: "retired", marketplace: "keep" },
+    ]);
+  });
+
+  test("skips a verdict entry naming a key no record in the scope carries", () => {
+    // arrange
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "steady@keep": {} });
+    const state = stateWith({
+      keep: marketplaceRecord("keep", githubSource("acme/keep"), { steady: pluginRecord(true) }),
+    });
+    const verdict: ScopeSatisfactionVerdict = {
+      ok: true,
+      unsatisfied: [
+        { dependent: "ghost@keep", dependency: "secrets-vault@keep", kind: "missing" },
+        { dependent: "@keep", dependency: "secrets-vault@keep", kind: "missing" },
+      ],
+    };
+
+    // act
+    const plan = planReconcile(merged, state, "project", verdict);
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
       sourceMismatches: [],
     });
   });

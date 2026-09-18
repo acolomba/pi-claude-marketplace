@@ -5,13 +5,20 @@ import path from "node:path";
 import test from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { buildScopeDeclarationIndex } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts";
+import {
+  buildScopeDeclarationDetail,
+  buildScopeDeclarationIndex,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { InvalidMarketplaceManifestError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import type { DependencyDeclarationReader } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-declaration-read.ts";
-import type { ScopeDeclarationIndexResult } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts";
+import type {
+  AddressedDependency,
+  ScopeDeclarationDetailResult,
+  ScopeDeclarationIndexResult,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 /**
@@ -539,4 +546,131 @@ test("D-05-06: with no seams injected the index is read from the real manifest c
 
   // assert
   assert.deepStrictEqual(indexEntries(walk), { "app@mp": ["helper@mp"] });
+});
+
+/** The detail walk's map as plain data, so a case compares whole values. */
+function detailEntries(
+  walk: ScopeDeclarationDetailResult,
+): Record<string, readonly AddressedDependency[]> {
+  assert.equal(walk.ok, true);
+  return walk.ok ? Object.fromEntries(walk.declarations) : {};
+}
+
+test("keeps every declared constraint and fills each declaration's marketplace", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", { app: {}, helper: {} });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: {
+        dependencies: [
+          "helper@^1.2.0",
+          { name: "base", marketplace: "other", version: ">=2.0.0 <3.0.0" },
+          { name: "pinned", sha: "0123456789abcdef0123456789abcdef01234567" },
+        ],
+      },
+      helper: {},
+    }),
+  });
+
+  // act
+  const walk = await buildScopeDeclarationDetail({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  // assert
+  assert.deepStrictEqual(detailEntries(walk), {
+    "app@mp": [
+      { name: "helper", version: "^1.2.0", marketplace: "mp" },
+      { name: "base", version: ">=2.0.0 <3.0.0", marketplace: "other" },
+      {
+        name: "pinned",
+        sha: "0123456789abcdef0123456789abcdef01234567",
+        marketplace: "mp",
+      },
+    ],
+    "helper@mp": [],
+  });
+});
+
+test("indexes every record in the scope, with no key under decision to exclude", async () => {
+  // arrange
+  const mp = mpRecord();
+  const other = otherRecord();
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: { dependencies: ["helper"] },
+      helper: {},
+      paused: {},
+    }),
+    [other.manifestPath]: manifestOf("other", { kit: {} }),
+  });
+
+  // act
+  const walk = await buildScopeDeclarationDetail({
+    state: stateOf(mp, other),
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  // assert
+  assert.deepStrictEqual(detailEntries(walk), {
+    "app@mp": [{ name: "helper", marketplace: "mp" }],
+    "helper@mp": [],
+    "paused@mp": [],
+    "kit@other": [],
+  });
+});
+
+test("ends the detail walk on the first declarer whose own manifest cannot be read", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", { app: {} });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: {} }),
+  });
+  const reader = ownManifests({
+    [path.join(mp.marketplaceRoot, "plugins", "app", ".claude-plugin", "plugin.json")]:
+      "{ truncated",
+  });
+
+  // act
+  const walk = await buildScopeDeclarationDetail({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader,
+    loadManifest,
+  });
+
+  // assert
+  assert.equal(walk.ok, false);
+  assert.deepStrictEqual(
+    walk.ok
+      ? undefined
+      : { declarer: walk.declarer, message: walk.cause.message, cause: walk.cause.cause },
+    {
+      declarer: "app@mp",
+      message:
+        "cannot read the dependencies of app@mp: its own manifest is present but cannot be read",
+      cause: undefined,
+    },
+  );
+});
+
+test("walks a scope with no recorded marketplace to an empty declaration map", async () => {
+  // arrange
+  const state = stateOf();
+
+  // act
+  const walk = await buildScopeDeclarationDetail({
+    state,
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest: manifestLoader({}),
+  });
+
+  // assert
+  assert.deepStrictEqual(detailEntries(walk), {});
 });
