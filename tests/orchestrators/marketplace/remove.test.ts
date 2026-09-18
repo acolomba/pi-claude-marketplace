@@ -136,6 +136,7 @@ function pluginRecord(resources: Partial<PluginRecord["resources"]> = {}): Plugi
       skills: resources.skills ?? [],
     },
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-02T00:00:00.000Z",
   };
@@ -153,7 +154,7 @@ function marketplaceState(args: {
   readonly source: unknown;
 }): ExtensionState {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {
       [args.name]: {
         name: args.name,
@@ -252,7 +253,7 @@ test("reports an explicit-scope missing marketplace without mutating project sta
     },
   ]);
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   assert.deepStrictEqual(invalidations, []);
@@ -289,7 +290,7 @@ test("invalidates committed full removal after persistence and before data hygie
     invalidateMarketplaceNames: async (marketplaceNamesCachePath, scope) => {
       events.push("names");
       assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-        schemaVersion: 2,
+        schemaVersion: 3,
         marketplaces: {},
       });
       const config = await loadConfig(locations.configJsonPath);
@@ -311,7 +312,7 @@ test("invalidates committed full removal after persistence and before data hygie
     dropMarketplaceCache: async (pluginCachePath, scope, name) => {
       events.push("plugins");
       assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-        schemaVersion: 2,
+        schemaVersion: 3,
         marketplaces: {},
       });
       assert.strictEqual(await pathExists(pluginData), true);
@@ -471,7 +472,7 @@ for (const failurePoint of ["names", "plugins"] as const) {
     assert.deepStrictEqual(events, failurePoint === "names" ? ["names"] : ["names", "plugins"]);
     assert.strictEqual(await pathExists(marketplaceData), false);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
     assert.deepStrictEqual(notification.calls, [
@@ -505,11 +506,11 @@ test("returns the complete orchestrated missing-marketplace outcome without noti
   assert.deepStrictEqual(outcome.error.scopes, ["project", "user"]);
   assert.deepStrictEqual(notification.calls, []);
   assert.deepStrictEqual(await loadState(projectLocations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   assert.deepStrictEqual(await loadState(userLocations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   notification.verifyInteractions();
@@ -548,7 +549,7 @@ test("prefers the project marketplace in orchestrated bare form", async (testCon
   assert.deepStrictEqual(outcome, { status: "removed", name: "shared", unstaged: [] });
   assert.deepStrictEqual(notification.calls, []);
   assert.deepStrictEqual(await loadState(projectLocations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   assert.deepStrictEqual(await loadState(userLocations.extensionRoot), userState);
@@ -581,11 +582,11 @@ test("selects the user marketplace in orchestrated bare form when project is abs
   assert.deepStrictEqual(outcome, { status: "removed", name: "user-only", unstaged: [] });
   assert.deepStrictEqual(notification.calls, []);
   assert.deepStrictEqual(await loadState(projectLocations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   assert.deepStrictEqual(await loadState(userLocations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   notification.verifyInteractions();
@@ -664,7 +665,7 @@ for (const sourceCase of SOURCE_CASES) {
       },
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
     assert.strictEqual(await pathExists(dataDir), false);
@@ -724,7 +725,7 @@ test("swallows clone garbage-collection failure and safely reports the retry", a
   });
   assert.deepStrictEqual(retryNotification.calls, []);
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   firstNotification.verifyInteractions();
@@ -785,7 +786,7 @@ test("retains the source clone when a forward-compatible recorded kind is unavai
   assert.strictEqual(sourceKindReads, 12);
   assert.strictEqual(await readFile(path.join(cloneDir, "sentinel"), "utf8"), "clone");
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   notification.verifyInteractions();
@@ -853,7 +854,7 @@ test("sweeps marketplace and plugin declarations from both config layers", async
     '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {}\n}\n',
   );
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   notification.verifyInteractions();
@@ -898,7 +899,7 @@ test("leaves a valid unrelated sibling config layer byte-identical", async (test
   assert.deepStrictEqual(notification.calls, [{ message: "● remove-me [project] (removed)" }]);
   assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), localBytes);
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   notification.verifyInteractions();
@@ -935,7 +936,7 @@ test("leaves an invalid sibling config layer byte-identical", async (testContext
   assert.deepStrictEqual(notification.calls, [{ message: "● remove-me [project] (removed)" }]);
   assert.strictEqual(await readFile(locations.configLocalJsonPath, "utf8"), invalidLocalBytes);
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   notification.verifyInteractions();
@@ -1091,7 +1092,7 @@ test("propagates config write failure, preserves state, and converges on retry",
   assert.strictEqual(configAfterFailure, configBytes);
   assert.strictEqual(await readFile(outsideConfigPath, "utf8"), configBytes);
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   assert.strictEqual(retryOutcome, undefined);
@@ -1188,7 +1189,7 @@ test("preserves the state record after state-save failure while retaining commit
     },
   ]);
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   firstNotification.verifyInteractions();
@@ -1312,7 +1313,7 @@ test("keeps exact partial state and silent cleanup residue before retry converge
     },
   ]);
   assert.deepStrictEqual(stateAfterFirst, {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {
       "partial-marketplace": {
         name: "partial-marketplace",
@@ -1339,6 +1340,7 @@ test("keeps exact partial state and silent cleanup residue before retry converge
               skills: ["skill-b"],
             },
             enabled: true,
+            provenance: "explicit",
             installedAt: "2026-08-01T00:00:00.000Z",
             updatedAt: "2026-08-02T00:00:00.000Z",
           },
@@ -1364,7 +1366,7 @@ test("keeps exact partial state and silent cleanup residue before retry converge
   ]);
   assert.deepStrictEqual(cascadeCalls, ["first:alpha", "first:beta", "first:gamma", "retry:beta"]);
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   assert.strictEqual(await pathExists(marketplaceData), false);
@@ -1485,7 +1487,7 @@ test("reports a concurrent in-lock disappearance as an empty successful removal"
   assert.strictEqual(outcome, undefined);
   assert.deepStrictEqual(notification.calls, [{ message: "● concurrent [project] (removed)" }]);
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
   });
   notification.verifyInteractions();

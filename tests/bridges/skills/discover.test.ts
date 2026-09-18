@@ -29,6 +29,14 @@ function resolvedPlugin(pluginRoot: string, skills: readonly string[]): Resolved
   };
 }
 
+async function writeSkill(skillDirectory: string, name: string): Promise<void> {
+  await mkdir(skillDirectory, { recursive: true });
+  await writeFile(
+    path.join(skillDirectory, "SKILL.md"),
+    `---\nname: ${name}\ndescription: The ${name} skill.\n---\n\nThe ${name} body.\n`,
+  );
+}
+
 test("returns no skills when the plugin declares no skill paths", async (t) => {
   // arrange
   const pluginRoot = await createPluginRoot(t, "skill-discover-empty-");
@@ -402,5 +410,93 @@ test("reports a self skill loss without traversing its nested directories", asyn
         `"mattpocock-skills:implement", already produced by skill source ` +
         `"mattpocock-skills-implement"; ignoring duplicate.`,
     ],
+  });
+});
+
+test("MANF-03 a declared skill subdir and its conventional parent yield one skill", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-overlap-subdir-");
+  const helpDirectory = path.join(pluginRoot, "skills", "help");
+  const tokensDirectory = path.join(pluginRoot, "skills", "tokens");
+  await writeSkill(helpDirectory, "help");
+  await writeSkill(tokensDirectory, "tokens");
+  const resolved = resolvedPlugin(pluginRoot, [
+    path.join("skills", "help"),
+    path.join("skills", "tokens"),
+    "skills",
+  ]);
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      { sourceName: "help", generatedName: "acme:help", skillDir: helpDirectory },
+      { sourceName: "tokens", generatedName: "acme:tokens", skillDir: tokensDirectory },
+    ],
+    warnings: [],
+  });
+});
+
+test("MANF-03 keeps an undeclared sibling skill when a subdir is also declared", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-overlap-sibling-");
+  const helpDirectory = path.join(pluginRoot, "skills", "help");
+  const otherDirectory = path.join(pluginRoot, "skills", "other");
+  await writeSkill(helpDirectory, "help");
+  await writeSkill(otherDirectory, "other");
+  const resolved = resolvedPlugin(pluginRoot, [path.join("skills", "help"), "skills"]);
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      { sourceName: "help", generatedName: "acme:help", skillDir: helpDirectory },
+      { sourceName: "other", generatedName: "acme:other", skillDir: otherDirectory },
+    ],
+    warnings: [],
+  });
+});
+
+test("silently skips a direct skill already discovered through its parent", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-parent-first-");
+  const helpDirectory = path.join(pluginRoot, "skills", "help");
+  await writeSkill(helpDirectory, "help");
+  const resolved = resolvedPlugin(pluginRoot, ["skills", path.join("skills", "help")]);
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [{ sourceName: "help", generatedName: "acme:help", skillDir: helpDirectory }],
+    warnings: [],
+  });
+});
+
+test("MANF-03 a trailing separator keys the same directory as one already seen", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-overlap-trailing-");
+  const helpDirectory = path.join(pluginRoot, "skills", "help");
+  await writeSkill(helpDirectory, "help");
+  const resolved = resolvedPlugin(pluginRoot, [path.join("skills", "help") + path.sep, "skills"]);
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        sourceName: "help",
+        generatedName: "acme:help",
+        skillDir: helpDirectory + path.sep,
+      },
+    ],
+    warnings: [],
   });
 });

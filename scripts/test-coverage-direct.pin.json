@@ -11,17 +11,20 @@
     },
     {
       "sourcePath": "extensions/pi-claude-marketplace/bridges/commands/discover.ts",
-      "reading": "branches 55/56, lines 412/414",
+      "reading": "branches 54/55, lines 395/397",
       "findingIds": ["BC-019"],
       "reasons": [
-        "288-290 (branch 288): the `if (!(err instanceof CommandNameError)) { throw err; }` narrowing arm around `nameCommandInDir`. BC-019 records the measured disposition: the arm is unreachable -- only a `Symbol.hasInstance` patch reaches its throw -- but the check still narrows the `unknown` catch binding for `badNameWarning(err)`, so deleting it without a restructure breaks typing."
+        "277-279 (branch 277): the `if (!(err instanceof CommandNameError)) { throw err; }` narrowing arm around `nameCommandInDir`. BC-019 records the measured disposition: the arm is unreachable -- only a `Symbol.hasInstance` patch reaches its throw -- but the check still narrows the `unknown` catch binding for `badNameWarning(err)`, so deleting it without a restructure breaks typing.",
+        "The overlapping-command deduplication fix removes duplicateFileWarning and replaces its warn-and-install block with an early Set-based skip. The merged source has 17 fewer lines and one fewer covered branch. The uncovered deficit remains the same BC-019 arm: one branch and two lines; no new exception is introduced."
       ]
     },
     {
       "sourcePath": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
-      "reading": "branches 109/111, lines 1043/1049",
+      "reading": "branches 114/116, lines 1075/1081",
       "findingIds": ["D-08-A14"],
       "reasons": [
+        "The D-04-01 provenance field adds an optional `provenance` member to InstallLedgerOptions and the statePhase write `existing?.provenance ?? opts.provenance ?? \"explicit\"`. Every arm of that chain is covered (the enable branch, the cascade, and a caller naming neither), so the reading grows by three branches and fourteen lines on both sides and the deficit is unchanged: the same two arms below, one branch and six lines. No new exception is introduced.",
+        "The RESV-03 source pin adds one conditional in the git-source resolve callback and its doc comment. Both of its arms are covered, so the reading grows by two branches and eighteen lines on both sides and the deficit is unchanged: the same two arms below, one branch and six lines. No new exception is introduced.",
         "422-426 (branch 422): re-validation of a manifest entry that the identical compiled schema already accepted in the same pass. MARKETPLACE_SCHEMA.plugins is Type.Array(PLUGIN_ENTRY_SCHEMA) and PLUGIN_ENTRY_VALIDATOR is Compile(PLUGIN_ENTRY_SCHEMA), so an entry reaching the re-check was already validated by that exact schema, in this process, from this parse. ARCHITECTURE.md records the re-check as deliberate defense-in-depth.",
         "827-829 (branch 827): the hooks re-parse guard, over bytes on which the resolver already ran both of parseHooksConfig's {ok:false} arms at install-entry under D-57-04. The only difference between the two calls is skipIfMap, and D-61-02 records that every compileIfPredicate failure collapses to MATCH_ALL_IF, so no if-field issue can produce a refusal. The guard fires only on a mutation between the resolve and the phase."
       ]

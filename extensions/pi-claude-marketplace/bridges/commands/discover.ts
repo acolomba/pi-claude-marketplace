@@ -126,17 +126,6 @@ function warnOnDirectorySkip(
   );
 }
 
-function duplicateFileWarning(
-  fileRel: string,
-  firstGeneratedName: string,
-  secondGeneratedName: string,
-): string {
-  return (
-    `command file "${fileRel}" is reached by more than one componentPaths.commands ` +
-    `entry; installing it as both "${firstGeneratedName}" and "${secondGeneratedName}".`
-  );
-}
-
 /**
  * Whether a skipped symlink pointed at a directory.
  *
@@ -363,9 +352,9 @@ export async function discoverPluginCommands(input: {
   // Keyed on the absolute source file. Two componentPaths.commands entries
   // that overlap -- "commands" and "commands/build", say -- reach the same
   // file at two different depths, so it generates two DIFFERENT names and
-  // the dedup above never sees it. Both names install and the user gets the
-  // one command twice under two spellings, which is worth saying out loud.
-  const seenByFile = new Map<string, DiscoveredCommand>();
+  // generated-name dedup cannot see it. Keep the first discovery silently;
+  // distinct files that generate the same name still produce a warning.
+  const seenByFile = new Set<string>();
   const warnings: string[] = [];
 
   for (const commandsRel of commandsDirs) {
@@ -377,6 +366,12 @@ export async function discoverPluginCommands(input: {
     await walkCommandsDir(commandsDir, commandsDir, input.pluginName, found, warnings);
 
     for (const command of found) {
+      if (seenByFile.has(command.commandFile)) {
+        continue;
+      }
+
+      seenByFile.add(command.commandFile);
+
       // D-07 first-wins dedup by generated command name.
       const winner = seenByGenerated.get(command.generatedName);
       if (winner !== undefined) {
@@ -391,18 +386,6 @@ export async function discoverPluginCommands(input: {
         continue;
       }
 
-      const sameFile = seenByFile.get(command.commandFile);
-      if (sameFile !== undefined) {
-        warnings.push(
-          duplicateFileWarning(
-            relFrom(input.resolved.pluginRoot, command.commandFile),
-            sameFile.generatedName,
-            command.generatedName,
-          ),
-        );
-      }
-
-      seenByFile.set(command.commandFile, command);
       seenByGenerated.set(command.generatedName, command);
     }
   }

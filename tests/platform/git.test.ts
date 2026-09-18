@@ -15,6 +15,7 @@ import {
   forceUpdateRef,
   listBranches,
   listRemotes,
+  listRemoteTags,
   resolveRef,
   resolveRemoteRef,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -29,6 +30,7 @@ import type {
   AuthAttemptResult,
   GitCredentials,
   OnAuthRequiredFn,
+  RemoteTag,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { GitHttpRequest, GitHttpResponse } from "isomorphic-git/http/node";
 
@@ -38,8 +40,12 @@ const OID_MAIN = "1111111111111111111111111111111111111111";
 const OID_DEV = "2222222222222222222222222222222222222222";
 const OID_TAG = "3333333333333333333333333333333333333333";
 const OID_PEELED = "4444444444444444444444444444444444444444";
+const OID_LIGHTWEIGHT = "5555555555555555555555555555555555555555";
 const FLUSH = Buffer.from("0000", "utf8");
 const DELIM = Buffer.from("0001", "utf8");
+// Hand-authored rather than imported from the module under test: feeding the
+// module's own literal back in could not fail.
+const TAG_REF_PREFIX = "refs/tags/";
 
 const FULL_ADVERTISEMENT = [
   `${OID_MAIN} HEAD symref-target:refs/heads/main`,
@@ -125,6 +131,20 @@ function expectedListRefsBody(): Buffer {
     DELIM,
     packet("peel"),
     packet("symrefs"),
+    FLUSH,
+  ]);
+}
+
+/**
+ * The ls-refs command a tag listing sends: peeling on, no symrefs, and the
+ * server-side ref-prefix that makes the advertisement the `--tags` equivalent.
+ */
+function expectedListTagsBody(): Buffer {
+  return Buffer.concat([
+    packet("command=ls-refs\n"),
+    DELIM,
+    packet("peel"),
+    packet(`ref-prefix ${TAG_REF_PREFIX}`),
     FLUSH,
   ]);
 }
@@ -364,7 +384,7 @@ function isExpectedDiscoveryError(error: unknown, caller: "git.clone" | "git.fet
   return true;
 }
 
-function expectedPublicRequests(): readonly RecordedHttpRequest[] {
+function expectedPublicRequests(): readonly [RecordedHttpRequest, RecordedHttpRequest] {
   return [
     {
       url: `${REMOTE_URL}/info/refs?service=git-upload-pack`,
@@ -383,6 +403,15 @@ function expectedPublicRequests(): readonly RecordedHttpRequest[] {
       body: expectedListRefsBody(),
     },
   ];
+}
+
+/**
+ * The same two-request envelope a ref resolution sends, carrying the tag
+ * listing's own ls-refs command instead.
+ */
+function expectedTagRequests(): readonly [RecordedHttpRequest, RecordedHttpRequest] {
+  const [discovery, listRefs] = expectedPublicRequests();
+  return [discovery, { ...listRefs, body: expectedListTagsBody() }];
 }
 
 function expectedDiscoveryRequest(
@@ -1064,7 +1093,132 @@ describe("resolveRemoteRef", () => {
       {
         ...expectedPublicRequests()[1],
         headers: {
-          ...expectedPublicRequests()[1]!.headers,
+          ...expectedPublicRequests()[1].headers,
+          Authorization: "Basic dXNlcjpzZWNyZXQ=",
+        },
+      },
+    ]);
+  });
+});
+
+describe("listRemoteTags", () => {
+  test("RESV-03: queries the tag namespace and returns every advertised tag in order", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, [
+      `${OID_LIGHTWEIGHT} refs/tags/v1.0.0`,
+      `${OID_MAIN} refs/tags/v1.1.0`,
+      `${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`,
+    ]);
+
+    // act
+    const tags = await listRemoteTags({ url: REMOTE_URL });
+
+    // assert
+    assert.deepStrictEqual(tags, [
+      { name: "v1.0.0", oid: OID_LIGHTWEIGHT },
+      { name: "v1.1.0", oid: OID_MAIN },
+      { name: "v2.0.0", oid: OID_PEELED },
+    ]);
+    assert.deepStrictEqual(requests, expectedTagRequests());
+  });
+
+  test("D-03-02.2: an entry naming an annotated tag's peel is not a second tag", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, [
+      `${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`,
+      `${OID_PEELED} refs/tags/v2.0.0^{}`,
+    ]);
+
+    // act
+    const tags = await listRemoteTags({ url: REMOTE_URL });
+
+    // assert
+    assert.deepStrictEqual(tags, [{ name: "v2.0.0", oid: OID_PEELED }]);
+    assert.deepStrictEqual(requests, expectedTagRequests());
+  });
+
+  test("a ref advertised outside the tag namespace is not returned as a tag", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, [
+      `${OID_MAIN} refs/heads/main`,
+      `${OID_DEV} refs/tags/v1.1.0`,
+    ]);
+
+    // act
+    const tags = await listRemoteTags({ url: REMOTE_URL });
+
+    // assert
+    assert.deepStrictEqual(tags, [{ name: "v1.1.0", oid: OID_DEV }]);
+    assert.deepStrictEqual(requests, expectedTagRequests());
+  });
+
+  test("a remote advertising no tags yields an empty list rather than throwing", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, []);
+
+    // act
+    const tags = await listRemoteTags({ url: REMOTE_URL });
+
+    // assert
+    assert.deepStrictEqual(tags, []);
+    assert.deepStrictEqual(requests, expectedTagRequests());
+  });
+
+  test("RESV-03: no credential callback answers a challenge when no bundle is supplied", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, [`${OID_MAIN} refs/tags/v1.0.0`], {
+      challengeOnce: true,
+    });
+
+    // act
+    const listing = listRemoteTags({ url: REMOTE_URL });
+
+    // assert
+    await assert.rejects(listing, { name: "HttpError", message: "HTTP Error: 401 Unauthorized" });
+    assert.deepStrictEqual(requests, [expectedTagRequests()[0]]);
+  });
+
+  test("RESV-03: the supplied credential bundle is what the tag query authenticates with", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(
+      t,
+      [`${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`],
+      { challengeOnce: true },
+    );
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [[HOST, { username: "user", password: "secret" }]],
+    });
+    const onAuthRequired: OnAuthRequiredFn = () => {
+      throw new Error("interactive auth is forbidden on a stored-credential hit");
+    };
+
+    // act
+    const tags = await listRemoteTags({
+      url: REMOTE_URL,
+      auth: { credentialOps: credentials.credentialOps, host: HOST, onAuthRequired },
+    });
+
+    // assert
+    assert.deepStrictEqual(tags, [{ name: "v2.0.0", oid: OID_PEELED }]);
+    assert.deepStrictEqual(credentials.calls, {
+      fill: [{ host: HOST }],
+      approve: [],
+      reject: [],
+    });
+    assert.deepStrictEqual(requests, [
+      expectedTagRequests()[0],
+      {
+        ...expectedTagRequests()[0],
+        headers: {
+          "Git-Protocol": "version=2",
+          Authorization: "Basic dXNlcjpzZWNyZXQ=",
+        },
+      },
+      {
+        ...expectedTagRequests()[1],
+        headers: {
+          ...expectedTagRequests()[1].headers,
           Authorization: "Basic dXNlcjpzZWNyZXQ=",
         },
       },
@@ -1077,3 +1231,4 @@ describe("GitOps contract", () => {
 });
 
 void ({ username: "user", password: "secret" } satisfies GitCredentials);
+void ({ name: "v1.0.0", oid: OID_MAIN } satisfies RemoteTag);

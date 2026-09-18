@@ -26,11 +26,14 @@
  *   scans source.
  *
  *   Persistence (COMPAT-01) -- the persisted install record's key set is exactly
- *   the eight fields it already had, and neither a manifest-snapshot-shaped key
- *   nor an orphan-shaped key appears. The state schema's version property still
- *   enumerates exactly the two versions it already enumerated and the frozen
- *   default state still declares the current one, which together prove no
- *   migration and no version bump was introduced.
+ *   its pinned ten fields, and neither a manifest-snapshot-shaped key nor an
+ *   orphan-shaped key appears. The state schema's version property enumerates
+ *   exactly the three versions the record has had, and the frozen default state
+ *   declares the current one. A key joins the record only by one of the two
+ *   sanctioned routes the key-set clause's message spells out (optional with no
+ *   bump, or required with a bump and a pre-validation fill, per D-04-03), and a
+ *   version joins the union only with such a fill behind it; either lands here
+ *   deliberately.
  *
  *   Network (COMPAT-01 / D-98-09) -- DELEGATED, not duplicated. The NFR-5
  *   orchestrator-network gate already proves both info surfaces carry zero
@@ -187,6 +190,43 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
     "marketplace in user scope",
     "marketplace in project scope",
     "workflows",
+    // DATA-01 / WR-06: uninstall's data-disposition marker, appended at the
+    // tail with its catalog row, its renderer arm and its fixture.
+    "data kept",
+    // RESV-03: no release tag of the dependency's source falls inside the
+    // effective constraint.
+    "no matching version",
+    // RESV-03 / RESV-05: the effective constraint cannot be satisfied, either by
+    // the declarations against each other or by the copy already on disk.
+    "version conflict",
+    // RESV-03: the declared constraints pass one of the two combination caps.
+    "constraint too complex",
+    // RESV-03: a declared constraint is not a readable version range.
+    "invalid version constraint",
+    // RESV-02 / D-03-08: the dependency's marketplace is not added in the target
+    // scope. A CONTENT reason -- its subject is the dependency row, not the
+    // standalone marketplace row the three structural markers above belong to.
+    "dependency marketplace not added",
+    // RESV-04: the dependency graph closes on itself.
+    "dependency cycle",
+    // RESV-06: the requesting plugin's own row, when a dependency is what failed.
+    "dependency failed",
+    // RESV-05: the dependency the cascade left alone is recorded but disabled,
+    // so it materialized nothing. It joins `already installed` in the same
+    // brace and lifts that row off the benign-skip default.
+    "dependency disabled",
+    // D-04-07: a recorded dependency the user then installed by name. The
+    // record's provenance changed and nothing was materialized, so it rides an
+    // `installed` row beside `already installed`.
+    "dependency promoted",
+    // D-05-14 / D-05-15: uninstall's refusal marker for a plugin another
+    // installed plugin in the scope still declares. Nothing is removed; the
+    // dependents ride the cause line, never the token.
+    "dependents remain",
+    // D-05-11: uninstall's prune marker -- a dependency record nothing
+    // installed declared any more, swept out by `--prune` after the named
+    // plugin. It rides an ordinary `uninstalled` row.
+    "dependency pruned",
   ];
 
   // act
@@ -418,6 +458,7 @@ test("COMPAT-01: the persisted install record holds exactly its inherited key se
     "enabled",
     "hookEntries",
     "installedAt",
+    "provenance",
     "resolvedSha",
     "resolvedSource",
     "resources",
@@ -434,7 +475,7 @@ test("COMPAT-01: the persisted install record holds exactly its inherited key se
   assert.deepEqual(
     actual,
     expected,
-    "COMPAT-01: this is the pinned key set of the persisted install record. A key may join it only as an OPTIONAL additive field that needs no schemaVersion bump and no migrate fill (the resolvedSha / hookEntries precedent); removing one is a migration. Either way the change lands here deliberately, alongside the sibling clause that forbids manifest-snapshot and orphan fields outright.",
+    "COMPAT-01: this is the pinned key set of the persisted install record. A key may join it in one of exactly two ways: as an OPTIONAL additive field that needs no schemaVersion bump and no migrate fill (the resolvedSha / hookEntries precedent), or as a REQUIRED field that arrives WITH a schemaVersion bump and a migrate fill that runs before validation, so every earlier document loads with a truthful default (the enabled / ENBL-02 and provenance / D-04-03 precedent). Removing one is a migration. Either way the change lands here deliberately, alongside the sibling clause that forbids manifest-snapshot and orphan fields outright.",
   );
 });
 
@@ -501,9 +542,9 @@ test("COMPAT-01: no manifest-snapshot or orphan field reached the install record
   );
 });
 
-test("COMPAT-01: the state schema version union is unchanged", () => {
+test("COMPAT-01: the state schema version union holds exactly its three sanctioned members", () => {
   // arrange
-  const expected = [1, 2];
+  const expected = [1, 2, 3];
 
   // act
   const actual = STATE_SCHEMA.properties.schemaVersion.anyOf.map((member) => member.const);
@@ -512,13 +553,13 @@ test("COMPAT-01: the state schema version union is unchanged", () => {
   assert.deepEqual(
     actual,
     expected,
-    "COMPAT-01: no state-schema migration was introduced. A third version means an on-disk migration, which this work promised not to require.",
+    'COMPAT-01 / D-04-03: schemaVersion 3 IS an on-disk migration, and it is the whole of it: a required `provenance` field that `ensurePluginProvenance` fills with its truthful default ("explicit") on every record that lacks it, before STATE_VALIDATOR.Check runs. It needs no user-visible step because no released build wrote a record that was not explicit, so the fill never guesses. A fourth member means another such migration and lands here deliberately, with its own fill and its own default stated.',
   );
 });
 
-test("COMPAT-01: the default state still declares the current schema version", () => {
+test("COMPAT-01: the default state declares the current schema version", () => {
   // arrange
-  const expected = 2;
+  const expected = 3;
 
   // act
   const actual = DEFAULT_STATE.schemaVersion;
@@ -527,7 +568,7 @@ test("COMPAT-01: the default state still declares the current schema version", (
   assert.equal(
     actual,
     expected,
-    "COMPAT-01: a first-load state.json is written at the version this work inherited -- no bump.",
+    "COMPAT-01 / D-04-03: a first-load state.json is written at the version the provenance migration introduced.",
   );
 });
 

@@ -64,6 +64,7 @@ function pluginRecord(
     readonly installable?: boolean;
     readonly skills?: readonly string[];
     readonly unsupported?: readonly string[];
+    readonly provenance?: PluginRecord["provenance"];
   } = {},
 ): PluginRecord {
   const installable = options.installable ?? true;
@@ -86,13 +87,42 @@ function pluginRecord(
       hooks: [],
     },
     enabled,
+    // D-04-01: a direct install unless the case asks for a dependency.
+    provenance: options.provenance ?? "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
 }
 
 function stateWith(marketplaces: Record<string, MarketplaceRecord> = {}): ExtensionState {
-  return { schemaVersion: 2, marketplaces: { ...marketplaces } };
+  return { schemaVersion: 3, marketplaces: { ...marketplaces } };
+}
+
+// D-04-05: one retained marketplace holding a dependency-provenance record and
+// a direct-install record side by side. Both D-04-05 cases plan over this same
+// state, so an exemption wide enough to keep every undeclared record shows up
+// as the missing `orphan` uninstall in either whole-plan assertion.
+function provenanceState(): ExtensionState {
+  return stateWith({
+    keep: marketplaceRecord("keep", githubSource("acme/keep"), {
+      steady: pluginRecord(true),
+      dependency: pluginRecord(true, { provenance: "dependency" }),
+      orphan: pluginRecord(true),
+    }),
+  });
+}
+
+// D-04-05: the cross-marketplace shape. `keep` is declared and holds the
+// requesting plugin; `adopted` was recorded through the CMP-3 fallback, is
+// declared nowhere, and holds a dependency record -- with or without a direct
+// install beside it that nothing declares. Both cases below plan over the same
+// declared config, so a removal guard that ignored provenance shows up as a
+// planned removal of `adopted` in either whole-plan assertion.
+function adoptedMarketplaceState(adoptedPlugins: Record<string, PluginRecord>): ExtensionState {
+  return stateWith({
+    keep: marketplaceRecord("keep", githubSource("acme/keep"), { steady: pluginRecord(true) }),
+    adopted: marketplaceRecord("adopted", githubSource("acme/adopted"), adoptedPlugins),
+  });
 }
 
 describe("planReconcile", () => {
@@ -750,6 +780,119 @@ describe("planReconcile", () => {
         { scope: "project", plugin: "zeta", marketplace: "marketplace" },
         { scope: "project", plugin: "alpha", marketplace: "marketplace" },
       ],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      sourceMismatches: [],
+    });
+  });
+
+  test("D-04-05: keeps an undeclared record whose provenance is dependency", () => {
+    // arrange
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "steady@keep": {} });
+    const state = provenanceState();
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [{ scope: "project", plugin: "orphan", marketplace: "keep" }],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      sourceMismatches: [],
+    });
+  });
+
+  test("D-04-05: still sweeps an undeclared direct install beside a declared dependency", () => {
+    // arrange
+    const merged = mergedConfig(
+      { keep: { source: "acme/keep" } },
+      { "steady@keep": {}, "dependency@keep": {} },
+    );
+    const state = provenanceState();
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [{ scope: "project", plugin: "orphan", marketplace: "keep" }],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      sourceMismatches: [],
+    });
+  });
+
+  test("D-04-05: retains an undeclared marketplace while a record under it is a dependency", () => {
+    // arrange
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "steady@keep": {} });
+    const state = adoptedMarketplaceState({
+      dependency: pluginRecord(true, { provenance: "dependency" }),
+    });
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      sourceMismatches: [],
+    });
+  });
+
+  test("D-04-05: still sweeps a direct-install orphan under a marketplace retained for its dependency", () => {
+    // arrange
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "steady@keep": {} });
+    const state = adoptedMarketplaceState({
+      dependency: pluginRecord(true, { provenance: "dependency" }),
+      orphan: pluginRecord(true),
+    });
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [{ scope: "project", plugin: "orphan", marketplace: "adopted" }],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      sourceMismatches: [],
+    });
+  });
+
+  test("D-04-05: still removes an undeclared marketplace whose records are all direct installs", () => {
+    // arrange
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "steady@keep": {} });
+    const state = adoptedMarketplaceState({ orphan: pluginRecord(true) });
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [{ scope: "project", marketplace: "adopted", plugins: ["orphan"] }],
+      pluginsToInstall: [],
+      pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
       sourceMismatches: [],

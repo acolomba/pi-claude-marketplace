@@ -339,6 +339,8 @@ Instala en el ámbito del proyecto en lugar del ámbito de usuario.
 /claude:plugin install context7-plugin@context7-marketplace --scope project
 ```
 
+Un complemento puede declarar los otros complementos que necesita. La instalación también los agrega, en el mismo ámbito y en el mismo archivo de configuración. Para más información, consulta [Resolución de dependencias](docs/dependency-resolution.md).
+
 Actualiza un complemento instalado, todos los complementos instalados de un mercado, o todos los complementos instalados.
 
 ```text

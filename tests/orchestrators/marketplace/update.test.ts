@@ -304,6 +304,7 @@ function makePluginRecord(): ExtensionState["marketplaces"][string]["plugins"][s
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
@@ -2150,7 +2151,7 @@ test("drops a changed target after persistence and before its plugin cascade", a
 
     // assert
     const expectedState: ExtensionState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {
         official: {
           name: "official",
@@ -2589,7 +2590,7 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
     ]);
     assert.deepStrictEqual(deviceFlow.calls, { requestCode: [], pollToken: [] });
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {
         "batch-mp": {
           name: "batch-mp",
@@ -2722,7 +2723,7 @@ test("all-target update drops changed rows in project-before-user order and isol
       },
     ]);
     assert.deepStrictEqual(await loadState(projectLocations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {
         alpha: {
           ...marketplaceRecord("alpha", "project", manifestPath),
@@ -2735,7 +2736,7 @@ test("all-target update drops changed rows in project-before-user order and isol
       },
     });
     assert.deepStrictEqual(await loadState(userLocations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {
         alpha: {
           ...marketplaceRecord("alpha", "user", manifestPath),
@@ -3369,7 +3370,7 @@ test("silently retains a failed changed-target cache cleanup and preserves later
 
     // assert
     const expectedState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {
         "cache-mp": {
           name: "cache-mp",
@@ -3439,7 +3440,7 @@ test("silently stops when the marketplace vanishes after preflight", async (test
     assert.strictEqual(replaced, true);
     assert.deepStrictEqual(notifications, []);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
     });
     assert.deepStrictEqual(git.calls, []);

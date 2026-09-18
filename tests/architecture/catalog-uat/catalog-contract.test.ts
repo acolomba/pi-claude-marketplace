@@ -35,8 +35,47 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const CATALOG_PATH = path.join(REPO_ROOT, "docs/output-catalog.md");
 const EXPECTED_MODULE_COUNT = 20;
 const EXPECTED_SECTION_COUNT = 20;
-const EXPECTED_STATE_COUNT = 190;
-const EXPECTED_UTF8_BYTES = 23_732;
+// D-01-22 / D-01-30: +1 state for plugin info's constraint parenthetical --
+// one `dependencies:` block carrying a version range alone, a sha alone, and
+// both together (190 -> 191).
+// WR-06 / DATA-01: +1 state for uninstall's `success-keep-data` row, the
+// preserving disposition's `{data kept}` brace (191 -> 192).
+// RESV-01..06: +12 states for the dependency cascade -- its success block, the
+// six constraint arms, the four closure arms, and a member whose own ledger
+// threw. Every one of them is a row the cascade renders and nothing else does
+// (192 -> 204).
+// RESV-05: +1 state for the cascade skip whose record is DISABLED -- the
+// `{already installed, dependency disabled}` brace and the warning it raises
+// (204 -> 205).
+// D-04-07: +1 state for the promotion of a recorded dependency the user then
+// installed by name -- the `installed` row carrying `{already installed,
+// dependency promoted}`, the one install outcome that changes a record
+// without materializing anything (205 -> 206).
+// PRUNE-05 / D-05-14 / D-05-07: +2 states for uninstall's refusals -- the
+// `{dependents remain}` row whose cause line names who still needs the plugin,
+// and the fail-closed row that carries a declarer's read-failure token when
+// some other record's declarations could not be established (206 -> 208).
+// D-05-16: +1 state for the load-time refusal -- the reconcile pass reports
+// the same `{dependents remain}` row, cause line included, on every pass
+// until the config is fixed (208 -> 209).
+// PRUNE-01..04 / D-05-01 / D-05-09 / D-05-13: +3 states for `uninstall
+// --prune` -- the two-block sweep report with its `{dependency pruned}` rows,
+// the same under `--keep-data` with `{dependency pruned, data kept}`, and the
+// partial failure where one pruned member's warning row sits beside the
+// removals that stood (209 -> 212).
+// D-01-32: +1 state for the cold git-source `(remote)` row that carries the
+// entry-declared `dependencies:` line after the unresolved marker (212 -> 213).
+// RESV-06: +1 state for the load-time counterpart of the dependency-cascade
+// `{dependency failed}` row -- reconcile drives one outcome per declared
+// plugin, so the requesting plugin's own row carries both the token and the
+// failing dependency's cause line (213 -> 214).
+// RESV-06: +1 state for import's own dependency-cascade failure -- a
+// `DependencyCascadeError` now collapses onto the requesting plugin's row with
+// `{dependency failed}` instead of the unrelated `{not in manifest}` token the
+// unexpected-failure fallthrough carried before `dispatchFailedOutcome`
+// narrowed on it (214 -> 215).
+const EXPECTED_STATE_COUNT = 215;
+const EXPECTED_UTF8_BYTES = 29_161;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -325,7 +364,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 190 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 215 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

@@ -6,7 +6,7 @@
 // CONSTRUCTION; this guard closes the remaining gaps so the catalog's SSOT
 // claim holds for every verb.
 //
-// Three reconciliations:
+// Four reconciliations:
 //
 //   (a) Completion consistency: the labels emitted by `getArgumentCompletions`
 //       for `<verb> -` -- every catalog verb (derived from CATALOG_VERBS, so a
@@ -20,20 +20,33 @@
 //
 //   (c) Exact per-verb parse-set pin: verbs whose handlers hard-reject unknown
 //       long flags inline instead of consuming the catalog
-//       (uninstall/reinstall/enable/disable accept only `--local`;
+//       (reinstall/enable/disable accept only `--local`;
 //       fetch/pending/import/bootstrap accept no extra flags) are pinned to
-//       the exact sets their handlers accept. install/update DO consume the
-//       catalog for their long-flag gates, but the mapModel/partial field
-//       mapping in edge/handlers/plugin/shared.ts names the flags literally --
-//       the pin makes a catalog rename or addition fail here first. Each pin
-//       row is kept in canonical sorted order; only the catalog side is sorted,
-//       so reordering a literal row also fails the equality.
+//       the exact sets their handlers accept. install/update/uninstall DO
+//       consume the catalog for their long-flag gates, but install/update still
+//       name their flags literally where they map them to an option field
+//       (mapModel / partial in edge/handlers/plugin/shared.ts), so the pin makes
+//       a catalog rename or addition fail here first. Uninstall maps `keepData`
+//       and `prune` off the exported `KEEP_DATA_FLAG` and `PRUNE_FLAG` constants
+//       instead (WR-01), which the compiler covers; the pin still holds its
+//       per-verb set. Each pin row is kept in canonical sorted order; only the
+//       catalog side is sorted, so reordering a literal row also fails the
+//       equality.
+//
+//   (d) Help-text consistency: `TOP_LEVEL_USAGE` (edge/router.ts) is the block
+//       printed for a bare `/claude:plugin` and for an unrecognized subcommand.
+//       It documents per-verb extra flags, so it is a flag-documenting surface
+//       and can drift from the catalog -- nothing in (a)-(c) reads it. Each
+//       verb's complete=true names are partitioned here into the ones its usage
+//       line documents and the ones it deliberately omits, one case per verb, so
+//       a new flag cannot reach users without a conscious decision about its
+//       help text, and a documented flag that leaves the catalog fails here.
 //
 // Closed-set tripwire: adding a flag to any verb requires updating
 // edge/flag-catalog.ts, the handler wiring, and the pin table in the SAME
 // change (mirrors the deliberate-bump discipline in
 // notify-closed-set-locks.test.ts). RSTA-07 / FTCH-03 / LIST-01 /
-// LIST-02 / AG-7 are the requirements this catalog serves.
+// LIST-02 / AG-7 / DATA-01 are the requirements this catalog serves.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -44,6 +57,7 @@ import {
   completionFlagEntries,
   parseFlagNames,
 } from "../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
+import { TOP_LEVEL_USAGE } from "../../extensions/pi-claude-marketplace/edge/router.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { LocationsResolver } from "../../extensions/pi-claude-marketplace/edge/completions/data.ts";
@@ -114,7 +128,7 @@ const HANDLER_ACCEPTED_PARSE_SETS: Record<CatalogVerb, readonly string[]> = {
   update: ["--local", "--map-model", "--partial"],
   list: ["--available", "--installed", "--partial", "--remote", "--unavailable"],
   info: ["--fetch"],
-  uninstall: ["--local"],
+  uninstall: ["--keep-data", "--local", "--prune"],
   reinstall: ["--local"],
   fetch: [],
   enable: ["--local"],
@@ -139,3 +153,76 @@ test("catalog vs handlers: every verb's parse-set matches the ordered handler-ac
     );
   }
 });
+
+// Reconciliation (d): how the top-level help block treats each verb's
+// completable flags. `documented` names must appear in that verb's usage line;
+// `omitted` names must NOT. The union must be the verb's complete-set exactly,
+// which is what makes a newly-catalogued flag a red test until someone decides
+// whether the help block should carry it.
+//
+// WR-02: the `omitted` rows record today's help block. Uninstall documents every
+// one of its extra flags (FLAG-01: `--keep-data`, `--local`, `--prune`) because
+// tab completion and a usage error are the only other routes an operator has
+// to them; the remaining rows stay as the block has them.
+const TOP_LEVEL_USAGE_FLAGS: Record<
+  CatalogVerb,
+  { readonly documented: readonly string[]; readonly omitted: readonly string[] }
+> = {
+  install: { documented: [], omitted: ["--local", "--map-model", "--partial"] },
+  update: { documented: [], omitted: ["--local", "--map-model", "--partial"] },
+  list: {
+    documented: [],
+    omitted: ["--available", "--installed", "--partial", "--remote", "--unavailable"],
+  },
+  info: { documented: [], omitted: ["--fetch"] },
+  uninstall: { documented: ["--keep-data", "--local", "--prune"], omitted: [] },
+  reinstall: { documented: [], omitted: ["--local"] },
+  fetch: { documented: [], omitted: [] },
+  enable: { documented: ["--local"], omitted: [] },
+  disable: { documented: ["--local"], omitted: [] },
+  pending: { documented: [], omitted: [] },
+  import: { documented: [], omitted: [] },
+  bootstrap: { documented: [], omitted: [] },
+};
+
+/**
+ * The one `TOP_LEVEL_USAGE` line that describes `verb` -- the indented entry
+ * whose first token is the verb itself. The header line and the trailing
+ * `marketplace ...` line describe no catalog verb, so neither can match.
+ */
+function usageLineFor(verb: CatalogVerb): string {
+  const lines = TOP_LEVEL_USAGE.split("\n").filter((line) => line.startsWith(`  ${verb} `));
+  assert.equal(lines.length, 1, `TOP_LEVEL_USAGE must hold exactly one "${verb}" line.`);
+  return lines[0] ?? "";
+}
+
+for (const verb of CATALOG_VERBS) {
+  test(`catalog vs help text: every completable "${verb}" flag is documented or deliberately omitted`, () => {
+    // arrange
+    const { documented, omitted } = TOP_LEVEL_USAGE_FLAGS[verb];
+
+    // act
+    const catalogComplete = completionFlagEntries(verb).map((entry) => entry.name);
+    const usageLine = usageLineFor(verb);
+
+    // assert
+    assert.deepEqual(
+      sorted([...documented, ...omitted]),
+      sorted(catalogComplete),
+      `Help-text drift for "${verb}": every completable flag must be listed as documented or omitted. Decide which the new flag is, in the same change.`,
+    );
+    for (const flag of documented) {
+      assert.ok(
+        usageLine.includes(`[${flag}]`),
+        `TOP_LEVEL_USAGE's "${verb}" line must document ${flag}: ${usageLine}`,
+      );
+    }
+
+    for (const flag of omitted) {
+      assert.ok(
+        !usageLine.includes(flag),
+        `TOP_LEVEL_USAGE's "${verb}" line documents ${flag}, which this pin calls omitted: ${usageLine}`,
+      );
+    }
+  });
+}

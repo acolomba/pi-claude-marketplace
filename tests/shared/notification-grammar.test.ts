@@ -35,7 +35,10 @@ import {
   renderVersion,
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
-import type { Reason } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import type {
+  PluginInfoMessage,
+  Reason,
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 test("exports notification grammar from its named owner", () => {
   // arrange
@@ -453,6 +456,51 @@ for (const [status, glyph] of [
     );
   });
 }
+
+test("renders the entry-declared dependencies line after the unresolved marker (D-01-32)", () => {
+  // arrange
+  const message: PluginInfoMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "remote",
+      name: "alpha",
+      componentsResolved: false,
+      dependencies: ["helper@mp"],
+    },
+  };
+
+  // act
+  const rendered = renderPluginInfo(message, bothLoadedProbe());
+
+  // assert
+  assert.equal(
+    rendered,
+    "● official [user] <no autoupdate>\n  ◌ alpha (remote)\n    components: not resolved\n    dependencies: helper@mp",
+  );
+});
+
+test("renders no dependencies line for an unresolved row whose list is empty", () => {
+  // arrange
+  const message: PluginInfoMessage = {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: { status: "remote", name: "alpha", componentsResolved: false, dependencies: [] },
+  };
+
+  // act
+  const rendered = renderPluginInfo(message, bothLoadedProbe());
+
+  // assert
+  assert.equal(
+    rendered,
+    "● official [user] <no autoupdate>\n  ◌ alpha (remote)\n    components: not resolved",
+  );
+});
 
 test("renders resolved plugin components and wraps descriptions without ellipsis", () => {
   // arrange
@@ -907,6 +955,24 @@ for (const { name, row, expected } of [
         "user",
       ),
     expected: "○ alpha [project] v1.0.0 (uninstalled)",
+  },
+  {
+    name: "renderUninstalledRow renders the data disposition of a realized removal",
+    row: () =>
+      renderUninstalledRow(
+        {
+          status: "uninstalled",
+          name: "alpha",
+          scope: "project",
+          version: "1.0.0",
+          reasons: ["data kept"],
+          severity: "info",
+          needsReload: true,
+        },
+        bothLoadedProbe(),
+        "user",
+      ),
+    expected: "○ alpha [project] v1.0.0 (uninstalled) {data kept}",
   },
   {
     name: "renderAvailableRow renders an entry-derived reason",

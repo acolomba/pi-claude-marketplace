@@ -56,6 +56,32 @@ test("collects strict paths in declaration order with first-wins deduplication",
   });
 });
 
+test("canonicalizes equivalent declarations and represents the plugin root as a dot", async () => {
+  // arrange
+  const { collectStrictComponentPaths } =
+    await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
+  const resolution = emptyResolution();
+
+  // act
+  const dirty = await collectStrictComponentPaths(
+    {
+      entry: { name: "alpha", source: "./alpha", skills: ["./skills/", "a/../skills", ".", "./"] },
+      manifest: { skills: ["skills"] },
+      pluginRoot: "/plugins/alpha",
+      resolution,
+    },
+    () => Promise.resolve(null),
+  );
+
+  // assert
+  assert.strictEqual(dirty, false);
+  assert.deepStrictEqual(resolution, {
+    supported: ["skills"],
+    notes: [],
+    componentPaths: { skills: ["skills", "."], commands: [], agents: [] },
+  });
+});
+
 test("accepts contained declared paths without requiring the leaf to exist", async () => {
   // arrange
   const { collectStrictComponentPaths } =

@@ -32,6 +32,7 @@ function oldRecord(overrides: Partial<PluginInstallRecord> = {}): PluginInstallR
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: EMPTY_RESOURCES,
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-02T00:00:00.000Z",
     ...overrides,
@@ -167,6 +168,51 @@ test("records an installed replacement and returns its exact outcome", () => {
   assert.strictEqual(recorded.resolvedSha, undefined);
   assert.strictEqual(recorded.hookEntries, undefined);
   assert.strictEqual(recorded.installedAt, previous.installedAt);
+});
+
+test("carries dependency provenance forward on reinstall", () => {
+  // arrange
+  const previous = oldRecord({ provenance: "dependency" });
+  const state = stateWith(previous);
+
+  // act
+  recordReinstallOutcome({
+    partition: "reinstalled",
+    name: "plugin",
+    marketplace: "market",
+    scope: "project",
+    state,
+    oldRecord: previous,
+    installable: installable(),
+    handles: handles({ populated: true }),
+    hookEntries: undefined,
+  });
+
+  // assert
+  const recorded = state.marketplaces.market?.plugins.plugin;
+  assert.ok(recorded);
+  assert.match(recorded.updatedAt, /^\d{4}-\d{2}-\d{2}T/u);
+  assert.deepStrictEqual(recorded, {
+    version: "1.2.3",
+    resolvedSource: "/new/plugin",
+    compatibility: {
+      installable: true,
+      notes: [],
+      supported: ["skills", "commands", "agents", "mcp"],
+      unsupported: [],
+    },
+    resources: {
+      skills: ["skill"],
+      prompts: ["command"],
+      agents: ["agent"],
+      mcpServers: ["server"],
+      hooks: [],
+    },
+    enabled: true,
+    provenance: "dependency",
+    installedAt: previous.installedAt,
+    updatedAt: recorded.updatedAt,
+  });
 });
 
 test("records partial compatibility, sha, hooks, and degradation exactly", () => {

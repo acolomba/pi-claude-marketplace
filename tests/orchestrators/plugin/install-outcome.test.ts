@@ -174,6 +174,7 @@ async function seedPlugin(
                   },
                   resources: { skills: [], prompts: [], agents: [], hooks: [], mcpServers: [] },
                   enabled: false,
+                  provenance: "explicit",
                   installedAt: "2026-01-01T00:00:00.000Z",
                   updatedAt: "2026-01-01T00:00:00.000Z",
                 },
@@ -316,6 +317,7 @@ test("captures the resolved version when a concurrent record aborts state commit
   const racedRecord: ExtensionState["marketplaces"][string]["plugins"][string] = {
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     resolvedSource: "/raced/plugin",
     resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
@@ -425,6 +427,7 @@ test("preserves installedAt while replacing an existing disabled record", async 
   assert.deepStrictEqual(seeded.state.marketplaces.marketplace?.plugins.empty, {
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     resolvedSource: seeded.pluginRoot,
     resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
@@ -1027,6 +1030,49 @@ test("PURL-09 / D-77-01 / D-77-02: a git-source install takes its root and its v
   const record = seeded.state.marketplaces.marketplace?.plugins.empty;
   assert.equal(record?.version, "sha-0123456789ab");
   assert.equal(record?.resolvedSha, RESOLVED_SHA);
+});
+
+test("RESV-03: a source pin override materializes the pinned commit, not the entry's own ref", async (t) => {
+  // arrange: the entry names a ref-less source, so only the override can put a
+  // sha on what the probe is handed.
+  const environment = await createHermeticEnvironment(t, "install-outcome-pin-");
+  const seeded = await seedPlugin(environment.cwd, {
+    gitSource: { source: "url", url: "https://example.com/org/repo" },
+    components: { skills: ["alpha"] },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const probed: unknown[] = [];
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    sourcePinOverride: RESOLVED_SHA,
+    cloneProbe: async (options) => {
+      probed.push(options.source);
+      return Promise.resolve({
+        result: { kind: "materialized", pluginRoot: seeded.pluginRoot, resolvedSha: RESOLVED_SHA },
+        resolvedSha: RESOLVED_SHA,
+      });
+    },
+  });
+
+  // assert: the override rides the source's `sha`, which is what routes the
+  // probe down its already-pinned arm rather than adding a second one.
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.version, "sha-0123456789ab");
+  assert.deepStrictEqual(probed, [
+    {
+      kind: "url",
+      raw: "https://example.com/org/repo",
+      sha: RESOLVED_SHA,
+      url: "https://example.com/org/repo",
+    },
+  ]);
 });
 
 test("the callback reaches the real clone probe through the ledger's own cache, credential, and memo seams", async (t) => {

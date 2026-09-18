@@ -244,6 +244,37 @@ function buildMarketplaceClaims(
   };
 }
 
+/**
+ * D-04-05: whether any record under a marketplace arrived as another plugin's
+ * dependency. The exemption that keeps such a record out of the uninstall
+ * bucket must reach the marketplace-removal path too: a dependency resolved
+ * through the CMP-3 project -> user fallback is recorded under a marketplace
+ * the target scope's config never declares (only the requesting plugin's own
+ * marketplace is adopted into the config, D-04-02), and removing that
+ * marketplace would tear the dependency down whole-cloth. So a recorded but
+ * undeclared marketplace is retained while it holds a dependency, and the
+ * uninstall bucket still sweeps the direct-install orphans under it.
+ */
+function holdsDependencyRecord(mpRecord: ExtensionState["marketplaces"][string]): boolean {
+  return Object.values(mpRecord.plugins).some((record) => record.provenance === "dependency");
+}
+
+/**
+ * Whether the marketplace-removal path keeps a recorded marketplace: one a
+ * declaration claims (steady state), a conflict candidate (ambiguity is
+ * report-only and must fail closed), or one holding a dependency record
+ * (D-04-05). `diffMarketplaces` removes every other recorded marketplace and
+ * `buildUninstallBucket` sweeps the direct-install orphans under the kept ones.
+ */
+function isRetainedRecorded(
+  mpName: string,
+  mpRecord: ExtensionState["marketplaces"][string],
+  retained: ReadonlySet<string>,
+  conflicted: ReadonlySet<string>,
+): boolean {
+  return retained.has(mpName) || conflicted.has(mpName) || holdsDependencyRecord(mpRecord);
+}
+
 function diffMarketplaces(
   merged: MergedConfig,
   state: ExtensionState,
@@ -319,9 +350,7 @@ function diffMarketplaces(
   }
 
   for (const [mpName, mpRecord] of Object.entries(recorded)) {
-    // A claimed canonical record remains steady state. Conflict candidates
-    // also remain untouched: ambiguity is report-only and must fail closed.
-    if (!retainedRecorded.has(mpName) && !claims.conflictedRecorded.has(mpName)) {
+    if (!isRetainedRecorded(mpName, mpRecord, retainedRecorded, claims.conflictedRecorded)) {
       // WILL-03 / D-65.1-03: carry the recorded plugin names so the PENDING
       // projection can synthesize per-plugin `will uninstall` rows. The apply
       // path cascades these internally; do NOT add them to `pluginsToUninstall`
@@ -479,7 +508,9 @@ function classifyDeclaredPlugin(
  * consider recorded plugins whose marketplace is still recorded (a
  * marketplace in `marketplacesToRemove` will be torn down whole-cloth by
  * the apply path; listing each plugin under it as a separate uninstall
- * would double-bill the work).
+ * would double-bill the work). A marketplace `diffMarketplaces` retained for
+ * the dependency it holds (D-04-05) is still recorded, so its other plugins
+ * are considered here like any retained marketplace's.
  */
 function buildUninstallBucket(
   state: ExtensionState,
@@ -490,15 +521,32 @@ function buildUninstallBucket(
   const uninstall: PlannedPluginUninstall[] = [];
   const retainedMarketplaces = new Set(marketplaceDiff.recordedByDeclared.values());
   for (const [mpName, mpRecord] of Object.entries(state.marketplaces)) {
+    // The removal path keeps a conflict candidate, but its plugins are not
+    // considered here either: ambiguity is report-only.
     if (marketplaceDiff.conflictedRecorded.has(mpName)) {
       continue;
     }
 
-    if (!retainedMarketplaces.has(mpName)) {
+    if (
+      !isRetainedRecorded(
+        mpName,
+        mpRecord,
+        retainedMarketplaces,
+        marketplaceDiff.conflictedRecorded,
+      )
+    ) {
       continue;
     }
 
-    for (const pluginName of Object.keys(mpRecord.plugins)) {
+    for (const [pluginName, record] of Object.entries(mpRecord.plugins)) {
+      // D-04-05 / D-04-02: a cascade-installed dependency is never named in
+      // the desired-state config, so its own record is the only thing that
+      // says it belongs. A recorded plugin that is neither declared nor
+      // marked as a dependency is an orphan and is still swept.
+      if (record.provenance === "dependency") {
+        continue;
+      }
+
       const key = `${pluginName}@${mpName}`;
       if (!declaredPluginKeys.has(key)) {
         uninstall.push({ scope, plugin: pluginName, marketplace: mpName });

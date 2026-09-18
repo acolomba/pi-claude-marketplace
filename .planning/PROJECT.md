@@ -10,6 +10,45 @@
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
+## Current Milestone: v1.20 transitive-dependencies -- Dependency Provenance, Manifest Fallback and Uninstall Flags (branch: features/manifest, started 2026-09-09)
+
+**Goal:** Record how each installed plugin got there, so `uninstall --prune` can
+remove the ones nothing needs any more -- and close the two adjacent gaps that
+land on the same surfaces.
+
+**Target features:**
+
+- Read a bare `<pluginRoot>/plugin.json` as well as the wrapped
+  `.claude-plugin/plugin.json`, at both call sites that hardcode the wrapped path.
+- Collapse `"./skills/"` and `"skills"` to one component path, so the fallback
+  does not enumerate the same directory twice.
+- Render object-shaped `{name, version, marketplace}` dependencies instead of
+  dropping them, on every surface that shows dependencies.
+- Record install provenance per plugin -- explicit or transitive -- in
+  `state.json`.
+- Remove no-longer-needed transitive plugins with `uninstall --prune`.
+- Keep a plugin's data directory with `uninstall --keep-data`.
+
+**Delivered 2026-09-14:** Manifest read fidelity is verified. All three readers
+share the ordered manifest candidates; component discovery avoids duplicate
+paths; and `info` displays validated dependency declarations from the readable
+plugin manifest, with the marketplace entry as the offline fallback. Isolated
+installs of the pinned upstream `ui5` and `ui-theme-designer` plugins installed
+eight and two skills with no duplicate warnings. Uninstall data preservation
+is also verified: `--keep-data` preserves the data directory; omitting it
+still deletes without a prompt at both `uninstall` and the load-time reconcile
+path (D-02-04 reaffirmed after a code-review challenge — see Key Decisions).
+Dependency resolution (Phase 3, verified 2026-09-15) installs a plugin's
+declared closure under one outer ledger. Install provenance (Phase 4, verified
+2026-09-16) records how every plugin got there and retires Phase 3's cascade
+config write. Prune on uninstall (Phase 5, verified 2026-09-16, human items
+accepted 2026-09-17) closes the milestone: `uninstall` refuses while any
+installed plugin in the scope still declares the target (disabled declarers
+included, unreadable declarers fail closed), `uninstall --prune` sweeps the
+scope to a fixpoint and removes only `provenance: "dependency"` records no
+remaining plugin declares, each reported as `{dependency pruned}`, and the
+uninstall flag surface is pinned at exactly `--keep-data` and `--prune`.
+
 ## Previous Milestone: refine-unit-tests -- Refine Unit Tests (branch: features/refine-unit-tests, shipped 2026-09-13, no npm release)
 
 **Goal:** Revalidate the adversarial unit-test review and related backlog against
@@ -304,6 +343,36 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Validated
 
+- ✓ Bare and wrapped plugin manifests follow consistent precedence, malformed
+  manifests keep their failure behavior, and missing manifests remain valid —
+  v1.20 Phase 1, verified 2026-09-14.
+- ✓ Skill and command path overlap does not create duplicate warnings; `info`
+  preserves valid string and object dependencies with constraints — v1.20
+  Phase 1, verified 2026-09-14.
+- ✓ `uninstall --keep-data` preserves a plugin's persistent data directory and
+  its installation record is still removed; omitting the flag still deletes
+  the data with no prompt, at both the explicit command and the load-time
+  reconcile path, which carries no command line (D-02-04, reaffirmed — see
+  Key Decisions). `--keep-data` is documented in usage and completions;
+  `--delete-data`/`-y` are rejected as unknown flags — v1.20 Phase 2, verified
+  2026-09-14.
+- ✓ Every install record carries `provenance: "explicit" | "dependency"` at
+  `state.json` schemaVersion 3; a cascade marks its root explicit and each
+  member a dependency; a pre-milestone document loads, back-fills `"explicit"`
+  silently and persists as v3, and a wrong value is rejected with a JSON
+  pointer — v1.20 Phase 4 (PROV-01, PROV-04), verified 2026-09-16.
+- ✓ A direct install stays explicit when a later cascade declares it (whole
+  record unchanged); `install <plugin>` on a dependency record promotes it —
+  one field flips, its key is declared, and the row reads
+  `{already installed, dependency promoted}`; `import` naming the record
+  promotes it too; a disabled record is re-enabled on promotion — v1.20
+  Phase 4 (PROV-02, PROV-03), verified 2026-09-16.
+- ✓ The desired-state config names only what the user asked for: the cascade
+  no longer declares dependencies, reconcile keeps a dependency because its
+  record says so and retains an undeclared marketplace that holds one, and a
+  cascade-installed dependency survives `/reload` — v1.20 Phase 4 (D-04-02,
+  D-04-04, D-04-05), verified 2026-09-16.
+
 <!-- Shipped and confirmed valuable via this GSD project. -->
 
 - ✓ refine-unit-tests Phase 1 Live Evidence Revalidation (RVAL-01..04, completed 2026-09-05): all 110 terminal research files were revalidated against the post-v1.19 tree, producing 2,897 linked claims, 2,437 terminal findings, nine resolved operator decisions, and a 40-row scope-impact crosswalk. Stale and duplicate findings authorize no implementation; every active item maps exactly once to Phases 2-9 or the deferred backlog.
@@ -528,7 +597,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 - **Pi API:** `@earendil-works/pi-coding-agent` peer dependency, pinned to `>=0.80.5` (dev `^0.84.2`); the NFR-11 floor-pinning SHOULD is now satisfied
 - **File operations:** All disk mutations atomic (tmp + rename or atomic JSON write) -- NFR-1
 - **Recovery model:** No fix may require a Pi process restart; `Run /reload` must suffice (NFR-2). All operations must be safe to retry -- idempotent or fail-clean (NFR-3)
-- **Network policy (NFR-5, amended by url-source):** Network is required only for git-source `marketplace add`/`update`, and for `install`/`update`/`reinstall` of git-source plugins **on cache miss only** — warm sha-pinned cache operations stay offline. `list`, `info`, `uninstall`, `marketplace remove`, and path-source operations MUST NOT touch the network
+- **Network policy (NFR-5, amended by url-source and by D-03-03):** Network is required only for git-source `marketplace add`/`update`, and for `install`/`update`/`reinstall` of git-source plugins **on cache miss only** -- warm sha-pinned cache operations stay offline. Resolving a dependency that carries a version constraint may additionally read that dependency's source repository tag list over the network, even when a cached or otherwise resolvable copy of that dependency already exists, because the constraint can demand a different tag than the cached one (D-03-03). `list`, `info`, `uninstall`, `marketplace remove`, and path-source operations MUST NOT touch the network
 - **Containment (NFR-10, re-anchored by url-source):** Refuse to write outside `<scopeRoot>/pi-claude-marketplace/`, `<scopeRoot>/agents/`, or `<scopeRoot>/mcp.json`; plugin roots must resolve inside their **owning clone root** (marketplace clone for `path` sources, `plugin-clones/<key>/` for git sources)
 - **Quality bar:** `npm run check` must stay green -- typecheck + ESLint + `fallow` (dead code, health, duplication) + Prettier + unit tests + integration tests (NFR-6)
 - **Output channel:** All user-visible messages MUST go through `ctx.ui.notify(message, severity)`; direct `process.stdout`/`process.stderr` writes forbidden in command/bridge code (IL-2). Single sanctioned `console.warn` is the load-time legacy migration save failure (IL-3)
@@ -628,6 +697,10 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-106-03: structural failure precedes partial classification** (workflows-detection, Phase 106): a malformed plugin remains unavailable even when it also contains workflows and the caller supplies `--partial`                                                                                                                                                                                                                                                                                                                                                                                         | Partial consent permits dropping unsupported components. It does not rescue containment, schema, or other structural defects.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | ✓ Good                                                                                                                                                                                                                                                                                                                                                             |
 | **D-106-04: workflows persist only as compatibility metadata** (workflows-detection, Phase 106): `compatibility.unsupported` may contain `workflows`; resources, install phases, reload discovery, and execution remain unchanged                                                                                                                                                                                                                                                                                                                                                                          | This keeps workflow detection aligned with other unsupported components and makes no future execution contract by accident.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | ✓ Good                                                                                                                                                                                                                                                                                                                                                             |
 | **D-106-05: `{workflows}` is one canonical tail reason** (workflows-detection, Phase 106): the shared typed-kind classifier owns mapping, order, and first-wins deduplication for every consumer                                                                                                                                                                                                                                                                                                                                                                                                           | One mapping prevents list, info, install, update, and autoupdate from drifting or emitting duplicate workflow reasons.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | ✓ Good                                                                                                                                                                                                                                                                                                                                                             |
+| **D-02-04 reaffirmed (v1.20, Phase 2 code review, 2026-09-14):** `orchestrators/reconcile/apply.ts` keeps calling `uninstallPlugin` with no `keepData`, so the load-time reconcile path (no command line, fires on every `/reload`) stays on the promptless-delete default -- same as an explicit `uninstall` with no flag. Phase 2's own code reviewer flagged this as a critical finding (data loss on an automatic path with no opt-out) and proposed forcing `keepData: true` there; the operator reviewed the tradeoff and explicitly kept the original decision.                                 | This is success criterion DATA-03, not an oversight: one behavior at both entry points is the phase's stated goal. A future phase should not "fix" this again without a fresh operator decision -- the tradeoff (silent automatic deletion vs. a reconcile pass gaining a way to say "keep") was surfaced and answered here.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | -- Locked                                                                                                                                                                                                                                                                                                                                                          |
+| **D-04-02 / D-04-04 (v1.20 Phase 4, 2026-09-15):** the desired-state config names only plugins the user asked for; a cascade-installed dependency is protected by its `provenance: "dependency"` record, not by a config declaration. Phase 3's cascade config write was retired in a fixed order — field, reconcile exemption, then the write. | Reconcile would otherwise sweep every dependency on the next `resources_discover`; `--prune` needs the asked-for / pulled-in distinction the write destroyed. The order is a correctness contract: 04-05 proved the exemption load-bearing by reverting it and watching the reload-survival case go red. | -- Locked |
+| **D-04-07 + review rulings (v1.20 Phase 4, 2026-09-16): a plugin asked for by name is enabled.** `install <dep>` on a dependency record promotes it and, if the record was disabled, re-materializes and enables it, stamping `{ enabled: true }` in whichever config file declares the key; `import` naming the record promotes it; a version pin refuses promotion, `--partial` is the consent gate for a partially-installed record, `--map-model` has no bearing. The planner (not the config) retains a CMP-3-adopted dependency marketplace. | Keeps D-04-02's config purity while closing the review's reproduced criticals (an undeclared adopted marketplace torn down on reload; a promoted-but-still-disabled record re-disabled by the reload its own row asked for). The cascade half of the same rule — enabling a disabled dependency during a cascade — reverses RESV-05 and is backlogged (ENBL-DEP-01), not shipped. | -- Locked |
+| **D-05-01/02/07/14 + review fix (v1.20 Phase 5, 2026-09-16):** `--prune` is a whole-scope fixpoint sweep run once after the primary is removed, inside the one locked transaction, over `provenance: "dependency"` records only; `uninstall X` refuses while any installed record in the scope declares X (disabled declarers hold; an unreadable declarer fails closed and renders `{unreadable}`); reconcile never prunes. The CR-01 fix re-checks each pruned member with `isHeldBy` against the keys that actually left, so a failed member keeps the dependencies only it declared. | A removal that leaves a declared dependency unsatisfied is the state the guard exists to forbid; running the sweep on the same declaration index the guard reads keeps the two rules consistent, and the single-save contract keeps a partial sweep from ghosting a record. D-05-07 (fail closed) is rated reversible; the two-stale-records mutual block was reviewed by the operator and accepted with `marketplace remove` as the exit. | -- Locked |
 
 ## Evolution
 
@@ -649,6 +722,10 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-09-17 after Phase 5 prune-on-uninstall verified (human items accepted). All five v1.20 phases are complete: bare `plugin.json` read fidelity, `--keep-data`, dependency resolution under one outer ledger, install provenance at schemaVersion 3, and the dependents guard plus `uninstall --prune`. Requirements PRUNE-01..05 and FLAG-01 read Complete. Milestone audit/close is next. Prior updates follow._
+
+_Last updated: 2026-09-09 when milestone v1.20 transitive-dependencies started. Scope is three coupled items: the unread bare `plugin.json` (PMAN-01), dependency support with transitive-install provenance behind `--prune` (PDEP-01 plus new scope), and a `--keep-data` opt-out on uninstall (UDISP-01). Items two and three both land on `plugin uninstall`, which is why they share a milestone -- the flag surface is designed once. MIGR-01 is deliberately out of scope; the provenance field depends only on its unresolved stale-state guard question, not on the `migrate.ts` deletion. Prior updates follow._
 
 _Last updated: 2026-09-05 after refine-unit-tests Phase 2 completed. Phase 1 sealed the 110-file terminal evidence ledger and scope crosswalk; Phase 2 closed PDEF-02, PDEF-03, and PDEF-04 with typed fail-closed MCP input, shared lexical containment, and recoverable host-boundary discovery. Independent verification passed 3/3 with no UAT or security gaps. Phase 3 owns the remaining confirmed production defects. Prior updates follow._
 
@@ -729,4 +806,4 @@ _Earlier updates (pre-v1.3-close): see git history. Phase 1 (2026-05-09), Phase 
 
 ---
 
-_Last updated: 2026-09-13 after the refine-unit-tests milestone_
+_Last updated: 2026-09-16 after v1.20 Phase 4 (install provenance)_

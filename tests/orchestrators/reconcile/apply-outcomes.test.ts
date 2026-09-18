@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { UninstallRefusedError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import {
   classifyOrchestratorThrow,
   classifyReadPassThrow,
@@ -28,6 +29,7 @@ import {
   type SourceMismatchOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import {
+  DependencyCascadeError,
   InvalidMarketplaceManifestError,
   PluginShapeError,
   StateLockHeldError,
@@ -85,6 +87,17 @@ void ({
   reason: "not in manifest",
 } satisfies PluginInstallFailedOutcome);
 void ({
+  kind: "plugin-install-failed",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  reason: "dependency failed",
+  cause: new DependencyCascadeError(
+    'Dependency "linter@official" is not declared by its marketplace.',
+    "linter@official",
+  ),
+} satisfies PluginInstallFailedOutcome);
+void ({
   kind: "plugin-uninstalled",
   scope: "user",
   marketplace: "official",
@@ -97,6 +110,14 @@ void ({
   marketplace: "official",
   plugin: "formatter",
   reason: "permission denied",
+} satisfies PluginUninstallFailedOutcome);
+void ({
+  kind: "plugin-uninstall-failed",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  reason: "dependents remain",
+  cause: new UninstallRefusedError("dependents remain", "required by linter@official"),
 } satisfies PluginUninstallFailedOutcome);
 void ({
   kind: "plugin-enabled",
@@ -247,6 +268,15 @@ void ({
   // @ts-expect-error plugin install failure outcomes require a reason
 } satisfies PluginInstallFailedOutcome);
 void ({
+  kind: "plugin-install-failed",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  reason: "unreadable",
+  // @ts-expect-error install failure causes are DependencyCascadeError, not a bare Error
+  cause: new Error("boom"),
+} satisfies PluginInstallFailedOutcome);
+void ({
   kind: "plugin-uninstalled",
   scope: "user",
   marketplace: "official",
@@ -260,6 +290,15 @@ void ({
   marketplace: "official",
   plugin: "formatter",
   // @ts-expect-error plugin uninstall failure outcomes require a reason
+} satisfies PluginUninstallFailedOutcome);
+void ({
+  kind: "plugin-uninstall-failed",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  reason: "unreadable",
+  // @ts-expect-error uninstall failure causes are UninstallRefusedError, not a bare Error
+  cause: new Error("boom"),
 } satisfies PluginUninstallFailedOutcome);
 void ({
   kind: "plugin-enabled",
@@ -411,6 +450,20 @@ describe("sourceMismatchOutcomeSubject", () => {
 });
 
 describe("classifyOrchestratorThrow", () => {
+  test("classifies a dependency-cascade failure", () => {
+    // arrange
+    const error = new DependencyCascadeError(
+      'Dependency "linter@official" is not declared by its marketplace.',
+      "linter@official",
+    );
+
+    // act
+    const reason = classifyOrchestratorThrow(error);
+
+    // assert
+    assert.strictEqual(reason, "dependency failed");
+  });
+
   test("classifies an already-installed plugin shape", () => {
     // arrange
     const error = new PluginShapeError({

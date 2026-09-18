@@ -36,10 +36,10 @@ export function assertNever(x: never): never {
  * mitigation). One constant rather than a literal per walker, so a change to
  * the bound cannot drift out of sync across walkers.
  */
-const CAUSE_CHAIN_MAX_DEPTH = 5;
+export const CAUSE_CHAIN_MAX_DEPTH = 5;
 
 /** Whether a chain link carries a further, non-self-referencing cause. */
-function hasOnwardCause(err: unknown): boolean {
+export function hasOnwardCause(err: unknown): boolean {
   return err instanceof Error && err.cause !== undefined && err.cause !== err;
 }
 
@@ -175,7 +175,14 @@ export function causeChainTrailer(err: unknown): string {
   return `${PREFIX}${rendered.join(JOINER)}`;
 }
 
-function linkMessage(c: unknown): string {
+/**
+ * One cause-chain link's display text: a `CleanupContextError` appends its
+ * cleanup facts, any other `Error` renders its message, a string renders
+ * verbatim, and anything else renders through `Object.prototype.toString`.
+ * Exported so `shared/redact-absolute-paths.ts`'s `redactCauseChain` renders
+ * a rebuilt link exactly as `causeChainTrailer` would render the original.
+ */
+export function linkMessage(c: unknown): string {
   if (c instanceof CleanupContextError) {
     const details = c.cleanupFailures.map(renderCleanupFailure).join("; ");
     return `${c.message} (cleanup: ${details})`;
@@ -653,7 +660,7 @@ export function manualRecoveryLeaks(err: unknown): readonly string[] {
  * `reasons` on the (not-)installable variants is `readonly string[]` and
  * NOT `readonly Reason[]`. The resolver populates `r.notes` with free-form
  * strings (`"contains hooks"`, `"source dir does not exist"`,
- * `"declares dependencies that must be installed manually"`, etc.) -- the
+ * `"malformed marketplace entry: ..."`, etc.) -- the
  * closed `Reason` set lives one layer up at the renderer boundary. The
  * `classifyEntityShapeError` consumer in `orchestrators/plugin/install-flow.ts`
  * narrows these strings to closed-set `Reason` members. Carrying the raw
@@ -736,6 +743,31 @@ function buildPluginShapeMessage(shape: PluginShapeErrorShape): string {
       return `Plugin "${shape.plugin}" is no longer installable: ${shape.reasons.join("; ")}`;
     default:
       return assertNever(shape);
+  }
+}
+
+/**
+ * RESV-06: typed marker for a cascade failure attributable to a DEPENDENCY
+ * rather than to the requesting plugin's own ledger. `key` is the failing
+ * subject's `name@marketplace` key.
+ *
+ * Thrown only by `orchestrators/plugin/install-cascade.messaging.ts`'s
+ * `cascadeFailureCause` (the closure, constraint, and non-root member failure
+ * arms), so an orchestrated install outcome can classify as `{dependency
+ * failed}` (`orchestrators/reconcile/apply-outcomes.ts::classifyOrchestratorThrow`)
+ * instead of falling through to the generic `{unreadable}` probe classifier.
+ * The requesting plugin's own ledger failure is never wrapped, so its
+ * classification is unaffected.
+ *
+ * `Error.cause` flows through the standard `ErrorOptions` bag so the depth-5
+ * `causeChainTrailer` walker still surfaces the originating cause.
+ */
+export class DependencyCascadeError extends Error {
+  readonly key: string;
+  constructor(message: string, key: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "DependencyCascadeError";
+    this.key = key;
   }
 }
 

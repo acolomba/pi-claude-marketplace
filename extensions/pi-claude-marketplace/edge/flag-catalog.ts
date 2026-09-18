@@ -10,14 +10,16 @@
 //   - the install/update long-flag gates (the `extractLocalFlag` pass-through
 //     lists and the `parsePositionalsWithFlags` recognized set, via
 //     `passThroughFlagNames`);
+//   - the uninstall long-flag gate (the `extractLocalFlag` CONSUMING list, also
+//     via `passThroughFlagNames`);
 //   - the scope-target flag name consumed by `extractLocalFlag`
 //     (`SCOPE_TARGET_FLAG`).
 //
 // Guarded BY TEST (tests/architecture/flag-catalog-drift.test.ts): the
-// uninstall/reinstall/enable/disable/fetch/pending/import/bootstrap handlers
-// hard-reject unknown long flags inline rather than consuming the catalog, so
-// the drift guard pins every verb's parse-set to the exact flags its handler
-// accepts (and reconciles catalog vs emitted completions per verb).
+// reinstall/enable/disable/fetch/pending/import/bootstrap handlers hard-reject
+// unknown long flags inline rather than consuming the catalog, so the drift
+// guard pins every verb's parse-set to the exact flags its handler accepts (and
+// reconciles catalog vs emitted completions per verb).
 //
 // SCOPE: this catalog models ONLY the per-verb EXTRA flags. `--scope` is a
 // global base flag consumed by the parseArgs tokenizer and hard-coded as the
@@ -74,6 +76,40 @@ const WRITE_TARGET_FLAG_ENTRY: FlagEntry = {
   name: "--local",
   description:
     "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json",
+  parse: true,
+  complete: true,
+};
+
+// DATA-01 / D-02-02: `--keep-data` opts out of uninstall's default data
+// deletion; the plugin's artifacts and installation record are removed either
+// way.
+//
+// WR-01: the name is EXPORTED (as `KEEP_DATA_FLAG` below) because the uninstall
+// handler must map the consumed flag onto its `keepData` option field, and a
+// hand-written literal at that mapping site fails OPEN -- a catalog rename would
+// leave `consumedFlags.has("--keep-data")` false, so the command would delete
+// the data the operator asked to keep while reporting success. Reading the name
+// from here makes a rename a compile-time break at the mapping site instead.
+const KEEP_DATA_FLAG_ENTRY: FlagEntry = {
+  name: "--keep-data",
+  description: "Preserve the plugin's persistent data directory",
+  parse: true,
+  complete: true,
+};
+
+// FLAG-01 / D-05-10: `--prune` also removes, after the named plugin, every
+// dependency-installed record in the scope that no remaining installed plugin
+// declares. A plugin the operator installed by name is never pruned.
+//
+// WR-01 applies here exactly as it does to `--keep-data`: the name is EXPORTED
+// (as `PRUNE_FLAG` below) because the uninstall handler maps the consumed flag
+// onto its `prune` option field, and a hand-written literal there fails OPEN --
+// a catalog rename would leave `consumedFlags.has("--prune")` false, so the
+// sweep the operator asked for would silently not run while the command
+// reported success.
+const PRUNE_FLAG_ENTRY: FlagEntry = {
+  name: "--prune",
+  description: "Also remove dependency-installed plugins no remaining plugin needs",
   parse: true,
   complete: true,
 };
@@ -140,7 +176,7 @@ const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
       complete: true,
     },
   ],
-  uninstall: [WRITE_TARGET_FLAG_ENTRY],
+  uninstall: [KEEP_DATA_FLAG_ENTRY, PRUNE_FLAG_ENTRY, WRITE_TARGET_FLAG_ENTRY],
   reinstall: [WRITE_TARGET_FLAG_ENTRY],
   fetch: [],
   enable: [WRITE_TARGET_FLAG_ENTRY],
@@ -164,6 +200,22 @@ export function isCatalogVerb(value: string): value is CatalogVerb {
  * catalog owns the name rather than a duplicated literal.
  */
 export const SCOPE_TARGET_FLAG = WRITE_TARGET_FLAG_ENTRY.name;
+
+/**
+ * WR-01 / DATA-01: the data-preservation flag name (`--keep-data`). The
+ * uninstall handler reads this constant when mapping the scanner's consumed
+ * flags onto the `keepData` option, so the catalog owns the name rather than a
+ * duplicated literal whose desynchronization would silently delete data.
+ */
+export const KEEP_DATA_FLAG = KEEP_DATA_FLAG_ENTRY.name;
+
+/**
+ * WR-01 / FLAG-01 / D-05-10: the orphan-sweep flag name (`--prune`). The
+ * uninstall handler reads this constant when mapping the scanner's consumed
+ * flags onto the `prune` option, so the catalog owns the name rather than a
+ * duplicated literal whose desynchronization would silently skip the sweep.
+ */
+export const PRUNE_FLAG = PRUNE_FLAG_ENTRY.name;
 
 /**
  * Ordered completion entries (name + description) for a verb -- the entries

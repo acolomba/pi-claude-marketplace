@@ -1438,52 +1438,68 @@ Claude Code's own official behavior
 is the one worth matching per this project's stated `/claude:plugin`
 alignment goal.
 
-**Claude Code's actual behavior:** `claude plugin uninstall <plugin>
-[--scope] [--keep-data] [--prune] [-y]`. There is no `--delete-data` flag.
-Default is delete, but only when the plugin has no other scope installation
-to fall back on: "By default, uninstalling from the last remaining scope
-also deletes the plugin's `${CLAUDE_PLUGIN_DATA}` directory. Use
-`--keep-data` to preserve it." Deletion is scope-aware and silent -- no
-confirmation prompt for data specifically (`-y`/`--yes` gates a different,
-unrelated `--prune` dependency-removal confirmation).
+**Claude Code's actual behavior**, read off the installed CLI v2.1.236 on
+2026-09-09 rather than from docs prose:
+`claude plugin uninstall|remove [options] <plugin>`.
 
-**Our behavior today:** `orchestrators/plugin/uninstall.ts:635` -- `await
-rm(dataDir, { recursive: true, force: true })` -- runs unconditionally on
-every uninstall, with no flag, no scope check, and no way to opt out.
-Confirmed by direct read, not inferred. The contents of
-`${CLAUDE_PLUGIN_DATA}` are lost on uninstall even when the plugin remains
-installed in the other scope.
+| Flag | Description |
+|---|---|
+| `--keep-data` | Preserve the plugin's persistent data directory (`~/.claude/plugins/data/{id}/`) |
+| `--prune` | Also remove auto-installed dependencies that are no longer needed (requires `-y` in non-interactive contexts) |
+| `-s, --scope <scope>` | `user`, `project`, or `local` |
+| `-y, --yes` | Skip the `--prune` confirmation prompt (required when stdin or stdout is not a TTY) |
 
-**Two call sites, one fix needed in both:** `uninstallPlugin()`
-(`orchestrators/plugin/uninstall.ts`) is called from the interactive
-`/claude:plugin uninstall` command AND from
-`orchestrators/reconcile/apply.ts`'s `applyPluginUninstalls()`, which fires
-non-interactively from `resources_discover`/`session_start` whenever a
-plugin is dropped from `claude-plugins.json`. Both paths need the same
-scope-aware rule; the reconcile path was never going to be interactive
-under Claude Code's own model either (their default is a scope-state
-check, not a prompt), so no special-casing is needed between the two call
-sites.
+There is no `--delete-data`. `-y` gates the `--prune` confirmation
+specifically and has nothing to do with data deletion. The required mutex
+pair this item was first framed against is the competitor's model, not
+upstream's, and is the wrong one to copy.
+
+**Our behavior today:** `orchestrators/plugin/uninstall.ts:429` -- `await
+rm(dataDir, { recursive: true, force: true })` -- runs on every uninstall,
+with no flag and no way to opt out. Confirmed by direct read, not inferred.
+
+**Corrected 2026-09-09: the cross-scope check this entry prescribed solves
+upstream's problem, not ours.** Upstream's data directory is global -- one
+`~/.claude/plugins/data/{id}/` backs every scope -- so upstream has to ask
+whether another scope still needs the directory before deleting it. Ours is
+already partitioned per scope: `dataRoot` is
+`<scopeRoot>/pi-claude-marketplace/data` (`persistence/locations.ts:165`).
+A user-scope uninstall cannot reach project-scope data, so the cross-scope
+data-loss case this entry used to describe cannot happen here. The
+other-scope presence check is removed from the direction below, and the
+reason is recorded here so it is not re-added from the same upstream
+sentence. The item is cheaper than it was filed: the whole fix is the flag.
+
+**The silent-delete claim is only half true.** The original text said
+deletion is "scope-aware and silent -- no confirmation prompt for data
+specifically". That describes the CLI. Upstream's interactive `/plugin`
+interface shows the data directory size and prompts before deleting it. The
+CLI deletes by default with no prompt.
+
+**Resolution, decided 2026-09-09: match the CLI -- delete silently, with
+`--keep-data` as the opt-out.** `uninstallPlugin()`
+(`orchestrators/plugin/uninstall.ts`) has two callers: the interactive
+`/claude:plugin uninstall` command, and `orchestrators/reconcile/apply.ts`'s
+`applyPluginUninstalls()`, which fires non-interactively from
+`resources_discover` / `session_start` whenever a plugin is dropped from
+`claude-plugins.json`. The reconcile path has no command line, so it can
+carry no flag. A promptless default is the only behavior both call sites
+can share. Prompt-with-size would give one operation two behaviors
+depending on which entry point reached it.
 
 Direction for later: add an optional `--keep-data` flag to the interactive
-command -- no `--delete-data`, matching upstream exactly; inventing one
-would add a flag Claude Code doesn't have. Before deleting, check whether
-the plugin is still installed in the other scope using the existing
-`otherScope()` + `locationsFor()` + `loadState()` seam
-(`orchestrators/plugin/shared.ts:216`, already reused by
-`reinstall.ts`/`update.ts`/`list.ts` for the identical "is this plugin
-present in the other scope" question -- "ONE extra `loadState` of the
-other scope" is the documented cost there). Delete only when this is the
-last remaining scope AND `--keep-data` was not passed; the
-reconcile-triggered path applies the identical rule with no flag to
-consult, since there is no command line to put one on. A GC sweep for
-orphaned `--keep-data`-retained data directories is out of scope here --
-keeping is opt-in under this model, not a default-driven accumulation
-path, so it is a reasonable separate follow-on item, not a blocker.
+command, matching upstream exactly. Do not add a delete flag; upstream has
+none, and inventing one would copy the competitor's model instead. Delete
+the data directory unless `--keep-data` was passed. No cross-scope check:
+our data directories are already per scope, so there is nothing another
+scope could still need. A GC sweep for orphaned `--keep-data`-retained data
+directories is out of scope here -- keeping is opt-in under this model, not
+a default-driven accumulation path, so it is a reasonable separate
+follow-on item, not a blocker.
 
 Code seams: `orchestrators/plugin/uninstall.ts` (the unconditional `rm()`
-call, line 635), `orchestrators/plugin/shared.ts` (`otherScope()`, the
-existing cross-scope-presence pattern to reuse), `orchestrators/reconcile/apply.ts`
+call, line 429), `persistence/locations.ts` (`dataRoot`, which establishes
+the per-scope partition), `orchestrators/reconcile/apply.ts`
 (`applyPluginUninstalls()`, the non-interactive call site),
 `edge/handlers/plugin/uninstall.ts` (new `--keep-data` flag parsing),
 `edge/args.ts` / `edge/flag-catalog.ts` (flag registration, drift-gated).
@@ -2790,6 +2806,85 @@ Code seams: `eslint.config.js` (the Sonar way block, currently scoped to
 rules), `.planning/codebase/CONVENTIONS.md` (the "Sonar way on `extensions/`
 only" bullet, which states the scope this item would change).
 
+## PMAN-01: a bare `<pluginRoot>/plugin.json` is never read
+
+Surfaced 2026-09-09 while correcting [UDISP-01]. Verified by source read,
+against the installed Claude Code CLI v2.1.236, and against the four
+plugins named below, each fetched at the sha its `marketplace.json` entry
+pins.
+
+**The gap:** Claude Code accepts both
+`<pluginRoot>/.claude-plugin/plugin.json` and a bare
+`<pluginRoot>/plugin.json`. We only ever build the wrapped path, at two
+independent hardcoded call sites -- `domain/resolver.ts:627`
+(`readManifest()`) and `orchestrators/plugin/shared.ts:921`
+(`resolvePluginVersion()` tier 1). On a stat miss `readManifest` returns
+`{ ok: true, manifest: null }`, so an absent manifest is deliberately
+non-fatal. Bare-manifest plugins therefore install fine. We silently ignore
+a manifest that is there.
+
+**Who ships it:** four plugins in the official Anthropic marketplace ship
+the bare form today.
+
+| Plugin | Repository | Declared skills |
+|---|---|---|
+| `ui5` | `github.com/UI5/plugins-coding-agents` | `["./skills/"]` |
+| `ui5-modernization` | `github.com/UI5/plugins-coding-agents` | `["./skills/"]` |
+| `ui5-typescript-conversion` | `github.com/UI5/plugins-coding-agents` | `["./skills/"]` |
+| `ui-theme-designer` | `github.com/SAP/ui-theme-designer-plugins-for-coding-agents` | `["./skills/ui-theme-designer-help", "./skills/ui-theme-designer-design-tokens"]` |
+
+The three UI5 plugins ship theirs at `plugins/<name>/plugin.json`. None of
+the four declares commands, agents, `mcpServers`, hooks, or any unsupported
+kind.
+
+**Severity: no component is dropped today.** Three independent reasons.
+
+1. `collectStrictComponentKind` (`domain/resolver.ts:1051`) probes
+   `<pluginRoot>/skills` and adds it additively and unconditionally, so the
+   convention path already yields the same set the declarations name.
+   Checked against the git trees: `ui5` has 8 skill directories under
+   `skills/`, and `ui-theme-designer` has exactly the 2 it names.
+2. The declared versions do not land either. All four are git-subdir
+   sources with a pinned sha, and `deriveInstallVersion`
+   (`orchestrators/plugin/install.ts:640`) makes a resolved sha replace the
+   whole three-tier ladder, so `plugin.json`'s `version` is unreachable for
+   them by design.
+3. The manifest `description` is not consumed anywhere in `extensions/`.
+
+So this is a parity gap with no in-the-wild victim in the official
+marketplace today.
+
+**The obvious fix carries a regression trap, and that is why this entry is
+worth reading.** The resolver dedups component paths by raw relative-path
+string (`addComponentPath`, `domain/resolver.ts:1001`), so `"./skills/"`
+and `"skills"` are two distinct keys. A naive fallback yields
+`componentPaths.skills = ["./skills/", "skills"]` and enumerates one
+directory twice. The skills bridge dedups by generated name, first wins, so
+nothing breaks -- but `ui5` would emit 8 spurious "ignoring duplicate"
+warnings per install and `ui-theme-designer` 2. That is an output
+regression on exactly the plugins the fix is for.
+
+Direction for later: try the two paths in order at BOTH call sites --
+`.claude-plugin/plugin.json` first, then bare `plugin.json` -- and add a
+normalized dedup key so `"./skills/"` and `"skills"` collapse to one. Keep
+the miss non-fatal. A malformed bare `plugin.json` must still route to the
+existing `malformed plugin.json: ...` reason rather than being silently
+skipped.
+
+An absent `plugin.json` needs no change and is not part of this item.
+Upstream accepts absence too: `learn-with-coursera` and `amd-skills`
+install, and their skills are discovered by directory convention. Our
+`manifest: null` behavior already matches.
+
+Code seams: `domain/resolver.ts` (`readManifest` line 627, the wrapped path
+that needs the ordered fallback; `addComponentPath` line 1001, the
+raw-string dedup key that needs normalizing; `collectStrictComponentKind`
+line 1051, the additive convention probe that masks the gap today),
+`orchestrators/plugin/shared.ts` (`resolvePluginVersion()` tier 1, line
+921, the second hardcoded wrapped path), `orchestrators/plugin/install.ts`
+(`deriveInstallVersion` line 640 -- evidence that the version tier is
+unreachable for these four, so no change is needed there).
+
 ## NEGCTL-01: the direct-coverage negative control cannot capture its child's stderr on Node 26
 
 Carried out of the `refine-unit-tests` milestone close (2026-09-13) as an open
@@ -2870,3 +2965,58 @@ Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
   (dedicated `marketplace-not-added` kind in shared/notify.ts; placeholder/sole-reason
   renderer carve-out removed).
 -->
+
+## ENBL-DEP-01: a cascade enables a disabled, already-installed dependency
+
+Surfaced by the v1.20 Phase 4 code review (2026-09-16). Operator rule stated
+during that review: a plugin that is asked for -- by name, or by another
+plugin's dependency declaration -- becomes enabled; nothing needs to remember
+that it happened. Phase 4 applied the by-name half (`install <dep>` on a
+`"dependency"` record promotes AND enables it). The cascade half is still the
+Phase 3 policy: RESV-05 checks an already-installed, disabled dependency and
+leaves it as it was, reporting `{already installed, dependency disabled}` at
+`warning` (`docs/plugin-enablement.md` § "Where the two differ"). Upstream
+Claude Code writes `enabled: true` for a required dependency at install time.
+
+Scope when picked up: the cascade's RESV-05 arm enables the disabled member
+through the existing enable branch instead of skipping it; retire the
+`dependency disabled` skip row (a catalog removal: fixture, both contract
+constants, length lock, both enumeration pins); rewrite the
+`plugin-enablement.md` divergence paragraph; a decision record superseding
+the Phase 3 policy.
+
+## DEPS-STATUS-01: dependency status propagates to the dependent
+
+Surfaced in the same review. Operator statement: a fully supported plugin
+that depends on a partially supported plugin is itself partially supported
+because of its dependency, and that extends to its status token and reasons
+on `list` / `info` / install rows. Today a plugin's status is computed from
+its own record alone. Needs: a walk from a record to its declared
+dependencies' records at render time (network-free, NFR-5), a reason naming
+which dependency degrades it, and the catalog rows that follow. Interacts
+with `--partial` consent on the promotion arm (WR-03 in `04-REVIEW.md`).
+
+## PRUNE-CMD-01: standalone `/claude:plugin prune` with `--dry-run`
+
+Surfaced during the v1.20 Phase 5 discussion (2026-09-16). Upstream has
+`claude plugin prune` (alias `autoremove`, `--dry-run`, `-y`) as the way to
+list and remove orphaned auto-installed dependencies without uninstalling
+anything, and `list`/`info` show no orphan marker either. Phase 5 ships only
+`uninstall --prune`; a user cannot see what would be pruned without running
+it. Scope when picked up: the standalone verb (no `-y`: D-02-05), a
+`--dry-run` that renders the would-be-pruned rows without removing them, and
+an `{orphaned}` inventory marker on `list`/`info` rows — a new closed-set
+token with the full catalog amendment.
+
+## PRUNE-GUARD-MR-01: `marketplace remove` bypasses the dependents guard
+
+Surfaced while planning the v1.20 prune work (2026-09-16). `marketplace
+remove` unstages every plugin under the marketplace through
+`cascadeUnstagePlugin` directly and never reaches `uninstallPlugin`, so it
+carries no dependents guard: a plugin in ANOTHER marketplace that depends on
+one of the removed plugins is left dangling. PRUNE-05 names `uninstall`, so
+this is a recorded decision, not an omission -- and the bypass is currently
+the documented exit for the two-stale-records scenario (D-05-07), which any
+guard here must keep open. Scope when picked up: read the scope's
+declaration index before the removal and refuse (or report) on the same
+`dependents remain` row, with a cause line naming the dependents.

@@ -52,18 +52,18 @@ import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import { DependencyCascadeError, errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 import { notifyDiagnostic } from "../../shared/notification-dispatch.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { notifyReconcileAppliedWithContext } from "../../shared/notify-context.ts";
-import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
+import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { removeMarketplace } from "../marketplace/remove.ts";
 import { createNodeSetPluginEnabled } from "../plugin/enable-disable.ts";
 import { createNodeInstallPlugin } from "../plugin/install-flow.ts";
-import { createNodeUninstallPlugin } from "../plugin/uninstall.ts";
+import { createNodeUninstallPlugin, UninstallRefusedError } from "../plugin/uninstall.ts";
 
 import {
   classifyOrchestratorThrow,
@@ -77,12 +77,18 @@ import { planReconcile } from "./plan.ts";
 import { RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
-import type { ApplyReconcileOptions, ReconcilePlan, ScopeReadResult } from "./types.ts";
+import type {
+  ApplyReconcileOptions,
+  PlannedPluginUninstall,
+  ReconcilePlan,
+  ScopeReadResult,
+} from "./types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   EnableDegradationSignals,
   EnableDisablePluginOutcome,
 } from "../plugin/enable-disable.ts";
+import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
 
 /** Reads the one state snapshot selected by the reconcile read pass. */
 export interface ReconcileStateReader {
@@ -339,57 +345,138 @@ async function applyMarketplaceAdds(
   }
 }
 
+/**
+ * One config-driven uninstall folded to its reconcile row. `undefined` is the
+ * PU-5 silent converge (WR-06): the record was already gone -- another process
+ * won the race or there was never an install -- so no row is rendered, because
+ * reporting it would claim work this reconcile did not perform.
+ */
+async function applyOnePluginUninstall(
+  uninstallPlugin: UninstallPluginOperation,
+  opts: ApplyReconcileOptions,
+  op: PlannedPluginUninstall,
+): Promise<PerEntryOutcome | undefined> {
+  try {
+    const result = await uninstallPlugin({
+      ctx: opts.ctx,
+      pi: opts.pi,
+      scope: op.scope,
+      cwd: opts.cwd,
+      marketplace: op.marketplace,
+      plugin: op.plugin,
+      notifications: { mode: "orchestrated" },
+    });
+    if (result.status === "converged") {
+      return undefined;
+    }
+
+    if (result.status === "uninstalled") {
+      return {
+        kind: "plugin-uninstalled",
+        scope: op.scope,
+        marketplace: op.marketplace,
+        plugin: op.plugin,
+        ...(result.version !== undefined && { version: result.version }),
+      };
+    }
+
+    return {
+      kind: "plugin-uninstall-failed",
+      scope: op.scope,
+      marketplace: op.marketplace,
+      plugin: op.plugin,
+      reason: result.reason,
+      // D-05-16: only a refusal carries its cause onto the reconcile row.
+      // Every other failed uninstall keeps the cause-less row, so no errno
+      // message ever reaches this surface.
+      ...(result.error instanceof UninstallRefusedError && { cause: result.error }),
+    };
+  } catch (err) {
+    return {
+      kind: "plugin-uninstall-failed",
+      scope: op.scope,
+      marketplace: op.marketplace,
+      plugin: op.plugin,
+      reason: classifyOrchestratorThrow(err),
+    };
+  }
+}
+
+/** A D-05-14 / D-05-07 refusal: nothing left disk and nothing was saved. */
+function isRefusedUninstall(outcome: PerEntryOutcome): boolean {
+  return (
+    outcome.kind === "plugin-uninstall-failed" && outcome.cause instanceof UninstallRefusedError
+  );
+}
+
+/**
+ * D-05-16: the uninstall bucket arrives in `state.json` record order, which
+ * is the order the install cascade writes -- a dependency BEFORE the plugin
+ * that declares it (D-03-07 post-order). Dropping both from config in one
+ * edit would then refuse the dependency (its declarer is still recorded) and
+ * remove the declarer, reporting a failure the user did not cause and leaving
+ * the dependency for the next reload. A refusal is cheap and changes nothing
+ * on disk, so refused entries are retried after each pass until a pass makes
+ * no progress; only an entry's final outcome is reported. Progress is an
+ * outcome settled in that pass. A PU-5 converge is neither refused nor
+ * progress -- the record it found absent removed no declarer -- so a pass
+ * that only converges and refuses ends the loop. The loop terminates: a
+ * settled outcome means the refused set is strictly shorter than the pass
+ * that produced it, and a pass that settles nothing returns. Reconcile still
+ * never prunes (D-05-08): every entry here is one the config no longer
+ * declares.
+ */
 async function applyPluginUninstalls(
   opts: ApplyReconcileOptions,
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
-  const uninstallPlugin = createNodeUninstallPlugin(opts.hooksRouting, opts.completionCache);
-  for (const op of plan.pluginsToUninstall) {
-    try {
-      const result = await uninstallPlugin({
-        ctx: opts.ctx,
-        pi: opts.pi,
-        scope: op.scope,
-        cwd: opts.cwd,
-        marketplace: op.marketplace,
-        plugin: op.plugin,
-        notifications: { mode: "orchestrated" },
-      });
-      // WR-06: the PU-5 silent converge (record already gone -- another
-      // process won the race or there was never an install) renders NO row;
-      // reporting it would claim work this reconcile did not perform.
-      if (result.status === "converged") {
+  const uninstallPlugin =
+    opts.uninstallPlugin ?? createNodeUninstallPlugin(opts.hooksRouting, opts.completionCache);
+  let pending = plan.pluginsToUninstall;
+  for (;;) {
+    const refused: Array<{
+      readonly op: PlannedPluginUninstall;
+      readonly outcome: PerEntryOutcome;
+    }> = [];
+    let settled = 0;
+    for (const op of pending) {
+      const outcome = await applyOnePluginUninstall(uninstallPlugin, opts, op);
+      if (outcome === undefined) {
         continue;
       }
 
-      if (result.status === "uninstalled") {
-        outcomes.push({
-          kind: "plugin-uninstalled",
-          scope: op.scope,
-          marketplace: op.marketplace,
-          plugin: op.plugin,
-          ...(result.version !== undefined && { version: result.version }),
-        });
+      if (isRefusedUninstall(outcome)) {
+        refused.push({ op, outcome });
       } else {
-        outcomes.push({
-          kind: "plugin-uninstall-failed",
-          scope: op.scope,
-          marketplace: op.marketplace,
-          plugin: op.plugin,
-          reason: result.reason,
-        });
+        outcomes.push(outcome);
+        settled += 1;
       }
-    } catch (err) {
-      outcomes.push({
-        kind: "plugin-uninstall-failed",
-        scope: op.scope,
-        marketplace: op.marketplace,
-        plugin: op.plugin,
-        reason: classifyOrchestratorThrow(err),
-      });
     }
+
+    if (refused.length === 0 || settled === 0) {
+      outcomes.push(...refused.map((entry) => entry.outcome));
+      return;
+    }
+
+    pending = refused.map((entry) => entry.op);
   }
+}
+
+/**
+ * RESV-06 / T-55-02-02 / T-53-02-02: rebuild a dependency-cascade failure's
+ * message AND its nested cause chain with every absolute path redacted, so
+ * the reconcile row's cause-chain trailer (`causeChainTrailer`, which walks
+ * `.cause` WITHOUT redacting) never surfaces a leaked path from a
+ * dependency's own ledger failure. `key` rides along unchanged so the
+ * rebuilt value is the same error, not a new one.
+ */
+function redactedDependencyCascadeError(error: DependencyCascadeError): DependencyCascadeError {
+  const message = redactAbsolutePaths(error.message);
+  const cause = redactCauseChain(error.cause);
+  return cause === undefined
+    ? new DependencyCascadeError(message, error.key)
+    : new DependencyCascadeError(message, error.key, { cause });
 }
 
 /**
@@ -509,6 +596,17 @@ async function applyPluginInstalls(
         marketplace: op.marketplace,
         plugin: op.plugin,
         reason: classifyOrchestratorThrow(result.error),
+        // RESV-06: only a dependency-cascade failure carries a cause onto
+        // this row. Redact defensively (T-55-02-02 / T-53-02-02) -- the
+        // closure/constraint arms build their message from keys and version
+        // constraints alone, but a dependency's own ledger failure can carry
+        // a path anywhere in its cause chain. `causeChainTrailer` walks
+        // `.cause` without redacting, so `redactedDependencyCascadeError`
+        // rebuilds the FULL chain (via `redactCauseChain`) with every link
+        // redacted, instead of dropping it.
+        ...(result.error instanceof DependencyCascadeError && {
+          cause: redactedDependencyCascadeError(result.error),
+        }),
       });
     }
   }

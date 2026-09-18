@@ -224,6 +224,7 @@ const INSTALL_INSTALLED_FULL = {
   landedDisabled: true,
   orphanRewake: true,
   postCommitWarnings: ["alpha was installed with a degraded skill"],
+  promoted: true,
   resourcesChanged: true,
   status: "installed",
   unsupported: ["hooks", "lsp"],
@@ -515,6 +516,15 @@ void ({
   declaresMcp: false,
   // @ts-expect-error landedDisabled is a true-only presence marker
   landedDisabled: false,
+  resourcesChanged: false,
+  status: "installed",
+} satisfies InstallPluginOutcome);
+
+void ({
+  declaresAgents: false,
+  declaresMcp: false,
+  // @ts-expect-error promoted is a true-only presence marker
+  promoted: false,
   resourcesChanged: false,
   status: "installed",
 } satisfies InstallPluginOutcome);

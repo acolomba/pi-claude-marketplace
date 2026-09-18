@@ -13,9 +13,10 @@
 // and may import from `domain/`, `shared/`, and `persistence/` (type-only).
 // No imports from `bridges/` or `orchestrators/marketplace/*`.
 
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
+import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
 import { computeHashVersion } from "../../domain/version.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import {
@@ -27,6 +28,7 @@ import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts"
 import {
   CrossPluginConflictError,
   errorMessage,
+  isErrnoException,
   MarketplaceNotFoundError,
 } from "../../shared/errors.ts";
 import { notify, notifyDiagnostic } from "../../shared/notification-dispatch.ts";
@@ -430,6 +432,43 @@ export async function resolveInstallMarketplaceSource(opts: {
 }
 
 /**
+ * D-03-08: every marketplace name one install can READ, which is the
+ * CMP-3-aware set `resolveInstallMarketplaceSource` answers from -- the target
+ * scope's own records plus, for a project-scope install, the user scope's.
+ *
+ * The dependency cascade gates a child edge on this set. Gating on the raw
+ * target-scope key set instead puts two different notions of "reachable" in one
+ * walk: the guard runs BEFORE the walk's own catalog read, so the stricter one
+ * wins and a dependency is refused for naming a marketplace the lookup one step
+ * later would have resolved. That refusal is the one cascade message with a
+ * trust rule behind it, so it reads to the user as a security decision when it
+ * is a resolution bug.
+ *
+ * The trust rule itself is untouched: every name in this set is one the user
+ * added themselves. Nothing here adds or clones a marketplace.
+ *
+ * NFR-5: filesystem only. The user-scope read is `loadState`, the same read the
+ * per-marketplace resolver already performs on its own fallback arm.
+ */
+export async function collectInstallReachableMarketplaces(opts: {
+  readonly targetScope: Scope;
+  readonly cwd: string;
+  readonly targetState: ExtensionState;
+}): Promise<ReadonlySet<string>> {
+  const names = new Set(Object.keys(opts.targetState.marketplaces));
+  if (opts.targetScope === "user") {
+    return names;
+  }
+
+  const userState = await loadState(locationsFor("user", opts.cwd).extensionRoot);
+  for (const name of Object.keys(userState.marketplaces)) {
+    names.add(name);
+  }
+
+  return names;
+}
+
+/**
  * Materialize the target-scope marketplace container needed by the current
  * state shape when CMP-3 falls back to a user-scope marketplace. The copied
  * record preserves source/manifest paths but starts with no target-scope
@@ -747,7 +786,9 @@ function synthesizeAdoptedMarketplaceSource(opts: {
  *
  * `pluginPatch` is the caller's own field set: `enable`/`disable` writes an
  * explicit `enabled`, while `install` writes `enabled: false` only when the
- * install actually landed disabled and otherwise writes an empty patch.
+ * install actually landed disabled and otherwise writes an empty patch. The
+ * requesting plugin's key is the only plugin key this write declares (D-04-02:
+ * the desired-state config names only plugins the user asked for by name).
  */
 export async function writeAdoptingConfigEntries(opts: {
   readonly current: ScopeConfig;
@@ -899,9 +940,71 @@ export async function resolveInstalledMarketplaceTarget(opts: {
 }
 
 /**
+ * D-01-07 / D-01-11: is this manifest candidate THERE? Only a path that is not
+ * there may advance the walk to the next candidate, so a stat this process was
+ * not allowed to make (EACCES and friends) counts as present -- it is not
+ * evidence of absence. Uses the absence policy beside MANIFEST_CANDIDATES:
+ * ENOENT, ENOTDIR and non-files advance the walk; other stat errors stop it.
+ * Unlike the resolver, this reader falls back to the entry version on failure.
+ * Never throws.
+ */
+async function manifestCandidateExists(manifestPath: string): Promise<boolean> {
+  try {
+    return (await stat(manifestPath)).isFile();
+  } catch (err) {
+    const absent = isErrnoException(err) && (err.code === "ENOENT" || err.code === "ENOTDIR");
+    return !absent;
+  }
+}
+
+/**
+ * Tier 1 of {@link resolvePluginVersion}: the `version` the plugin's own
+ * manifest declares, or `undefined` when it declares none usable.
+ *
+ * MANF-01: the walk is the shared `MANIFEST_CANDIDATES` ordering, so this
+ * reader and the resolver read the same file. D-01-07: a candidate that
+ * EXISTS ends the walk -- if it cannot be read, cannot be parsed, or carries
+ * no usable `version`, the answer falls to tier 2, never to a sibling
+ * candidate. Never throws (D-23-02 / D-23-03).
+ */
+async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | undefined> {
+  for (const candidate of MANIFEST_CANDIDATES) {
+    const manifestPath = path.join(pluginRoot, candidate);
+
+    if (!(await manifestCandidateExists(manifestPath))) {
+      continue;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(await readFile(manifestPath, "utf8"));
+    } catch {
+      // Present and unusable: tier 2 / tier 3 cover it.
+      return undefined;
+    }
+
+    return usableDeclaredVersion(parsed);
+  }
+
+  return undefined;
+}
+
+/** The `version` a parsed manifest declares when it is a non-empty string. */
+function usableDeclaredVersion(parsed: unknown): string | undefined {
+  if (typeof parsed !== "object" || parsed === null || !("version" in parsed)) {
+    return undefined;
+  }
+
+  return typeof parsed.version === "string" && parsed.version.length > 0
+    ? parsed.version
+    : undefined;
+}
+
+/**
  * PI-7 / PUP-3 / SNM-34 version precedence (3 tiers, highest first):
- *   1. The plugin's own `<pluginRoot>/.claude-plugin/plugin.json` `version`
- *      (D-23-01: "If also set in the marketplace entry, `plugin.json` wins.").
+ *   1. The plugin's own manifest `version`, read at the first
+ *      `MANIFEST_CANDIDATES` location present under `pluginRoot` (MANF-01;
+ *      D-23-01: "If also set in the marketplace entry, `plugin.json` wins.").
  *   2. The marketplace `entry.version`.
  *   3. The PI-7 `computeHashVersion` content hash, as a last resort.
  *
@@ -909,7 +1012,7 @@ export async function resolveInstalledMarketplaceTarget(opts: {
  * gate used for `entry.version`; D-23-03 -- no SemVer enforcement). The
  * plugin.json read is re-done here independently (D-23-02): the NFR-7
  * discriminated `ResolvedPluginInstallable` union is NOT widened with a
- * `manifest` field. Any read/parse failure (ENOENT, malformed JSON, missing
+ * `manifest` field. Any read/parse failure (absence, malformed JSON, missing
  * or non-string `.version`) silently falls through to the next tier and never
  * throws.
  */
@@ -917,19 +1020,10 @@ export async function resolvePluginVersion(
   entry: PluginEntry,
   installable: MaterializablePlugin,
 ): Promise<string> {
-  // Tier 1: the plugin's own plugin.json `version`. Re-read in place; any
-  // failure falls through to the next tier (D-23-02 / D-23-03).
-  try {
-    const manifestPath = path.join(installable.pluginRoot, ".claude-plugin", "plugin.json");
-    const raw = await readFile(manifestPath, "utf8");
-    const parsed: unknown = JSON.parse(raw);
-    const pluginJsonVersion = (parsed as { version?: unknown }).version;
-    if (typeof pluginJsonVersion === "string" && pluginJsonVersion.length > 0) {
-      return pluginJsonVersion;
-    }
-  } catch {
-    // Fall through -- plugin.json is absent, unparseable, or carries no usable
-    // version; tier 2 / tier 3 cover it.
+  // Tier 1: the plugin's own manifest `version`.
+  const declaredVersion = await readDeclaredPluginVersion(installable.pluginRoot);
+  if (declaredVersion !== undefined) {
+    return declaredVersion;
   }
 
   // Tier 2: the marketplace entry version.

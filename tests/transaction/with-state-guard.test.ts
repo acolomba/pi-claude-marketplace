@@ -107,12 +107,12 @@ test("saves one explicit transaction while the real scope lock is held and permi
     },
   } satisfies LockedStateTransactionDeps;
   const expectedState = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
     lastReconciledExtensionVersion: "saved-by-transaction",
   } satisfies ExtensionState;
   const expectedStateBytes =
-    '{\n  "schemaVersion": 2,\n  "marketplaces": {},\n  "lastReconciledExtensionVersion": "saved-by-transaction"\n}\n';
+    '{\n  "schemaVersion": 3,\n  "marketplaces": {},\n  "lastReconciledExtensionVersion": "saved-by-transaction"\n}\n';
 
   // act
   const callbackOutcome = await withLockedStateTransaction(
@@ -200,7 +200,7 @@ test("returns a no-save transaction without creating durable state", async (t) =
 
   // assert
   assert.deepStrictEqual(callbackOutcome, {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
     lastReconciledExtensionVersion: "memory-only",
   });
@@ -223,12 +223,12 @@ test("rejects a duplicate explicit save after one complete durable write", async
     },
   } satisfies LockedStateTransactionDeps;
   const expectedState = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
     lastReconciledExtensionVersion: "saved-once",
   } satisfies ExtensionState;
   const expectedStateBytes =
-    '{\n  "schemaVersion": 2,\n  "marketplaces": {},\n  "lastReconciledExtensionVersion": "saved-once"\n}\n';
+    '{\n  "schemaVersion": 3,\n  "marketplaces": {},\n  "lastReconciledExtensionVersion": "saved-once"\n}\n';
 
   // act
   const duplicateSaveError = await captureThrown(() =>
@@ -269,7 +269,7 @@ test("automatically saves a successful state guard callback and returns its comp
   t.after(() => rm(directory, { recursive: true, force: true }));
   const locations = locationsFor("project", directory);
   const expectedState = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     marketplaces: {},
     lastReconciledExtensionVersion: "automatic-save",
   } satisfies ExtensionState;
@@ -491,7 +491,7 @@ test("propagates an injected save failure by identity with the complete attempte
   assert.strictEqual(thrownError, saveError);
   assert.deepStrictEqual(saveLog, [expectedAttemptedState]);
   assert.strictEqual(stateBytes, undefined);
-  assert.deepStrictEqual(retryOutcome, { schemaVersion: 2, marketplaces: {} });
+  assert.deepStrictEqual(retryOutcome, { schemaVersion: 3, marketplaces: {} });
   assert.strictEqual(lockHeldAfterRetry, false);
 });
 
@@ -509,12 +509,12 @@ test(
     let contenderEntries = 0;
     let retryEntries = 0;
     const expectedState = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       marketplaces: {},
       lastReconciledExtensionVersion: "retry-committed",
     } satisfies ExtensionState;
     const expectedStateBytes =
-      '{\n  "schemaVersion": 2,\n  "marketplaces": {},\n  "lastReconciledExtensionVersion": "retry-committed"\n}\n';
+      '{\n  "schemaVersion": 3,\n  "marketplaces": {},\n  "lastReconciledExtensionVersion": "retry-committed"\n}\n';
 
     // act
     const holderTransaction = withLockedStateTransaction(locations, async () => {

@@ -34,9 +34,6 @@
  *   - `orchestrators/plugin/update-flow.ts` and `update-preflight.ts`: PUP-2
  *     `syncClone` REQUIRES gitOps; they legitimately name the `GitOps` surface
  *     via the `orchestrators/marketplace/shared.ts` re-export (Pattern S-9).
- *   - `orchestrators/plugin/uninstall.ts` is implicitly clean (no git surface
- *     today) but is not gated -- gating install + list covers the NFR-5
- *     orchestrator-tier obligation.
  */
 export const NETWORK_FREE_TARGETS = [
   // The update flow owns refresh enumeration and its injected Git seam, so it
@@ -111,6 +108,14 @@ export const NETWORK_FREE_TARGETS = [
   // ENBL-03: the enable/disable orchestrator re-materializes from cache
   // -- NO network.
   "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
+  // NFR-5 / D-05-06 / PRUNE-05: uninstall composes an offline manifest read
+  // through the declaration-index leaf before it decides anything -- the
+  // dependents guard reads what every other record in the scope declares from
+  // the memoized manifest cache and the warm clone cache only. Neither owner
+  // names a git surface; a future need to refresh a clone before deciding must
+  // route through orchestrators/plugin/clone-cache.ts.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts",
   // FTCH-01: fetch reaches git ONLY through the clone-cache.ts seam (by
   // entrypoint name), install-style. It names zero gitOps surface, so it is
   // locked here permanently. It is NOT exempt: among the gated orchestrator
@@ -654,6 +659,13 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
   ],
   "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts": ["createFetchPlugins"],
   "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts": ["createGetPluginInfo"],
+  // RESV-03: the constraint-resolution step, exported so it can be exercised
+  // as a unit and so a later surface can compose the resolution rather than
+  // re-derive it. `runInstallCascade` in the same module is its only production
+  // caller, which is what the census measures here.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts": [
+    "resolveMemberConstraints",
+  ],
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts": ["createInstallPlugin"],
   "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts": [
     "narrowResolverReasons",

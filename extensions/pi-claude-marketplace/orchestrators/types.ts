@@ -457,6 +457,18 @@ export type InstallPluginOutcome =
        * shape) is undisturbed.
        */
       readonly landedDisabled?: true;
+      /**
+       * D-04-07: the plugin was already recorded as another plugin's
+       * dependency, and this install promoted that record to a direct install
+       * rather than installing anew. `resourcesChanged` says whether the
+       * promotion re-materialized a disabled record. Omitted for a fresh
+       * install (NREG-01). An orchestrated caller reads it to describe the row
+       * as a promotion, since its own snapshot may pre-date the record: an
+       * import whose earlier entry's cascade recorded the dependency sees no
+       * record at its call site. Not a `LedgerDegradationSignals` member, so
+       * the COMPAT-01 key-set pin is undisturbed.
+       */
+      readonly promoted?: true;
     } & Omit<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers">)
   | {
       /**

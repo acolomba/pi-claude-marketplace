@@ -671,7 +671,12 @@ export function renderUninstalledRow(
     renderScopeBracket(p.scope, mpScope),
     renderVersion(p.version),
     "(uninstalled)",
-    composeReasons(undefined, false, false, probe),
+    // WR-06: the row's only reason today is uninstall's `data kept` disposition,
+    // and the field is optional, so a producer with nothing to report composes
+    // the brace-less row. Both soft-dep flags stay hard-coded false: MSG-SD-3
+    // keeps `{requires pi-...}` markers off uninstall rows by construction (the
+    // variant has no `dependencies` field to read).
+    composeReasons(p.reasons, false, false, probe),
   ]);
 }
 
@@ -1328,6 +1333,19 @@ function appendResolvedComponentLines(
     }
   }
 
+  appendDependenciesLine(lines, dependencies);
+}
+
+/**
+ * Appends the optional `    dependencies: <list>` line. Both `renderPluginInfo`
+ * arms end with this line, so it is LAST: after every per-kind line on the
+ * resolved arm and after the `components: not resolved` marker on the
+ * unresolved arm (INFO-02 / D-01-32).
+ */
+function appendDependenciesLine(
+  lines: string[],
+  dependencies: readonly string[] | undefined,
+): void {
   if (dependencies !== undefined && dependencies.length > 0) {
     lines.push(`    dependencies: ${dependencies.join(", ")}`);
   }
@@ -1397,8 +1415,8 @@ function notAddedReasonFor(message: MarketplaceNotAddedMessage): Reason {
  * description block wrapped via `wrapDescription(text, 4, 66)`; then
  * either per-kind component lists at 4-space indent + optional
  * `dependencies:` line (componentsResolved: true), or the single
- * marker line `    components: not resolved` (componentsResolved:
- * false).
+ * marker line `    components: not resolved` followed by the same
+ * optional `dependencies:` line (componentsResolved: false, D-01-32).
  *
  * Reasons brace via `composeReasons` with both declares-flags FALSE
  * -- info messages NEVER emit soft-dep markers.
@@ -1444,6 +1462,8 @@ export function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatu
 
     case false:
       lines.push("    components: not resolved");
+      // D-01-32: the cold git-source `(remote)` row carries the entry-declared list.
+      appendDependenciesLine(lines, plugin.dependencies);
       break;
 
     default:

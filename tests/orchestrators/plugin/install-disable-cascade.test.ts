@@ -58,6 +58,7 @@ function installedState(): ExtensionState {
               mcpServers: ["server-a", "server-b"],
             },
             enabled: true,
+            provenance: "explicit",
             installedAt: INSTALLED_AT,
             updatedAt: INSTALLED_AT,
           },
@@ -131,6 +132,7 @@ test("disables a freshly installed record after a clean five-kind cascade", asyn
       mcpServers: ["server-a", "server-b"],
     },
     enabled: false,
+    provenance: "explicit",
     installedAt: INSTALLED_AT,
     updatedAt: UPDATED_AT,
   });

@@ -39,6 +39,7 @@ function pluginRecord(version: string, enabled = true): PluginRecord {
       hooks: ["hello"],
     },
     enabled,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };

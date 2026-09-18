@@ -5,14 +5,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 44-entry
+ * in `notification-types.ts` as the SINGLE source of catalog truth (OUT-08: the 56-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 44-entry set.
+ * 56-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
@@ -24,7 +24,25 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * length, so the two sentences above cannot drift from the tuple again without
  * a red test. CMP-4 / SCOPE-01 added two structural scope reasons (39 to 41).
  * SCOPE-01 / D-01 added two content scope reasons (41 to 43). WDET-04 /
- * D-106-04 appended the dedicated `workflows` reason (43 to 44).
+ * D-106-04 appended the dedicated `workflows` reason (43 to 44). DATA-01 /
+ * WR-06 added `data kept`, uninstall's data-disposition marker (44 to 45).
+ * RESV-02..06 added the seven dependency-cascade reasons -- `no matching
+ * version`, `version conflict`, `constraint too complex`, `invalid version
+ * constraint`, `dependency marketplace not added`, `dependency cycle` and
+ * `dependency failed` -- which are what let one cascade row name WHICH
+ * dependency failed and WHY, instead of the requesting plugin alone (45 to 52).
+ * RESV-05 added `dependency disabled`, which lifts a skipped-but-inert
+ * dependency off the benign-skip default (52 to 53). D-04-07 added
+ * `dependency promoted`, install's marker for a recorded dependency the user
+ * then asked for by name -- a state change, which the refusal `already
+ * installed` cannot report on its own (53 to 54). D-05-14 added `dependents
+ * remain`, uninstall's refusal marker for a plugin another installed plugin in
+ * the scope still declares -- an error, not a benign skip, so it joins the
+ * command-private reasons and not the idempotent group (54 to 55). D-05-11
+ * added `dependency pruned`, the marker `uninstall --prune` stamps on each
+ * orphaned dependency record it swept out after the named plugin -- a removal
+ * the user did not name, so it is a state change and joins the command-private
+ * reasons, not the idempotent group (55 to 56).
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -240,6 +258,11 @@ type SharedTopicReason = IdempotentReason | UnsupportedReason | FailureReason | 
 type CommandPrivateReason =
   | "not found"
   | "not installed"
+  // DATA-01 / WR-06: uninstall's data-disposition marker, stamped by the
+  // preserving branch of the one command that offers the opt-out. Owned by that
+  // verb, so it is named here for the proof rather than promoted to a shared
+  // topic group.
+  | "data kept"
   // SCOPE-01 / D-01: the cross-scope qualifier the lifecycle verbs join to
   // `not installed` on an absent-target row. Owned by those verbs' own
   // absent-target composer alongside `not installed`, so it is named here for
@@ -247,7 +270,42 @@ type CommandPrivateReason =
   // structural markers below it, this pair IS a `ContentReason`.
   | "marketplace in user scope"
   | "marketplace in project scope"
+  // RESV-02..06: the dependency-cascade vocabulary, owned by
+  // `orchestrators/plugin/install-cascade.messaging.ts`. Every one of them
+  // describes the install cascade's relationship to ONE closure member, so they
+  // are named here for the proof rather than promoted to a shared topic group.
+  // All seven are `ContentReason`s -- each rides the row of the dependency (or,
+  // for `dependency failed`, the requesting plugin) it is a fact about.
+  | "no matching version"
+  | "version conflict"
+  | "constraint too complex"
+  | "invalid version constraint"
+  | "dependency marketplace not added"
+  | "dependency cycle"
+  | "dependency failed"
+  // RESV-05: the skipped dependency is recorded but disabled, so it
+  // materialized nothing. It joins `already installed` in the same brace and
+  // is what lifts that row off the benign-skip default.
+  | "dependency disabled"
+  // D-04-07: install's marker for a recorded dependency the user then named.
+  // The record changed hands and nothing was materialized, so it joins
+  // `already installed` on an `installed` row rather than a skipped one -- a
+  // promotion mutates state, which is why it is not an idempotent reason.
+  | "dependency promoted"
   | "plugins remain"
+  // D-05-14 / D-05-15: uninstall's refusal marker, owned by
+  // `orchestrators/plugin/uninstall.messaging.ts`. The named plugin is still
+  // declared by another installed plugin in the scope, so nothing was removed;
+  // the dependents are named on the cause line. It sits beside `plugins
+  // remain` because the two are the same shape of refusal about different
+  // subjects -- and it is NOT idempotent: the operation was refused, not
+  // already done.
+  | "dependents remain"
+  // D-05-11 / PRUNE-04: uninstall's prune marker, owned by
+  // `orchestrators/plugin/uninstall.messaging.ts`. The row's plugin was
+  // recorded as another plugin's dependency and `--prune` removed it once
+  // nothing installed declared it. NOT idempotent: a record left the state.
+  | "dependency pruned"
   | "stale clone"
   | "duplicate name"
   | "marketplace not added"

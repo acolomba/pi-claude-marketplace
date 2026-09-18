@@ -167,6 +167,7 @@ function pluginRecord(resources: Partial<PluginRecord["resources"]> = {}): Plugi
       mcpServers: resources.mcpServers ?? [],
     },
     enabled: true,
+    provenance: "explicit",
     installedAt: "2026-08-31T12:00:00.000Z",
     updatedAt: "2026-08-31T12:00:00.000Z",
   };

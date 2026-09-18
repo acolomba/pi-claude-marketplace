@@ -36,7 +36,7 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { PluginShapeError } from "../shared/errors.ts";
+import { isErrnoException, PluginShapeError } from "../shared/errors.ts";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
 
 import {
@@ -45,7 +45,9 @@ import {
   type ComponentPathResolution,
 } from "./component-paths.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
+import { parseDeclaredDependencies } from "./dependencies.ts";
 import { resolveHooks, type HooksResolution } from "./hooks-resolution.ts";
+import { MANIFEST_CANDIDATES } from "./manifest-path.ts";
 import { resolveLooseMcp, resolveStrictMcp, type McpResolution } from "./mcp-resolution.ts";
 import { assertSafeName } from "./name.ts";
 import {
@@ -193,6 +195,23 @@ type SourceSupport =
   | { readonly kind: "supported"; readonly source: SupportedParsedSource }
   | { readonly kind: "rejected"; readonly reason: string };
 
+/**
+ * The parse failure of an entry's own `dependencies` declaration, or
+ * `undefined` when the entry declares none or declares them validly.
+ * `domain/manifest.ts::normalizeDependencyEntries` keeps a malformed value on
+ * the entry it isolates, so this re-parse is what names the real defect --
+ * checked BEFORE source classification runs, so the reported defect names
+ * `dependencies`, not `source`.
+ */
+function malformedDependenciesReason(entry: PluginEntry): string | undefined {
+  if (!("dependencies" in entry)) {
+    return undefined;
+  }
+
+  const dependencies = parseDeclaredDependencies(entry.dependencies);
+  return dependencies.ok ? undefined : dependencies.reason;
+}
+
 function classifySourceSupport(parsedSource: ParsedSource): SourceSupport {
   switch (parsedSource.kind) {
     case "path":
@@ -227,34 +246,80 @@ async function sourceEscapeReason(
   }
 }
 
+/** Distinguishes a missing candidate from a failed filesystem probe. */
+async function manifestCandidateIsFile(
+  ctx: ResolveContext,
+  manifestPath: string,
+): Promise<boolean> {
+  try {
+    return (await statKindOf(ctx)(manifestPath)) === "file";
+  } catch (err: unknown) {
+    if (isErrnoException(err) && (err.code === "ENOENT" || err.code === "ENOTDIR")) {
+      return false;
+    }
+
+    // A failed stat is not evidence of absence. The manifest reader reports
+    // it as unusable, just like a read failure, without trying another file.
+    throw err;
+  }
+}
+
+/**
+ * MANF-01 / MANF-02: reads the plugin's own manifest in `MANIFEST_CANDIDATES`
+ * order, rejecting unusable candidates rather than trying another file.
+ * MANF-05: no manifest at any candidate is a normal outcome, not a failure.
+ */
 async function readManifest(
   ctx: ResolveContext,
   pluginRoot: string,
 ): Promise<{ ok: true; manifest: Record<string, unknown> | null } | { ok: false; reason: string }> {
-  const manifestPath = path.join(pluginRoot, ".claude-plugin", "plugin.json");
-  if ((await statKindOf(ctx)(manifestPath)) !== "file") {
-    return { ok: true, manifest: null };
-  }
+  for (const candidate of MANIFEST_CANDIDATES) {
+    const manifestPath = path.join(pluginRoot, candidate);
 
-  try {
-    const raw = await readFileTextOf(ctx)(manifestPath);
-    const parsed: unknown = JSON.parse(raw);
+    // D-01-07: ABSENCE is the only fall-through. The first candidate that
+    // exists is this plugin's manifest and its read decides the outcome; a
+    // present-but-unusable file never hands off to the next candidate.
+    try {
+      if (!(await manifestCandidateIsFile(ctx, manifestPath))) {
+        continue;
+      }
 
-    if (!PLUGIN_MANIFEST_VALIDATOR.Check(parsed)) {
-      const detail = PLUGIN_MANIFEST_VALIDATOR.Errors(parsed)
-        .slice(0, 1)
-        .map((error) => `${error.instancePath || "(root)"}: ${error.message}`)
-        .join("");
-      return { ok: false, reason: `malformed plugin.json: ${detail}` };
+      const raw = await readFileTextOf(ctx)(manifestPath);
+      const parsed: unknown = JSON.parse(raw);
+
+      if (!PLUGIN_MANIFEST_VALIDATOR.Check(parsed)) {
+        const detail = PLUGIN_MANIFEST_VALIDATOR.Errors(parsed)
+          .slice(0, 1)
+          .map((error) => `${error.instancePath || "(root)"}: ${error.message}`)
+          .join("");
+        return { ok: false, reason: `malformed plugin.json: ${detail}` };
+      }
+
+      const dependencies = parseDeclaredDependencies(parsed.dependencies);
+      if (!dependencies.ok) {
+        return { ok: false, reason: `malformed plugin.json: ${dependencies.reason}` };
+      }
+
+      return { ok: true, manifest: parsed };
+    } catch (err: unknown) {
+      // D-01-08 / D-01-09: this catch only ever sees a THROWN failure -- a
+      // rejected stat (manifestCandidateIsFile rethrows anything but ENOENT /
+      // ENOTDIR), an unreadable file, or a JSON.parse syntax error. Schema
+      // rejection and an invalid `dependencies` declaration are direct
+      // `return`s above, inside the same `try`, and never land here. All five
+      // origins still end up observably identical to the caller: each
+      // produces the same `malformed plugin.json: ...` reason on the
+      // `unavailable` arm.
+      return {
+        ok: false,
+        reason: `malformed plugin.json: ${err instanceof Error ? err.message : String(err)}`,
+      };
     }
-
-    return { ok: true, manifest: parsed };
-  } catch (err) {
-    return {
-      ok: false,
-      reason: `malformed plugin.json: ${err instanceof Error ? err.message : String(err)}`,
-    };
   }
+
+  // D-01-13 / MANF-05: absent at every candidate. A plugin declaring no
+  // manifest at all still resolves, and still installs.
+  return { ok: true, manifest: null };
 }
 
 /**
@@ -393,6 +458,22 @@ async function preflightStages(
   const partial = emptyResolution();
   // Caller bug if name validation throws -- entry came through PLUGIN_ENTRY_VALIDATOR.
   assertSafeName(entry.name);
+
+  // domain/manifest.ts::normalizeDependencyEntries isolates a marketplace
+  // entry whose declared `dependencies` failed to parse before this resolver
+  // ever sees it. Re-parsed first -- ahead of PR-2's source-kind classification
+  // below -- so the reported defect names the field that is actually broken
+  // (`dependencies`) rather than an unrecognized source kind.
+  const dependencyDefect = malformedDependenciesReason(entry);
+  if (dependencyDefect !== undefined) {
+    return {
+      kind: "unavailable",
+      result: unavailable(entry.name, [
+        ...partial.notes,
+        `malformed marketplace entry: ${dependencyDefect}`,
+      ]),
+    };
+  }
 
   // Classify source. PluginEntry.source is Type.Unknown() per MM-3.
   const parsedSource: ParsedSource = parsePluginSource(entry.source);
@@ -549,7 +630,6 @@ async function resolveWithMode(
   // not a structural defect); it is read separately via `partial.unsupported`
   // in the decision below.
   await addUnsupportedKindNotes(entry, manifest, pluginRoot, ctx, partial);
-  noteDeclaredDependencies(entry, partial);
 
   return decideResolution(entry.name, pluginRoot, partial, dirty, defaultEnabled);
 }
@@ -589,13 +669,6 @@ async function runStructuralStages(args: {
   );
 
   return flags.includes(true);
-}
-
-/** Step 10 (PR-5): dependencies stay installable but get a note. */
-function noteDeclaredDependencies(entry: PluginEntry, partial: PartialResolution): void {
-  if ((entry as Record<string, unknown>).dependencies !== undefined) {
-    partial.notes.push(`declares dependencies that must be installed manually`);
-  }
 }
 
 /**

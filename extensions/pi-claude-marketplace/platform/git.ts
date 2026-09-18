@@ -111,6 +111,31 @@ export interface ResolveRemoteRefOptions {
   auth?: { credentialOps: CredentialOps; host: string; onAuthRequired: OnAuthRequiredFn };
 }
 
+export interface ListRemoteTagsOptions {
+  /** Remote URL. */
+  url: string;
+  /**
+   * Optional auth bundle. Same shape as `CloneOptions.auth`; when present,
+   * listRemoteTags builds isomorphic-git `onAuth`/`onAuthFailure` callbacks via
+   * `buildAuthCallbacks` and threads them into `listServerRefs`, so a private
+   * source repository's tags are readable through the one credential path the
+   * remote-ref resolution above already uses (RESV-03). When omitted, the
+   * listing behaves identically to the public-only path.
+   */
+  auth?: { credentialOps: CredentialOps; host: string; onAuthRequired: OnAuthRequiredFn };
+}
+
+/** One advertised tag, resolved to the object the tag names. */
+export interface RemoteTag {
+  /** The advertised ref with its `refs/tags/` prefix removed. */
+  name: string;
+  /**
+   * The object id the tag resolves to. For an annotated tag this is the commit
+   * the tag points at, not the tag object.
+   */
+  oid: string;
+}
+
 export interface ForceUpdateRefOptions {
   dir: string;
   ref: string;
@@ -258,6 +283,83 @@ export async function resolveRemoteRef(opts: ResolveRemoteRefOptions): Promise<s
   // For an annotated tag the `peeled` field carries the commit the tag points
   // at; prefer it so a tag resolves to a commit, not the tag object.
   return match.peeled ?? match.oid;
+}
+
+/** Ref namespace a tag advertisement is filtered to -- the `--tags` equivalent. */
+const TAG_REF_PREFIX = "refs/tags/";
+
+/**
+ * Suffix an advertisement uses when it names the peel of an annotated tag as a
+ * ref of its own. That peel already rides on the tag's own entry, so an entry
+ * spelled this way duplicates one the listing has already returned.
+ */
+const PEELED_REF_SUFFIX = "^{}";
+
+/**
+ * RESV-03 / D-03-02.2: read a remote's tag list WITHOUT a clone, so a
+ * dependency carrying a version constraint can be pinned to whichever release
+ * tag satisfies it. Wraps isomorphic-git's `listServerRefs` (protocol version 2
+ * ref advertisement), the same call `resolveRemoteRef` above makes, with the
+ * ref-prefix option supplied and no head-ref branch.
+ *
+ * D-03-03 amends NFR-5 for exactly this read: resolving a constrained
+ * dependency may query its source repository's tags even when a cached or
+ * otherwise resolvable copy of that dependency already exists, because the
+ * constraint can demand a different tag than the cached one.
+ *
+ * `prefix: "refs/tags/"` filters the advertisement server-side and is the
+ * `git ls-remote --tags` equivalent; `peelTags: true` makes an annotated tag's
+ * entry carry the commit it points at in `peeled`. Each entry prefers `peeled`
+ * over its own `oid`, the same preference `resolveRemoteRef` states, so an
+ * annotated tag resolves to a commit rather than to the tag object. An entry
+ * naming a peel as a ref of its own is dropped as a duplicate, and an entry
+ * outside the tag namespace is dropped because this function returns tags only.
+ *
+ * A remote advertising no matching refs yields an empty array rather than
+ * throwing. A transport failure propagates as isomorphic-git threw it:
+ * classifying what a failed listing means belongs to the caller that knows
+ * which operation it was serving.
+ *
+ * Auth is threaded through the optional `opts.auth` bundle -- the same bundle
+ * `resolveRemoteRef` takes, so a private source repository needs no second
+ * credential path; omitted = the public-only path.
+ *
+ * Source: node_modules/isomorphic-git/index.d.ts -- listServerRefs({ http,
+ * url, onAuth, onAuthFailure, protocolVersion, prefix, peelTags }) =>
+ * Promise<ServerRef[]>, where each ServerRef is { ref, oid, target?, peeled? }.
+ */
+export async function listRemoteTags(opts: ListRemoteTagsOptions): Promise<RemoteTag[]> {
+  // Same conditional-spread + AuthFailureCallback cast idiom as clone() at the
+  // top of this file: build the callbacks only when opts.auth is defined so the
+  // public-only listing stays byte-identical.
+  const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
+  const refs = await git.listServerRefs({
+    http,
+    url: opts.url,
+    protocolVersion: 2,
+    prefix: TAG_REF_PREFIX,
+    peelTags: true,
+    ...(authCbs !== undefined && {
+      onAuth: authCbs.onAuth,
+      onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
+    }),
+  });
+
+  const tags: RemoteTag[] = [];
+  for (const advertised of refs) {
+    if (!advertised.ref.startsWith(TAG_REF_PREFIX)) {
+      continue;
+    }
+
+    const name = advertised.ref.slice(TAG_REF_PREFIX.length);
+    if (name.endsWith(PEELED_REF_SUFFIX)) {
+      continue;
+    }
+
+    tags.push({ name, oid: advertised.peeled ?? advertised.oid });
+  }
+
+  return tags;
 }
 
 /**

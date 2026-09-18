@@ -29,6 +29,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { UninstallPluginOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   ExtensionAPI,
@@ -46,6 +47,10 @@ const extensionApi = mock<ExtensionAPI>({
 const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
 const completionCache = createCompletionCache();
 const gitOps = mock<GitOps>({ exactParams: true, name: "Git operations type evidence" });
+const uninstallPlugin = mock<UninstallPluginOperation>({
+  exactParams: true,
+  name: "uninstall operation type evidence",
+});
 
 const plannedMarketplaceAdd = {
   scope: "project",
@@ -136,6 +141,14 @@ void ({
   scope: "project",
   gitOps,
   hooksRouting,
+} satisfies ApplyReconcileOptions);
+void ({
+  ctx: extensionContext,
+  pi: extensionApi,
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
+  uninstallPlugin,
 } satisfies ApplyReconcileOptions);
 
 const extensionState = {
@@ -312,6 +325,15 @@ void ({
   hooksRouting,
   gitOps: undefined,
   // @ts-expect-error exact optional properties reject explicitly undefined Git operations
+} satisfies ApplyReconcileOptions);
+void ({
+  ctx: extensionContext,
+  pi: extensionApi,
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
+  uninstallPlugin: undefined,
+  // @ts-expect-error exact optional properties reject an explicitly undefined uninstall operation
 } satisfies ApplyReconcileOptions);
 void ({
   scope: "project",
