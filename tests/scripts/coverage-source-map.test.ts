@@ -425,6 +425,41 @@ const transformRows: readonly TransformRow[] = [
   },
 ];
 
+// Strip mode blanks a removed character with a blank of the same UTF-8
+// length, so byte offsets hold as well as UTF-16 columns: one byte becomes a
+// space, two bytes U+00A0, three bytes U+2002, and four bytes (a surrogate
+// pair) a space followed by U+FEFF. The removed type alias below carries one
+// of each.
+test("accepts the same-length blanks strip mode writes for removed one-, two-, three- and four-byte characters", async () => {
+  // arrange
+  const sourceMap = (await import(sourceMapModuleUrl)) as unknown as SourceMapModule;
+  const modulePath = "/fixture/extensions/pi-claude-marketplace/domain/blanks.ts";
+  const url = pathToFileURL(modulePath).href;
+  const typeLine = 'export type Note = "a § ∑ 🎉";';
+  const original = `${typeLine}\nexport const kept = 1;\n`;
+  const executed = executedText(original, url);
+  const blankFor = (character: string): string => {
+    const bytes = Buffer.byteLength(character, "utf8");
+    return bytes === 4 ? " \ufeff" : ([" ", "\u00a0", "\u2002"][bytes - 1] ?? "");
+  };
+
+  const expectedTypeLine = Array.from(typeLine, blankFor).join("");
+
+  // act
+  const map = sourceMap.executedSourceMap({ path: modulePath, url, original, executed });
+
+  // assert
+  assert.strictEqual(executed.split("\n")[0], expectedTypeLine);
+  assert.deepStrictEqual(
+    {
+      sources: map.sources,
+      sourcesContent: map.sourcesContent,
+      lines: decode(map.mappings).length,
+    },
+    { sources: [modulePath], sourcesContent: [original], lines: 3 },
+  );
+});
+
 for (const row of transformRows) {
   test(`refuses ${row.name}`, async () => {
     // arrange

@@ -6,9 +6,9 @@
 // A capture run stores the original bytes and the executed text of every
 // in-project module under content digests. For a TypeScript module the
 // executed text is Node's strip-mode output plus the `//# sourceURL` trailer
-// the translator appends: types become blanks of the same UTF-16 length, so
-// every remaining character, every line boundary and every column keeps its
-// position. This module requires exactly that relationship and refuses
+// the translator appends: types become blanks of the same UTF-8 and UTF-16
+// length, so every remaining character, every line boundary and every column
+// keeps its position. This module requires exactly that relationship and refuses
 // anything else; it never shifts, clamps or repairs a coordinate.
 //
 // The identity map carries one segment per UTF-16 column of every original
@@ -45,9 +45,11 @@ import {
   parseExecuted,
 } from "./coverage-syntax.mjs";
 
-// Strip mode blanks a removed character with a space, and pads the second
-// unit of a removed surrogate pair with U+FEFF so the UTF-16 length holds.
-const BLANKS = new Set([" ", "﻿"]);
+// Strip mode blanks a removed character with a blank of the same UTF-8
+// length, so byte offsets hold as well as UTF-16 columns: a one-byte
+// character becomes a space, a two-byte one U+00A0, a three-byte one U+2002,
+// and a four-byte one (a surrogate pair) a space followed by U+FEFF.
+const BLANKS = new Set([" ", "\u00a0", "\u2002", "\ufeff"]);
 const LINE_TERMINATORS = new Set(["\n", "\r"]);
 
 // A mapping, identity or run failure the caller must treat as "no report".
