@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 19
+open_count: 20
 waived_count: 18
 fixed_count: 19
-total_count: 56
-last_updated: 2026-09-18T16:56:44.890Z
+total_count: 57
+last_updated: 2026-09-18T18:18:32.642Z
 ---
 
 # Broken Windows Ledger
@@ -71,6 +71,7 @@ last_updated: 2026-09-18T16:56:44.890Z
 | 54 | 07 | deviation | tests/scripts/coverage-unit-fixtures.ts |  | The four-source production population fixture lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list | open |  | 2026-09-18T14:53:47.434Z |  |
 | 55 | 07 | deviation | tests/scripts/coverage-source-map.test.ts |  | The strip proof admits the two- and three-byte blanks (U+00A0, U+2002) strip mode writes for removed characters, found by the full-population conversion; the control was added to a test file outside the plan's list | open |  | 2026-09-18T15:10:44.507Z |  |
 | 56 | 07 | deviation | tests/scripts/check-coverage-risk-fixtures.ts |  | The production CRAP policy corpus (classify, grade, below, twins, unicode fixtures with anchors, complexities and statement counts written from the source text) lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list | open |  | 2026-09-18T16:56:44.890Z |  |
+| 57 | 07 | deviation | scripts/coverage-acceptance.mjs |  | 07-07 Task 1 touched five files outside the plan's list (Rule 2, T-07-07-01): scripts/coverage-acceptance.mjs (new), scripts/coverage-unit.mjs, scripts/coverage-validate.mjs, scripts/coverage-capture.manifest.mjs and tests/scripts/check-coverage-risk-fixtures.ts, so the accepted-bundle readback recomputes the recorded population and denominators and refuses copied counts (summary-mismatch) | open |  | 2026-09-18T18:18:32.642Z |  |
 
 ````json
 [
@@ -768,6 +769,19 @@ last_updated: 2026-09-18T16:56:44.890Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-18T16:56:44.890Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 57,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "scripts/coverage-acceptance.mjs",
+    "line": null,
+    "description": "07-07 Task 1 touched five files outside the plan's list (Rule 2, T-07-07-01): scripts/coverage-acceptance.mjs (new), scripts/coverage-unit.mjs, scripts/coverage-validate.mjs, scripts/coverage-capture.manifest.mjs and tests/scripts/check-coverage-risk-fixtures.ts, so the accepted-bundle readback recomputes the recorded population and denominators and refuses copied counts (summary-mismatch)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-18T18:18:32.642Z",
     "resolved_at": null,
     "milestone": null
   }
