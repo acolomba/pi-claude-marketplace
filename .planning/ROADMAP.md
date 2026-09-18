@@ -314,10 +314,20 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 06-01-PLAN.md — Tracer: an unsatisfied declaration disables its dependent at reload and says why (schema marker, constraint-preserving walk, verdict module with the propagation fixpoint, plan bucket, apply step, row)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 06-02-PLAN.md — The disabled and out-of-range arms, the lift, and the convergence proof that the disable does not oscillate
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 06-03-PLAN.md — LOAD-03: uninstall proceeds and names the dependents; the refusal and its vocabulary are retired (carries a blocking decision checkpoint)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 06-04-PLAN.md — Documentation, the supersession record, and the backlog re-triage
 
 **Notes.** The design point to settle in discuss, before any row is worded: how the "disabled as a consequence" state is persisted so reconcile respects it. The config cannot carry it (D-04-02: the config names only what the user asked for, and enablement there is the user's word), so it is a record-level flag or reason that `orchestrators/reconcile/plan.ts` reads when it buckets enables — and the lift condition (dependency installed, enabled, in range) is the same predicate the check runs. `recordedVersionSatisfies` in `domain/dependency-range.ts` already answers the range half. Interaction with the update family: Phase 10 keeps an update from moving a dependency out of range, so the range arm here fires only on hand-edited records and pre-Phase-10 updates. Owners: `orchestrators/reconcile/plan.ts` / `apply.ts` (new outcome kinds), `orchestrators/plugin/uninstall.ts`, `shared/notification-types.ts` + `notify-reasons.ts` + `docs/output-catalog.md` + `tests/architecture/catalog-uat` for the tokens.
