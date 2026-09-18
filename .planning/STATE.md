@@ -5,11 +5,11 @@ milestone_name: transitive-dependencies
 current_phase: 6
 current_phase_name: Load-time dependency check and allowed uninstall
 status: planning
-stopped_at: Phases 6-12 (upstream dependency parity) added to the roadmap 2026-09-18; Phase 6 not yet discussed
-last_updated: "2026-09-18T21:30:00.000Z"
+stopped_at: Phase 6 context gathered
+last_updated: "2026-09-18T21:53:24.640Z"
 last_activity: 2026-09-18
 last_activity_desc: Extended v1.20 with Phases 6-12 from HANDOFF-upstream-dependency-parity.md
-state_head: 1517a88c3864406178506bcca4a922e12518176c
+state_head: f2d80cc9ac0e35e8308a6236ed856c37c1f77990
 progress:
   total_phases: 12
   completed_phases: 5
@@ -850,9 +850,9 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Milestone audit ran 2026-09-17 — `v1.20-MILESTONE-AUDIT.md` status `tech_debt` (26/26 requirements, 5/5 seams, 2/2 flows, 0 blockers). The operator chose to address the debt before `/gsd-complete-milestone v1.20`: `/gsd-validate-phase 3|4|5`, `/gsd-secure-phase 3|4|5`, settle `05-REVIEW.md` IN-05/IN-06, and triage `PRUNE-GUARD-MR-01` + Phase 1 `deferred-items.md`. Autonomous run stopped by the operator at the audit gate.
+**Stopped at:** Phase 6 context gathered
 
-**Resume file:** `.planning/HANDOFF.md` (ordered to-do to close v1.20 — run secure-phase and validate-phase on 3/4/5 BEFORE complete-milestone)
+**Resume file:** .planning/phases/06-load-time-dependency-check-and-allowed-uninstall/06-CONTEXT.md
 `HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
 content was folded into `04-CONTEXT.md`: the supersession warning and the
 ordering constraint into `<decisions>`, and the operational anti-patterns
@@ -862,7 +862,7 @@ carried-notes block under `<specifics>`.
 
 **Read beside it:** `.planning/phases/04-install-provenance/04-CONTEXT.md`
 
-Last session: 2026-09-17T00:13:18.540Z
+Last session: 2026-09-18T21:53:24.433Z
 resumed a paused Phase 4 discussion, answered its two open questions (the
 config-write reversal lands entirely in Phase 4 in a fixed order; reconcile
 keeps sweeping genuine orphans with one exemption), wrote `04-CONTEXT.md` and
