@@ -29,6 +29,21 @@ land on the same surfaces.
 - Remove no-longer-needed transitive plugins with `uninstall --prune`.
 - Keep a plugin's data directory with `uninstall --keep-data`.
 
+**Extended 2026-09-18 (Phases 6-12, upstream dependency parity).** A
+doc-vs-shipped comparison against the Claude Code dependency docs (binary
+2.1.267) found thirteen divergences; the operator's rule is to align unless
+Pi or this project's model gives a concrete reason not to, and to extend this
+milestone rather than open a new one. The seven added phases: a load-time
+dependency check that disables an unsatisfied dependent with the upstream
+remedy and lets `uninstall` proceed past dependents (retiring PRUNE-05's
+refusal); marketplace-repository tag resolution for path-source constraints;
+enable/disable cascades and refusals that understand dependencies; reload
+installing missing declared dependencies; constraint-aware `update`; the
+`allowCrossMarketplaceDependenciesOn` allowlist; and a standalone `prune
+--dry-run`. Kept divergences: fail-clean on an unresolvable dependency
+(NFR-1/3), `sha` refused on a dependency element, the `name@mp@^range` string
+superset. Decision table: `.planning/HANDOFF-upstream-dependency-parity.md`.
+
 **Delivered 2026-09-14:** Manifest read fidelity is verified. All three readers
 share the ordered manifest candidates; component discovery avoids duplicate
 paths; and `info` displays validated dependency declarations from the readable

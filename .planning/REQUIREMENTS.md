@@ -83,7 +83,15 @@ New scope. Consumes PROV.
 - [x] **PRUNE-04**: The user learns which plugins `--prune` removed.
 - [x] **PRUNE-05**: `uninstall` refuses to remove a plugin that another
   installed plugin in the same scope still declares, and names the dependents.
-  (Folded into Phase 5 by the operator on 2026-09-16; D-05-14..16.)
+  (Folded into Phase 5 by the operator on 2026-09-16; D-05-14..16.
+  **Superseded by LOAD-03 on 2026-09-18:** the refusal is retired for upstream
+  parity; the dependents are named on the row and reported unsatisfied at the
+  next load instead.)
+- [ ] **PRUNE-06**: A standalone `prune` removes the dependency-installed
+  plugins that no installed plugin in the scope declares, without uninstalling
+  anything else, and says which ones it removed.
+- [ ] **PRUNE-07**: `prune --dry-run` lists what `prune` would remove and
+  removes nothing.
 
 ### Uninstall data disposition (DATA)
 
@@ -102,6 +110,105 @@ to opt out.
 
 - [x] **FLAG-01**: `uninstall` accepts exactly `--keep-data` and `--prune` as
   its extra flags, and the flag-catalog drift guard pins that set.
+- [ ] **FLAG-02**: `prune` accepts exactly `--dry-run` as its extra flag, and
+  the flag-catalog drift guard pins that set. No `-y`: there is no prompt to
+  skip (Out of Scope table).
+
+### Load-time dependency check (LOAD)
+
+Parity with the upstream load-time check (`dependency-unsatisfied`,
+`dependency-version-unsatisfied`). Today nothing checks an installed plugin's
+declarations after install; a dependency can be uninstalled or disabled
+underneath its dependent and the dependent keeps loading.
+
+- [ ] **LOAD-01**: At load, an installed plugin whose declared dependency is
+  missing, disabled, or outside the declared range is disabled and reported
+  with a remedy that names the dependency and the dependent (`Install "X" or
+  uninstall "Y"`, `Enable "X" or uninstall "Y"`, `Update "X" to satisfy R, or
+  uninstall "Y"`).
+- [ ] **LOAD-02**: The load-time disable is a consequence the config does not
+  express: reconcile keeps the dependent disabled while the dependency stays
+  unsatisfied, does not oscillate, and lifts the disable once the dependency is
+  installed, enabled and in range.
+- [ ] **LOAD-03**: `uninstall <plugin>` proceeds while other installed plugins
+  in the scope still declare it; the row names the dependents, and each becomes
+  unsatisfied at the next load. Supersedes PRUNE-05 and the reload-path
+  refusal.
+
+### Marketplace-repository tag resolution (TAGS)
+
+Parity with upstream tag resolution for relative-path plugins. Today any
+non-wildcard constraint on a path-source dependency fails
+`{no matching version}`, so constraints are unusable on the common case.
+
+- [ ] **TAGS-01**: A constrained dependency whose marketplace entry is a
+  relative path resolves the constraint against the marketplace repository's
+  `{name}--v{version}` tags, read from the local marketplace clone without
+  network (NFR-5).
+- [ ] **TAGS-02**: When no tag satisfies the constraint, the marketplace's
+  current copy is installed and the constraint is checked at load (LOAD-01)
+  rather than failing the install.
+- [ ] **TAGS-03**: A constrained path-source dependency with a satisfying tag
+  installs the plugin as it stands at that tag, not the marketplace's current
+  copy.
+
+### Enablement parity for dependencies (EDEP)
+
+Parity with the upstream enable/disable rules. Today `enable` and `disable`
+know nothing about plugin dependencies, and the cascade leaves a disabled,
+already-installed dependency disabled (RESV-05; BACKLOG ENBL-DEP-01).
+
+- [ ] **EDEP-01**: `enable <plugin>` also enables the plugin's declared
+  dependencies, transitively, in the same scope, and lists them.
+- [ ] **EDEP-02**: `disable <plugin>` is refused while an enabled installed
+  plugin in the scope declares it; the refusal names the dependents and gives
+  the one command that disables them together.
+- [ ] **EDEP-03**: Installing or enabling a plugin enables an already-installed,
+  disabled dependency through its record -- the desired-state config never
+  names a dependency (D-04-02) -- and reports it on the row; the
+  `{already installed, dependency disabled}` skip is retired.
+
+### Reload installs missing dependencies (MISS)
+
+Parity with upstream reload. Today reconcile keeps recorded dependencies
+(D-04-05) but never fetches a declared one that is absent.
+
+- [ ] **MISS-01**: A reload installs every declared dependency of an installed
+  plugin that is not yet installed, through the install cascade, with
+  provenance `dependency`.
+- [ ] **MISS-02**: When such a dependency cannot be installed, the reload
+  completes, the failure is reported on its own row, and the dependent is
+  handled by LOAD-01.
+
+### Constraint-aware update (UPDT)
+
+Parity with upstream update. Today `update` and `autoupdate` never read
+constraints, so an update can move a dependency out of every range that
+depends on it.
+
+- [ ] **UPDT-01**: `update` and `autoupdate` move a plugin that installed
+  plugins constrain only to the highest version that satisfies every
+  dependent's range.
+- [ ] **UPDT-02**: When no version satisfies every range, the update of that
+  plugin is skipped and reported, naming the constraining plugin(s).
+
+### Cross-marketplace dependency allowlist (XMKT)
+
+Parity with upstream's `allowCrossMarketplaceDependenciesOn`. Today any added
+marketplace may satisfy a dependency (D-03-08 covers only the not-added case).
+
+- [ ] **XMKT-01**: A dependency that resolves from a marketplace other than the
+  root plugin's is refused unless the root marketplace's `marketplace.json`
+  lists that marketplace in `allowCrossMarketplaceDependenciesOn`; the reason
+  names the field.
+- [ ] **XMKT-02**: An already-installed dependency satisfies the declaration
+  regardless of the allowlist.
+
+### Divergence record (DIVG)
+
+- [ ] **DIVG-01**: `docs/dependency-resolution.md` states that upstream accepts
+  a `sha` field on a dependency element and that this extension refuses it
+  (D-03-36), beside the kept divergences it already records.
 
 ## Future Requirements
 
@@ -160,15 +267,44 @@ this milestone.
 | DATA-02 | Phase 2 | Complete |
 | DATA-03 | Phase 2 | Complete |
 | FLAG-01 | Phase 5 | Complete |
+| LOAD-01 | Phase 6 | Pending |
+| LOAD-02 | Phase 6 | Pending |
+| LOAD-03 | Phase 6 | Pending |
+| TAGS-01 | Phase 7 | Pending |
+| TAGS-02 | Phase 7 | Pending |
+| TAGS-03 | Phase 7 | Pending |
+| EDEP-01 | Phase 8 | Pending |
+| EDEP-02 | Phase 8 | Pending |
+| EDEP-03 | Phase 8 | Pending |
+| MISS-01 | Phase 9 | Pending |
+| MISS-02 | Phase 9 | Pending |
+| UPDT-01 | Phase 10 | Pending |
+| UPDT-02 | Phase 10 | Pending |
+| XMKT-01 | Phase 11 | Pending |
+| XMKT-02 | Phase 11 | Pending |
+| PRUNE-06 | Phase 12 | Pending |
+| PRUNE-07 | Phase 12 | Pending |
+| FLAG-02 | Phase 12 | Pending |
+| DIVG-01 | Phase 7 | Pending |
 
 **Coverage:**
 
-- v1.20 requirements: 25 total
-- Mapped to phases: 25
+- v1.20 requirements: 44 total (25 defined 2026-09-09; 19 added 2026-09-18
+  from `HANDOFF-upstream-dependency-parity.md`)
+- Mapped to phases: 44
 - Unmapped: 0 ✓
 
 Every requirement maps to exactly one phase: 7 to Phase 1, 3 to Phase 2, 6 to
-Phase 3, 4 to Phase 4, 5 to Phase 5.
+Phase 3, 4 to Phase 4, 5 to Phase 5, 3 to Phase 6, 4 to Phase 7, 3 to Phase 8,
+2 to Phase 9, 2 to Phase 10, 2 to Phase 11, 3 to Phase 12.
+
+**Parity extension (2026-09-18).** After the five original phases shipped, a
+doc-vs-shipped comparison against the Claude Code dependency docs (binary
+2.1.267) found thirteen divergences; the operator's rule is to align with
+upstream unless Pi or this project's model gives a concrete reason not to.
+The nine alignments are the LOAD, TAGS, EDEP, MISS, UPDT, XMKT and DIVG
+families plus PRUNE-06/07 and FLAG-02 below; the decision table with the four
+kept divergences is `HANDOFF-upstream-dependency-parity.md`.
 
 ## Planning Notes
 

@@ -1,7 +1,7 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v1.20 — transitive-dependencies",
+  "milestone": "v1.20 \u2014 transitive-dependencies",
   "phases": [
     {
       "number": "1",
@@ -27,12 +27,47 @@
       "number": "5",
       "name": "Prune on uninstall",
       "status": "complete"
+    },
+    {
+      "number": "6",
+      "name": "Load-time dependency check and allowed uninstall",
+      "status": "pending"
+    },
+    {
+      "number": "7",
+      "name": "Marketplace-repository tag resolution for path-source dependencies",
+      "status": "pending"
+    },
+    {
+      "number": "8",
+      "name": "Enablement parity for dependencies",
+      "status": "pending"
+    },
+    {
+      "number": "9",
+      "name": "Reload installs missing declared dependencies",
+      "status": "pending"
+    },
+    {
+      "number": "10",
+      "name": "Constraint-aware update",
+      "status": "pending"
+    },
+    {
+      "number": "11",
+      "name": "Cross-marketplace dependency allowlist",
+      "status": "pending"
+    },
+    {
+      "number": "12",
+      "name": "Standalone prune with dry-run",
+      "status": "pending"
     }
   ],
   "next": {
-    "command": "/gsd:new-milestone",
-    "label": "Start a new milestone",
-    "reason": "All phases complete — start a new milestone"
+    "command": "/gsd:discuss-phase 6",
+    "label": "Discuss Phase 6",
+    "reason": "Phases 6-12 added 2026-09-18 for upstream dependency parity; Phase 6 is next"
   },
-  "updated_at": "2026-09-17T01:39:22.249Z"
+  "updated_at": "2026-09-18T21:15:50.000Z"
 }

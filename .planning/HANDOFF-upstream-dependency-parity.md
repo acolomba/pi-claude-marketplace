@@ -3,6 +3,12 @@
 Written 2026-09-18 after the v1.20 review pass, when the context was cleared.
 Self-contained: nothing here depends on a chat transcript.
 
+**Picked up 2026-09-18:** the operator chose to extend v1.20 rather than open
+a new milestone. Phases 6-12 in `ROADMAP.md` and the LOAD / TAGS / EDEP /
+MISS / UPDT / XMKT / DIVG families plus PRUNE-06/07 and FLAG-02 in
+`REQUIREMENTS.md` carry this table forward; the phase order below was changed
+so the load-time check (#8/#7) leads. The "Resume" section is superseded.
+
 ## Where you are
 
 | | |

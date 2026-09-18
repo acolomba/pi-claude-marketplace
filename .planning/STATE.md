@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v1.20
 milestone_name: transitive-dependencies
-current_phase: 5
-current_phase_name: Prune on uninstall
-status: completed
-stopped_at: v1.20 shipped as PR #198 (all audit tech debt settled except BACKLOG PRUNE-GUARD-MR-01); next is complete-milestone after merge
-last_updated: "2026-09-17T20:34:55.808Z"
-last_activity: 2026-09-17
-last_activity_desc: Shipped milestone v1.20 as PR #198 (features/manifest -> main)
+current_phase: 6
+current_phase_name: Load-time dependency check and allowed uninstall
+status: planning
+stopped_at: Phases 6-12 (upstream dependency parity) added to the roadmap 2026-09-18; Phase 6 not yet discussed
+last_updated: "2026-09-18T21:30:00.000Z"
+last_activity: 2026-09-18
+last_activity_desc: Extended v1.20 with Phases 6-12 from HANDOFF-upstream-dependency-parity.md
 state_head: 1517a88c3864406178506bcca4a922e12518176c
 progress:
-  total_phases: 5
+  total_phases: 12
   completed_phases: 5
   total_plans: 22
   completed_plans: 22
-  percent: 100
+  percent: 42
 ---
 
 # Project State
@@ -27,16 +27,39 @@ See: `.planning/PROJECT.md` (updated 2026-09-17 after Phase 5 prune-on-uninstall
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Milestone v1.20 close — audit, complete, cleanup (all 5 phases verified)
+**Current focus:** Milestone v1.20 parity extension — Phases 6-12 align the
+shipped dependency feature with the Claude Code dependency docs.
 Installing a plugin that declares dependencies should install what it needs.
-25 requirements across 5 phases. v1.19 Unit Test Refactor closed 2026-09-04 and
-is archived under `.planning/milestones/v1.19-*`.
+44 requirements across 12 phases (25 shipped in Phases 1-5 as PR #198, 19
+added 2026-09-18). v1.19 Unit Test Refactor closed 2026-09-04 and is archived
+under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 5 (Prune on uninstall) — COMPLETE
-Plan: 3 of 3
-Status: Milestone v1.20 shipped — PR #198
+Phase: 6 (Load-time dependency check and allowed uninstall) — NOT STARTED
+Plan: —
+Status: Roadmap extended 2026-09-18; next is `/gsd-discuss-phase 6`
+
+**Phases 6-12 were added on 2026-09-18** from
+`.planning/HANDOFF-upstream-dependency-parity.md`, after Phases 1-5 shipped as
+PR #198 (CI green, mergeable, audit passed 2026-09-17). Thirteen divergences
+from the upstream dependency docs (binary 2.1.267): nine aligned across the
+seven new phases, three kept with their reason (warn-and-degrade on an
+unresolvable dependency, `sha` on a dependency element, the `name@mp@^range`
+string superset), one skipped (author tooling and unsupported source kinds).
+Two operator decisions shaped the roadmap: extend this milestone rather than
+open v1.21 (PR #198 stays open and grows; the milestone audit is re-run at
+close), and lead with the load-time check (Phase 6) rather than the handoff's
+tag-resolution-first order, because Phase 7's no-matching-tag fallback, Phase
+8's consequence record and Phase 9's failed-install path all land on it.
+The one design point flagged for Phase 6's discuss: how the
+"disabled as a consequence" state is persisted so reconcile respects it
+without the config carrying it (D-04-02). PRUNE-05 is superseded by LOAD-03,
+not deleted from the record. BACKLOG `ENBL-DEP-01`, `PRUNE-CMD-01` and
+`PRUNE-GUARD-MR-01` are each claimed by a phase (8, 12, 6); `DEPS-STATUS-01`
+is not.
+
+**Phase 5 closed 2026-09-16** — see below.
 
 **Phase 5 closed 2026-09-16**, verified 6/6 must-haves; the four human items
 (live refusal row, live `--prune`, dev-tree provenance residue, and the
@@ -489,6 +512,10 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 05 P03 | 19 min | 3 tasks | 4 files |
 
 ## Accumulated Context
+
+### Roadmap Evolution
+
+- Phases 6-12 added 2026-09-18 (operator decision: extend v1.20 rather than open v1.21): Load-time dependency check and allowed uninstall; Marketplace-repository tag resolution for path-source dependencies; Enablement parity for dependencies; Reload installs missing declared dependencies; Constraint-aware update; Cross-marketplace dependency allowlist; Standalone prune with dry-run. Source: `HANDOFF-upstream-dependency-parity.md`. Order changed from the handoff's: load-time check leads.
 
 ### Decisions
 

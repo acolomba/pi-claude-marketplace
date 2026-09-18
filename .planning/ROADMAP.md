@@ -2,7 +2,7 @@
 
 ## Milestones
 
-- 🚧 **v1.20 transitive-dependencies** — Phases 1-5 (planning opened 2026-09-09, branch `features/manifest`) — record how each installed plugin got there so `uninstall --prune` can remove the ones nothing needs any more, and close the two adjacent gaps that land on the same surfaces
+- 🚧 **v1.20 transitive-dependencies** — Phases 1-12 (planning opened 2026-09-09, branch `features/manifest`; Phases 6-12 added 2026-09-18) — record how each installed plugin got there so `uninstall --prune` can remove the ones nothing needs any more, close the two adjacent gaps that land on the same surfaces, then align the shipped dependency feature with the Claude Code dependency docs
 - ✅ **refine-unit-tests — Refine Unit Tests** — Phases 1-9 (shipped 2026-09-13) — full detail: [`milestones/refine-unit-tests-ROADMAP.md`](milestones/refine-unit-tests-ROADMAP.md)
 - ✅ **v1.19 Unit Test Refactor** — Phases 108-117 (completed 2026-09-04) — full detail: [`milestones/v1.19-ROADMAP.md`](milestones/v1.19-ROADMAP.md)
 
@@ -25,6 +25,25 @@ v1.20 phase. Decimal phases (2.1, 3.1) are urgent insertions only, marked
 - [x] **Phase 3: Dependency resolution** — installing a plugin installs what it declares it needs, retiring the PI-13 / PR-5 no-auto-resolution decision. Marketplace attribution, a stated version-constraint grammar, cycle termination, no reinstall of what is already there, and a named failure that leaves nothing half-materialized. Maps onto the existing `orchestrators/import/` cascade and the `orchestrators/plugin/bootstrap.ts` composer rather than adding a second cascade beside them. (RESV-01, RESV-02, RESV-03, RESV-04, RESV-05, RESV-06) (completed 2026-09-15)
 - [x] **Phase 4: Install provenance** — each install record states whether the user asked for the plugin by name or another plugin declared it, with the promotion and retention rules that keep the two from overwriting each other, and a pre-milestone record upgraded with a truthful default rather than misreported. This phase also retires the cascade-dependency config write Phase 3 shipped, so the desired-state config names only what the user asked for; provenance is what keeps reconcile from sweeping a dependency once that write is gone. This is the record `--prune` reads. (PROV-01, PROV-02, PROV-03, PROV-04) (completed 2026-09-16)
 - [x] **Phase 5: Prune on uninstall** — `uninstall --prune` removes the dependency-installed plugins no remaining plugin declares, never a directly-installed one and never a still-needed one, and says which ones it removed. The uninstall flag surface closes here at exactly the two flags upstream defines. (PRUNE-01, PRUNE-02, PRUNE-03, PRUNE-04, PRUNE-05, FLAG-01) (completed 2026-09-16)
+
+**Parity extension (added 2026-09-18).** Phases 1-5 shipped as PR #198 and
+passed the milestone audit. A doc-vs-shipped comparison against the Claude
+Code dependency docs (binary 2.1.267) then found thirteen divergences; nine
+are aligned by Phases 6-12, three are kept with their reason, one is skipped.
+The decision table is `.planning/HANDOFF-upstream-dependency-parity.md`. The
+operator chose to extend this milestone rather than open a new one, and to
+lead with the load-time check: Phase 7's no-matching-tag fallback, Phase 8's
+"disabled as a consequence" record and Phase 9's failed-install path all land
+on the check Phase 6 builds, so shipping any of them first would leave a
+constraint silently unchecked for a phase.
+
+- [ ] **Phase 6: Load-time dependency check and allowed uninstall** — reconcile checks every installed plugin's declarations against the scope's records; a dependent whose dependency is missing, disabled or out of range is disabled with the upstream remedy, the disable is a recorded consequence reconcile respects until the dependency is satisfied, and `uninstall` stops refusing a still-needed plugin: it proceeds, names the dependents, and leaves them to the check. Retires PRUNE-05 / D-05-14..16 and the reload-path refusal. (LOAD-01, LOAD-02, LOAD-03)
+- [ ] **Phase 7: Marketplace-repository tag resolution for path-source dependencies** — a constrained dependency whose marketplace entry is a relative path resolves against the marketplace repository's `{name}--v{version}` tags, read from the local clone offline; no satisfying tag installs the current copy and defers to Phase 6's check. Also records the kept `sha` divergence. (TAGS-01, TAGS-02, TAGS-03, DIVG-01)
+- [ ] **Phase 8: Enablement parity for dependencies** — `enable` cascades to declared dependencies and lists them, `disable` is refused while an enabled dependent needs the plugin and gives the chained command, and a cascade enables a disabled already-installed dependency through its record instead of skipping it. Closes BACKLOG ENBL-DEP-01. (EDEP-01, EDEP-02, EDEP-03)
+- [ ] **Phase 9: Reload installs missing declared dependencies** — a reload installs any declared dependency an installed plugin lacks, through the cascade with provenance `dependency`; a dependency that cannot be installed is reported on its own row and the dependent falls to Phase 6's check. (MISS-01, MISS-02)
+- [ ] **Phase 10: Constraint-aware update** — `update` and `autoupdate` move a constrained plugin only to the highest version every installed dependent's range accepts, and skip-and-report when none does, naming the constraining plugin. (UPDT-01, UPDT-02)
+- [ ] **Phase 11: Cross-marketplace dependency allowlist** — a dependency in another marketplace is refused unless the root marketplace's `marketplace.json` lists it in `allowCrossMarketplaceDependenciesOn`; an already-installed dependency still satisfies. (XMKT-01, XMKT-02)
+- [ ] **Phase 12: Standalone prune with dry-run** — `prune` sweeps the scope's orphaned dependency-installed plugins without uninstalling anything else, `--dry-run` shows the sweep without running it, and the flag surface closes at `--dry-run` alone (no prompt, no `-y`). Closes BACKLOG PRUNE-CMD-01. (PRUNE-06, PRUNE-07, FLAG-02)
 
 **Settled going in.** These are decided; planning should not reopen them.
 
@@ -277,6 +296,164 @@ Plans:
 
 **Notes.** `uninstall`'s handler hard-rejects unknown long flags inline rather than consuming `edge/flag-catalog.ts`, so FLAG-01 has two sides to reconcile: the handler's accepted set and the catalog entry the completions are derived from. Today the catalog lists only the shared write-target flag for `uninstall`. The reconcile path is the other obligation here: `applyPluginUninstalls()` runs from `resources_discover` / `session_start` with no command line and therefore takes `--prune`'s default, whatever open decision 4 settles it to be — and that default must hold there as firmly as DATA-02's does, or the operation acquires two behaviors depending on which entry point reached it.
 
+### Phase 6: Load-time dependency check and allowed uninstall
+
+**Goal**: An installed plugin whose declared dependency is missing, disabled or out of range no longer loads as if nothing were wrong: reconcile disables it, says why, and names the remedy. With that check in place `uninstall` can stop refusing a still-needed plugin and report the consequence instead, the way upstream does.
+
+**Depends on**: Phase 5 (the declaration index `orchestrators/plugin/dependency-index.ts::buildScopeDeclarationIndex` and the `dependents remain` row it reads) and Phase 4 (records carry `provenance`; the check reads records, never the config).
+
+**Requirements**: LOAD-01, LOAD-02, LOAD-03
+
+**Success Criteria** (what must be TRUE):
+
+1. On `/reload`, an installed plugin whose declared dependency is not installed, is disabled, or has a recorded version outside the declared range is disabled and reported on its own row with the upstream remedy shape — `Install "X" or uninstall "Y"`, `Enable "X" or uninstall "Y"`, `Update "X" to satisfy R, or uninstall "Y"` — through new closed-set tokens landed on every pin surface. (LOAD-01)
+2. The disable is recorded as a consequence, not a user choice: the next reconcile pass neither re-enables the dependent while the dependency stays unsatisfied nor flips it back and forth, and once the dependency is installed, enabled and in range the dependent is enabled again without the user touching the config. (LOAD-02)
+3. `uninstall <plugin>` removes a plugin other installed plugins in the scope still declare; the row names the dependents, and each dependent is reported unsatisfied at the next load. The reload-path refusal goes with it. `--prune` semantics are unchanged. (LOAD-03)
+4. PRUNE-05's refusal (`assertNoDependents`, D-05-14..16), its `dependents remain` row and the `docs/dependency-resolution.md` §138 "documents this for `disable`; this extension applies it to `uninstall`" sentences are retired, with a decision record superseding D-05-14; BACKLOG `PRUNE-GUARD-MR-01` is re-triaged, since a `marketplace remove` that leaves dependents dangling is now reported by the check rather than needing a guard.
+
+**Plans**: 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 6 to break down)
+
+**Notes.** The design point to settle in discuss, before any row is worded: how the "disabled as a consequence" state is persisted so reconcile respects it. The config cannot carry it (D-04-02: the config names only what the user asked for, and enablement there is the user's word), so it is a record-level flag or reason that `orchestrators/reconcile/plan.ts` reads when it buckets enables — and the lift condition (dependency installed, enabled, in range) is the same predicate the check runs. `recordedVersionSatisfies` in `domain/dependency-range.ts` already answers the range half. Interaction with the update family: Phase 10 keeps an update from moving a dependency out of range, so the range arm here fires only on hand-edited records and pre-Phase-10 updates. Owners: `orchestrators/reconcile/plan.ts` / `apply.ts` (new outcome kinds), `orchestrators/plugin/uninstall.ts`, `shared/notification-types.ts` + `notify-reasons.ts` + `docs/output-catalog.md` + `tests/architecture/catalog-uat` for the tokens.
+
+### Phase 7: Marketplace-repository tag resolution for path-source dependencies
+
+**Goal**: A version constraint on a path-source dependency — the common case — resolves the way upstream resolves it: against the marketplace repository's `{name}--v{version}` tags, offline, with a stated fallback when no tag matches.
+
+**Depends on**: Phase 6 (TAGS-02's fallback installs the current copy and relies on the load-time check to catch a copy outside the range; without it the constraint would be silently unchecked) and Phase 3 (the tag probe and the cascade's `probeMemberPin` seam).
+
+**Requirements**: TAGS-01, TAGS-02, TAGS-03, DIVG-01
+
+**Success Criteria** (what must be TRUE):
+
+1. A constrained dependency whose marketplace entry is a relative path is resolved by listing the marketplace clone's tags of the form `{name}--v{version}`, selecting the highest that satisfies the constraint, with no network access (`list`, `info`, `uninstall` unaffected; install on a warm clone stays offline — NFR-5). (TAGS-01)
+2. When no tag satisfies, the install proceeds with the marketplace's current copy and the row says so; the constraint is then checked at load by Phase 6 rather than failing the install with `{no matching version}`. (TAGS-02)
+3. When a tag satisfies, the plugin's files come from the marketplace repository at that tag — not the current checkout — and the record's version reflects it. (TAGS-03)
+4. `docs/dependency-resolution.md` says that upstream accepts a `sha` field on a dependency element and that this extension refuses it (D-03-36), next to the divergences it already lists; §"What a version constraint can say" and §path source describe the new resolution. (DIVG-01)
+
+**Plans**: 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 7 to break down)
+
+**Notes.** `orchestrators/plugin/dependency-tag-probe.ts::probeDependencyTags` today lists the *dependency's own source repository* tags over the network; a path source has no such repository, which is why every non-wildcard constraint fails. The marketplace clone is local, so tag listing goes through `platform/git.ts` against the clone (isomorphic-git `listTags`), not the advertised-refs path — and `no-orchestrator-network.test.ts` must keep passing for the gated install owners. Materializing "the plugin at that tag" from a clone whose checkout is at a different commit is the open mechanics question for discuss: a second worktree-like checkout under the plugin's clone root, or reading the tree at the tag oid into the staging directory. Containment (NFR-10) applies either way.
+
+### Phase 8: Enablement parity for dependencies
+
+**Goal**: `enable` and `disable` understand dependencies the way `install` and `uninstall` now do: enabling a plugin enables what it declares, disabling a plugin that an enabled dependent still needs is refused with the one command that does it properly, and a cascade turns a disabled dependency back on rather than leaving the dependent broken.
+
+**Depends on**: Phase 6 (the "disabled as a consequence" record: an enable cascade must lift it, and EDEP-02's refusal reads the same declaration index) and Phase 4 (D-04-07: promotion re-enables through the enable path; this phase generalises that write).
+
+**Requirements**: EDEP-01, EDEP-02, EDEP-03
+
+**Success Criteria** (what must be TRUE):
+
+1. `enable <plugin>` enables the plugin's declared dependencies, transitively, in the same scope, and lists each one on its own row. (EDEP-01)
+2. `disable <plugin>` is refused while an enabled installed plugin in the scope declares it; the refusal names the dependents and gives one chained `disable` command that takes them down together. (EDEP-02)
+3. Installing or enabling a plugin whose already-installed dependency is disabled enables that dependency through its record — the config never names it (D-04-02) — and reports it on the row with a new closed-set token; RESV-05's `{already installed, dependency disabled}` warning skip is removed from the catalog (fixture, both contract constants, length lock, both enumeration pins), and `docs/plugin-enablement.md` §"Dependencies" is rewritten, not appended, since it argues the divergence this phase reverses. (EDEP-03)
+4. BACKLOG `ENBL-DEP-01` is closed by this phase; `DEPS-STATUS-01` (partial dependency degrades the dependent) stays open — it is not upstream parity and is not pulled in here.
+
+**Plans**: 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 8 to break down)
+
+**Notes.** `orchestrators/plugin/enable-disable.ts`'s existing "dependencies" are the soft-dep companion extensions (pi-subagents, pi-mcp-adapter), not plugin dependencies — the naming collision is the first thing the planner should disambiguate. The enable branch already reuses `runInstallLedger` for materialization; the cascade order comes from `domain/dependency-closure.ts`'s post-order. The disable refusal text upstream: `X is still required by A, B. Disable those plugins first, or disable everything together: <chained command>`.
+
+### Phase 9: Reload installs missing declared dependencies
+
+**Goal**: A desired plugin implies its dependencies. A reload that finds an installed plugin missing a declared dependency installs it, the way `install` would have, instead of leaving the dependent to be disabled.
+
+**Depends on**: Phase 6 (a dependency that cannot be installed hands the dependent to the check) and Phase 7 (the cascade's tag probe, which the reload reuses for path sources).
+
+**Requirements**: MISS-01, MISS-02
+
+**Success Criteria** (what must be TRUE):
+
+1. On `/reload`, every declared dependency of an installed plugin that is not installed in the scope is installed through the install cascade with provenance `dependency`, from the marketplace the declaration resolves to (a not-added marketplace is still not auto-added — D-03-08). (MISS-01)
+2. When such a dependency cannot be installed, the reload completes, the failure is reported on its own row with its cause, and the dependent is disabled by Phase 6's check with the install remedy; nothing is half-materialized (NFR-1/NFR-3). (MISS-02)
+3. A reload with nothing missing installs nothing and stays offline (NFR-5); the new reconcile bucket is exercised by `tests/integration/reconcile-plan-convergence.test.ts` alongside the existing ones.
+
+**Plans**: 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 9 to break down)
+
+**Notes.** `orchestrators/reconcile/plan.ts` buckets declared-vs-recorded today; this adds a bucket derived from the declaration index rather than the config, so D-04-02 holds (the config still names only what the user asked for). Upstream also runs this on `marketplace add` and autoupdate; whether Pi's `bootstrap.ts` composer and `marketplace/autoupdate.ts` reach the same reconcile is a planning question, not a requirement.
+
+### Phase 10: Constraint-aware update
+
+**Goal**: An update never moves a dependency out of the range its dependents declare. When every installed dependent's constraints leave room, the update takes the highest version inside it; when they leave none, that plugin's update is skipped and the user is told which plugin is holding it.
+
+**Depends on**: Phase 7 (tag listing on the marketplace clone for path sources; git-source updates already read tags) and Phase 3 (`domain/dependency-range.ts::intersectDependencyRanges`).
+
+**Requirements**: UPDT-01, UPDT-02
+
+**Success Criteria** (what must be TRUE):
+
+1. `update <plugin>`, `update` (all) and `autoupdate` of a plugin that installed plugins in the scope constrain select the highest available version satisfying the intersection of every dependent's range, for both git-source and path-source dependencies. (UPDT-01)
+2. When no available version satisfies the intersection, that plugin's update is skipped and reported on its row with a reason naming the constraining plugin(s); the rest of the update proceeds. (UPDT-02)
+3. An unconstrained plugin updates exactly as before; the update family stays inside its network policy (warm cache offline; `update-flow.ts` / `update-preflight.ts` remain the only git consumers per `no-orchestrator-network.test.ts`).
+
+**Plans**: 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 10 to break down)
+
+**Notes.** Owners: `orchestrators/plugin/update-flow.ts`, `update-preflight.ts`, `update-swap.ts`, `update-row.ts`, `update.messaging.ts`, `orchestrators/marketplace/autoupdate.ts`. `update-preflight.ts` is the natural place to compute the intersection from the declaration index before the swap decides a target. A version-pinned record already refuses promotion (D-04-07); a pinned record's update is out of scope here as before.
+
+### Phase 11: Cross-marketplace dependency allowlist
+
+**Goal**: A plugin may only pull a dependency from another marketplace when its own marketplace says so, matching the upstream `allowCrossMarketplaceDependenciesOn` field, while a dependency the user already installed by hand keeps satisfying the declaration.
+
+**Depends on**: Phase 3 (the closure walk and its guard order — the D-03-10 record-before-guard note).
+
+**Requirements**: XMKT-01, XMKT-02
+
+**Success Criteria** (what must be TRUE):
+
+1. A dependency that resolves from a marketplace other than the root plugin's is refused with a closed-set reason naming `allowCrossMarketplaceDependenciesOn` unless the root marketplace's `marketplace.json` lists the target marketplace there; the cascade fails clean as it does for any unresolvable dependency (D-03-07). (XMKT-01)
+2. A dependency already installed in the scope satisfies the declaration whatever the allowlist says. (XMKT-02)
+3. A `marketplace.json` without the field behaves as an empty allowlist; `info` and the cascade read the same parsed value.
+
+**Plans**: 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 11 to break down)
+
+**Notes.** Owners: `domain/manifest.ts` (schema field), `domain/dependency-closure.ts` (the guard slots after the already-installed check and before resolution, per D-03-10), a new closed-set reason on every pin surface. D-03-08 parity holds: upstream never auto-adds a marketplace to satisfy a dependency, and neither does this.
+
+### Phase 12: Standalone prune with dry-run
+
+**Goal**: A user can see and remove the scope's orphaned dependency-installed plugins without uninstalling anything, through a `prune` verb whose flag surface closes at `--dry-run`.
+
+**Depends on**: Phase 5 (`finalizePrunedMembers` and `domain/dependency-orphans.ts::pruneOrphans` are the sweep; this phase gives them an entry point that removes no primary) and Phase 6 (LOAD-03 changed what "orphaned" can mean after an allowed uninstall; the sweep's `provenance: "dependency"` + undeclared predicate is unchanged, but the docs and rows are written after that change).
+
+**Requirements**: PRUNE-06, PRUNE-07, FLAG-02
+
+**Success Criteria** (what must be TRUE):
+
+1. `prune` removes every `provenance: "dependency"` record in the scope that no installed plugin declares, renders each as `(uninstalled) {dependency pruned}`, and removes nothing else; the sweep runs to the same fixpoint `uninstall --prune` reaches, in one locked transaction. (PRUNE-06)
+2. `prune --dry-run` renders the same rows as a would-remove listing and mutates nothing on disk or in `state.json`. (PRUNE-07)
+3. `prune` accepts exactly `--dry-run` as its extra flag beside the shared scope flags; the flag-catalog drift guard (`tests/architecture/flag-catalog-drift.test.ts`) pins that set, and FLAG-01's `uninstall` set is untouched. No confirmation prompt and no `-y` (REQUIREMENTS Out of Scope). (FLAG-02)
+4. BACKLOG `PRUNE-CMD-01` is closed; its `{orphaned}` inventory marker on `list` / `info` is NOT part of this phase (upstream shows none), and is re-filed or dropped in discuss.
+
+**Plans**: 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 12 to break down)
+
+**Notes.** Owners: `edge/router.ts` (new subcommand + completions), `edge/flag-catalog.ts` (amend the FLAG-01 drift guard deliberately — a new `prune` entry, not a change to `uninstall`'s), `orchestrators/plugin/uninstall.ts` (extract the sweep so `prune` reaches it without a primary). `--dry-run` must not open the write lock for nothing: plan the read-only path through the same `pruneOrphans` predicate.
+
 ## Progress
 
 **Execution order:** 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
@@ -285,6 +462,13 @@ Phase 1 goes first only because Phase 3 needs it. Phase 2 can be pulled forward
 or run alongside the dependency lane, but it must precede Phase 5, which extends
 the option seam it builds. Phases 3, 4 and 5 are a strict chain: the cascade
 writes the provenance the prune reads.
+
+**Parity phases (6-12):** 6 → 7 → {8, 9, 10} → 11 → 12. Phase 6 leads because
+7, 8 and 9 each land on its check. Phase 7 precedes 9 and 10 because both reuse
+its marketplace-clone tag listing. Phases 8, 9 and 10 are independent of each
+other once 6 and 7 are in. Phase 11 is independent of everything after Phase 3
+and sits late only because it is the smallest. Phase 12 goes last so its docs
+and rows describe the post-LOAD-03 model.
 
 **Gate for every phase:** `npm run check` stays green — typecheck, ESLint,
 `fallow` (dead code, health, duplication), Prettier, unit tests and integration
@@ -305,6 +489,13 @@ plugin names — so plan these phases with the UI gate skipped.
 | 3. Dependency resolution | v1.20 | 7/7 | Complete    | 2026-09-15 |
 | 4. Install provenance | v1.20 | 6/6 | Complete    | 2026-09-16 |
 | 5. Prune on uninstall | v1.20 | 3/3 | Complete    | 2026-09-16 |
+| 6. Load-time dependency check and allowed uninstall | v1.20 | 0/0 | Not started | — |
+| 7. Marketplace-repository tag resolution for path-source dependencies | v1.20 | 0/0 | Not started | — |
+| 8. Enablement parity for dependencies | v1.20 | 0/0 | Not started | — |
+| 9. Reload installs missing declared dependencies | v1.20 | 0/0 | Not started | — |
+| 10. Constraint-aware update | v1.20 | 0/0 | Not started | — |
+| 11. Cross-marketplace dependency allowlist | v1.20 | 0/0 | Not started | — |
+| 12. Standalone prune with dry-run | v1.20 | 0/0 | Not started | — |
 
 ## Carried Forward
 
