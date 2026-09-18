@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 11
+open_count: 18
 waived_count: 18
 fixed_count: 19
-total_count: 48
-last_updated: 2026-09-18T13:01:15.464Z
+total_count: 55
+last_updated: 2026-09-18T15:10:44.507Z
 ---
 
 # Broken Windows Ledger
@@ -63,6 +63,13 @@ last_updated: 2026-09-18T13:01:15.464Z
 | 46 | 07 | deviation | scripts/coverage-source-map.mjs |  | The AST walker primitives (fresh parse, child-node walk, newline-only line model, declared-function spans) moved from coverage-source-map.mjs and coverage-correspondence.mjs into scripts/coverage-syntax.mjs so fallow's duplicate gate passes; neither coverage-source-map.mjs nor the new module was in the plan's file list | open |  | 2026-09-18T13:01:14.775Z |  |
 | 47 | 07 | deviation | tests/scripts/coverage-run-support.ts |  | Capture-and-convert, map publishing and installed-Fallow helpers shared by the correspondence, schema and validation controls live in a support module that was not in the plan's file list | open |  | 2026-09-18T13:01:15.144Z |  |
 | 48 | 07 | deviation | tests/scripts/coverage-correspondence-fixtures.ts |  | The twins fixture (two same-name callbacks with equal hits and statement ratio) lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list | open |  | 2026-09-18T13:01:15.464Z |  |
+| 49 | 07 | deviation | scripts/coverage-capture.mjs |  | The capture records an executed text for every production source no test loaded (inventory snapshot stripped under the same runtime) so consumers find every production source in the run; the file was not in the plan's list | open |  | 2026-09-18T14:53:44.164Z |  |
+| 50 | 07 | deviation | scripts/coverage-source-map.mjs |  | recordedModule serves unloaded production records from the inventory snapshot store and reports whether the run loaded the module; the file was not in the plan's list | open |  | 2026-09-18T14:53:44.869Z |  |
+| 51 | 07 | deviation | scripts/coverage-validate.mjs |  | coverage:validate verifies an accepted bundle (producer identity, full re-validation, receipt equality) and refuses execution counters on an unloaded source; the file postdates the plan and was not in its list | open |  | 2026-09-18T14:53:45.504Z |  |
+| 52 | 07 | deviation | scripts/coverage-producer.convert.mjs |  | The adapter exports createCoverageMerger and returns merged files in path order so snapshot order cannot change the map bytes; the file was not in the plan's list | open |  | 2026-09-18T14:53:46.246Z |  |
+| 53 | 07 | deviation | tests/scripts/coverage-projection.ts |  | The projection helpers the producer corpus and the unit-bundle controls share live in a support module that was not in the plan's file list | open |  | 2026-09-18T14:53:46.812Z |  |
+| 54 | 07 | deviation | tests/scripts/coverage-unit-fixtures.ts |  | The four-source production population fixture lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list | open |  | 2026-09-18T14:53:47.434Z |  |
+| 55 | 07 | deviation | tests/scripts/coverage-source-map.test.ts |  | The strip proof admits the two- and three-byte blanks (U+00A0, U+2002) strip mode writes for removed characters, found by the full-population conversion; the control was added to a test file outside the plan's list | open |  | 2026-09-18T15:10:44.507Z |  |
 
 ````json
 [
@@ -656,6 +663,97 @@ last_updated: 2026-09-18T13:01:15.464Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-18T13:01:15.464Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 49,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "scripts/coverage-capture.mjs",
+    "line": null,
+    "description": "The capture records an executed text for every production source no test loaded (inventory snapshot stripped under the same runtime) so consumers find every production source in the run; the file was not in the plan's list",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-18T14:53:44.164Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 50,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "scripts/coverage-source-map.mjs",
+    "line": null,
+    "description": "recordedModule serves unloaded production records from the inventory snapshot store and reports whether the run loaded the module; the file was not in the plan's list",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-18T14:53:44.869Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 51,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "scripts/coverage-validate.mjs",
+    "line": null,
+    "description": "coverage:validate verifies an accepted bundle (producer identity, full re-validation, receipt equality) and refuses execution counters on an unloaded source; the file postdates the plan and was not in its list",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-18T14:53:45.504Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 52,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "scripts/coverage-producer.convert.mjs",
+    "line": null,
+    "description": "The adapter exports createCoverageMerger and returns merged files in path order so snapshot order cannot change the map bytes; the file was not in the plan's list",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-18T14:53:46.246Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 53,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "tests/scripts/coverage-projection.ts",
+    "line": null,
+    "description": "The projection helpers the producer corpus and the unit-bundle controls share live in a support module that was not in the plan's file list",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-18T14:53:46.812Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 54,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "tests/scripts/coverage-unit-fixtures.ts",
+    "line": null,
+    "description": "The four-source production population fixture lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-18T14:53:47.434Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 55,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "tests/scripts/coverage-source-map.test.ts",
+    "line": null,
+    "description": "The strip proof admits the two- and three-byte blanks (U+00A0, U+2002) strip mode writes for removed characters, found by the full-population conversion; the control was added to a test file outside the plan's list",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-18T15:10:44.507Z",
     "resolved_at": null,
     "milestone": null
   }
