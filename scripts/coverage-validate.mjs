@@ -7,13 +7,14 @@
 // The published capture bundle under `root` is read back the way every
 // consumer must (`verifyCaptureBundle`): pointer, run manifest, artifact
 // digests, module stores and the inventory recomputed from the tree. The
-// candidate map (`coverage/unit.istanbul.json` by default) must then name
-// exactly the production sources that run inventoried, and each record must
-// pass, against the run's own immutable source and executed text, the
-// position-preserving strip proof, the concrete-position check and the
-// independent syntax correspondence. Any failure refuses the whole map with
-// exit status 1 and one `{ kind, ... }` row per finding on stderr; a usage
-// error exits 2 before anything is read. The module is inert on import.
+// candidate map (`coverage/unit.istanbul.json` by default) must then name,
+// by canonical contained paths, exactly the production sources that run
+// inventoried, and each record must pass, against the run's own immutable
+// source and executed text, the position-preserving strip proof, the strict
+// schema (shape, counters, concrete positions, implicit-else convention) and
+// the independent syntax correspondence. Any failure refuses the whole map
+// with exit status 1 and one `{ kind, ... }` row per finding on stderr; a
+// usage error exits 2 before anything is read. The module is inert on import.
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -31,12 +32,8 @@ import {
   correspondenceFailures,
   syntaxInventory,
 } from "./coverage-correspondence.mjs";
-import {
-  executedSourceMap,
-  openCaptureRun,
-  positionFailures,
-  recordedModule,
-} from "./coverage-source-map.mjs";
+import { COVERAGE_SCHEMA_VERSION, fileFailures, mapFiles } from "./coverage-schema.mjs";
+import { executedSourceMap, openCaptureRun, recordedModule } from "./coverage-source-map.mjs";
 
 const DEFAULT_MAP_PATH = "coverage/unit.istanbul.json";
 
@@ -109,19 +106,17 @@ function productionPaths(run) {
   return inventory.filter((entry) => entry.group === "production").map((entry) => entry.path);
 }
 
-// The map must name every production source the run inventoried and no
-// other file; each key is resolved to its repository-relative path.
+// The map must name, by canonical contained paths, every production source
+// the run inventoried and no other file.
 function population(root, production, map) {
+  const { files, failures } = mapFiles(map, root);
   const keyed = new Map();
-  const failures = [];
 
-  for (const key of Object.keys(map)) {
-    const projectPath = toProjectPath(root, key);
-
-    if (projectPath === undefined || !production.includes(projectPath)) {
-      failures.push({ kind: "unlisted-file", path: key });
-    } else {
+  for (const [projectPath, key] of files) {
+    if (production.includes(projectPath)) {
       keyed.set(projectPath, key);
+    } else {
+      failures.push({ kind: "unlisted-file", path: key });
     }
   }
 
@@ -139,15 +134,16 @@ function withPath(failures, projectPath) {
 }
 
 // One record against the run's own bytes: the executed text must be a
-// position-preserving strip of the source, every location a concrete
-// position in it, and the record must correspond exactly to the syntax.
+// position-preserving strip of the source, the record must have the strict
+// schema with every location a concrete position in that source, and it
+// must correspond exactly to the syntax.
 function fileVerdict(run, projectPath, file) {
   const module = recordedModule(run, projectPath);
   executedSourceMap(module);
-  const positions = positionFailures(file, module.original);
+  const schema = fileFailures(file, module.original);
 
-  if (positions.length > 0) {
-    return { failures: withPath(positions, projectPath) };
+  if (schema.length > 0) {
+    return { failures: withPath(schema, projectPath) };
   }
 
   const inventory = syntaxInventory(module.executed);
@@ -202,7 +198,7 @@ function validate(options) {
 function report(accepted) {
   const { runId, files, totals } = accepted;
   process.stdout.write(
-    `Coverage map validated: ${runId}, ${files} file(s), ${totals.functions} function(s), ${totals.statements} statement(s), ${totals.branches} branch(es), syntax model ${CORRESPONDENCE_SYNTAX_VERSION}\n`,
+    `Coverage map validated: ${runId}, ${files} file(s), ${totals.functions} function(s), ${totals.statements} statement(s), ${totals.branches} branch(es), schema ${COVERAGE_SCHEMA_VERSION}, syntax model ${CORRESPONDENCE_SYNTAX_VERSION}\n`,
   );
 }
 

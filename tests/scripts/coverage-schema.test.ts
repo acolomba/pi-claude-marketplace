@@ -477,7 +477,7 @@ test("refuses two keys that resolve to one file", async (t) => {
   // arrange
   const schema = await loadSchema();
   const { fixture, root, captured, file, map } = await convertedTwins(t);
-  const detour = path.join(root, "extensions", "..", fixture.sourcePath);
+  const detour = `${root}/extensions/../${fixture.sourcePath}`;
   const doubled: IstanbulCoverageMap = { ...map, [detour]: { ...file, path: detour } };
 
   // act

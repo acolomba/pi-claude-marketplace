@@ -61,7 +61,7 @@ test("accepts the converted map of a captured fixture root", async (t) => {
   // assert
   assert.deepStrictEqual(validation, {
     status: 0,
-    stdout: `Coverage map validated: ${path.basename(captured.directory)}, 1 file(s), 4 function(s), 10 statement(s), 4 branch(es), syntax model 1\n`,
+    stdout: `Coverage map validated: ${path.basename(captured.directory)}, 1 file(s), 4 function(s), 10 statement(s), 4 branch(es), schema 1, syntax model 1\n`,
     stderr: "",
   });
 });
