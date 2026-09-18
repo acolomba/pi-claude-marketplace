@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -12,15 +11,11 @@ import {
   fixtureFiles,
   refusalRows,
   run,
+  writeMap,
 } from "./coverage-run-support.ts";
 
 import type { ProducerFixture } from "./coverage-producer-fixtures.ts";
-import type {
-  CapturedRun,
-  IstanbulCoverageMap,
-  IstanbulFileCoverage,
-  ProcessRun,
-} from "./coverage-run-support.ts";
+import type { CapturedRun, IstanbulFileCoverage, ProcessRun } from "./coverage-run-support.ts";
 import type { TestContext } from "node:test";
 
 // The validator CLI is exercised as a process against a fixture root that
@@ -32,19 +27,11 @@ const validateCliPath = fileURLToPath(
   new URL("../../scripts/coverage-validate.mjs", import.meta.url),
 );
 
-const MAP_PATH = "coverage/unit.istanbul.json";
-
 interface ValidationRoot {
   readonly fixture: ProducerFixture;
   readonly root: string;
   readonly captured: CapturedRun;
   readonly file: IstanbulFileCoverage;
-}
-
-async function writeMap(root: string, map: IstanbulCoverageMap): Promise<void> {
-  const mapPath = path.join(root, MAP_PATH);
-  await mkdir(path.dirname(mapPath), { recursive: true });
-  await writeFile(mapPath, `${JSON.stringify(map, undefined, 2)}\n`);
 }
 
 // A fixture root captured and converted, with the converted map published

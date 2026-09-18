@@ -4,7 +4,7 @@ import test from "node:test";
 import { twinsFixture } from "./coverage-correspondence-fixtures.ts";
 import {
   captureFixture,
-  convertFromRun,
+  capturedConversion,
   createRoot,
   executedText,
   fixtureFiles,
@@ -13,6 +13,7 @@ import {
 
 import type { ProducerFixture, SourceSpan } from "./coverage-producer-fixtures.ts";
 import type {
+  CapturedConversion,
   FailureRow,
   IstanbulBranch,
   IstanbulFileCoverage,
@@ -139,20 +140,8 @@ function expectedFunction(
   return { decl: fn.decl, loc: fn.loc };
 }
 
-interface ConvertedTwins {
-  readonly fixture: ProducerFixture;
-  readonly file: IstanbulFileCoverage;
-  readonly executed: string;
-}
-
-async function convertedTwins(t: TestContext): Promise<ConvertedTwins> {
-  const fixture = twinsFixture();
-  const root = await createRoot(t, fixtureFiles(fixture));
-  const captured = await captureFixture(root, fixture);
-  const coverage = await convertFromRun(t, captured);
-  const file = coverage[captured.modulePath];
-  assert.ok(file);
-  return { fixture, file, executed: await executedText(captured) };
+function convertedTwins(t: TestContext): Promise<CapturedConversion> {
+  return capturedConversion(t, twinsFixture());
 }
 
 test("accepts the converted map of a captured module whose twin callbacks share a name, a hit count and a statement ratio", async (t) => {
@@ -289,6 +278,54 @@ test("rejects a map missing the if branch inside the first callback", async (t) 
     { kind: "branch-missing", type: "if", loc: branch.loc, locations: [branch.loc, absent] },
   ]);
 });
+
+// The implicit else is admitted only as the absent location of an `if` the
+// syntax declares without an alternate. A location the source does not
+// declare in that slot is an unproven branch and the declared one is missing,
+// however plausible the coordinates look.
+for (const { name, alternate } of [
+  {
+    name: "zero coordinates",
+    alternate: { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } },
+  },
+  {
+    name: "the span of the consequent",
+    alternate: { start: { line: 4, column: 22 }, end: { line: 6, column: 5 } },
+  },
+]) {
+  test(`rejects an if branch whose absent else is replaced by ${name}`, async (t) => {
+    // arrange
+    const correspondence = await loadCorrespondence();
+    const { fixture, file, executed } = await convertedTwins(t);
+    const branch = fixture.branches[1];
+    assert.ok(branch);
+    const id = idWhere(
+      file.branchMap,
+      (candidate) => candidate.type === "if" && sameSpan(candidate.loc, branch.loc),
+    );
+    const record = file.branchMap[id];
+    assert.ok(record);
+    const filled: IstanbulFileCoverage = {
+      ...file,
+      branchMap: { ...file.branchMap, [id]: { ...record, locations: [record.loc, alternate] } },
+    };
+
+    // act
+    const failures = correspondence.correspondenceFailures(filled, executed);
+
+    // assert
+    assert.deepStrictEqual(failures, [
+      { kind: "branch-missing", type: "if", loc: branch.loc, locations: [branch.loc, absent] },
+      {
+        kind: "branch-unproven",
+        id,
+        type: "if",
+        loc: branch.loc,
+        locations: [branch.loc, alternate],
+      },
+    ]);
+  });
+}
 
 const shifted: IstanbulLocation = { start: { line: 2, column: 22 }, end: { line: 2, column: 27 } };
 

@@ -23,6 +23,14 @@ export const captureCliPath = fileURLToPath(
 export const producerCliPath = fileURLToPath(
   new URL("../../scripts/coverage-producer.mjs", import.meta.url),
 );
+// The installed Fallow launcher: a Node script that runs the platform binary
+// the lockfile resolved, so a control exercises the consumer the gate uses.
+export const fallowBinPath = fileURLToPath(
+  new URL("../../node_modules/fallow/bin/fallow", import.meta.url),
+);
+
+/** Where a fixture root publishes the Istanbul map the validator reads by default. */
+export const MAP_PATH = "coverage/unit.istanbul.json";
 
 export interface ProcessRun {
   readonly status: number;
@@ -228,6 +236,116 @@ export async function convertFromRun(
 /** The executed text the run recorded for the captured module. */
 export async function executedText(captured: CapturedRun): Promise<string> {
   return readFile(path.join(captured.directory, "executed", captured.record.executed), "utf8");
+}
+
+/** The original source the run recorded for the captured module. */
+export async function originalText(captured: CapturedRun): Promise<string> {
+  return readFile(path.join(captured.directory, "sources", captured.record.source), "utf8");
+}
+
+// One fixture captured and converted: the root, the run, the map the producer
+// wrote and its record for the fixture module, with the texts the run stored.
+export interface CapturedConversion {
+  readonly fixture: ProducerFixture;
+  readonly root: string;
+  readonly captured: CapturedRun;
+  readonly map: IstanbulCoverageMap;
+  readonly file: IstanbulFileCoverage;
+  readonly original: string;
+  readonly executed: string;
+}
+
+export async function capturedConversion(
+  t: TestContext,
+  fixture: ProducerFixture,
+): Promise<CapturedConversion> {
+  const root = await createRoot(t, fixtureFiles(fixture));
+  const captured = await captureFixture(root, fixture);
+  const map = await convertFromRun(t, captured);
+  const file = map[captured.modulePath];
+  assert.ok(file, `the producer wrote no record for ${captured.modulePath}`);
+  return {
+    fixture,
+    root,
+    captured,
+    map,
+    file,
+    original: await originalText(captured),
+    executed: await executedText(captured),
+  };
+}
+
+/** Publishes `map` at the path the validator reads by default and returns that path. */
+export async function writeMap(root: string, map: IstanbulCoverageMap): Promise<string> {
+  const mapPath = path.join(root, MAP_PATH);
+  await mkdir(path.dirname(mapPath), { recursive: true });
+  await writeFile(mapPath, `${JSON.stringify(map, undefined, 2)}\n`);
+  return mapPath;
+}
+
+// One production function as the installed Fallow reports it when given a
+// coverage map: the coverage it joined to the function and where that
+// coverage came from (`istanbul` when a record matched, `estimated` when
+// none did).
+export interface FallowFunction {
+  readonly path: string;
+  readonly name: string;
+  readonly line: number;
+  readonly coveragePct: number | null;
+  readonly coverageSource: string;
+}
+
+interface FallowHealthReport {
+  readonly summary: { readonly istanbul_matched: number; readonly istanbul_total: number };
+  readonly findings: ReadonlyArray<{
+    readonly path: string;
+    readonly name: string;
+    readonly line: number;
+    readonly coverage_pct: number | null;
+    readonly coverage_source: string;
+  }>;
+}
+
+export interface FallowHealth {
+  readonly status: number;
+  readonly matched: number;
+  readonly functions: readonly FallowFunction[];
+}
+
+// Runs the installed Fallow health command over `root` with `mapPath` as its
+// coverage input, in report-only mode with a CRAP ceiling of 1 so that every
+// function is listed with the coverage Fallow attached to it. Only the
+// fixture's production functions are returned.
+export function fallowHealth(root: string, mapPath: string): FallowHealth {
+  const health = run([
+    fallowBinPath,
+    "health",
+    "--root",
+    root,
+    "--coverage",
+    mapPath,
+    "--format",
+    "json",
+    "--no-cache",
+    "--report-only",
+    "--max-crap",
+    "1",
+  ]);
+  assert.strictEqual(health.status, 0, health.stderr);
+  const report = JSON.parse(health.stdout) as FallowHealthReport;
+  return {
+    status: health.status,
+    matched: report.summary.istanbul_matched,
+    functions: report.findings
+      .filter((finding) => finding.path.startsWith("extensions/"))
+      .map((finding) => ({
+        path: finding.path,
+        name: finding.name,
+        line: finding.line,
+        coveragePct: finding.coverage_pct,
+        coverageSource: finding.coverage_source,
+      })),
+  };
 }
 
 /** The V8 record for the captured module in each raw file that holds one. */
