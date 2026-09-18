@@ -3,6 +3,7 @@
 // D-09).
 //
 //   node scripts/coverage-validate.mjs [--root <dir>] [--map <istanbul.json>]
+//                                      [--receipt <json>]
 //
 // The published capture bundle under `root` is read back the way every
 // consumer must (`verifyCaptureBundle`): pointer, run manifest, artifact
@@ -12,20 +13,30 @@
 // inventoried, and each record must pass, against the run's own immutable
 // source and executed text, the position-preserving strip proof, the strict
 // schema (shape, counters, concrete positions, implicit-else convention) and
-// the independent syntax correspondence. Any failure refuses the whole map
-// with exit status 1 and one `{ kind, ... }` row per finding on stderr; a
-// usage error exits 2 before anything is read. The module is inert on import.
+// the independent syntax correspondence.
+//
+// An accepted map earns a receipt (`coverage/unit.validation.json` by
+// default) that binds the verdict to its exact inputs: the run, the digest
+// of the public manifest, the digest of the map bytes, the source and
+// executed-text digests of every validated module, the schema and syntax
+// model versions, the digests of the validator scripts and the runtime. A
+// receipt from an earlier run is removed before validation starts, so no
+// acceptance survives a refusal. Any failure refuses the whole map with exit
+// status 1 and one `{ kind, ... }` row per finding on stderr; a usage or
+// setup error exits 2 before anything is read. The module is inert on import.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
   RUNS_DIRECTORY,
   runtimeIdentity,
+  sha256,
   toolingIdentity,
   toProjectPath,
   verifyCaptureBundle,
+  writeJsonAtomically,
 } from "./coverage-capture.manifest.mjs";
 import {
   CORRESPONDENCE_SYNTAX_VERSION,
@@ -35,7 +46,21 @@ import {
 import { COVERAGE_SCHEMA_VERSION, fileFailures, mapFiles } from "./coverage-schema.mjs";
 import { executedSourceMap, openCaptureRun, recordedModule } from "./coverage-source-map.mjs";
 
+const PUBLIC_MANIFEST_PATH = "coverage/unit.manifest.json";
 const DEFAULT_MAP_PATH = "coverage/unit.istanbul.json";
+const DEFAULT_RECEIPT_PATH = "coverage/unit.validation.json";
+const RECEIPT_KIND = "pi-claude-marketplace-unit-coverage-validation";
+const RECEIPT_SCHEMA_VERSION = 1;
+
+// The scripts whose bytes decide a verdict, read next to this module.
+const VALIDATOR_TOOLING = [
+  "coverage-validate.mjs",
+  "coverage-schema.mjs",
+  "coverage-correspondence.mjs",
+  "coverage-syntax.mjs",
+  "coverage-source-map.mjs",
+];
+const OPTIONS = ["--root", "--map", "--receipt"];
 
 class UsageError extends Error {}
 
@@ -48,25 +73,35 @@ class ValidationError extends Error {
   }
 }
 
+// `--map` and `--receipt` resolve against the root; the root must exist.
 function parseArguments(args) {
-  const options = { root: process.cwd(), map: undefined };
+  const options = { root: process.cwd(), map: DEFAULT_MAP_PATH, receipt: DEFAULT_RECEIPT_PATH };
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
     const value = args[index + 1];
 
-    if ((argument === "--root" || argument === "--map") && value !== undefined) {
-      options[argument.slice(2)] = path.resolve(value);
+    if (OPTIONS.includes(argument) && value !== undefined) {
+      options[argument.slice(2)] = value;
       index += 1;
     } else {
       throw new UsageError(
-        `Unknown option: ${argument}. Pass [--root <dir>] [--map <istanbul.json>].`,
+        `Unknown option: ${argument}. Pass [--root <dir>] [--map <istanbul.json>] [--receipt <json>].`,
       );
     }
   }
 
-  options.map ??= path.join(options.root, DEFAULT_MAP_PATH);
-  return options;
+  const root = path.resolve(options.root);
+
+  if (!existsSync(root) || !statSync(root).isDirectory()) {
+    throw new UsageError(`Root is not a directory: ${root}`);
+  }
+
+  return {
+    root,
+    map: path.resolve(root, options.map),
+    receipt: path.resolve(root, options.receipt),
+  };
 }
 
 // The capture run the bundle points at, current for this tree and tooling.
@@ -92,11 +127,13 @@ function readCandidateMap(root, mapPath) {
     ]);
   }
 
+  const bytes = readFileSync(mapPath);
+
   try {
-    return JSON.parse(readFileSync(mapPath, "utf8"));
-  } catch (error) {
+    return { map: JSON.parse(bytes.toString("utf8")), digest: sha256(bytes) };
+  } catch {
     throw new ValidationError(`${mapPath} is not JSON`, [
-      { kind: "malformed-json", path: projectPath, message: error.message },
+      { kind: "malformed-json", path: projectPath },
     ]);
   }
 }
@@ -166,9 +203,46 @@ function rowsOf(error) {
   throw error;
 }
 
+function validatorTooling() {
+  const identity = {};
+
+  for (const fileName of VALIDATOR_TOOLING) {
+    identity[fileName] = sha256(readFileSync(fileURLToPath(new URL(fileName, import.meta.url))));
+  }
+
+  return identity;
+}
+
+// The acceptance bound to its exact inputs; `modules` are the run's records
+// of every validated file, in the order the map was read.
+function receiptFor(options, run, keyed, mapDigest, totals) {
+  const records = new Map(run.manifest.modules.map((record) => [record.path, record]));
+
+  return {
+    kind: RECEIPT_KIND,
+    schemaVersion: RECEIPT_SCHEMA_VERSION,
+    status: "accepted",
+    runId: run.manifest.runId,
+    manifest: {
+      path: PUBLIC_MANIFEST_PATH,
+      digest: sha256(readFileSync(path.join(options.root, PUBLIC_MANIFEST_PATH))),
+    },
+    map: { path: toProjectPath(options.root, options.map) ?? options.map, digest: mapDigest },
+    modules: [...keyed.keys()].map((projectPath) => {
+      const { source, executed } = records.get(projectPath);
+      return { path: projectPath, source, executed };
+    }),
+    model: { coverageSchema: COVERAGE_SCHEMA_VERSION, syntax: CORRESPONDENCE_SYNTAX_VERSION },
+    tooling: validatorTooling(),
+    runtime: runtimeIdentity(),
+    totals: { files: keyed.size, ...totals },
+  };
+}
+
 function validate(options) {
+  rmSync(options.receipt, { force: true });
   const run = currentRun(options.root);
-  const map = readCandidateMap(options.root, options.map);
+  const { map, digest } = readCandidateMap(options.root, options.map);
   const { keyed, failures } = population(options.root, productionPaths(run), map);
   const totals = { functions: 0, statements: 0, branches: 0 };
 
@@ -192,13 +266,18 @@ function validate(options) {
     throw new ValidationError("The coverage map is refused", failures);
   }
 
-  return { runId: run.manifest.runId, files: keyed.size, totals };
+  const receipt = receiptFor(options, run, keyed, digest, totals);
+  writeJsonAtomically(options.receipt, receipt);
+  return {
+    ...receipt,
+    receiptPath: toProjectPath(options.root, options.receipt) ?? options.receipt,
+  };
 }
 
 function report(accepted) {
-  const { runId, files, totals } = accepted;
+  const { runId, totals, model, receiptPath } = accepted;
   process.stdout.write(
-    `Coverage map validated: ${runId}, ${files} file(s), ${totals.functions} function(s), ${totals.statements} statement(s), ${totals.branches} branch(es), schema ${COVERAGE_SCHEMA_VERSION}, syntax model ${CORRESPONDENCE_SYNTAX_VERSION}\n`,
+    `Coverage map validated: ${runId}, ${totals.files} file(s), ${totals.functions} function(s), ${totals.statements} statement(s), ${totals.branches} branch(es), schema ${model.coverageSchema}, syntax model ${model.syntax}; receipt ${receiptPath}\n`,
   );
 }
 
