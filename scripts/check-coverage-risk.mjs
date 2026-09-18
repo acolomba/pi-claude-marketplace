@@ -46,6 +46,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  PUBLIC_ISTANBUL_PATH,
   PUBLIC_MANIFEST_PATH,
   RUNS_DIRECTORY,
   writeJsonAtomically,
@@ -661,7 +662,9 @@ function riskVerdict(options) {
   const run = openCaptureRun(
     path.join(options.root, RUNS_DIRECTORY, manifest.runId, "manifest.json"),
   );
-  const mapPath = path.join(options.root, manifest.acceptance.artifacts.public.istanbul);
+  // The readback verifies the digest of the map at the public path constant;
+  // the pointer the manifest records is not what selects the file.
+  const mapPath = path.join(options.root, PUBLIC_ISTANBUL_PATH);
   const population = populationAnchors(options.root, run, readJson(mapPath));
   const report = consumerReport(options.root, mapPath, options.consumer);
   const identity = reportFailures(report, policy);

@@ -415,6 +415,38 @@ test("refuses an accepted bundle whose source changed since the run", async (t) 
   });
 });
 
+// The readback verifies the digest of the map at the public path; the
+// pointer the accepted manifest records under `acceptance.artifacts.public`
+// is not verified, so the gate must not select the map through it.
+test("reads the map at the verified public path, not at the pointer the manifest records", async (t) => {
+  // arrange
+  const fixture = classifyFixture(true);
+  const root = await acceptedRoot(t, fixture);
+  const manifest = await readJson<{ runId: string }>(path.join(root, PUBLIC_MANIFEST));
+  const recordedPointer = '"istanbul": "coverage/unit.istanbul.json"';
+  const foreignPointer = '"istanbul": "coverage/elsewhere.istanbul.json"';
+
+  for (const manifestPath of [
+    path.join(root, PUBLIC_MANIFEST),
+    path.join(root, "coverage", "runs", manifest.runId, "accepted.json"),
+  ]) {
+    const text = await readFile(manifestPath, "utf8");
+    assert.ok(text.includes(recordedPointer));
+    await writeFile(manifestPath, text.replace(recordedPointer, foreignPointer));
+  }
+
+  // act
+  const passed = risk(root, "coverage/unit.risk.json");
+
+  // assert
+  assert.deepStrictEqual(passed, {
+    status: 0,
+    stdout: `Coverage risk verified: ${manifest.runId}, 1 production function(s) in 1 file(s) measured, max CRAP 6.00 at ${CLASSIFY_PATH}:1:7 (classify), policy < ${POLICY}; 2 other row(s) not gated\n`,
+    stderr: "",
+  });
+  assert.deepStrictEqual(measured(await reportAt(root)), expectedRows(fixture));
+});
+
 // A consumer that answers like the installed one except for one edit to its
 // report, written beside its counter so every invocation applies the edit.
 // Row counts in the summary follow the edit, as a consumer that dropped or
