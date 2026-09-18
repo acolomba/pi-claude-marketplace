@@ -198,7 +198,7 @@ test("rejects a validator that writes an unparsable row", async (t) => {
 
   // assert
   assert.strictEqual(run.status, 1);
-  assert.match(run.stderr, /^source-added: the validator wrote an unparsable row: {2}\{not a row/u);
+  assert.match(run.stderr, /^source-added: the validator wrote an unparsable row: {3}\{not a row/u);
 });
 
 test("rejects a validator ended by a signal", async (t) => {
