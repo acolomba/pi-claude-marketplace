@@ -22,6 +22,8 @@ export interface ExpectedRisk {
   readonly anchor: SourcePosition;
   readonly cyclomatic: number;
   readonly statements: { readonly total: number; readonly covered: number };
+  /** Whether a statement-empty body was entered; the entry rule's only input. */
+  readonly entered?: boolean;
 }
 
 export interface RiskFixture {
@@ -206,9 +208,11 @@ export function belowFixture(): RiskFixture {
 }
 
 // Two methods named `count` with opposite coverage, two arrows on one line
-// with opposite coverage, and a callback nested in `outer` whose body is
-// partly executed: `outer([1])` runs the callback once, takes the `if`
-// and its fall-through return, and never the early return.
+// with opposite coverage, a callback nested in `outer` whose body is partly
+// executed (`outer([1])` runs it once, takes the `if` and its fall-through
+// return, and never the early return), and the method shapes whose anchor
+// differs from the parameter list: a type parameter list the strip erases,
+// an optional marker, and two statement-empty bodies of which one runs.
 const twinsSource = `export class Left {
   count(items: string[]): number {
     return items.length;
@@ -231,9 +235,20 @@ export function outer(values: number[]): number[] {
     return value * 2;
   });
 }
+
+export class Shapes {
+  static async load<T>(x: T): Promise<T> {
+    return x;
+  }
+  opt?(): number {
+    return 1;
+  }
+  noop(): void {}
+  idle(): void {}
+}
 `;
 
-/** Repeated names, one line, nested and opposite coverage in one module. */
+/** Repeated names, one line, nested, opposite coverage and method shapes in one module. */
 export function twinsFixture(): RiskFixture {
   const source = twinsSource;
 
@@ -244,10 +259,13 @@ export function twinsFixture(): RiskFixture {
     tests: {
       "tests/domain/twins.test.ts": importingTest(
         TWINS_PATH,
-        ["Left", "outer", "same"],
+        ["Left", "outer", "same", "Shapes"],
         `  assert.equal(new Left().count(["a"]), 1);
   assert.equal(same[0](1), 2);
-  assert.deepEqual(outer([1]), [2]);`,
+  assert.deepEqual(outer([1]), [2]);
+  assert.equal(typeof Shapes.load(1).then, "function");
+  assert.equal(new Shapes().opt?.(), 1);
+  new Shapes().noop();`,
       ),
     },
     functions: [
@@ -286,6 +304,31 @@ export function twinsFixture(): RiskFixture {
         anchor: anchorOf(source, "(value) => {"),
         cyclomatic: 2,
         statements: { total: 3, covered: 2 },
+      },
+      {
+        name: "load",
+        anchor: anchorOf(source, "<T>(x: T): Promise<T>"),
+        cyclomatic: 1,
+        statements: { total: 1, covered: 1 },
+      },
+      {
+        name: "opt",
+        anchor: anchorOf(source, "(): number {\n    return 1;"),
+        cyclomatic: 1,
+        statements: { total: 1, covered: 1 },
+      },
+      {
+        name: "noop",
+        anchor: anchorOf(source, "(): void {}\n  idle"),
+        cyclomatic: 1,
+        statements: { total: 0, covered: 0 },
+        entered: true,
+      },
+      {
+        name: "idle",
+        anchor: anchorOf(source, "(): void {}\n}"),
+        cyclomatic: 1,
+        statements: { total: 0, covered: 0 },
       },
     ],
   };
@@ -334,8 +377,17 @@ export function riskFixtureFiles(fixture: RiskFixture): Record<string, string> {
 }
 
 /** The CRAP formula the policy applies, from the consumer's complexity and unrounded coverage. */
-export function crapOf(cyclomatic: number, statements: ExpectedRisk["statements"]): number {
-  return cyclomatic * cyclomatic * (1 - statements.covered / statements.total) ** 3 + cyclomatic;
+export function crapOf(cyclomatic: number, coverage: number): number {
+  return cyclomatic * cyclomatic * (1 - coverage) ** 3 + cyclomatic;
+}
+
+// The statement proportion, or the entry rule for a body with no statement.
+function coverageOf(fn: ExpectedRisk): number {
+  if (fn.statements.total === 0) {
+    return fn.entered === true ? 1 : 0;
+  }
+
+  return fn.statements.covered / fn.statements.total;
 }
 
 /** The rows the gate must report for `fixture`, in path, line and column order. */
@@ -348,8 +400,8 @@ export function expectedRows(fixture: RiskFixture): ExpectedRow[] {
       name: fn.name,
       cyclomatic: fn.cyclomatic,
       statements: fn.statements,
-      coverage: fn.statements.covered / fn.statements.total,
-      crap: crapOf(fn.cyclomatic, fn.statements),
+      coverage: coverageOf(fn),
+      crap: crapOf(fn.cyclomatic, coverageOf(fn)),
     }))
     .sort((a, b) => a.line - b.line || a.column - b.column);
 }
