@@ -2,8 +2,8 @@
 //
 // DIFF-01 -- pure type surface for the reconcile planner.
 //
-// `ReconcilePlan` is the structured result of the bidirectional 7-bucket
-// diff that `planReconcile(merged, state, scope)` produces. The seven
+// `ReconcilePlan` is the structured result of the bidirectional 8-bucket
+// diff that `planReconcile(merged, state, scope, verdict)` produces. The eight
 // buckets partition the union of declared marketplaces + plugins (from
 // `MergedConfig`) and recorded marketplaces + plugins (from `ExtensionState`)
 // into the actions the apply path takes:
@@ -21,7 +21,12 @@
 //                                availability is an orthogonal axis)
 //   6. `pluginsToDisable`     -- declared with `enabled === false` but
 //                                still recorded
-//   7. `sourceMismatches`     -- four per-cause planner diagnostics
+//   7. `pluginsToDependencyDisable`
+//                             -- recorded plugins the load-time check holds
+//                                down because a declared dependency is not
+//                                satisfied in the same scope (LOAD-01); the
+//                                verdict arrives precomputed (D-06-04)
+//   8. `sourceMismatches`     -- four per-cause planner diagnostics
 //                                (`source-mismatch`, `unknown-stored`,
 //                                `dangling-reference`, `malformed-plugin-key`);
 //                                each variant carries only the fields its
@@ -41,6 +46,7 @@
 // for any populated state.
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
+import type { UnsatisfiedKind } from "./dependency-verdict.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -130,6 +136,32 @@ export interface PlannedPluginDisable {
 }
 
 /**
+ * LOAD-01: a recorded plugin the load-time check holds down, because one of
+ * the dependencies it declares is not satisfied in the same scope.
+ *
+ * Membership means "held down", not "about to change". The apply step performs
+ * the enabled -> disabled transition and stamps the marker only on a record it
+ * actually transitions (D-06-02), so a record a previous pass already disabled
+ * stays in this bucket -- that is how LOAD-02 keeps it down -- and the step
+ * leaves it alone.
+ *
+ * `dependency`, `kind` and `range` are the row's payload: the first
+ * unsatisfied declaration in declaration order, which is the one the remedy
+ * names. A declarer with several unsatisfied declarations gets ONE entry, so
+ * one held-down plugin renders as one row.
+ */
+export interface PlannedDependencyDisable {
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  /** `name@marketplace` of the declared dependency the scope does not satisfy. */
+  readonly dependency: string;
+  readonly kind: UnsatisfiedKind;
+  /** The declared range, present only on the out-of-range kind. */
+  readonly range?: string;
+}
+
+/**
  * Recorded source diverges from declared source -- four per-cause variants
  * surface distinct planner diagnostics on a single bucket. Each cause
  * carries only the fields its diagnostic actually renders; the prior fused
@@ -207,7 +239,7 @@ export function plannedSourceMismatchSubject(mismatch: PlannedSourceMismatch): s
 }
 
 /**
- * DIFF-01 result -- the structured output of `planReconcile`. The seven
+ * DIFF-01 result -- the structured output of `planReconcile`. The eight
  * action buckets are mutually exclusive at the (scope, marketplace,
  * plugin?) tuple level (a single entity is in at most one bucket).
  */
@@ -219,6 +251,7 @@ export interface ReconcilePlan {
   readonly pluginsToUninstall: readonly PlannedPluginUninstall[];
   readonly pluginsToEnable: readonly PlannedPluginEnable[];
   readonly pluginsToDisable: readonly PlannedPluginDisable[];
+  readonly pluginsToDependencyDisable: readonly PlannedDependencyDisable[];
   readonly sourceMismatches: readonly PlannedSourceMismatch[];
 }
 
@@ -235,6 +268,7 @@ export function emptyReconcilePlan(scope: Scope): ReconcilePlan {
     pluginsToUninstall: [],
     pluginsToEnable: [],
     pluginsToDisable: [],
+    pluginsToDependencyDisable: [],
     sourceMismatches: [],
   };
 }

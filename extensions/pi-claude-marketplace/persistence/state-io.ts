@@ -116,6 +116,18 @@ export const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
   // Named for the entries themselves because `resources.hooks` already holds
   // a different fact -- the hooks CONTAINER slug.
   hookEntries: Type.Optional(Type.Array(PERSISTED_HOOK_ENTRY_SCHEMA)),
+  // LOAD-02 / D-06-01: the record is disabled as a CONSEQUENCE of a
+  // declaration the load-time check found unsatisfied, not by a user choice.
+  // OPTIONAL and additive -- NO schemaVersion bump (the resolvedSha /
+  // hookEntries precedent), so a legacy record without it loads unchanged and
+  // absence needs no migrate fill.
+  //
+  // ABSENCE MEANS "not currently held down by the check". It is never a claim
+  // that the check ran and found nothing: the verdict is re-derived live on
+  // every reconcile pass, and this boolean only answers whether the record is
+  // held down right now. A widening into a reason enum would make it a durable
+  // claim about WHY, which nothing keeps honest.
+  dependencyDisabled: Type.Optional(Type.Boolean()),
   compatibility: Type.Object({
     installable: Type.Boolean(),
     notes: Type.Array(Type.String()),
@@ -170,6 +182,13 @@ export function clonePluginRecord(record: PluginInstallRecord): PluginInstallRec
     // copy, matching the resources arrays below.
     ...(record.hookEntries !== undefined && {
       hookEntries: record.hookEntries.map((entry) => ({ ...entry })),
+    }),
+    // LOAD-02 / D-06-01: preserve the consequence-disable marker across the
+    // snapshot. This function enumerates fields rather than spreading, so
+    // dropping it here would let a failed reinstall restore a record that
+    // reads as a user's own disable.
+    ...(record.dependencyDisabled !== undefined && {
+      dependencyDisabled: record.dependencyDisabled,
     }),
     compatibility: {
       installable: record.compatibility.installable,

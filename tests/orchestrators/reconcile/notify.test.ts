@@ -41,6 +41,7 @@ function reconcilePlan(scope: Scope, actions: PlannedActions = {}): ReconcilePla
     pluginsToUninstall: [...(actions.pluginsToUninstall ?? [])],
     pluginsToEnable: [...(actions.pluginsToEnable ?? [])],
     pluginsToDisable: [...(actions.pluginsToDisable ?? [])],
+    pluginsToDependencyDisable: [...(actions.pluginsToDependencyDisable ?? [])],
     sourceMismatches: [...(actions.sourceMismatches ?? [])],
   };
 }

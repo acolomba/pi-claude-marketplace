@@ -51,7 +51,9 @@ import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 
 import { emptyReconcilePlan } from "./types.ts";
 
+import type { ScopeSatisfactionVerdict } from "./dependency-verdict.ts";
 import type {
+  PlannedDependencyDisable,
   PlannedMarketplaceAdd,
   PlannedMarketplaceRemove,
   PlannedPluginDisable,
@@ -375,6 +377,7 @@ interface PluginDiff {
   readonly uninstall: readonly PlannedPluginUninstall[];
   readonly enable: readonly PlannedPluginEnable[];
   readonly disable: readonly PlannedPluginDisable[];
+  readonly dependencyDisable: readonly PlannedDependencyDisable[];
   readonly dangling: readonly PlannedSourceMismatch[];
 }
 
@@ -404,6 +407,22 @@ interface DeclaredPluginInputs {
   readonly declaredMarketplaces: MergedConfig["marketplaces"];
   readonly marketplaceDiff: MarketplaceDiff;
   readonly state: ExtensionState;
+  /** LOAD-01: the precomputed load-time verdict (D-06-04). */
+  readonly verdict: ScopeSatisfactionVerdict;
+}
+
+/**
+ * LOAD-02: whether the load-time check currently holds this record down.
+ *
+ * It reads the LIVE verdict and never the record's persisted
+ * `dependencyDisabled` marker. The marker says a previous pass held the record
+ * down; it says nothing about whether the dependency has since been installed,
+ * and reading it here would make the lift impossible. Extracted rather than
+ * inlined because `classifyDeclaredPlugin` sits under two independently
+ * computed cognitive ceilings.
+ */
+function isHeldByUnsatisfiedDependency(key: string, verdict: ScopeSatisfactionVerdict): boolean {
+  return verdict.ok && verdict.unsatisfied.some((entry) => entry.dependent === key);
 }
 
 /**
@@ -417,7 +436,7 @@ function classifyDeclaredPlugin(
   key: string,
   declared: MergedConfig["plugins"][string],
 ): void {
-  const { scope, recordedKeys, declaredMarketplaces, marketplaceDiff, state } = inputs;
+  const { scope, recordedKeys, declaredMarketplaces, marketplaceDiff, state, verdict } = inputs;
   const parsed = parsePluginKey(key);
   if (parsed === undefined) {
     // Malformed key (no `@`, leading `@`, or trailing `@`, e.g. the user
@@ -455,12 +474,13 @@ function classifyDeclaredPlugin(
 
   const marketplace =
     marketplaceDiff.recordedByDeclared.get(declaredMarketplace) ?? declaredMarketplace;
-  acc.declaredKeys.add(`${plugin}@${marketplace}`);
+  const recordKey = `${plugin}@${marketplace}`;
+  acc.declaredKeys.add(recordKey);
 
   // D-04 consume-time default via S7's `isDeclaredEnabled`: an absent
   // `enabled` field includes; only an explicit `false` excludes.
   const enabledExplicitFalse = !isDeclaredEnabled(declared.entry);
-  const recorded = recordedKeys.has(`${plugin}@${marketplace}`);
+  const recorded = recordedKeys.has(recordKey);
 
   if (enabledExplicitFalse) {
     // WR-05 convergence: the terminal state of a successful disable is
@@ -494,8 +514,17 @@ function classifyDeclaredPlugin(
   // marker (ENBL-05 / isRecordedButDisabled). The install branch above already
   // returned for `!recorded`, so a plugin CAN'T land in both `install` and
   // `enable` in the same pass.
+  //
+  // D-06-03: the third term is what stops the oscillation LOAD-02 forbids. A
+  // consequence-disable is structurally indistinguishable from an ordinary
+  // declared-enabled / recorded-disabled divergence, so without it every
+  // reload would re-enable a record the same reload then disables again.
   const record = state.marketplaces[marketplace]?.plugins[plugin];
-  if (record !== undefined && isRecordedButDisabled(record)) {
+  if (
+    record !== undefined &&
+    isRecordedButDisabled(record) &&
+    !isHeldByUnsatisfiedDependency(recordKey, verdict)
+  ) {
     acc.enable.push({ scope, plugin, marketplace });
   }
   // Declared-enabled, recorded, not disabled: steady state, no action. The
@@ -557,11 +586,92 @@ function buildUninstallBucket(
   return uninstall;
 }
 
+/**
+ * Every plugin key another bucket already claims in this pass.
+ *
+ * A plugin is in at most one bucket, so a record already planned for uninstall,
+ * for a config-declared disable, or for removal with its whole marketplace is
+ * never also held down: the load-time check has nothing to add about a record
+ * this pass is tearing down anyway.
+ */
+function claimedPluginKeys(
+  marketplaceDiff: MarketplaceDiff,
+  uninstall: readonly PlannedPluginUninstall[],
+  disable: readonly PlannedPluginDisable[],
+): ReadonlySet<string> {
+  const claimed = new Set<string>();
+  for (const entry of [...uninstall, ...disable]) {
+    claimed.add(`${entry.plugin}@${entry.marketplace}`);
+  }
+
+  for (const removal of marketplaceDiff.remove) {
+    for (const plugin of removal.plugins) {
+      claimed.add(`${plugin}@${removal.marketplace}`);
+    }
+  }
+
+  return claimed;
+}
+
+/**
+ * LOAD-01: turns the precomputed verdict into the held-down bucket.
+ *
+ * One entry per held-down declarer, carrying the FIRST unsatisfied declaration
+ * in declaration order -- the one the remedy names -- so one held-down plugin
+ * renders as one row. A verdict the declaration walk could not complete plans
+ * nothing: an incomplete answer must never disable anything (D-05-07).
+ */
+function buildDependencyDisableBucket(
+  state: ExtensionState,
+  scope: Scope,
+  verdict: ScopeSatisfactionVerdict,
+  claimed: ReadonlySet<string>,
+): PlannedDependencyDisable[] {
+  if (!verdict.ok) {
+    return [];
+  }
+
+  const planned: PlannedDependencyDisable[] = [];
+  const bucketed = new Set<string>();
+  for (const entry of verdict.unsatisfied) {
+    if (bucketed.has(entry.dependent) || claimed.has(entry.dependent)) {
+      continue;
+    }
+
+    bucketed.add(entry.dependent);
+    const parsed = parsePluginKey(entry.dependent);
+    // A verdict names keys built from the scope's own records, so both
+    // guards below are unreachable from a verdict this reconcile pass
+    // computed. They hold for a verdict computed against a different
+    // snapshot, where the honest answer is to plan nothing for a record
+    // that is not there.
+    const record =
+      parsed === undefined
+        ? undefined
+        : state.marketplaces[parsed.marketplace]?.plugins[parsed.plugin];
+    if (parsed === undefined || record === undefined) {
+      continue;
+    }
+
+    planned.push({
+      scope,
+      plugin: parsed.plugin,
+      marketplace: parsed.marketplace,
+      dependency: entry.dependency,
+      kind: entry.kind,
+      ...(entry.range !== undefined && { range: entry.range }),
+    });
+  }
+
+  return planned;
+}
+
 function diffPlugins(
   merged: MergedConfig,
   state: ExtensionState,
   scope: Scope,
   marketplaceDiff: MarketplaceDiff,
+  verdict: ScopeSatisfactionVerdict,
 ): PluginDiff {
   const acc: DeclaredPluginAccumulator = {
     install: [],
@@ -577,6 +687,7 @@ function diffPlugins(
     declaredMarketplaces: merged.marketplaces,
     marketplaceDiff,
     state,
+    verdict,
   };
 
   for (const [key, declared] of Object.entries(merged.plugins)) {
@@ -584,22 +695,38 @@ function diffPlugins(
   }
 
   const uninstall = buildUninstallBucket(state, scope, marketplaceDiff, acc.declaredKeys);
+  const claimed = claimedPluginKeys(marketplaceDiff, uninstall, acc.disable);
 
   return {
     install: acc.install,
     uninstall,
     enable: acc.enable,
     disable: acc.disable,
+    dependencyDisable: buildDependencyDisableBucket(state, scope, verdict, claimed),
     dangling: acc.dangling,
   };
 }
 
 /**
- * DIFF-01 pure bidirectional 7-bucket diff. Produces a `ReconcilePlan`
+ * The verdict a caller that computed none supplies: nothing in the scope is
+ * held down by the load-time check.
+ *
+ * Named at module scope rather than written as an inline parameter default, so
+ * every call that omits the argument reads this one value instead of
+ * allocating a fresh literal per invocation (typescript:S7737).
+ */
+const NO_HELD_DECLARERS: ScopeSatisfactionVerdict = Object.freeze({ ok: true, unsatisfied: [] });
+
+/**
+ * DIFF-01 pure bidirectional 8-bucket diff. Produces a `ReconcilePlan`
  * describing the actions required to make `state` converge to `merged`.
  *
  * Pure: no I/O, no network, no notify, no state mutation. Re-runs against
- * the same inputs produce deepEqual outputs.
+ * the same inputs produce deepEqual outputs. LOAD-01's satisfaction verdict is
+ * therefore an INPUT (D-06-04): establishing it reads manifests, which this
+ * function may not do, so the reconcile read pass computes it inside its own
+ * locked closure and hands it in. A caller that asks only "what does the
+ * config-versus-state diff say" omits it and no plugin is held down.
  *
  * O(N + M) in the union of declared + recorded entries (no per-entry regex
  * compilation, no nested scans).
@@ -608,9 +735,10 @@ export function planReconcile(
   merged: MergedConfig,
   state: ExtensionState,
   scope: Scope,
+  verdict: ScopeSatisfactionVerdict = NO_HELD_DECLARERS,
 ): ReconcilePlan {
   const marketplaceDiff = diffMarketplaces(merged, state, scope);
-  const pluginDiff = diffPlugins(merged, state, scope, marketplaceDiff);
+  const pluginDiff = diffPlugins(merged, state, scope, marketplaceDiff, verdict);
 
   // Fast path: empty inputs -> empty plan (deterministic shape).
   const totalAdds = marketplaceDiff.add.length;
@@ -619,6 +747,7 @@ export function planReconcile(
   const totalUninstalls = pluginDiff.uninstall.length;
   const totalEnables = pluginDiff.enable.length;
   const totalDisables = pluginDiff.disable.length;
+  const totalDependencyDisables = pluginDiff.dependencyDisable.length;
   const totalMismatches = marketplaceDiff.mismatches.length + pluginDiff.dangling.length;
 
   if (
@@ -628,6 +757,7 @@ export function planReconcile(
     totalUninstalls === 0 &&
     totalEnables === 0 &&
     totalDisables === 0 &&
+    totalDependencyDisables === 0 &&
     totalMismatches === 0
   ) {
     return emptyReconcilePlan(scope);
@@ -641,6 +771,7 @@ export function planReconcile(
     pluginsToUninstall: pluginDiff.uninstall,
     pluginsToEnable: pluginDiff.enable,
     pluginsToDisable: pluginDiff.disable,
+    pluginsToDependencyDisable: pluginDiff.dependencyDisable,
     sourceMismatches: [...marketplaceDiff.mismatches, ...pluginDiff.dangling],
   };
 }

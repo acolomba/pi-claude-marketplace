@@ -44,6 +44,18 @@
 // A declaration HOLDS its key whatever `version` or `sha` constraint it
 // carries. The closure walk's refusal of a `sha` pin is an install-time rule;
 // here the fail-closed direction is to treat every named key as held.
+//
+// LOAD-01: the file publishes TWO walks over that one read path.
+// `buildScopeDeclarationIndex` answers the dependents question and flattens
+// each declaration to a bare key, because who-declares-X does not depend on
+// which version X must be. `buildScopeDeclarationDetail` answers the load-time
+// satisfaction question and keeps the whole declaration, because
+// out-of-range-ness is exactly the constraint the flattening discards. The
+// detail walk also has no `exclude`: the load-time question has no key under
+// decision, so every record is at once a potential declarer and a potential
+// dependency. Two shapes and two parameter lists are why it is a sibling here
+// rather than a flag on the neighbour, and keeping it in this file inherits
+// the file's network-free gate entry.
 
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
@@ -53,6 +65,7 @@ import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { readDependencyDeclaration } from "./dependency-declaration-read.ts";
 
 import type { DependencyDeclarationReader } from "./dependency-declaration-read.ts";
+import type { DeclaredDependency } from "../../domain/dependencies.ts";
 import type { DeclarationIndex, OrphanCandidate } from "../../domain/dependency-orphans.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -76,17 +89,30 @@ export interface IndexedRecord extends OrphanCandidate {
   readonly record: MarketplaceStateRecord["plugins"][string];
 }
 
-/** Inputs of one scope-wide index build. */
-export interface ScopeDeclarationIndexOptions {
+/**
+ * A declaration whose marketplace is filled in with the declaring record's own
+ * where the element named none -- the same fill rule the closure walk applies,
+ * so `${name}@${marketplace}` compares exactly against a recorded key.
+ */
+export interface AddressedDependency extends DeclaredDependency {
+  readonly marketplace: string;
+}
+
+/** Inputs of one scope-wide declaration-detail build. */
+export interface ScopeDeclarationDetailOptions {
   /** The locked snapshot of the target scope's state document. */
   readonly state: ExtensionState;
   readonly locations: ScopedLocations;
-  /** The `name@marketplace` key under decision; it is never indexed. */
-  readonly exclude: string;
   /** Filesystem seam of the declaration read; production omits it. */
   readonly reader?: DependencyDeclarationReader;
   /** Manifest-load seam; production omits it and reads the memoized cache. */
   readonly loadManifest?: typeof loadMarketplaceManifest;
+}
+
+/** Inputs of one scope-wide index build: the same read, plus the exclusion. */
+export interface ScopeDeclarationIndexOptions extends ScopeDeclarationDetailOptions {
+  /** The `name@marketplace` key under decision; it is never indexed. */
+  readonly exclude: string;
 }
 
 /**
@@ -115,9 +141,26 @@ export type ScopeDeclarationIndexResult =
 
 type IndexFailure = Extract<ScopeDeclarationIndexResult, { readonly ok: false }>;
 
-/** One record's declared key set, or the failure that ends the walk. */
+/**
+ * Every record's declarations with their constraints intact, keyed by the
+ * declarer's `name@marketplace` key, or the first record whose declarations
+ * could not be established (D-05-07). The failure arm is the index walk's, so
+ * both walks fail closed in the same shape.
+ */
+export type ScopeDeclarationDetailResult =
+  | {
+      readonly ok: true;
+      readonly declarations: ReadonlyMap<string, readonly AddressedDependency[]>;
+    }
+  | {
+      readonly ok: false;
+      readonly declarer: string;
+      readonly cause: Error;
+    };
+
+/** One record's declarations, or the failure that ends the walk. */
 type RecordDeclarations =
-  { readonly ok: true; readonly declared: ReadonlySet<string> } | IndexFailure;
+  { readonly ok: true; readonly declared: readonly AddressedDependency[] } | IndexFailure;
 
 function unreadableDeclarer(key: string, detail: string): IndexFailure {
   return {
@@ -128,13 +171,13 @@ function unreadableDeclarer(key: string, detail: string): IndexFailure {
 }
 
 /**
- * What one record declares, in the D-05-06 read order, as filled-in keys. A
- * declaration naming no marketplace resolves in the declaring record's own --
- * the same fill rule the closure walk applies -- so the keys here compare
- * exactly against the keys the callers ask about.
+ * What one record declares, in the D-05-06 read order, with every declaration
+ * addressed. A declaration naming no marketplace resolves in the declaring
+ * record's own -- the same fill rule the closure walk applies -- so the keys
+ * derived here compare exactly against the keys the callers ask about.
  */
 async function readRecordDeclarations(
-  options: ScopeDeclarationIndexOptions,
+  options: ScopeDeclarationDetailOptions,
   marketplace: MarketplaceStateRecord,
   name: string,
 ): Promise<RecordDeclarations> {
@@ -164,10 +207,16 @@ async function readRecordDeclarations(
 
   return {
     ok: true,
-    declared: new Set(
-      read.dependencies.map((dep) => `${dep.name}@${dep.marketplace ?? marketplace.name}`),
-    ),
+    declared: read.dependencies.map((dep) => ({
+      ...dep,
+      marketplace: dep.marketplace ?? marketplace.name,
+    })),
   };
+}
+
+/** The `name@marketplace` key one addressed declaration names. */
+function declarationKey(dependency: AddressedDependency): string {
+  return `${dependency.name}@${dependency.marketplace}`;
 }
 
 /**
@@ -191,10 +240,32 @@ export async function buildScopeDeclarationIndex(
         return read;
       }
 
-      index.set(key, read.declared);
+      index.set(key, new Set(read.declared.map(declarationKey)));
       candidates.push({ key, provenance: record.provenance, marketplace, plugin: name, record });
     }
   }
 
   return { ok: true, index, candidates };
+}
+
+/**
+ * Maps every record in the scope to what it declares, constraints intact,
+ * stopping at the FIRST record whose declarations cannot be established.
+ */
+export async function buildScopeDeclarationDetail(
+  options: ScopeDeclarationDetailOptions,
+): Promise<ScopeDeclarationDetailResult> {
+  const declarations = new Map<string, readonly AddressedDependency[]>();
+  for (const marketplace of Object.values(options.state.marketplaces)) {
+    for (const name of Object.keys(marketplace.plugins)) {
+      const read = await readRecordDeclarations(options, marketplace, name);
+      if (!read.ok) {
+        return read;
+      }
+
+      declarations.set(`${name}@${marketplace.name}`, read.declared);
+    }
+  }
+
+  return { ok: true, declarations };
 }
