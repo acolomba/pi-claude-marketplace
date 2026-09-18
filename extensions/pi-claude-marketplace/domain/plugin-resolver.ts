@@ -306,8 +306,8 @@ async function readManifest(
       // rejected stat (manifestCandidateIsFile rethrows anything but ENOENT /
       // ENOTDIR), an unreadable file, or a JSON.parse syntax error. Schema
       // rejection and an invalid `dependencies` declaration are direct
-      // `return`s above, inside the same `try`, and never land here. All four
-      // outcomes still end up observably identical to the caller: each
+      // `return`s above, inside the same `try`, and never land here. All five
+      // origins still end up observably identical to the caller: each
       // produces the same `malformed plugin.json: ...` reason on the
       // `unavailable` arm.
       return {

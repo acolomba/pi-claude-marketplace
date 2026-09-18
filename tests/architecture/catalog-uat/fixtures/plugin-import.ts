@@ -233,5 +233,42 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    "dependency-cascade-failed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Import",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            status: "added",
+            plugins: [
+              {
+                status: "installed",
+                name: "before",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+              // RESV-06: a `DependencyCascadeError` throw collapses onto the
+              // requesting plugin's own row -- `{dependency failed}` plus the
+              // failing dependency's cause line -- exactly as reconcile's
+              // load-time counterpart renders it (no separate dependency row).
+              {
+                status: "failed",
+                name: "hello",
+                reasons: ["dependency failed"],
+                cause: new Error('Dependency "missing@mp" is not declared by its marketplace.'),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };

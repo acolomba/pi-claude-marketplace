@@ -57,7 +57,7 @@ import { pathExists } from "../../shared/fs-utils.ts";
 import { notifyDiagnostic } from "../../shared/notification-dispatch.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { notifyReconcileAppliedWithContext } from "../../shared/notify-context.ts";
-import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
+import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { removeMarketplace } from "../marketplace/remove.ts";
@@ -464,6 +464,22 @@ async function applyPluginUninstalls(
 }
 
 /**
+ * RESV-06 / T-55-02-02 / T-53-02-02: rebuild a dependency-cascade failure's
+ * message AND its nested cause chain with every absolute path redacted, so
+ * the reconcile row's cause-chain trailer (`causeChainTrailer`, which walks
+ * `.cause` WITHOUT redacting) never surfaces a leaked path from a
+ * dependency's own ledger failure. `key` rides along unchanged so the
+ * rebuilt value is the same error, not a new one.
+ */
+function redactedDependencyCascadeError(error: DependencyCascadeError): DependencyCascadeError {
+  const message = redactAbsolutePaths(error.message);
+  const cause = redactCauseChain(error.cause);
+  return cause === undefined
+    ? new DependencyCascadeError(message, error.key)
+    : new DependencyCascadeError(message, error.key, { cause });
+}
+
+/**
  * RECON-03 note: unlike the removal and uninstall loops, this one carries NO
  * per-entry try/catch. `installPlugin` documents that it never re-throws: its
  * whole body sits inside one try whose catch returns a typed failed outcome in
@@ -584,12 +600,12 @@ async function applyPluginInstalls(
         // this row. Redact defensively (T-55-02-02 / T-53-02-02) -- the
         // closure/constraint arms build their message from keys and version
         // constraints alone, but a dependency's own ledger failure can carry
-        // a path.
+        // a path anywhere in its cause chain. `causeChainTrailer` walks
+        // `.cause` without redacting, so `redactedDependencyCascadeError`
+        // rebuilds the FULL chain (via `redactCauseChain`) with every link
+        // redacted, instead of dropping it.
         ...(result.error instanceof DependencyCascadeError && {
-          cause: new DependencyCascadeError(
-            redactAbsolutePaths(result.error.message),
-            result.error.key,
-          ),
+          cause: redactedDependencyCascadeError(result.error),
         }),
       });
     }

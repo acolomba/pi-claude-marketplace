@@ -46,6 +46,7 @@ import { loadState } from "../../../extensions/pi-claude-marketplace/persistence
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   ConcurrentInstallError,
+  DependencyCascadeError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
@@ -365,6 +366,23 @@ function failedUnexpectedly(
     marketplace,
     plugin,
     reason: "unexpected-failure",
+    ref: `${plugin}@${marketplace}`,
+    scope,
+  };
+}
+
+function failedDependency(
+  plugin: string,
+  marketplace: string,
+  scope: Scope,
+  cause: string,
+): UnexpectedFailure {
+  return {
+    cause,
+    kind: "plugin-failure",
+    marketplace,
+    plugin,
+    reason: "dependency-failed",
     ref: `${plugin}@${marketplace}`,
     scope,
   };
@@ -1348,6 +1366,74 @@ for (const { cause, installPlugin, order, title } of [
     verifyBoundary();
   });
 }
+
+// A `DependencyCascadeError` thrown by a dependency cascade (closure,
+// constraint, or a dependency member's own ledger, RESV-06) must not read as
+// the generic `{not in manifest}` unexpected-failure row: the requesting
+// plugin's row is self-contradictory beside a cause line about a dependency.
+test("records a dependency-cascade failure with the dependency-failed reason", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "install-dependency-cascade");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2);
+  const cause = 'Dependency "lib@mp" has no release tag satisfying "^2.0.0".';
+  const order = ["before", "target", "after"];
+  const surviving = order.filter((plugin) => plugin !== "target");
+  const attempted: string[] = [];
+  const expectedResult: ClaudeImportExecutionResult = {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("mp", "user")],
+    changedResources: true,
+    installedPlugins: surviving.map((plugin) => installed(plugin, "mp", "user")),
+    unexpectedPluginFailures: [failedDependency("target", "mp", "user", cause)],
+  };
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: (options) => {
+        attempted.push(options.plugin);
+        return Promise.resolve(
+          options.plugin === "target"
+            ? failedInstallOutcome(new DependencyCascadeError(cause, "lib@mp"), cause)
+            : installedOutcome(),
+        );
+      },
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: Object.fromEntries(order.map((plugin) => [`${plugin}@mp`, true])),
+            extraKnownMarketplaces: { mp: { directory: "./mp" } },
+          }),
+        ),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, expectedResult);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n" +
+        "● mp [user] (added)\n" +
+        `  ● ${surviving[0]} (installed)\n` +
+        `  ● ${surviving[1]} (installed)\n` +
+        "  ⊘ target (failed) {dependency failed}\n" +
+        `    cause: ${cause}\n\n` +
+        "Import: 1 failure, 3 successes\n\n" +
+        "/reload to pick up changes",
+      severity: "error",
+    },
+  ]);
+  assert.deepStrictEqual(attempted, order);
+  verifyBoundary();
+});
 
 // The installed outcome's two soft-dependency predicates ride onto the public
 // outcome and onto the cascade row's marker brace. The boundary reports no

@@ -37,8 +37,10 @@
 //                            orphaned-rewake and companion variants
 //   plugin-install-failed    a manifest entry whose source tree is gone, an
 //                            install whose dependency the marketplace does not
-//                            declare, and an install whose own manifest entry
-//                            is missing (classification unaffected by RESV-06)
+//                            declare, an install whose own manifest entry
+//                            is missing (classification unaffected by RESV-06),
+//                            and an install whose dependency's own ledger
+//                            fails with a nested cause (redacted, kept intact)
 //   plugin-uninstalled       a declaration deleted under a kept marketplace,
 //                            and the children of a marketplace removal
 //   plugin-uninstall-failed  a refused unstage, both directly and under a
@@ -1928,6 +1930,78 @@ describe("applyReconcile", () => {
       },
     ]);
     assert.equal(await recordFor(project, "mp", "ghost"), undefined);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("RESV-06 / T-55-02-02 / T-53-02-02: a dependency's own ledger failure keeps its nested cause, redacted", async (t) => {
+    // arrange: `bar` resolves and reaches its own ledger, where its one
+    // command source file is unreadable -- a genuine nested cause (the raw
+    // EACCES error) under the bridge's own descriptive wrapper, with an
+    // absolute path only the inner link carries.
+    const { cwd, project } = await createHermeticScopes(t, "install-dependency-nested-cause");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", dependencies: ["bar"] },
+      bar: { command: true },
+    });
+    const commandFile = path.join(marketplaceRoot, "plugins", "bar", "commands", "deploy.md");
+    if (typeof process.getuid === "function" && process.getuid() === 0) {
+      throw new Error("this case cannot deny reads as root; run this suite as a non-root user");
+    }
+
+    // No restore is registered: removing the tree only needs write access on
+    // its parent directories, which `createHermeticEnvironment`'s own
+    // teardown already has -- an unreadable file underneath is still
+    // removable.
+    await chmod(commandFile, 0o000);
+    const declaration = configBytes({
+      marketplaces: { mp: { source: marketplaceRoot } },
+      plugins: { "hello@mp": {} },
+    });
+    await writeUnder(project.configJsonPath, declaration);
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert: the dependency's own ledger error rides the row intact -- its
+    // message AND its nested cause, both redacted -- instead of the single
+    // truncated line RESV-06 used to leave behind.
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ hello (failed) {dependency failed}\n" +
+          '    cause: command "bar:deploy" of plugin "bar" could not be staged -> ' +
+          "EACCES: permission denied, open 'deploy.md'\n" +
+          "\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    const [notification] = notifications;
+    const wholeMessage = notification?.message ?? "";
+    assert.doesNotMatch(wholeMessage, /\/[\w.-]+\/[\w.-]+/);
+    assert.ok(!wholeMessage.includes(marketplaceRoot));
+    assert.equal(await recordFor(project, "mp", "hello"), undefined);
+    assert.equal(await recordFor(project, "mp", "bar"), undefined);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });

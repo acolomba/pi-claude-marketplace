@@ -168,8 +168,12 @@ export interface PluginInstallFailedOutcome extends PluginOutcomeBase {
    * Redacted at the apply.ts push site (T-55-02-02 / T-53-02-02): the
    * closure/constraint arms build their message from `name@marketplace` keys
    * and version constraints (never a path), but a dependency's own ledger
-   * failure can carry one, so the value is defensively redacted the way the
-   * invalid-block arm redacts its cause.
+   * failure can carry one anywhere in its cause chain. `apply.ts`'s
+   * `redactedDependencyCascadeError` rebuilds the value's message AND its
+   * full nested cause chain (via `shared/redact-absolute-paths.ts`'s
+   * `redactCauseChain`) with every link redacted, since the renderer's
+   * depth-5 `causeChainTrailer` walker (`shared/errors.ts`) does not redact
+   * on its own.
    */
   readonly cause?: DependencyCascadeError;
 }

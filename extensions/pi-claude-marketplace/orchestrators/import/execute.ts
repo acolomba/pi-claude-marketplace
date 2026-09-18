@@ -19,7 +19,12 @@ import {
   type PluginInstallRecord,
 } from "../../persistence/state-io.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
-import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
+import {
+  ConcurrentInstallError,
+  DependencyCascadeError,
+  errorMessage,
+  PluginShapeError,
+} from "../../shared/errors.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type MarketplaceStatus,
@@ -150,7 +155,13 @@ export interface UnexpectedPluginFailureOutcome {
   readonly plugin: string;
   readonly marketplace: string;
   readonly ref: string;
-  readonly reason: "unexpected-failure";
+  /**
+   * RESV-06: `"dependency-failed"` marks a `DependencyCascadeError` throw (a
+   * cascade closure/constraint/member failure), so the row renders
+   * `{dependency failed}` instead of the `{not in manifest}` token
+   * `"unexpected-failure"` carries.
+   */
+  readonly reason: "unexpected-failure" | "dependency-failed";
   readonly cause: string;
 }
 
@@ -389,6 +400,16 @@ function importWarningReason(reason: RenderedWarningReason): ContentReason {
   }
 }
 
+/** Maps an `UnexpectedPluginFailureOutcome.reason` onto its rendered token. */
+function unexpectedFailureReason(reason: UnexpectedPluginFailureOutcome["reason"]): ContentReason {
+  switch (reason) {
+    case "unexpected-failure":
+      return "not in manifest";
+    case "dependency-failed":
+      return "dependency failed";
+  }
+}
+
 function dependenciesFromInstalled(o: PluginInstalledOutcome): readonly Dependency[] {
   const deps: Dependency[] = [];
   if (o.declaresAgents) {
@@ -497,7 +518,7 @@ function buildImportNotificationMarketplaces(
     const row: PluginFailedMessage = {
       status: "failed",
       name: o.plugin,
-      reasons: ["not in manifest"] as const,
+      reasons: [unexpectedFailureReason(o.reason)],
       // WR-03: `UnexpectedPluginFailureOutcome.cause` carries the original
       // failure as a string (`errorMessage(err)`); wrap it in an Error so the
       // depth-5 cause-chain trailer emits a diagnostic line instead of
@@ -1213,8 +1234,13 @@ function isEmptyPatch(batch: ImportConfigPatch): boolean {
  * `status: "failed"` outcome. `PluginShapeError.kind === "already-installed"`
  * and `ConcurrentInstallError` both route to the skip bucket;
  * `not-in-manifest` and `(no-)not-installable` route to the
- * unavailable / uninstallable warnings; everything else lands in
- * `unexpectedPluginFailures`.
+ * unavailable / uninstallable warnings; a `DependencyCascadeError` (RESV-06)
+ * routes to `unexpectedPluginFailures` with `reason: "dependency-failed"`;
+ * everything else lands there with `reason: "unexpected-failure"`.
+ *
+ * Mirrors the instanceof ladder in
+ * `orchestrators/reconcile/apply-outcomes.ts::classifyOrchestratorThrow`,
+ * which checks `DependencyCascadeError` first for the same reason.
  */
 function dispatchFailedOutcome(
   result: MutableImportResult,
@@ -1222,6 +1248,19 @@ function dispatchFailedOutcome(
   error: Error,
   cause: string,
 ): void {
+  if (error instanceof DependencyCascadeError) {
+    result.unexpectedPluginFailures.push({
+      kind: "plugin-failure",
+      scope: plugin.scope,
+      plugin: plugin.ref.plugin,
+      marketplace: plugin.ref.marketplace,
+      ref: refLabel(plugin),
+      reason: "dependency-failed",
+      cause,
+    });
+    return;
+  }
+
   if (error instanceof ConcurrentInstallError) {
     result.skippedExistingPlugins.push({
       kind: "plugin-skip",

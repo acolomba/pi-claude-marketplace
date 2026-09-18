@@ -1791,6 +1791,25 @@ Import: 4 successes
 
 Per-scope marketplace blocks. OUT-03/D-04: two `added` marketplace rows plus two `installed` plugin rows yield `4 successes`. Reload-hint fires. Severity: info.
 
+### A dependency cascade fails during import (RESV-06)
+
+<!-- catalog-state: dependency-cascade-failed -->
+
+```text
+A plugin operation has failed.
+
+● mp [user] (added)
+  ● before (installed)
+  ⊘ hello (failed) {dependency failed}
+    cause: Dependency "missing@mp" is not declared by its marketplace.
+
+Import: 1 failure, 2 successes
+
+/reload to pick up changes
+```
+
+`hello@mp` declares a dependency the marketplace does not declare, so its install cascade fails before `hello`'s own ledger runs. `installOnePlannedPlugin` drives exactly one orchestrated outcome per planned plugin (it does not install the dependency separately), so the two-row standalone cascade form -- a dependency row plus a `{dependency failed}` root row -- collapses onto the ONE row import can render: `hello`'s own row carries `{dependency failed}` and the failing dependency's cause line, exactly as the "Load-time install failed by a dependency" state under [`## reconcile-applied-cascade`](#reconcile-applied-cascade) renders it. `dispatchFailedOutcome` narrows on `instanceof DependencyCascadeError` before its generic fallthrough, so a cascade failure never renders the unrelated `{not in manifest}` token the fallthrough carries for every other unclassified throw. Every other plugin in the batch is unaffected and keeps installing (D-115-08 continuation); the trailing tally counts the marketplace add and `before`'s install as successes and `hello`'s row as the one failure. Severity: `error`; reload-hint fires (`before` materialized).
+
 ______________________________________________________________________
 
 ## `/claude:plugin bootstrap`
