@@ -26,8 +26,8 @@ Started 2026-09-14 on `features/test-backlog`.
 - [x] **EXPORT-02**: Enable and validate Fallow production mode while retaining completed explicit-seam protections.
 - [x] **MEMBER-01**: Add a static gate that detects unused interface/type members, including an unread optional EdgeDeps member.
 - [x] **MEMBER-02**: Validate read-site analysis with offender and benign controls and document justified external/structural contracts.
-- [ ] **METRIC-01**: Reliably convert current unit coverage to Fallow-compatible Istanbul JSON and verify measurement fidelity.
-- [ ] **METRIC-02**: Select and validate a CRAP metric policy using real measurements and negative controls.
+- [x] **METRIC-01**: Reliably convert current unit coverage to Fallow-compatible Istanbul JSON and verify measurement fidelity.
+- [x] **METRIC-02**: Select and validate a CRAP metric policy using real measurements and negative controls.
 - [ ] **FINAL-01**: Preserve 100% aggregate unit production coverage, assertion strength, direct-pair requirements, and all required quality checks.
 - [ ] **FINAL-02**: Account for all authorized backlog/todo items with implementation evidence or a current user-agreed disposition.
 
@@ -49,7 +49,7 @@ Started 2026-09-14 on `features/test-backlog`.
 | EXPORT-02 | 5 | Complete |
 | MEMBER-01 | 6 | Complete |
 | MEMBER-02 | 6 | Complete |
-| METRIC-01 | 7 | Pending |
-| METRIC-02 | 7 | Pending |
+| METRIC-01 | 7 | Complete |
+| METRIC-02 | 7 | Complete |
 | FINAL-01 | 8 | Pending |
 | FINAL-02 | 8 | Pending |

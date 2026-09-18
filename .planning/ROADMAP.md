@@ -17,7 +17,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 - [x] **Phase 4: Strict Command Arguments** — ARGS-01
 - [x] **Phase 5: Production Export Ownership** — FLOW-09
 - [x] **Phase 6: Unused Type Member Gate** — 2026-09-02-detect-unused-code-and-type-members.md
-- [ ] **Phase 7: Reliable Coverage Metrics** — FLOW-05
+- [x] **Phase 7: Reliable Coverage Metrics** — FLOW-05 (completed 2026-09-18)
 - [ ] **Phase 8: Final Verification and Reconciliation** — All authorized items
 
 ## Phase Details
@@ -124,7 +124,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 1. Unit coverage converts to valid Istanbul data with measured source/function correspondence and no clamped coordinates.
 2. Fallow health consumes verified coverage under a measured CRAP policy; offender and benign controls reject missing or misleading inputs.
 
-**Plans:** 07-01 through 07-08 approved after independent plan review; producer qualification and production acceptance wait for the stable Phase 5/6 tree.
+**Plans:** 8/8 plans complete
 
 - [x] 07-01-PLAN.md
 - [x] 07-02-PLAN.md
@@ -157,5 +157,5 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 | 4. Strict Command Arguments | 3/3 | Complete | 2026-09-14 |
 | 5. Production Export Ownership | 28/28 | Complete | 2026-09-15 |
 | 6. Unused Type Member Gate | 17/17 | Complete | 2026-09-17 |
-| 7. Reliable Coverage Metrics | 8/8 | In Progress|  |
+| 7. Reliable Coverage Metrics | 8/8 | Complete    | 2026-09-18 |
 | 8. Final Verification and Reconciliation | 0/TBD | Not started | - |
