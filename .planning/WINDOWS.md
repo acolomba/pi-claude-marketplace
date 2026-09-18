@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 8
+open_count: 11
 waived_count: 18
 fixed_count: 19
-total_count: 45
-last_updated: 2026-09-17T20:09:28.640Z
+total_count: 48
+last_updated: 2026-09-18T13:01:15.464Z
 ---
 
 # Broken Windows Ledger
@@ -60,6 +60,9 @@ last_updated: 2026-09-17T20:09:28.640Z
 | 43 | 07 | deviation | package.json |  | coverage:producer:build script alias added with the delivery tool (Task 2) instead of Task 3 because fallow reports an unreferenced script as an unused file | open |  | 2026-09-17T19:11:00.326Z |  |
 | 44 | 07 | deviation | scripts/coverage-producer.convert.mjs |  | convertScripts now unwraps the merger's FileCoverage instances into plain records (their maps sat under data, hidden by JSON.stringify); the file was not in the plan's file list | open |  | 2026-09-17T20:09:28.277Z |  |
 | 45 | 07 | deviation | tests/scripts/coverage-source-map-fixtures.ts |  | Mapping fixtures (endpoints, declarations, crlf) live in a sibling support module mirroring coverage-producer-fixtures.ts instead of the test file; the module was not in the plan's file list | open |  | 2026-09-17T20:09:28.640Z |  |
+| 46 | 07 | deviation | scripts/coverage-source-map.mjs |  | The AST walker primitives (fresh parse, child-node walk, newline-only line model, declared-function spans) moved from coverage-source-map.mjs and coverage-correspondence.mjs into scripts/coverage-syntax.mjs so fallow's duplicate gate passes; neither coverage-source-map.mjs nor the new module was in the plan's file list | open |  | 2026-09-18T13:01:14.775Z |  |
+| 47 | 07 | deviation | tests/scripts/coverage-run-support.ts |  | Capture-and-convert, map publishing and installed-Fallow helpers shared by the correspondence, schema and validation controls live in a support module that was not in the plan's file list | open |  | 2026-09-18T13:01:15.144Z |  |
+| 48 | 07 | deviation | tests/scripts/coverage-correspondence-fixtures.ts |  | The twins fixture (two same-name callbacks with equal hits and statement ratio) lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list | open |  | 2026-09-18T13:01:15.464Z |  |
 
 ````json
 [
@@ -614,6 +617,45 @@ last_updated: 2026-09-17T20:09:28.640Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-17T20:09:28.640Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 46,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "scripts/coverage-source-map.mjs",
+    "line": null,
+    "description": "The AST walker primitives (fresh parse, child-node walk, newline-only line model, declared-function spans) moved from coverage-source-map.mjs and coverage-correspondence.mjs into scripts/coverage-syntax.mjs so fallow's duplicate gate passes; neither coverage-source-map.mjs nor the new module was in the plan's file list",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-18T13:01:14.775Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 47,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "tests/scripts/coverage-run-support.ts",
+    "line": null,
+    "description": "Capture-and-convert, map publishing and installed-Fallow helpers shared by the correspondence, schema and validation controls live in a support module that was not in the plan's file list",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-18T13:01:15.144Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 48,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "tests/scripts/coverage-correspondence-fixtures.ts",
+    "line": null,
+    "description": "The twins fixture (two same-name callbacks with equal hits and statement ratio) lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-18T13:01:15.464Z",
     "resolved_at": null,
     "milestone": null
   }
