@@ -37,8 +37,10 @@ import {
   TYPE_MEMBER_NEGATIVE_REL,
   UNUSED_TYPE_MEMBER_GATE_TARGETS,
 } from "./gate-targets.ts";
+import { readLocalHooks } from "./pre-commit-hooks.ts";
 import { REPO_ROOT } from "./source-scan.ts";
 
+import type { PreCommitHook } from "./pre-commit-hooks.ts";
 import type { TestContext } from "node:test";
 
 /** The key the live sensitivity control plants, which no real member may spell. */
@@ -343,62 +345,12 @@ const EXCEPTION_FIELDS = ["id", "owner", "key", "decision", "mechanism"];
 /** The key planted into the real tree by the live activation control below. */
 const CONTROL_KEY = "neverExcusedAnywhere";
 
-interface PreCommitHook {
-  readonly id: string;
-  readonly entry: string;
-  readonly passFilenames: string;
-  readonly files: string;
-}
-
 interface RecordedDecision {
   readonly id: string;
   readonly owner: string;
   readonly key: string;
   readonly decision: string;
   readonly mechanism: string;
-}
-
-/**
- * The `repo: local` hooks, read out of the configuration text.
- *
- * The configuration is a flat list of fixed-shape blocks, so it is read here by
- * line rather than through a YAML library the project does not depend on. A
- * block that stops having this shape stops being found, and every case that
- * names it fails -- which is the reporting this gate wants.
- */
-function readLocalHooks(configuration: string): Map<string, PreCommitHook> {
-  const hooks = new Map<string, PreCommitHook>();
-  let current: { id: string; fields: Map<string, string> } | undefined;
-
-  const commit = (): void => {
-    if (current !== undefined) {
-      hooks.set(current.id, {
-        id: current.id,
-        entry: current.fields.get("entry") ?? "",
-        passFilenames: current.fields.get("pass_filenames") ?? "",
-        files: (current.fields.get("files") ?? "").replace(/^'(.*)'$/, "$1"),
-      });
-    }
-  };
-
-  for (const line of configuration.split("\n")) {
-    const started = /^ {6}- id: (\S+)$/.exec(line);
-
-    if (started !== null) {
-      commit();
-      current = { id: started[1] ?? "", fields: new Map() };
-      continue;
-    }
-
-    const field = /^ {8}(\w+): (.+)$/.exec(line);
-
-    if (field !== null && current !== undefined) {
-      current.fields.set(field[1] ?? "", field[2] ?? "");
-    }
-  }
-
-  commit();
-  return hooks;
 }
 
 async function readHook(id: string): Promise<PreCommitHook> {
