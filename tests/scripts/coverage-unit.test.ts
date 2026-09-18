@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { appendFile, copyFile, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 import test from "node:test";
@@ -407,6 +407,28 @@ test("removes the previous acceptance before a replacement run publishes anythin
   assert.strictEqual((await readdir(path.join(root, "coverage", "runs"))).length, 2);
 });
 
+test("prunes every superseded run directory once a replacement run is accepted", async (t) => {
+  // arrange
+  const { root, runId: superseded } = await verifiedRoot(t, tallyFixture());
+  const failingPath = path.join(root, "tests/domain/failing.test.ts");
+  await writeFile(failingPath, failingTest);
+  assert.strictEqual(verify(root).status, 1);
+  await rm(failingPath);
+  await mkdir(path.join(root, "coverage", "runs", "not-a-run"));
+
+  // act
+  const replacement = verify(root);
+
+  // assert
+  assert.strictEqual(replacement.status, 0, replacement.stderr);
+  const accepted = await readJson<AcceptedManifest>(path.join(root, PUBLIC.manifest));
+  assert.notStrictEqual(accepted.runId, superseded);
+  assert.deepStrictEqual((await readdir(path.join(root, "coverage", "runs"))).sort(), [
+    accepted.runId,
+    "not-a-run",
+  ]);
+});
+
 test("exits 2 without a refusal row on an unknown option", () => {
   // act
   const verified = run([unitCliPath, "--verbose"]);
@@ -656,10 +678,15 @@ test("refuses a type-only source that carries a record", async (t) => {
 
 // The bytes of the map and the counts of the summary are a function of the
 // tree and the tests alone, so a second run of an unchanged tree publishes
-// the same measurement under a new run identity.
+// the same measurement under a new run identity, and the first run's
+// directory is gone once the second is accepted.
 test("publishes the same map and summary for a second run of an unchanged tree", async (t) => {
   // arrange
   const first = await populationRoot(t);
+  const firstMap = await readFile(path.join(first.runDirectory, "unit.istanbul.json"));
+  const firstAccepted = await readJson<PopulationManifest>(
+    path.join(first.runDirectory, "accepted.json"),
+  );
 
   // act
   const replacement = verify(first.root);
@@ -667,17 +694,9 @@ test("publishes the same map and summary for a second run of an unchanged tree",
   // assert
   assert.strictEqual(replacement.status, 0, replacement.stderr);
   const second = await readJson<PopulationManifest>(path.join(first.root, PUBLIC.manifest));
-  assert.deepStrictEqual(
-    (await readdir(path.join(first.root, "coverage", "runs"))).sort(),
-    [first.runId, second.runId].sort(),
-  );
-  assert.deepStrictEqual(
-    await readFile(path.join(first.root, PUBLIC.istanbul)),
-    await readFile(path.join(first.runDirectory, "unit.istanbul.json")),
-  );
-  const firstAccepted = await readJson<PopulationManifest>(
-    path.join(first.runDirectory, "accepted.json"),
-  );
+  assert.notStrictEqual(second.runId, first.runId);
+  assert.deepStrictEqual(await readdir(path.join(first.root, "coverage", "runs")), [second.runId]);
+  assert.deepStrictEqual(await readFile(path.join(first.root, PUBLIC.istanbul)), firstMap);
   assert.deepStrictEqual(
     { population: second.acceptance.population, denominators: second.acceptance.denominators },
     {

@@ -468,9 +468,9 @@ test("the reusable producer captures again once a production source changed", as
       verb: report.verb,
       replaced: report.runId !== previousRunId,
       published: await publishedRunId(root),
-      runs: (await runDirectories(root)).length,
+      runs: await runDirectories(root),
     },
-    { status: 0, verb: "verified", replaced: true, published: report.runId, runs: 2 },
+    { status: 0, verb: "verified", replaced: true, published: report.runId, runs: [report.runId] },
   );
 });
 

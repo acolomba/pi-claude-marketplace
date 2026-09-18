@@ -20,7 +20,9 @@
 //    syntax denominators, labeled apart (`coverage-acceptance.mjs`, which the
 //    readback recomputes). The map and the validation receipt
 //    are copied to their public paths, the accepted manifest is written last,
-//    and the whole bundle is read back the way a consumer reads it.
+//    and the whole bundle is read back the way a consumer reads it. Every
+//    earlier run directory is then removed: the accepted run is the one the
+//    public manifest names, so its directory is the evidence that remains.
 //
 // A refusal at any step removes every public artifact, keeps the run
 // directory as evidence and exits 1 with one `{ kind, ... }` row per finding;
@@ -75,6 +77,8 @@ const PUBLIC_PATHS = [
 ];
 // A child's stderr can hold the runner's warnings for every worker.
 const CHILD_OUTPUT_BUDGET = 256 * 1024 * 1024;
+// The run-id form `createRun` in `coverage-capture.mjs` writes.
+const RUN_ID_PATTERN = /^[0-9TZ]+-[0-9a-f]{8}$/u;
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const scriptPath = (name) => fileURLToPath(new URL(name, import.meta.url));
@@ -361,6 +365,17 @@ function removePublicArtifacts(root) {
   }
 }
 
+// Every run directory except the accepted one is removed once the bundle is
+// published and read back; only directories in the run-id form the capture
+// writes are touched.
+function pruneSupersededRuns(root, acceptedRunId) {
+  for (const runId of runDirectories(root)) {
+    if (runId !== acceptedRunId && RUN_ID_PATTERN.test(runId)) {
+      rmSync(path.join(root, RUNS_DIRECTORY, runId), { recursive: true, force: true });
+    }
+  }
+}
+
 function verifiedRun(root) {
   removePublicArtifacts(root);
   capture(root);
@@ -369,6 +384,7 @@ function verifiedRun(root) {
   const validation = validate(root, bundle, artifacts);
   const accepted = acceptedManifest(root, bundle, artifacts, validation);
   publish(root, bundle, accepted);
+  pruneSupersededRuns(root, accepted.runId);
   return accepted;
 }
 

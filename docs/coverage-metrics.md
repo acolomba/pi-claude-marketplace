@@ -55,7 +55,7 @@ An accepted run publishes four files under `coverage/`, which is gitignored:
 | `coverage/unit.validation.json` | The receipt of the validation: the run, the digests of the manifest and the map, every validated module with the digests of its source and executed text, the model versions, the validator tooling and the runtime. |
 | `coverage/unit.manifest.json`   | The accepted manifest, written last. It binds the LCOV, the map, both receipts, the producer identity, the tooling digests, the production population and the two denominators.                                      |
 
-Each run also keeps its evidence under `coverage/runs/<runId>/`: the inventory of every input with its digest, the raw V8 records of every process, the source and executed text of every module, the worker records and the same four artifacts. A refused run keeps this directory with `status: "failed"` and publishes nothing. Run directories are not pruned; remove the ones you no longer reference.
+Each run also keeps its evidence under `coverage/runs/<runId>/`: the inventory of every input with its digest, the raw V8 records of every process, the source and executed text of every module, the worker records and the same four artifacts. A refused run keeps this directory with `status: "failed"` and publishes nothing. An acceptance removes every earlier run directory under `coverage/runs/`, so after `coverage:unit:verified` exits 0 the accepted run's directory is the only one left; a refusal removes nothing, so its evidence and the last accepted run stay until the next acceptance.
 
 ## Exit status
 
