@@ -3686,4 +3686,234 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
+  test("LOAD-01: a plugin whose declared dependency is not recorded is disabled, stamped and unstaged", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "dependency-missing");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    const declaration = await readFile(project.configJsonPath, "utf8");
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+              skills: ["deploy-kit-tool"],
+            }),
+          },
+        }),
+      },
+    });
+    await writeUnder(
+      path.join(project.skillsTargetDir, "deploy-kit-tool", "SKILL.md"),
+      "---\nname: deploy-kit-tool\n---\n\nbody\n",
+    );
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "\u25cf mp [project]\n" +
+          "  \u25cd deploy-kit v1.0.0 (disabled)\n" +
+          "\n" +
+          "Reconcile: 1 warning",
+        severity: "warning",
+      },
+    ]);
+    const record = await recordFor(project, "mp", "deploy-kit");
+    assert.equal(record?.enabled, false);
+    assert.equal(record?.dependencyDisabled, true);
+    assert.equal(await pathExists(path.join(project.skillsTargetDir, "deploy-kit-tool")), false);
+    assert.equal(await readFile(project.configJsonPath, "utf8"), declaration);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("LOAD-01: a scope whose declarations are all satisfied stays silent and leaves state.json untouched", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "dependency-satisfied");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {}, "secrets-vault@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+            "secrets-vault": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "secrets-vault"),
+            }),
+          },
+        }),
+      },
+    });
+    const stateBytes = await readFile(project.stateJsonPath, "utf8");
+    const stateModifiedAt = (await stat(project.stateJsonPath)).mtimeMs;
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, []);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), stateBytes);
+    assert.equal((await stat(project.stateJsonPath)).mtimeMs, stateModifiedAt);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-06-02: a record disabled before the pass is held down without being stamped or reported", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "dependency-already-disabled");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              enabled: false,
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const stateBytes = await readFile(project.stateJsonPath, "utf8");
+    const stateModifiedAt = (await stat(project.stateJsonPath)).mtimeMs;
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, []);
+    const record = await recordFor(project, "mp", "deploy-kit");
+    assert.equal(record?.enabled, false);
+    assert.equal(Object.hasOwn(record ?? {}, "dependencyDisabled"), false);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), stateBytes);
+    assert.equal((await stat(project.stateJsonPath)).mtimeMs, stateModifiedAt);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-05-07: a declarer whose own manifest cannot be read is reported and nothing in the scope is disabled", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "dependency-unreadable");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      alfa: { dependencies: ["secrets-vault"], skill: "clean" },
+      broken: { skill: "clean" },
+    });
+    await writeUnder(
+      path.join(marketplaceRoot, "plugins", "broken", ".claude-plugin", "plugin.json"),
+      "{ truncated",
+    );
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "alfa@mp": {}, "broken@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            alfa: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "alfa") }),
+            broken: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "broken") }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "\u25cf mp [project]\n" +
+          "  \u2298 broken (failed) {unreadable}\n" +
+          "\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "alfa"))?.enabled, true);
+    assert.equal((await recordFor(project, "mp", "broken"))?.enabled, true);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
 });

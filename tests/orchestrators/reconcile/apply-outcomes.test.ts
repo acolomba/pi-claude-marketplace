@@ -17,6 +17,7 @@ import {
   type OutcomeBase,
   type PerEntryOutcome,
   type PluginBackfilledOutcome,
+  type PluginDependencyDisabledOutcome,
   type PluginDisabledOutcome,
   type PluginDisableFailedOutcome,
   type PluginEnabledOutcome,
@@ -148,6 +149,24 @@ void ({
   enableHint: true,
   postCommitWarnings: ["data directory deferred"],
 } satisfies PluginDisabledOutcome);
+void ({
+  kind: "plugin-dependency-disabled",
+  scope: "project",
+  marketplace: "official",
+  plugin: "deploy-kit",
+  version: "1.2.3",
+  dependency: "secrets-vault@official",
+  unsatisfied: "out-of-range",
+  range: "^2.0.0",
+} satisfies PluginDependencyDisabledOutcome);
+void ({
+  kind: "plugin-dependency-disabled",
+  scope: "user",
+  marketplace: "official",
+  plugin: "deploy-kit",
+  dependency: "secrets-vault@official",
+  unsatisfied: "missing",
+} satisfies PluginDependencyDisabledOutcome);
 void ({
   kind: "plugin-disable-failed",
   scope: "project",
@@ -331,6 +350,23 @@ void ({
   // @ts-expect-error disabled plugin reasons exclude the structural marketplace-only reason
   reasons: ["marketplace not added"],
 } satisfies PluginDisabledOutcome);
+void ({
+  kind: "plugin-dependency-disabled",
+  scope: "user",
+  marketplace: "official",
+  plugin: "deploy-kit",
+  dependency: "secrets-vault@official",
+  // @ts-expect-error a held-down plugin names why its declaration is unsatisfied
+} satisfies PluginDependencyDisabledOutcome);
+void ({
+  kind: "plugin-dependency-disabled",
+  scope: "user",
+  marketplace: "official",
+  plugin: "deploy-kit",
+  dependency: "secrets-vault@official",
+  // @ts-expect-error unsatisfied declarations use a closed three-member vocabulary
+  unsatisfied: "unreadable",
+} satisfies PluginDependencyDisabledOutcome);
 void ({
   kind: "plugin-disable-failed",
   scope: "project",
