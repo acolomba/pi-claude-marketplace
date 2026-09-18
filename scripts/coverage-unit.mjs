@@ -17,7 +17,8 @@
 // 4. The acceptance record binds the captured manifest, the map, both
 //    receipts, the conversion tooling, the population of production sources
 //    (loaded, unloaded executable, unloaded type-only) and the native and
-//    syntax denominators, labeled apart. The map and the validation receipt
+//    syntax denominators, labeled apart (`coverage-acceptance.mjs`, which the
+//    readback recomputes). The map and the validation receipt
 //    are copied to their public paths, the accepted manifest is written last,
 //    and the whole bundle is read back the way a consumer reads it.
 //
@@ -40,6 +41,7 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { acceptanceSummary, productionPaths } from "./coverage-acceptance.mjs";
 import {
   acceptanceToolingIdentity,
   PUBLIC_ISTANBUL_PATH,
@@ -53,8 +55,7 @@ import {
   verifyCaptureBundle,
   writeJsonAtomically,
 } from "./coverage-capture.manifest.mjs";
-import { classifySyntax } from "./coverage-correspondence.mjs";
-import { openCaptureRun, recordedModule } from "./coverage-source-map.mjs";
+import { openCaptureRun } from "./coverage-source-map.mjs";
 
 const ACCEPTANCE_SCHEMA_VERSION = 1;
 const PUBLIC_PATHS = [
@@ -190,12 +191,6 @@ function capturedBundle(root) {
   return { manifest: verdict.manifest, run, runPrefix, runDirectory: run.directory };
 }
 
-function productionPaths(run) {
-  return readJson(path.join(run.directory, "inventory.json"))
-    .filter((entry) => entry.group === "production")
-    .map((entry) => entry.path);
-}
-
 // Every production source in the run's raw snapshots, in the run's order,
 // converted into the run directory.
 function convert(root, bundle) {
@@ -231,85 +226,6 @@ function validate(root, bundle, artifacts) {
   return receipt;
 }
 
-// The production population: every source the run inventoried is either
-// loaded or unloaded, and each unloaded one is classified from its recorded
-// executed text (D-04, D-07).
-function populationOf(bundle) {
-  const production = new Set(productionPaths(bundle.run));
-  const loaded = bundle.manifest.modules.filter((record) => production.has(record.path));
-  const unloaded = bundle.manifest.unloaded.map((record) => ({
-    ...record,
-    ...classifySyntax(recordedModule(bundle.run, record.path).executed),
-  }));
-
-  return {
-    production: production.size,
-    loaded: loaded.length,
-    unloaded,
-    typeOnly: unloaded.filter((record) => record.syntax === "type-only").length,
-    executable: unloaded.filter((record) => record.syntax === "executable").length,
-  };
-}
-
-// The runner's own totals from the native LCOV: records, lines, functions and
-// branches as Node counts them. They are one measurement.
-function nativeTotals(lcovText) {
-  const totals = {
-    records: 0,
-    lines: { found: 0, hit: 0 },
-    functions: { found: 0, hit: 0 },
-    branches: { found: 0, hit: 0 },
-  };
-  const fields = {
-    LF: ["lines", "found"],
-    LH: ["lines", "hit"],
-    FNF: ["functions", "found"],
-    FNH: ["functions", "hit"],
-    BRF: ["branches", "found"],
-    BRH: ["branches", "hit"],
-  };
-
-  for (const line of lcovText.split("\n")) {
-    const [key, value] = line.split(":");
-    const target = fields[key];
-
-    if (line === "end_of_record") {
-      totals.records += 1;
-    } else if (target !== undefined) {
-      totals[target[0]][target[1]] += Number(value);
-    }
-  }
-
-  return totals;
-}
-
-// The map's own totals over the syntax model: constructs and how many of
-// them executed. They are another measurement, never equated with the
-// native one (D-07).
-function syntaxTotals(map) {
-  const totals = {
-    files: 0,
-    functions: { total: 0, covered: 0 },
-    statements: { total: 0, covered: 0 },
-    branchArms: { total: 0, covered: 0 },
-  };
-  const count = (counter, hits) => {
-    for (const value of hits) {
-      counter.total += 1;
-      counter.covered += value > 0 ? 1 : 0;
-    }
-  };
-
-  for (const file of Object.values(map)) {
-    totals.files += 1;
-    count(totals.functions, Object.values(file.f));
-    count(totals.statements, Object.values(file.s));
-    count(totals.branchArms, Object.values(file.b).flat());
-  }
-
-  return totals;
-}
-
 function digested(root, projectPath) {
   return { path: projectPath, digest: sha256(readFileSync(path.join(root, projectPath))) };
 }
@@ -337,13 +253,7 @@ function acceptedManifest(root, bundle, artifacts, validation) {
         istanbul: digested(root, artifacts.istanbul),
         public: { istanbul: PUBLIC_ISTANBUL_PATH, validation: PUBLIC_VALIDATION_PATH },
       },
-      population: populationOf(bundle),
-      denominators: {
-        native: nativeTotals(
-          readFileSync(path.join(root, bundle.manifest.artifacts.lcov.path), "utf8"),
-        ),
-        syntax: syntaxTotals(map),
-      },
+      ...acceptanceSummary(root, bundle.run, bundle.manifest, map),
     },
   };
 }

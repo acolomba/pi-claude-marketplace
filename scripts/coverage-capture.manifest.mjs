@@ -84,6 +84,7 @@ const TOOLING_FILES = [
 // requires the same bytes in use.
 const ACCEPTANCE_FILES = [
   "coverage-unit.mjs",
+  "coverage-acceptance.mjs",
   "coverage-producer.mjs",
   "coverage-producer.convert.mjs",
   "coverage-source-map.mjs",

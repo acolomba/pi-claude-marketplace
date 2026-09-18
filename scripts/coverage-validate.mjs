@@ -26,8 +26,10 @@
 // An `accepted` bundle is the published result of `coverage:unit:verified`,
 // and no argument beyond `--root` applies. The installed producer must still
 // be the one the acceptance recorded, the accepted map is validated again in
-// full from the run's own bytes, and the receipt that validation would write
-// now must equal the receipt the bundle carries; nothing is written.
+// full from the run's own bytes, the receipt that validation would write now
+// must equal the receipt the bundle carries, and the population and
+// denominators the acceptance records must equal the ones the run's own
+// records, LCOV and map yield now; nothing is written.
 //
 // Any failure refuses with exit status 1 and one `{ kind, ... }` row per
 // finding on stderr; a usage or setup error exits 2 before anything is read.
@@ -37,6 +39,7 @@ import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { acceptanceSummary, productionPaths } from "./coverage-acceptance.mjs";
 import {
   canonicalJson,
   PUBLIC_MANIFEST_PATH,
@@ -161,11 +164,6 @@ function readCandidateMap(root, mapPath) {
       { kind: "malformed-json", path: projectPath },
     ]);
   }
-}
-
-function productionPaths(run) {
-  const inventory = JSON.parse(readFileSync(path.join(run.directory, "inventory.json"), "utf8"));
-  return inventory.filter((entry) => entry.group === "production").map((entry) => entry.path);
 }
 
 // The map must name, by canonical contained paths, every production source
@@ -345,9 +343,21 @@ async function producerFailures(acceptance) {
   return changed.length === 0 ? [] : [{ kind: "producer-changed", fields: changed }];
 }
 
+// The population and denominators an acceptance records must be the ones
+// its own bundle yields; a summary copied from another run is refused even
+// when every digest agrees (D-02).
+function summaryFailures(root, run, published, map) {
+  const summary = acceptanceSummary(root, run, published, map);
+
+  return Object.keys(summary)
+    .filter((field) => canonicalJson(summary[field]) !== canonicalJson(published.acceptance[field]))
+    .map((field) => ({ kind: "summary-mismatch", field }));
+}
+
 // An accepted bundle: nothing is written, the map is validated again from
-// the run's bytes, and the receipt that validation yields must be the one
-// the bundle carries.
+// the run's bytes, the receipt that validation yields must be the one the
+// bundle carries, and the recorded summary must be the one the bundle
+// yields.
 async function verifyAccepted(options) {
   if (options.candidateOptions.length > 0) {
     throw new UsageError(
@@ -384,6 +394,12 @@ async function verifyAccepted(options) {
     throw new ValidationError("The accepted receipt is not the one validation yields", [
       { kind: "receipt-mismatch", path: acceptance.validation.path, fields },
     ]);
+  }
+
+  const summary = summaryFailures(options.root, run, published, map);
+
+  if (summary.length > 0) {
+    throw new ValidationError("The accepted summary is not the one the bundle yields", summary);
   }
 
   return { ...receipt, verb: "bundle verified", trailer: `manifest ${PUBLIC_MANIFEST_PATH}` };

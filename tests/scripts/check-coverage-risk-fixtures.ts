@@ -3,14 +3,14 @@
 // and for every function the risk gate must report its exact anchor, its
 // cyclomatic complexity, the statements its body contains and how many of
 // those execute. Every expectation is written from the source text and the
-// standard cyclomatic rules (one plus each `if` and each `&&`), never from
-// the consumer's output; the CRAP score follows from those by the formula
-// `cc * cc * (1 - covered / total) ** 3 + cc`.
+// standard cyclomatic rules (one plus each `if`, each `&&` and each
+// `catch`), never from the consumer's output; the CRAP score follows from
+// those by the formula `cc * cc * (1 - covered / total) ** 3 + cc`.
 //
 // A function's anchor is where the installed consumer reports it: the start
 // of the function node itself, which is the `function` keyword of a
-// declaration, the first character of an arrow, and the parameter list of a
-// method. Anchors are named by a snippet that occurs once in the source, so
+// declaration (`async` when it has one), the first character of an arrow,
+// and the parameter list of a method. Anchors are named by a snippet that occurs once in the source, so
 // a reader can check each coordinate by eye.
 
 import { fixturePackageJson, prefixOf } from "./coverage-producer-fixtures.ts";
@@ -51,6 +51,8 @@ export const GRADE_PATH = "extensions/pi-claude-marketplace/domain/grade.ts";
 export const BELOW_PATH = "extensions/pi-claude-marketplace/domain/below.ts";
 export const TWINS_PATH = "extensions/pi-claude-marketplace/domain/twins.ts";
 export const UNICODE_PATH = "extensions/pi-claude-marketplace/domain/unicode.ts";
+export const GUARD_PATH = "extensions/pi-claude-marketplace/domain/guard.ts";
+export const RETHROW_PATH = "extensions/pi-claude-marketplace/domain/rethrow.ts";
 
 function anchorOf(source: string, snippet: string): SourcePosition {
   return prefixOf(source, snippet).start;
@@ -362,6 +364,122 @@ export function unicodeFixture(): RiskFixture {
         anchor: anchorOf(source, "function width"),
         cyclomatic: 1,
         statements: { total: 1, covered: 1 },
+      },
+    ],
+  };
+}
+
+// One `if` with no else, always true for the input the test gives:
+// cyclomatic 2 and four statements (the initializer, the `if`, its body and
+// the return), all executed. The implicit else is a branch arm the syntax
+// model records and no statement, so the score is 2.
+const guardSource = `export function guard(items: string[]): number {
+  let total = 0;
+  if (items.length > 0) {
+    total += items.length;
+  }
+  return total;
+}
+`;
+
+/** A fully executed function whose implicit else is never taken. */
+export function guardFixture(): RiskFixture {
+  const source = guardSource;
+
+  return {
+    name: "guard",
+    sourcePath: GUARD_PATH,
+    source,
+    tests: {
+      "tests/domain/guard.test.ts": importingTest(
+        GUARD_PATH,
+        ["guard"],
+        `  assert.equal(guard(["a", "b"]), 2);`,
+      ),
+    },
+    functions: [
+      {
+        name: "guard",
+        anchor: anchorOf(source, "function guard"),
+        cyclomatic: 2,
+        statements: { total: 4, covered: 4 },
+      },
+    ],
+  };
+}
+
+// A catch that rethrows what it does not tolerate. `attempt` has one `if`
+// and three statements (the `if`, the `throw` and the return); `probe` has
+// one `catch` and one `if`, so cyclomatic 3, and five statements (the
+// `try`, the awaited return, the `if`, the `throw` and the return). Two test
+// files load the module in two processes: one drives both arms of `attempt`,
+// so `probe` enters its catch once and tolerates the error; the other runs
+// the happy path only. The rethrow never executes: 4 of 5 statements, so
+// 9 * 0.2 ** 3 + 3 = 3.072.
+const rethrowSource = `export async function attempt(fail: boolean): Promise<string> {
+  if (fail) {
+    throw new TypeError("tolerated");
+  }
+  return "ok";
+}
+
+export async function probe(fail: boolean): Promise<string> {
+  try {
+    return await attempt(fail);
+  } catch (err) {
+    if (!(err instanceof TypeError)) {
+      throw err;
+    }
+    return "warned";
+  }
+}
+`;
+
+const rethrowBothArmsTest = `import assert from "node:assert/strict";
+import test from "node:test";
+
+import { probe } from "../../${RETHROW_PATH}";
+
+test("tolerates the failure", async () => {
+  assert.equal(await probe(false), "ok");
+  assert.equal(await probe(true), "warned");
+});
+`;
+
+const rethrowHappyPathTest = `import assert from "node:assert/strict";
+import test from "node:test";
+
+import { probe } from "../../${RETHROW_PATH}";
+
+test("runs the happy path", async () => {
+  assert.equal(await probe(false), "ok");
+});
+`;
+
+/** A rethrow no process executes, loaded by two processes. */
+export function rethrowFixture(): RiskFixture {
+  const source = rethrowSource;
+
+  return {
+    name: "rethrow",
+    sourcePath: RETHROW_PATH,
+    source,
+    tests: {
+      "tests/domain/rethrow.test.ts": rethrowBothArmsTest,
+      "tests/domain/rethrow-happy.test.ts": rethrowHappyPathTest,
+    },
+    functions: [
+      {
+        name: "attempt",
+        anchor: anchorOf(source, "async function attempt"),
+        cyclomatic: 2,
+        statements: { total: 3, covered: 3 },
+      },
+      {
+        name: "probe",
+        anchor: anchorOf(source, "async function probe"),
+        cyclomatic: 3,
+        statements: { total: 5, covered: 4 },
       },
     ],
   };

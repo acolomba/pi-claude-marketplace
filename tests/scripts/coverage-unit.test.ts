@@ -619,6 +619,74 @@ test("refuses a type-only source that carries a record", async (t) => {
   });
 });
 
+// The bytes of the map and the counts of the summary are a function of the
+// tree and the tests alone, so a second run of an unchanged tree publishes
+// the same measurement under a new run identity.
+test("publishes the same map and summary for a second run of an unchanged tree", async (t) => {
+  // arrange
+  const first = await populationRoot(t);
+
+  // act
+  const replacement = verify(first.root);
+
+  // assert
+  assert.strictEqual(replacement.status, 0, replacement.stderr);
+  const second = await readJson<PopulationManifest>(path.join(first.root, PUBLIC.manifest));
+  assert.deepStrictEqual(
+    (await readdir(path.join(first.root, "coverage", "runs"))).sort(),
+    [first.runId, second.runId].sort(),
+  );
+  assert.deepStrictEqual(
+    await readFile(path.join(first.root, PUBLIC.istanbul)),
+    await readFile(path.join(first.runDirectory, "unit.istanbul.json")),
+  );
+  const firstAccepted = await readJson<PopulationManifest>(
+    path.join(first.runDirectory, "accepted.json"),
+  );
+  assert.deepStrictEqual(
+    { population: second.acceptance.population, denominators: second.acceptance.denominators },
+    {
+      population: firstAccepted.acceptance.population,
+      denominators: firstAccepted.acceptance.denominators,
+    },
+  );
+});
+
+// Every digest of this bundle agrees and only its summary is another run's:
+// the counts a reader takes from the manifest must be the ones this run
+// yields, never a historical record.
+test("refuses the consumer readback once the recorded summary is another run's", async (t) => {
+  // arrange
+  const verified = await verifiedRoot(t, tallyFixture());
+  const other = await populationRoot(t);
+  const historical = await readJson<PopulationManifest>(path.join(other.root, PUBLIC.manifest));
+
+  for (const manifestPath of [
+    path.join(verified.runDirectory, "accepted.json"),
+    path.join(verified.root, PUBLIC.manifest),
+  ]) {
+    const manifest = await readJson<PopulationManifest>(manifestPath);
+    const acceptance = {
+      ...manifest.acceptance,
+      population: historical.acceptance.population,
+      denominators: historical.acceptance.denominators,
+    };
+    await writeFile(manifestPath, `${JSON.stringify({ ...manifest, acceptance }, undefined, 2)}\n`);
+  }
+
+  // act
+  const validation = validate(verified.root);
+
+  // assert
+  assert.deepStrictEqual(verdict(validation), {
+    status: 1,
+    rows: [
+      { kind: "summary-mismatch", field: "population" },
+      { kind: "summary-mismatch", field: "denominators" },
+    ],
+  });
+});
+
 test("refuses a bundle whose manifest no longer represents an unloaded source", async (t) => {
   // arrange
   const verified = await populationRoot(t);

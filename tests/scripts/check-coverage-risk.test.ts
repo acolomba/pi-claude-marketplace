@@ -13,6 +13,8 @@ import {
   crapOf,
   expectedRows,
   gradeFixture,
+  guardFixture,
+  rethrowFixture,
   riskFixtureFiles,
   twinsFixture,
   TWINS_PATH,
@@ -47,6 +49,35 @@ const repositoryUrl = new URL("../../", import.meta.url);
 
 const PUBLIC_MANIFEST = "coverage/unit.manifest.json";
 const POLICY = 30;
+
+interface Counter {
+  readonly found?: number;
+  readonly hit?: number;
+  readonly total?: number;
+  readonly covered?: number;
+}
+
+// The two denominators an accepted manifest records apart (D-07): Node's
+// own totals over the LCOV and the syntax model's totals over the map.
+interface Denominators {
+  readonly native: {
+    readonly records: number;
+    readonly lines: Counter;
+    readonly functions: Counter;
+    readonly branches: Counter;
+  };
+  readonly syntax: {
+    readonly files: number;
+    readonly functions: Counter;
+    readonly statements: Counter;
+    readonly branchArms: Counter;
+  };
+}
+
+interface AcceptedManifest {
+  readonly runId: string;
+  readonly acceptance: { readonly denominators: Denominators };
+}
 
 interface RiskReport {
   readonly status: string;
@@ -209,6 +240,92 @@ test("passes the same function fully exercised at CRAP 6 with measured provenanc
       other: { rows: 2, estimated: 2 },
       reported: [{ coverage: 100, crap: 6, source: "istanbul" }],
       failures: [],
+    },
+  );
+});
+
+// The syntax model records the implicit else of an `if` as a branch arm and
+// V8 records no block for code that does not exist, so the two denominators
+// disagree on branches while every statement executed; the score uses
+// statements only and stays at the complexity.
+test("scores a function whose implicit else is never taken at its full statement coverage", async (t) => {
+  // arrange
+  const fixture = guardFixture();
+  const root = await acceptedRoot(t, fixture);
+  const manifest = await readJson<AcceptedManifest>(path.join(root, PUBLIC_MANIFEST));
+
+  // act
+  const passed = risk(root, "coverage/unit.risk.json");
+
+  // assert
+  assert.strictEqual(passed.status, 0, passed.stderr);
+  const report = await reportAt(root);
+  assert.deepStrictEqual(measured(report), expectedRows(fixture));
+  assert.deepStrictEqual(
+    report.functions.map((row) => row.reported),
+    [{ coverage: 100, crap: 2, source: "istanbul" }],
+  );
+  // Seven lines and one function, all executed; V8 reports the module root
+  // and the function body as blocks and elides the `if` block, which ran as
+  // often as its function. The syntax model counts four statements and the
+  // two arms of the `if`, of which the implicit else never ran.
+  assert.deepStrictEqual(manifest.acceptance.denominators, {
+    native: {
+      records: 1,
+      lines: { found: 7, hit: 7 },
+      functions: { found: 1, hit: 1 },
+      branches: { found: 2, hit: 2 },
+    },
+    syntax: {
+      files: 1,
+      functions: { total: 1, covered: 1 },
+      statements: { total: 4, covered: 4 },
+      branchArms: { total: 2, covered: 1 },
+    },
+  });
+});
+
+// Node merges the block ranges of every process into one LCOV, and its
+// merge keeps a zero-count block only when it matches or nests a zero-count
+// block of the other side before an exact match ends the scan. The `throw`
+// block sits inside a catch clause both processes report at the same span,
+// one of them with a nonzero count, so the merged LCOV counts the `throw`
+// line as executed. The raw ranges of each process and the map converted
+// from them keep the statement at zero, and the score follows the map.
+test("scores a rethrow no process executed although the merged native lines count it", async (t) => {
+  // arrange
+  const fixture = rethrowFixture();
+  const root = await acceptedRoot(t, fixture);
+  const manifest = await readJson<AcceptedManifest>(path.join(root, PUBLIC_MANIFEST));
+  const { native, syntax } = manifest.acceptance.denominators;
+
+  // act
+  const passed = risk(root, "coverage/unit.risk.json");
+
+  // assert
+  assert.strictEqual(passed.status, 0, passed.stderr);
+  const report = await reportAt(root);
+  assert.deepStrictEqual(measured(report), expectedRows(fixture));
+  assert.deepStrictEqual(
+    report.functions.map((row) => [row.name, row.crap, row.reported]),
+    [
+      ["attempt", 2, { coverage: 100, crap: 2, source: "istanbul" }],
+      ["probe", 3 * 3 * (1 - 4 / 5) ** 3 + 3, { coverage: 80, crap: 3.1, source: "istanbul" }],
+    ],
+  );
+  // Seventeen lines, every one counted as executed, against eight statements
+  // of which the `throw` never ran; the `if` of `attempt` took both arms, the
+  // `if` of `probe` only its implicit else.
+  assert.deepStrictEqual(
+    { native: { lines: native.lines, functions: native.functions }, syntax },
+    {
+      native: { lines: { found: 17, hit: 17 }, functions: { found: 2, hit: 2 } },
+      syntax: {
+        files: 1,
+        functions: { total: 2, covered: 2 },
+        statements: { total: 8, covered: 7 },
+        branchArms: { total: 4, covered: 3 },
+      },
     },
   );
 });
