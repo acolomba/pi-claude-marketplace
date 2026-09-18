@@ -184,12 +184,7 @@ async function seedMarketplace(
  */
 async function twoScopeFootprint(cwd: string, state: ExtensionState): Promise<unknown> {
   return {
-    records: Object.fromEntries(
-      Object.entries(state.marketplaces).map(([name, record]) => [
-        name,
-        Object.keys(record.plugins).sort(),
-      ]),
-    ),
+    records: structuredClone(state.marketplaces),
     project: await retryTree(locationsFor("project", cwd).scopeRoot),
     user: await retryTree(locationsFor("user", cwd).scopeRoot),
   };

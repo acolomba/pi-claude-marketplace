@@ -653,7 +653,7 @@ export function manualRecoveryLeaks(err: unknown): readonly string[] {
  * `reasons` on the (not-)installable variants is `readonly string[]` and
  * NOT `readonly Reason[]`. The resolver populates `r.notes` with free-form
  * strings (`"contains hooks"`, `"source dir does not exist"`,
- * `"declares dependencies that must be installed manually"`, etc.) -- the
+ * `"malformed marketplace entry: ..."`, etc.) -- the
  * closed `Reason` set lives one layer up at the renderer boundary. The
  * `classifyEntityShapeError` consumer in `orchestrators/plugin/install-flow.ts`
  * narrows these strings to closed-set `Reason` members. Carrying the raw

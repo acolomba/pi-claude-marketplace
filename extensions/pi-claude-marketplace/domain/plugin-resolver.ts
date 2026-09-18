@@ -196,19 +196,20 @@ type SourceSupport =
   | { readonly kind: "rejected"; readonly reason: string };
 
 /**
- * Recognizes `domain/manifest.ts::normalizeDependencyEntries`'s load-time stub
- * for a marketplace entry whose `dependencies` failed to parse, via the
- * synthetic `dependenciesReason` field it stamps onto the isolated entry, and
- * returns the parse-failure detail that field carries. `undefined` for every
- * real `PluginEntry` -- checked BEFORE source classification runs so an
- * isolated entry's reported defect names `dependencies`, not `source`.
+ * The parse failure of an entry's own `dependencies` declaration, or
+ * `undefined` when the entry declares none or declares them validly.
+ * `domain/manifest.ts::normalizeDependencyEntries` keeps a malformed value on
+ * the entry it isolates, so this re-parse is what names the real defect --
+ * checked BEFORE source classification runs, so the reported defect names
+ * `dependencies`, not `source`.
  */
-function isolatedDependencyDefectReason(entry: PluginEntry): string | undefined {
-  if (!("dependenciesReason" in entry)) {
+function malformedDependenciesReason(entry: PluginEntry): string | undefined {
+  if (!("dependencies" in entry)) {
     return undefined;
   }
 
-  return typeof entry.dependenciesReason === "string" ? entry.dependenciesReason : undefined;
+  const dependencies = parseDeclaredDependencies(entry.dependencies);
+  return dependencies.ok ? undefined : dependencies.reason;
 }
 
 function classifySourceSupport(parsedSource: ParsedSource): SourceSupport {
@@ -460,10 +461,10 @@ async function preflightStages(
 
   // domain/manifest.ts::normalizeDependencyEntries isolates a marketplace
   // entry whose declared `dependencies` failed to parse before this resolver
-  // ever sees it. Detected first -- ahead of PR-2's source-kind classification
+  // ever sees it. Re-parsed first -- ahead of PR-2's source-kind classification
   // below -- so the reported defect names the field that is actually broken
   // (`dependencies`) rather than an unrecognized source kind.
-  const dependencyDefect = isolatedDependencyDefectReason(entry);
+  const dependencyDefect = malformedDependenciesReason(entry);
   if (dependencyDefect !== undefined) {
     return {
       kind: "unavailable",
@@ -629,7 +630,6 @@ async function resolveWithMode(
   // not a structural defect); it is read separately via `partial.unsupported`
   // in the decision below.
   await addUnsupportedKindNotes(entry, manifest, pluginRoot, ctx, partial);
-  noteDeclaredDependencies(entry, partial);
 
   return decideResolution(entry.name, pluginRoot, partial, dirty, defaultEnabled);
 }
@@ -669,13 +669,6 @@ async function runStructuralStages(args: {
   );
 
   return flags.includes(true);
-}
-
-/** Step 10 (PR-5): dependencies stay installable but get a note. */
-function noteDeclaredDependencies(entry: PluginEntry, partial: PartialResolution): void {
-  if ((entry as Record<string, unknown>).dependencies !== undefined) {
-    partial.notes.push(`declares dependencies that must be installed manually`);
-  }
 }
 
 /**

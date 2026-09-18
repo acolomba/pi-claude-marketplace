@@ -1,6 +1,6 @@
 // Strict-mode resolver coverage. 1:1 mapping between PR-2 cases and tests
 // (9 tests for the 9 cases). Plus PR-3 multi, PR-4 implicit-by-convention
-// (positive + negative), PR-5 dependencies, PR-6 requireInstallable
+// (positive + negative), RESV-01 dependencies, PR-6 requireInstallable
 // narrowing/throwing, and one MM-5 happy path.
 
 import assert from "node:assert/strict";
@@ -63,14 +63,14 @@ for (const { mode, resolve } of [
   { mode: "loose", resolve: resolveLoose },
 ]) {
   test(`${mode} resolution reports the isolated marketplace-entry dependencies defect ahead of an unrelated bad source`, async () => {
-    // arrange -- domain/manifest.ts::normalizeDependencyEntries stamps
-    // `dependenciesReason` onto a marketplace entry whose own `dependencies`
-    // failed to parse; the resolver must report THAT defect even when the
-    // entry's `source` is independently unclassifiable.
+    // arrange -- domain/manifest.ts::normalizeDependencyEntries keeps the
+    // malformed `dependencies` value on the entry it isolates; the resolver
+    // must report THAT defect even when the entry's `source` is independently
+    // unclassifiable.
     const context = resolveContext(marketplaceRoot, {});
     const entry = pluginEntry({
       source: 42,
-      dependenciesReason: "dependencies.0: Invalid input",
+      dependencies: ["foo@~1.0.0"],
     });
 
     // act
@@ -86,12 +86,12 @@ for (const { mode, resolve } of [
   });
 }
 
-test("resolveStrict ignores a non-string dependenciesReason (falls through to ordinary preflight)", async () => {
-  // arrange -- no real marketplace entry carries this shape; a non-string
-  // value proves the isolation guard checks the field's TYPE, not just its
-  // presence, and otherwise falls through to ordinary source/dir resolution.
+test("resolveStrict lets a valid dependencies declaration fall through to ordinary preflight", async () => {
+  // arrange -- the malformed-dependencies check fires only on a declaration
+  // that fails to parse; a valid one changes nothing about the entry's
+  // ordinary source/dir resolution.
   const context = resolveContext(marketplaceRoot, {});
-  const entry = pluginEntry({ dependenciesReason: 42 });
+  const entry = pluginEntry({ dependencies: ["foo@^1.0.0"] });
 
   // act
   const resolvedPlugin = await resolveStrict(entry, context);
@@ -1823,25 +1823,22 @@ test("D-07 entry-declared path UNIONs with implicit-by-convention (was: PR-4 sho
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// PR-5: dependencies stay installable but get a note
+// RESV-01: a dependencies declaration is resolved, never noted
 // ──────────────────────────────────────────────────────────────────────────
 
-test("PR-5 entry.dependencies present -> installable: true with manual-install note", async () => {
+test("RESV-01 strict: a valid dependencies declaration leaves the entry installable with no note", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
 
   // act
   const resolvedPlugin = await resolveStrict(
-    pluginEntry({ source: "./local", dependencies: { other: "1.0" } }),
+    pluginEntry({ source: "./local", dependencies: ["other@^1.0.0"] }),
     context,
   );
 
   // assert
   assert.strictEqual(resolvedPlugin.state, "installable");
-  assert.ok(
-    resolvedPlugin.notes.some((n) => n.includes("must be installed manually")),
-    `notes: ${resolvedPlugin.notes.join(" / ")}`,
-  );
+  assert.deepStrictEqual(resolvedPlugin.notes, []);
 });
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -3198,7 +3195,7 @@ test("MM-7 entry.mcpServers malformed (non-object) in loose mode -> unavailable 
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// PR-3 + PR-5 in loose mode (same semantics as strict)
+// PR-3 + RESV-01 in loose mode (same semantics as strict)
 // ──────────────────────────────────────────────────────────────────────────
 
 test("PR-3 loose: entry declares unsupported component -> notInstallable", async () => {
@@ -3340,19 +3337,19 @@ test("D-90-06 loose: bin/ dir on disk -> installable, no bin contains-note", asy
   );
 });
 
-test("PR-5 loose: entry.dependencies -> installable with manual-install note", async () => {
+test("RESV-01 loose: a valid dependencies declaration leaves the entry installable with no note", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
 
   // act
   const resolvedPlugin = await resolveLoose(
-    pluginEntry({ source: "./local", dependencies: { other: "1.0" } }),
+    pluginEntry({ source: "./local", dependencies: ["other@^1.0.0"] }),
     context,
   );
 
   // assert
   assert.strictEqual(resolvedPlugin.state, "installable");
-  assert.ok(resolvedPlugin.notes.some((n) => n.includes("must be installed manually")));
+  assert.deepStrictEqual(resolvedPlugin.notes, []);
 });
 
 // ──────────────────────────────────────────────────────────────────────────

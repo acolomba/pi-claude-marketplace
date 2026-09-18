@@ -864,7 +864,8 @@ function applyPluginOutcomeToBlock(
         status: "failed",
         name: outcome.plugin,
         reasons: reasonAsContent(outcome.reason),
-        // D-05-16: only a refused uninstall carries a cause onto this row.
+        // D-05-16 / RESV-06: only a refused uninstall or a dependency-cascade
+        // install failure carries a cause onto this row.
         ...failedRowCause(outcome),
         // D-03/D-06: a failed reconcile apply row -> error, no reload.
         severity: "error",

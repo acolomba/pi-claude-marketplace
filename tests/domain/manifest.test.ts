@@ -188,7 +188,7 @@ describe("loadMarketplaceManifest", () => {
         {
           name: "broken",
           source: { source: "unsupported" },
-          dependenciesReason: "dependencies.0: Invalid input",
+          dependencies: ["foo@~1.0.0"],
         },
         {
           name: "healthy",

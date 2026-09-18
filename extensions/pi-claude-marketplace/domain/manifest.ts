@@ -43,11 +43,11 @@ const MARKETPLACE_VALIDATOR = Compile(MARKETPLACE_SCHEMA);
 
 /**
  * Isolates invalid dependency declarations before validating the marketplace.
- * The stub's `source` sub-object is unchanged from before -- `info.ts`'s
- * `isUnsupportedEntrySource` still matches it byte-for-byte -- and the parse
- * failure now also lands in a new sibling `dependenciesReason` field so
- * `plugin-resolver.ts` can name the real defect (`dependencies`, not
- * `source`) instead of reporting an unrecognized source kind.
+ * The stub's `source` sub-object is the shape `info.ts`'s
+ * `isUnsupportedEntrySource` check and `tests/architecture/partial-vocabulary-guard.test.ts`
+ * both pin. The stub keeps the entry's own `dependencies` value: the resolver
+ * parses it again and reports the parse failure as the entry's defect, so no
+ * synthetic marker is needed and a real entry cannot be mistaken for a stub.
  */
 function normalizeDependencyEntries(raw: unknown): unknown {
   if (
@@ -83,7 +83,7 @@ function normalizeDependencyEntries(raw: unknown): unknown {
       plugins.push({
         name: entry.name,
         source: { source: "unsupported" },
-        dependenciesReason: dependencies.reason,
+        dependencies: entry.dependencies,
       });
     }
   }
