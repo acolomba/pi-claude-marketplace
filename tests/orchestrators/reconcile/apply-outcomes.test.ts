@@ -6,6 +6,7 @@ import {
   classifyOrchestratorThrow,
   classifyReadPassThrow,
   dependenciesFromInstall,
+  dependencyDisabledOutcome,
   MigrateConfigSaveError,
   sourceMismatchOutcomeSubject,
   type InvalidBlockOutcome,
@@ -798,5 +799,58 @@ describe("dependenciesFromInstall", () => {
 
     // assert
     assert.deepStrictEqual(dependencies, ["agents", "mcp"]);
+  });
+});
+
+describe("dependencyDisabledOutcome", () => {
+  test("carries the recorded version and the declared range of an out-of-range dependency", () => {
+    // arrange
+    const held = {
+      scope: "project",
+      marketplace: "official",
+      plugin: "deploy-kit",
+      dependency: "secrets-vault@official",
+      kind: "out-of-range",
+      range: "^2.0.0",
+    } as const;
+
+    // act
+    const outcome = dependencyDisabledOutcome(held, "1.2.3");
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "plugin-dependency-disabled",
+      scope: "project",
+      marketplace: "official",
+      plugin: "deploy-kit",
+      version: "1.2.3",
+      dependency: "secrets-vault@official",
+      unsatisfied: "out-of-range",
+      range: "^2.0.0",
+    });
+  });
+
+  test("omits the version and the range a missing dependency has neither of", () => {
+    // arrange
+    const held = {
+      scope: "user",
+      marketplace: "official",
+      plugin: "deploy-kit",
+      dependency: "secrets-vault@official",
+      kind: "missing",
+    } as const;
+
+    // act
+    const outcome = dependencyDisabledOutcome(held, undefined);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "plugin-dependency-disabled",
+      scope: "user",
+      marketplace: "official",
+      plugin: "deploy-kit",
+      dependency: "secrets-vault@official",
+      unsatisfied: "missing",
+    });
   });
 });

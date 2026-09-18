@@ -268,6 +268,35 @@ function appliedOutcomeRows(): AppliedOutcomeRows {
         ],
       },
     },
+    "plugin-dependency-disabled": {
+      outcome: {
+        kind: "plugin-dependency-disabled",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "cr",
+        version: "1.0.0",
+        dependency: "vault@mp",
+        unsatisfied: "missing",
+      },
+      expected: {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "disabled",
+                name: "cr",
+                version: "1.0.0",
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
     "plugin-install-failed": {
       outcome: {
         kind: "plugin-install-failed",

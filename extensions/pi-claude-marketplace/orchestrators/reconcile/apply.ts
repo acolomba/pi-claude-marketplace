@@ -58,7 +58,7 @@ import { notifyDiagnostic } from "../../shared/notification-dispatch.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { notifyReconcileAppliedWithContext } from "../../shared/notify-context.ts";
 import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
-import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import { withLockedStateTransaction, withStateGuard } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { removeMarketplace } from "../marketplace/remove.ts";
 import { createNodeSetPluginEnabled } from "../plugin/enable-disable.ts";
@@ -69,9 +69,11 @@ import {
   classifyOrchestratorThrow,
   classifyReadPassThrow,
   dependenciesFromInstall,
+  dependencyDisabledOutcome,
   MigrateConfigSaveError,
 } from "./apply-outcomes.ts";
 import { applyBackfillForScopeIsolated, runScopeIsolated } from "./backfill.ts";
+import { buildScopeSatisfactionVerdict } from "./dependency-verdict.ts";
 import { buildReconcileAppliedCascade } from "./notify.ts";
 import { planReconcile } from "./plan.ts";
 import { RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
@@ -79,6 +81,7 @@ import { RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type {
   ApplyReconcileOptions,
+  PlannedDependencyDisable,
   PlannedPluginUninstall,
   ReconcilePlan,
   ScopeReadResult,
@@ -193,12 +196,26 @@ async function readPassForScope(
         return { scope, plan: undefined, invalidOutcomes, stateExisted: stateExists };
       }
 
-      // (4) Plan against the merged config + current state. Pure -- no I/O.
-      const plan = planReconcile(outcome.merged, state, scope);
+      // (4) LOAD-01 / D-06-04: decide which recorded plugin has a declaration
+      // this scope does not satisfy. It runs HERE, not in index.ts, because the
+      // snapshot and the `ScopedLocations` bundle it walks are both produced
+      // inside this locked closure: computing it outside would mean a second
+      // unlocked state read that could disagree with the snapshot the planner
+      // sees, which is the race this lock exists to close. The closure is
+      // already async and already reads the filesystem through
+      // `migrateFirstRunConfig` and `loadMergedScopeConfig`, so the walk
+      // introduces no new kind of work at this seam. It takes NO lock of its
+      // own: this closure already holds the scope lock, and the guard is
+      // configured with no retries and is not re-entrant.
+      const verdict = await buildScopeSatisfactionVerdict({ state, locations: loc });
+
+      // (5) Plan against the merged config + current state + the verdict.
+      // Pure -- no I/O.
+      const plan = planReconcile(outcome.merged, state, scope, verdict);
       // BFILL-02: carry the loaded state snapshot out so applyBackfillForScope can
       // read its stamp + scan its partially-installed plugins. planReconcile is pure,
       // so the snapshot is the unmutated read-pass state.
-      return { scope, plan, invalidOutcomes: [], state, stateExisted: stateExists };
+      return { scope, plan, invalidOutcomes: [], state, stateExisted: stateExists, verdict };
     },
     { loadState: reader.loadState },
   );
@@ -727,6 +744,103 @@ async function applyPluginToggles(
 }
 
 /**
+ * LOAD-01 / D-06-02: stamp the consequence-disable marker on the records this
+ * pass just transitioned, in ONE locked transaction for the whole bucket.
+ *
+ * SPLIT-02 / NFR-1: the write routes through `withStateGuard` -> `saveState`,
+ * never a bare atomic JSON write, and every path comes from the branded
+ * `ScopedLocations` bundle. CR-01: it takes its own per-scope lock, which is
+ * legal because the surrounding apply region holds none.
+ *
+ * Only a record the step itself flipped from enabled to disabled is stamped. A
+ * record already disabled for any other reason -- the user's own `disable`, or
+ * a config-declared `enabled: false` -- is left alone, which is what keeps the
+ * user's own choice distinguishable from the check's consequence.
+ *
+ * A record that vanished between the transition and this write is skipped: the
+ * marker is re-derived every pass, so there is nothing to recover.
+ */
+async function stampDependencyDisabled(
+  opts: ApplyReconcileOptions,
+  scope: Scope,
+  transitioned: readonly PlannedDependencyDisable[],
+): Promise<void> {
+  const loc = locationsFor(scope, opts.cwd);
+  await withStateGuard(loc, (fresh) => {
+    for (const op of transitioned) {
+      const record = fresh.marketplaces[op.marketplace]?.plugins[op.plugin];
+      if (record !== undefined) {
+        record.dependencyDisabled = true;
+      }
+    }
+  });
+}
+
+/**
+ * LOAD-01: perform the load-time disable for every plugin the planner found
+ * held down by an unsatisfied declaration.
+ *
+ * The disable itself is delegated to `setPluginEnabled` in orchestrated mode,
+ * the same seam the toggle buckets drive. That is what makes the plugin
+ * actually stop loading: resource discovery walks the materialized directories
+ * and never reads a record, so flipping `enabled` without the unstage cascade
+ * would leave every skill, prompt, agent, MCP entry and hook of a "disabled"
+ * plugin live on the next session. RECON-03: the orchestrated mode SKIPS the
+ * config write-back, so the consequence-disable never makes the user's own
+ * `claude-plugins.json` claim a choice they did not make (D-04-02 / LOAD-02).
+ *
+ * The marker is stamped afterwards, in one transaction for the whole bucket,
+ * because `setPluginEnabled` owns its own lock and `toDisabledRecord` takes no
+ * third argument. A crash between the two writes leaves a disabled record with
+ * no marker; the next pass re-derives the same verdict, keeps the record down
+ * and plans no enable for it, so the hold survives the gap.
+ *
+ * An already-disabled record answers idempotently and is neither stamped nor
+ * reported -- a row for it would break the load-time silence contract on every
+ * reload of an unchanged tree (RECON-05).
+ */
+async function applyDependencyDisables(
+  opts: ApplyReconcileOptions,
+  plan: ReconcilePlan,
+  outcomes: PerEntryOutcome[],
+): Promise<void> {
+  const setPluginEnabled = createNodeSetPluginEnabled(opts.hooksRouting);
+  const transitioned: PlannedDependencyDisable[] = [];
+  const rows: PerEntryOutcome[] = [];
+  for (const op of plan.pluginsToDependencyDisable) {
+    const result = await setPluginEnabled({
+      ctx: opts.ctx,
+      pi: opts.pi,
+      cwd: opts.cwd,
+      marketplace: op.marketplace,
+      plugin: op.plugin,
+      enable: false,
+      scope: op.scope,
+      notifications: { mode: "orchestrated" },
+    });
+
+    if (result.status === "disabled") {
+      transitioned.push(op);
+      rows.push(dependencyDisabledOutcome(op, result.version));
+    } else if (result.status === "failed") {
+      rows.push({
+        kind: "plugin-disable-failed",
+        scope: op.scope,
+        marketplace: op.marketplace,
+        plugin: op.plugin,
+        reason: result.reason,
+      });
+    }
+  }
+
+  if (transitioned.length > 0) {
+    await stampDependencyDisabled(opts, plan.scope, transitioned);
+  }
+
+  outcomes.push(...rows);
+}
+
+/**
  * Source-mismatch and dangling-reference rows from the planner are NOT
  * actionable at apply time -- they surface as `(failed) {source mismatch}`
  * marketplace rows (with an optional plugin child for dangling references).
@@ -799,7 +913,12 @@ function applySourceMismatches(plan: ReconcilePlan, outcomes: PerEntryOutcome[])
  *   4. install new plugins under the marketplaces from step 3.
  *   5. enable plugins newly declared enabled.
  *   6. disable plugins newly declared disabled.
- *   7. source-mismatch / dangling rows (report-only) folded last.
+ *   7. disable plugins the load-time check holds down (LOAD-01). It runs
+ *      AFTER both toggle steps so a record the config already disabled in
+ *      step 6 answers this step idempotently and is left unstamped
+ *      (D-06-02), and after the install step so a plugin installed in this
+ *      same pass is held down in this same pass rather than the next one.
+ *   8. source-mismatch / dangling rows (report-only) folded last.
  */
 async function applyPlan(
   opts: ApplyReconcileOptions,
@@ -833,7 +952,60 @@ async function applyPlan(
     }),
     buildFailed: (info) => ({ kind: "plugin-disable-failed", ...info }),
   });
+  // WR-02-style isolation: the step's own stamp write can throw a transient
+  // `StateLockHeldError` or an EACCES, and a throw out of the apply pass would
+  // discard every outcome accumulated for both scopes.
+  await runScopeIsolated(plan.scope, outcomes, () => applyDependencyDisables(opts, plan, outcomes));
   applySourceMismatches(plan, outcomes);
+}
+
+/**
+ * D-05-07 / LOAD-01: report the one declarer whose declarations could not be
+ * established, which is why no plugin in this scope was held down on this pass.
+ *
+ * The walk fails closed, so an unreadable declarer never reads as a plugin that
+ * declares nothing -- but it must not be silent either: a silent pass is
+ * indistinguishable from a scope whose declarations are all satisfied, and the
+ * dependent that should have been held down keeps loading. The row names the
+ * DECLARER rather than `state.json`, because the read that failed was of a
+ * plugin manifest and the read-pass catch's file row would make a false claim
+ * about the state document.
+ *
+ * The key is built by the walk as `${name}@${marketplace}`, so splitting on the
+ * last `@` is total and needs no fallback arm.
+ *
+ * RECON-04 single-emit: a declarer this pass already reported -- its clone is
+ * gone, its install failed -- gets no second row. The same tree that stops a
+ * manifest being read is usually the one that already failed something else
+ * about that plugin, and two rows for one plugin state the same fact twice.
+ */
+function reportUnreadableDeclarer(readResult: ScopeReadResult, outcomes: PerEntryOutcome[]): void {
+  const verdict = readResult.verdict;
+  if (verdict === undefined || verdict.ok) {
+    return;
+  }
+
+  const at = verdict.declarer.lastIndexOf("@");
+  const marketplace = verdict.declarer.slice(at + 1);
+  const plugin = verdict.declarer.slice(0, at);
+  const reported = outcomes.some(
+    (outcome) =>
+      outcome.scope === readResult.scope &&
+      "plugin" in outcome &&
+      outcome.plugin === plugin &&
+      outcome.marketplace === marketplace,
+  );
+  if (reported) {
+    return;
+  }
+
+  outcomes.push({
+    kind: "plugin-disable-failed",
+    scope: readResult.scope,
+    marketplace,
+    plugin,
+    reason: "unreadable",
+  });
 }
 
 /**
@@ -903,6 +1075,8 @@ async function applyReconcileWithReader(
     if (readResult.plan !== undefined) {
       await applyPlan(opts, readResult.plan, outcomes);
     }
+
+    reportUnreadableDeclarer(readResult, outcomes);
 
     // BFILL-01 / BFILL-02 / D-68-03: load-time backfill sibling step. Runs in
     // the no-outer-lock apply region (CR-01) after applyPlan so re-materialized

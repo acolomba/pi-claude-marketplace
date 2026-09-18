@@ -34,6 +34,7 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
+import type { UnsatisfiedKind } from "./dependency-verdict.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
@@ -273,6 +274,66 @@ export interface PluginDisabledOutcome extends PluginOutcomeBase {
   readonly postCommitWarnings?: readonly string[];
 }
 
+/**
+ * LOAD-01: the load-time check disabled this plugin, because a dependency it
+ * declares is not satisfied in the same scope.
+ *
+ * It is a separate arm from `plugin-disabled` rather than three more optional
+ * fields on it, because the two report different facts. A toggle disable
+ * carried out what the user declared and reaches the desired state; this one
+ * carried out a consequence the user did not ask for and leaves the desired
+ * state unreached, so it renders at warning severity with a remedy the toggle
+ * row has nothing to say about.
+ *
+ * `dependency`, `unsatisfied` and `range` are the remedy's inputs. The
+ * discriminant is named `unsatisfied` because `kind` already discriminates the
+ * outcome union itself.
+ */
+export interface PluginDependencyDisabledOutcome extends PluginOutcomeBase {
+  readonly kind: "plugin-dependency-disabled";
+  readonly version?: string;
+  /** `name@marketplace` of the declared dependency the scope does not satisfy. */
+  readonly dependency: string;
+  readonly unsatisfied: UnsatisfiedKind;
+  /** The declared range, present only on the out-of-range kind. */
+  readonly range?: string;
+}
+
+/**
+ * Build the load-time disable outcome for one held-down plugin.
+ *
+ * It lives beside the shape rather than inside the apply step, on the
+ * `dependenciesFromInstall` precedent: which optional fields a given
+ * unsatisfied kind carries is the arm's own contract, so the one place that
+ * fills them sits next to the interface that declares them.
+ *
+ * The parameter is the planned entry's shape structurally rather than by name:
+ * `types.ts` already imports this module for `PerEntryOutcome`, so naming
+ * `PlannedDependencyDisable` here would close an import cycle.
+ */
+export function dependencyDisabledOutcome(
+  held: {
+    readonly scope: Scope;
+    readonly marketplace: string;
+    readonly plugin: string;
+    readonly dependency: string;
+    readonly kind: UnsatisfiedKind;
+    readonly range?: string;
+  },
+  version: string | undefined,
+): PluginDependencyDisabledOutcome {
+  return {
+    kind: "plugin-dependency-disabled",
+    scope: held.scope,
+    marketplace: held.marketplace,
+    plugin: held.plugin,
+    ...(version !== undefined && { version }),
+    dependency: held.dependency,
+    unsatisfied: held.kind,
+    ...(held.range !== undefined && { range: held.range }),
+  };
+}
+
 /** Plugin disable failure outcome. */
 export interface PluginDisableFailedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-disable-failed";
@@ -381,6 +442,7 @@ export type PerEntryOutcome =
   | PluginEnabledOutcome
   | PluginEnableFailedOutcome
   | PluginDisabledOutcome
+  | PluginDependencyDisabledOutcome
   | PluginDisableFailedOutcome
   | SourceMismatchOutcome
   | InvalidBlockOutcome;

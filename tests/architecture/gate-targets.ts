@@ -687,12 +687,6 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
   "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts": [
     "scanForceInstalledBackfills",
   ],
-  // LOAD-01: the satisfaction verdict exists and is proven, and the reconcile
-  // read pass that calls it is the next change. Until that call lands, the walk
-  // has no production reader.
-  "extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts": [
-    "buildScopeSatisfactionVerdict",
-  ],
   "extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts": [
     "PENDING_STATUSES",
   ],

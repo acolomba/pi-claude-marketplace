@@ -3916,4 +3916,67 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
+  test("LOAD-01: a held-down plugin whose unstage is refused reports the failure and is not stamped", async (t) => {
+    // arrange
+    const { cwd, denyWrites, project } = await createHermeticScopes(t, "dependency-refused");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], hooks: true },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              hooks: ["deploy-kit"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    await writeUnder(
+      path.join(project.extensionRoot, "hooks", "deploy-kit", "hooks.json"),
+      JSON.stringify({ PreToolUse: [] }),
+    );
+    await denyWrites(path.join(project.extensionRoot, "hooks", "deploy-kit"));
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "\u25cf mp [project]\n" +
+          "  \u2298 deploy-kit (failed) {permission denied}\n" +
+          "\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    const record = await recordFor(project, "mp", "deploy-kit");
+    assert.equal(record?.enabled, true);
+    assert.equal(Object.hasOwn(record ?? {}, "dependencyDisabled"), false);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
 });

@@ -780,6 +780,7 @@ function applyPluginOutcomeToBlock(
         | "plugin-uninstalled"
         | "plugin-enabled"
         | "plugin-disabled"
+        | "plugin-dependency-disabled"
         | "plugin-install-failed"
         | "plugin-uninstall-failed"
         | "plugin-enable-failed"
@@ -856,6 +857,19 @@ function applyPluginOutcomeToBlock(
         needsReload: true,
       });
       return block;
+    case "plugin-dependency-disabled":
+      block.plugins.push({
+        status: "disabled",
+        name: outcome.plugin,
+        ...(outcome.version !== undefined && { version: outcome.version }),
+        // LOAD-01: the disable was carried out in full, but the desired state
+        // -- the plugin loading -- was not reached, which is the warning arm of
+        // the tri-state severity model. The toggle arm above stays `info` and
+        // byte-frozen; the producing orchestrator stamps this one.
+        severity: "warning",
+        needsReload: true,
+      });
+      return block;
     case "plugin-install-failed":
     case "plugin-uninstall-failed":
     case "plugin-enable-failed":
@@ -904,6 +918,7 @@ function applyOutcomeToBlock(
     case "plugin-uninstalled":
     case "plugin-enabled":
     case "plugin-disabled":
+    case "plugin-dependency-disabled":
     case "plugin-install-failed":
     case "plugin-uninstall-failed":
     case "plugin-enable-failed":

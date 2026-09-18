@@ -46,7 +46,7 @@
 // for any populated state.
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
-import type { UnsatisfiedKind } from "./dependency-verdict.ts";
+import type { ScopeSatisfactionVerdict, UnsatisfiedKind } from "./dependency-verdict.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -343,4 +343,13 @@ export interface ScopeReadResult {
    * pristine arm (no `state` carried anyway).
    */
   readonly stateExisted: boolean;
+  /**
+   * LOAD-01: the satisfaction verdict computed inside the locked read pass,
+   * over the same snapshot the planner saw. Carried out so the apply pass can
+   * report a declarer whose declarations could not be established -- the
+   * planner turns that arm into an empty bucket and has nothing left to say
+   * about it. Undefined for a pristine scope and for a CFG-03 abort, where no
+   * record was walked.
+   */
+  readonly verdict?: ScopeSatisfactionVerdict;
 }
