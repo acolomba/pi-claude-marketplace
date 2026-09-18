@@ -131,7 +131,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 - [x] 07-03-PLAN.md
 - [x] 07-04-PLAN.md
 - [x] 07-05-PLAN.md
-- [ ] 07-06-PLAN.md
+- [x] 07-06-PLAN.md
 - [ ] 07-07-PLAN.md
 - [ ] 07-08-PLAN.md
 
@@ -157,5 +157,5 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 | 4. Strict Command Arguments | 3/3 | Complete | 2026-09-14 |
 | 5. Production Export Ownership | 28/28 | Complete | 2026-09-15 |
 | 6. Unused Type Member Gate | 17/17 | Complete | 2026-09-17 |
-| 7. Reliable Coverage Metrics | 5/8 | In Progress|  |
+| 7. Reliable Coverage Metrics | 6/8 | In Progress|  |
 | 8. Final Verification and Reconciliation | 0/TBD | Not started | - |
