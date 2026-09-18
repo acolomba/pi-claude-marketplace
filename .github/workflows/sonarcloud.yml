@@ -59,6 +59,15 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
+      # The unit half of `npm run test:coverage` is the verified capture, so
+      # the LCOV Sonar reads is Node's own report from an accepted bundle
+      # (D-01). This job makes its own capture and binds its own runtime, so it
+      # qualifies the installed producer here the way ci.yml's check job does.
+      - name: Qualify the coverage producer on this runtime
+        run: |
+          npm run coverage:producer:build -- --verify
+          npm run coverage:producer:check
+
       - name: Run tests with coverage
         run: npm run test:coverage
 

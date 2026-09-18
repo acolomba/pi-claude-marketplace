@@ -15,7 +15,10 @@
  *   - the pre-commit hooks must run the producer, which may reuse a bundle the
  *     current tree still validates, before the consumer, which never may;
  *   - a consumer handed a missing or stale bundle must refuse without
- *     regenerating it or falling back to a coverage file at an inherited path.
+ *     regenerating it or falling back to a coverage file at an inherited path;
+ *   - each CI job that consumes a capture must make its own, on its own
+ *     runtime, after proving the installed producer there, and Sonar must keep
+ *     reading only the native unit LCOV that capture publishes.
  *
  * Each structural predicate is also run against a planted violation, so a
  * green case means the predicate fires and not only that the file was read.
@@ -558,4 +561,242 @@ test("the consumer reads no coverage file at the inherited public path when the 
       runs: [],
     },
   );
+});
+
+// The CI half of the wiring (D-10): each job that consumes a capture makes its
+// own, on its own runtime, after proving the installed producer there; Sonar
+// keeps reading the native unit LCOV that capture publishes and nothing else.
+
+const CI_WORKFLOW_REL = ".github/workflows/ci.yml";
+const SONAR_WORKFLOW_REL = ".github/workflows/sonarcloud.yml";
+const LINT_WORKFLOW_REL = ".github/workflows/lint.yml";
+const SONAR_PROPERTIES_REL = "sonar-project.properties";
+const SONAR_INPUT_KEY = "sonar.javascript.lcov.reportPaths=";
+const CHECK_CHAIN = "npm run check";
+const COVERAGE_CHAIN = "npm run test:coverage";
+
+/** The producer's provenance and conformance, proved on the runner before a capture is accepted there. */
+const QUALIFICATION = [
+  "npm run coverage:producer:build -- --verify",
+  "npm run coverage:producer:check",
+];
+
+/**
+ * Every command a workflow runs, in file order: the value of each inline
+ * `run:` and each line of a `run: |` block. The parser follows indentation
+ * only, which is all a `run:` step needs.
+ */
+function commandsIn(workflow: string): string[] {
+  const commands: string[] = [];
+  let blockIndent: number | undefined;
+
+  for (const line of workflow.split("\n")) {
+    const inline = /^(\s*)run: (.*)$/u.exec(line);
+
+    if (inline !== null) {
+      blockIndent = runStep(inline, commands);
+    } else if (blockIndent !== undefined) {
+      blockIndent = blockLine(line, blockIndent, commands);
+    }
+  }
+
+  return commands;
+}
+
+// An inline `run:` records its command and opens no block; `run: |` opens a
+// block at the step's indentation and records nothing yet.
+function runStep(inline: RegExpExecArray, commands: string[]): number | undefined {
+  const value = (inline[2] ?? "").trim();
+
+  if (value === "|") {
+    return (inline[1] ?? "").length;
+  }
+
+  commands.push(value);
+  return undefined;
+}
+
+// A line indented deeper than the block's `run:` is one command; a shallower
+// line closes the block; a blank line is neither.
+function blockLine(line: string, blockIndent: number, commands: string[]): number | undefined {
+  if (line.trim() === "") {
+    return blockIndent;
+  }
+
+  if (line.length - line.trimStart().length <= blockIndent) {
+    return undefined;
+  }
+
+  commands.push(line.trim());
+  return blockIndent;
+}
+
+/** What is wrong with a workflow around `target`: the target missing, or a qualification command missing or after it. */
+function qualificationFindings(commands: readonly string[], target: string): string[] {
+  const at = commands.indexOf(target);
+
+  if (at === -1) {
+    return [`missing: ${target}`];
+  }
+
+  return QUALIFICATION.filter((command) => {
+    const index = commands.indexOf(command);
+    return index === -1 || index > at;
+  }).map((command) => `${command} does not precede ${target}`);
+}
+
+/** What is wrong with Sonar's coverage input: anything other than one line naming the native unit LCOV. */
+function sonarInputFindings(properties: string): string[] {
+  const values = properties
+    .split("\n")
+    .filter((line) => line.startsWith(SONAR_INPUT_KEY))
+    .map((line) => line.slice(SONAR_INPUT_KEY.length));
+
+  return values.length === 1 && values[0] === "coverage/unit.lcov"
+    ? []
+    : [`${SONAR_INPUT_KEY}${JSON.stringify(values)}`];
+}
+
+/** A one-job workflow whose steps run `commands`, block form for a multi-line step. */
+function workflowRunning(...steps: ReadonlyArray<readonly string[]>): string {
+  const rendered = steps.map((commands) =>
+    commands.length === 1
+      ? `      - name: step\n        run: ${commands[0]}`
+      : `      - name: step\n        run: |\n${commands.map((command) => `          ${command}`).join("\n")}`,
+  );
+  return `jobs:\n  planted:\n    steps:\n${rendered.join("\n")}\n`;
+}
+
+function nodeVersionsIn(workflow: string): string[] {
+  return [...workflow.matchAll(/node-version: "(\d+)"/gu)].map((match) => match[1] ?? "");
+}
+
+test("CI qualifies the producer on its runner before the check chain accepts a capture", async () => {
+  // arrange
+  const commands = commandsIn(await readRepoFile(CI_WORKFLOW_REL));
+
+  // act
+  const findings = qualificationFindings(commands, CHECK_CHAIN);
+
+  // assert
+  assert.deepStrictEqual(findings, []);
+});
+
+test("the Sonar job qualifies the producer on its runner before its coverage run", async () => {
+  // arrange
+  const commands = commandsIn(await readRepoFile(SONAR_WORKFLOW_REL));
+
+  // act
+  const findings = qualificationFindings(commands, COVERAGE_CHAIN);
+
+  // assert
+  assert.deepStrictEqual(findings, []);
+});
+
+for (const { plant, workflow, expectedFindings } of [
+  {
+    plant: "a chain that accepts a capture without qualifying the producer",
+    workflow: workflowRunning(["npm ci --ignore-scripts"], [CHECK_CHAIN]),
+    expectedFindings: QUALIFICATION.map((command) => `${command} does not precede ${CHECK_CHAIN}`),
+  },
+  {
+    plant: "a qualification that runs after the chain it should precede",
+    workflow: workflowRunning(["npm ci --ignore-scripts"], [CHECK_CHAIN], QUALIFICATION),
+    expectedFindings: QUALIFICATION.map((command) => `${command} does not precede ${CHECK_CHAIN}`),
+  },
+  {
+    plant: "a job that never runs the chain",
+    workflow: workflowRunning(["npm ci --ignore-scripts"], QUALIFICATION),
+    expectedFindings: [`missing: ${CHECK_CHAIN}`],
+  },
+  {
+    plant: "nothing, when the qualification block precedes the chain",
+    workflow: workflowRunning(["npm ci --ignore-scripts"], QUALIFICATION, [CHECK_CHAIN]),
+    expectedFindings: [],
+  },
+]) {
+  test(`the qualification predicate reports ${plant}`, () => {
+    // arrange
+    const commands = commandsIn(workflow);
+
+    // act
+    const findings = qualificationFindings(commands, CHECK_CHAIN);
+
+    // assert
+    assert.deepStrictEqual(findings, expectedFindings);
+  });
+}
+
+test("Sonar reads the native unit LCOV of the verified capture and nothing else", async () => {
+  // arrange
+  const properties = await readRepoFile(SONAR_PROPERTIES_REL);
+  const scripts = await readScripts();
+  const sonarCommands = commandsIn(await readRepoFile(SONAR_WORKFLOW_REL));
+
+  // act
+  const wiring = {
+    input: sonarInputFindings(properties),
+    coverageChain: (scripts["test:coverage"] ?? "").split(" && "),
+    sonarRunsChain: sonarCommands.includes(COVERAGE_CHAIN),
+  };
+
+  // assert
+  assert.deepStrictEqual(wiring, {
+    input: [],
+    coverageChain: [
+      "rm -rf coverage",
+      "mkdir -p coverage",
+      "npm run test:coverage:unit",
+      "npm run test:coverage:integration",
+      "npm run test:coverage:e2e",
+    ],
+    sonarRunsChain: true,
+  });
+});
+
+for (const { plant, properties, expectedFindings } of [
+  {
+    plant: "a partial-surface report merged into the unit one",
+    properties: `${SONAR_INPUT_KEY}coverage/unit.lcov,coverage/integration.lcov\n`,
+    expectedFindings: [`${SONAR_INPUT_KEY}["coverage/unit.lcov,coverage/integration.lcov"]`],
+  },
+  {
+    plant: "a second input line",
+    properties: `${SONAR_INPUT_KEY}coverage/unit.lcov\n${SONAR_INPUT_KEY}coverage/e2e.lcov\n`,
+    expectedFindings: [`${SONAR_INPUT_KEY}["coverage/unit.lcov","coverage/e2e.lcov"]`],
+  },
+  {
+    plant: "no input at all",
+    properties: "sonar.sources=extensions\n",
+    expectedFindings: [`${SONAR_INPUT_KEY}[]`],
+  },
+]) {
+  test(`the Sonar input predicate reports ${plant}`, () => {
+    // arrange
+    const planted = properties;
+
+    // act
+    const findings = sonarInputFindings(planted);
+
+    // assert
+    assert.deepStrictEqual(findings, expectedFindings);
+  });
+}
+
+test("every job that captures stays on Node 24 and the pre-commit job skips no hook", async () => {
+  // arrange
+  const ci = await readRepoFile(CI_WORKFLOW_REL);
+  const sonar = await readRepoFile(SONAR_WORKFLOW_REL);
+  const lint = await readRepoFile(LINT_WORKFLOW_REL);
+
+  // act
+  const runtimes = {
+    ci: [...new Set(nodeVersionsIn(ci))],
+    sonar: [...new Set(nodeVersionsIn(sonar))],
+    lint: [...new Set(nodeVersionsIn(lint))],
+    lintSkips: lint.split("\n").filter((line) => /\bSKIP\b/u.test(line)),
+  };
+
+  // assert
+  assert.deepStrictEqual(runtimes, { ci: ["24"], sonar: ["24"], lint: ["24"], lintSkips: [] });
 });
