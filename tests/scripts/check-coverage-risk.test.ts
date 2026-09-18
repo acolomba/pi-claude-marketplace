@@ -659,6 +659,37 @@ test("refuses a consumer of another version than the policy names", async (t) =>
   });
 });
 
+test("relays the consumer's own message beside the status row when it exits without a report", async (t) => {
+  // arrange
+  const root = await acceptedRoot(t, classifyFixture(true));
+  const directory = await mkdtemp(path.join(tmpdir(), "coverage-risk-consumer-"));
+  t.after(async () => {
+    await rm(directory, { force: true, recursive: true });
+  });
+  const consumer = path.join(directory, "consumer.mjs");
+  await writeFile(
+    consumer,
+    'process.stderr.write("error: unexpected argument --report-only\\n");\nprocess.exitCode = 3;\n',
+  );
+
+  // act
+  const refused = risk(root, undefined, consumer);
+
+  // assert
+  assert.deepStrictEqual(
+    { status: refused.status, stderr: refused.stderr },
+    {
+      status: 1,
+      stderr: [
+        "    error: unexpected argument --report-only",
+        "The consumer exited without a report:",
+        '  {"kind":"consumer","outcome":"status","status":3}',
+        "",
+      ].join("\n"),
+    },
+  );
+});
+
 test("refuses an uncovered complexity-5 function at exactly 30", async (t) => {
   // arrange
   const fixture = gradeFixture();

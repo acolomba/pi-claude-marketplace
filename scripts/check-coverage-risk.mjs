@@ -413,7 +413,10 @@ function populationAnchors(root, run, map) {
 
 // The consumer's report over `root` with the accepted map as its coverage
 // input, in the diagnostic form, under an environment stripped of every
-// `FALLOW_*` override.
+// `FALLOW_*` override. A consumer that yields no report has its stderr
+// re-emitted indented, like the validator's, so its own message stands
+// beside the status row; the warnings of a consumer that reports stay with
+// the report.
 function consumerReport(root, mapPath, consumer) {
   const env = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => !name.startsWith("FALLOW_")),
@@ -426,10 +429,12 @@ function consumerReport(root, mapPath, consumer) {
   const failure = processFailure("consumer", completed);
 
   if (failure !== undefined) {
+    reemit(completed.stderr ?? "");
     throw new RiskError("The consumer did not run", [failure]);
   }
 
   if (completed.status !== 0) {
+    reemit(completed.stderr);
     throw new RiskError("The consumer exited without a report", [
       { kind: "consumer", outcome: "status", status: completed.status },
     ]);
