@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { appendFile, copyFile, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { tallyFixture } from "./coverage-producer-fixtures.ts";
 import { expectedCoverage, projectCoverage } from "./coverage-projection.ts";
@@ -16,6 +17,13 @@ import {
   refusalRows,
   run,
 } from "./coverage-run-support.ts";
+import {
+  populationFiles,
+  populationSources,
+  TYPES_PATH,
+  UNIMPORTED_PATH,
+  unimportedCoverage,
+} from "./coverage-unit-fixtures.ts";
 
 import type { ProducerFixture } from "./coverage-producer-fixtures.ts";
 import type {
@@ -128,21 +136,16 @@ test("fails on purpose", () => {
 });
 `;
 
-// The accepted map republished with `mutate` applied to the fixture's file
-// record: both copies of the map and both copies of the manifest are
-// rewritten so every digest agrees, which is the state a consumer that
-// trusted digests alone would accept.
+// The accepted map republished with `mutate` applied: both copies of the
+// map and both copies of the manifest are rewritten so every digest agrees,
+// which is the state a consumer that trusted digests alone would accept.
 async function republish(
   verified: VerifiedRoot,
-  mutate: (file: IstanbulFileCoverage) => IstanbulFileCoverage,
+  mutate: (map: IstanbulCoverageMap) => IstanbulCoverageMap,
 ): Promise<void> {
   const runMapPath = path.join(verified.root, verified.manifest.acceptance.artifacts.istanbul.path);
   const map = await readJson<IstanbulCoverageMap>(runMapPath);
-  const [key] = Object.keys(map);
-  assert.ok(key);
-  const file = map[key];
-  assert.ok(file);
-  const mutated = `${JSON.stringify({ [key]: mutate(file) }, undefined, 2)}\n`;
+  const mutated = `${JSON.stringify(mutate(map), undefined, 2)}\n`;
   await writeFile(runMapPath, mutated);
   await writeFile(path.join(verified.root, PUBLIC.istanbul), mutated);
   const previous = verified.manifest.acceptance.artifacts.istanbul.digest;
@@ -292,7 +295,7 @@ test("revalidates the accepted map on readback instead of trusting its digests",
   const verified = await verifiedRoot(t, fixture);
   const [statement] = fixture.statements;
   assert.ok(statement);
-  await republish(verified, (file) => ({
+  await republishFile(verified, fixture.sourcePath, (file) => ({
     ...file,
     statementMap: {
       ...file.statementMap,
@@ -375,4 +378,266 @@ test("exits 2 without a refusal row on an unknown option", () => {
 
   // assert
   assert.deepStrictEqual(verdict(verified), { status: 2, rows: [] });
+});
+
+// The production population (D-04, D-07): every production source of the
+// fixture root is in the accepted map, with the loaded modules merged across
+// workers, the never-loaded executable module at zero execution and the
+// type-only module as an empty record; the native LCOV totals (which count
+// only the two loaded files) and the syntax totals (which count all four) are
+// recorded apart and never equated.
+
+interface UnloadedRecord {
+  readonly path: string;
+  readonly source: string;
+  readonly executed: string;
+  readonly syntax: string;
+  readonly functions: number;
+  readonly statements: number;
+  readonly branches: number;
+}
+
+interface PopulationManifest extends AcceptedManifest {
+  readonly acceptance: AcceptedManifest["acceptance"] & {
+    readonly population: {
+      readonly production: number;
+      readonly loaded: number;
+      readonly unloaded: readonly UnloadedRecord[];
+      readonly typeOnly: number;
+      readonly executable: number;
+    };
+    readonly denominators: Record<string, unknown>;
+  };
+}
+
+// The executed text of an unloaded `.ts` source: Node's own strip mode with
+// the module URL as the sourceURL trailer, exactly what the loader would have
+// evaluated.
+function executedDigest(root: string, modulePath: string, source: string): string {
+  const url = pathToFileURL(path.join(root, modulePath)).href;
+  return sha256(Buffer.from(stripTypeScriptTypes(source, { mode: "strip", sourceUrl: url })));
+}
+
+async function populationRoot(t: TestContext): Promise<VerifiedRoot> {
+  const root = await createRoot(t, populationFiles());
+  const verified = verify(root);
+  assert.strictEqual(verified.status, 0, verified.stderr);
+  const manifest = await readJson<AcceptedManifest>(path.join(root, PUBLIC.manifest));
+  return {
+    root,
+    runId: manifest.runId,
+    runDirectory: path.join(root, "coverage", "runs", manifest.runId),
+    manifest,
+  };
+}
+
+// Republishes the accepted population map with one file's record replaced.
+async function republishFile(
+  verified: VerifiedRoot,
+  modulePath: string,
+  mutate: (file: IstanbulFileCoverage) => IstanbulFileCoverage,
+): Promise<void> {
+  const key = path.join(verified.root, modulePath);
+  await republish(verified, (map) => {
+    const file = map[key];
+    assert.ok(file);
+    return { ...map, [key]: mutate(file) };
+  });
+}
+
+test("accounts for every production source: merged workers, an uncalled import, an unloaded module and a type-only module", async (t) => {
+  // arrange
+  const root = await createRoot(t, populationFiles());
+  const sources = populationSources();
+  const unloadedSource = (modulePath: string): string =>
+    sources.find((source) => source.path === modulePath)?.source ?? "";
+
+  // act
+  const verified = verify(root);
+
+  // assert
+  assert.strictEqual(verified.status, 0, verified.stderr);
+  const manifest = await readJson<PopulationManifest>(path.join(root, PUBLIC.manifest));
+  assert.strictEqual(
+    verified.stdout.split("\n").at(-2),
+    `Coverage unit verified: ${manifest.runId}: 4 production file(s), 2 loaded, 2 unloaded (1 type-only, 1 executable); native 8/10 line(s), 2/3 function(s), 4/4 branch(es); syntax 2/4 function(s), 2/6 statement(s), 0/2 branch arm(s) -> ${PUBLIC.manifest}`,
+  );
+  const map = await readJson<IstanbulCoverageMap>(path.join(root, PUBLIC.istanbul));
+  const projected = new Map(
+    sources.map(({ path: modulePath }) => {
+      const file = map[path.join(root, modulePath)];
+      assert.ok(file, `the map lacks ${modulePath}`);
+      return [modulePath, projectCoverage(file)];
+    }),
+  );
+  assert.deepStrictEqual(
+    projected,
+    new Map(sources.map(({ path: modulePath, expected }) => [modulePath, expected])),
+  );
+  assert.strictEqual(Object.keys(map).length, 4);
+  assert.deepStrictEqual(manifest.acceptance.population, {
+    production: 4,
+    loaded: 2,
+    unloaded: [
+      {
+        path: TYPES_PATH,
+        source: sha256(Buffer.from(unloadedSource(TYPES_PATH))),
+        executed: executedDigest(root, TYPES_PATH, unloadedSource(TYPES_PATH)),
+        syntax: "type-only",
+        functions: 0,
+        statements: 0,
+        branches: 0,
+      },
+      {
+        path: UNIMPORTED_PATH,
+        source: sha256(Buffer.from(unloadedSource(UNIMPORTED_PATH))),
+        executed: executedDigest(root, UNIMPORTED_PATH, unloadedSource(UNIMPORTED_PATH)),
+        syntax: "executable",
+        functions: 1,
+        statements: 3,
+        branches: 1,
+      },
+    ],
+    typeOnly: 1,
+    executable: 1,
+  });
+  // Node's LCOV covers the two loaded files: pair.ts (7 lines, 2 functions,
+  // and a branch for each block V8 entered: the module root and both function
+  // bodies) and idle.ts (3 lines with the body and closing brace unexecuted,
+  // 1 function, and only the module root as a branch, since V8 reports no
+  // block for a function it never entered). The syntax model covers all four
+  // files, so the two denominators differ in kind and in population.
+  assert.deepStrictEqual(manifest.acceptance.denominators, {
+    native: {
+      records: 2,
+      lines: { found: 10, hit: 8 },
+      functions: { found: 3, hit: 2 },
+      branches: { found: 4, hit: 4 },
+    },
+    syntax: {
+      files: 4,
+      functions: { total: 4, covered: 2 },
+      statements: { total: 6, covered: 2 },
+      branchArms: { total: 2, covered: 0 },
+    },
+  });
+});
+
+test("passes the consumer readback with every production source counted", async (t) => {
+  // arrange
+  const { root, runId } = await populationRoot(t);
+
+  // act
+  const validation = validate(root);
+
+  // assert
+  assert.deepStrictEqual(validation, {
+    status: 0,
+    stdout: `Coverage bundle verified: ${runId}, 4 file(s), 4 function(s), 6 statement(s), 1 branch(es), schema 1, syntax model 1; manifest ${PUBLIC.manifest}\n`,
+    stderr: "",
+  });
+});
+
+test("refuses an unloaded source whose record shows execution", async (t) => {
+  // arrange
+  const verified = await populationRoot(t);
+  await republishFile(verified, UNIMPORTED_PATH, (file) => ({ ...file, f: { ...file.f, 0: 1 } }));
+
+  // act
+  const validation = validate(verified.root);
+
+  // assert
+  assert.deepStrictEqual(verdict(validation), {
+    status: 1,
+    rows: [{ kind: "unloaded-hits", part: "f[0]", hits: 1, path: UNIMPORTED_PATH }],
+  });
+});
+
+test("refuses an unloaded executable source recorded as an empty map", async (t) => {
+  // arrange
+  const verified = await populationRoot(t);
+  const expected = unimportedCoverage();
+  await republishFile(verified, UNIMPORTED_PATH, (file) => ({
+    path: file.path,
+    statementMap: {},
+    fnMap: {},
+    branchMap: {},
+    s: {},
+    f: {},
+    b: {},
+  }));
+
+  // act
+  const validation = validate(verified.root);
+
+  // assert
+  assert.deepStrictEqual(verdict(validation), {
+    status: 1,
+    rows: [
+      ...expected.functions.map((fn) => ({
+        kind: "function-missing",
+        decl: fn.decl,
+        loc: fn.loc,
+        path: UNIMPORTED_PATH,
+      })),
+      ...expected.statements.map((statement) => ({
+        kind: "statement-missing",
+        loc: statement.loc,
+        path: UNIMPORTED_PATH,
+      })),
+      ...expected.branches.map((branch) => ({
+        kind: "branch-missing",
+        type: branch.type,
+        loc: branch.loc,
+        locations: [branch.locations[0], { start: {}, end: {} }],
+        path: UNIMPORTED_PATH,
+      })),
+    ],
+  });
+});
+
+test("refuses a type-only source that carries a record", async (t) => {
+  // arrange
+  const verified = await populationRoot(t);
+  const invented = { start: { line: 1, column: 0 }, end: { line: 1, column: 6 } };
+  await republishFile(verified, TYPES_PATH, (file) => ({
+    ...file,
+    statementMap: { 0: invented },
+    s: { 0: 1 },
+  }));
+
+  // act
+  const validation = validate(verified.root);
+
+  // assert
+  assert.deepStrictEqual(verdict(validation), {
+    status: 1,
+    rows: [
+      { kind: "statement-unproven", id: "0", loc: invented, path: TYPES_PATH },
+      { kind: "unloaded-hits", part: "s[0]", hits: 1, path: TYPES_PATH },
+    ],
+  });
+});
+
+test("refuses a bundle whose manifest no longer represents an unloaded source", async (t) => {
+  // arrange
+  const verified = await populationRoot(t);
+
+  for (const manifestPath of [
+    path.join(verified.runDirectory, "accepted.json"),
+    path.join(verified.root, PUBLIC.manifest),
+  ]) {
+    const manifest = await readJson<{ unloaded: UnloadedRecord[] }>(manifestPath);
+    manifest.unloaded = manifest.unloaded.filter((record) => record.path !== UNIMPORTED_PATH);
+    await writeFile(manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`);
+  }
+
+  // act
+  const validation = validate(verified.root);
+
+  // assert
+  assert.deepStrictEqual(verdict(validation), {
+    status: 1,
+    rows: [{ kind: "unrepresented-source", path: UNIMPORTED_PATH }],
+  });
 });

@@ -18,6 +18,17 @@ import {
   tallyWorkerHits,
 } from "./coverage-producer-fixtures.ts";
 import { expectedCoverage, projectCoverage, spanKey } from "./coverage-projection.ts";
+import { refusalRows } from "./coverage-run-support.ts";
+import {
+  IDLE_PATH,
+  PAIR_PATH,
+  pairCoverage,
+  pairWorkerHits,
+  populationFiles,
+  TYPES_PATH,
+  UNIMPORTED_PATH,
+  unimportedCoverage,
+} from "./coverage-unit-fixtures.ts";
 
 import type { ExpectedFunction, ProducerFixture } from "./coverage-producer-fixtures.ts";
 import type { ProjectedCoverage } from "./coverage-projection.ts";
@@ -77,6 +88,7 @@ interface CaptureManifest {
   readonly status: string;
   readonly modules: ReadonlyArray<{ readonly path: string; readonly executed: string }>;
   readonly workers: ReadonlyArray<{ readonly test: string; readonly raw: readonly string[] }>;
+  readonly raw: ReadonlyArray<{ readonly path: string }>;
 }
 
 interface V8Range {
@@ -813,4 +825,243 @@ test("verifies the vendored delivery: archive, entries, license, patch context a
 
   // assert
   assert.deepStrictEqual(verification, expectedVerdict);
+});
+
+// A snapshot request converts every requested module of a run from the run's
+// own raw files, one file per worker isolate, and merges the workers through
+// Istanbul's merger (D-04, D-07).
+
+interface PopulationRun {
+  readonly root: string;
+  readonly manifestPath: string;
+  readonly runDirectory: string;
+  readonly raw: readonly string[];
+  readonly rawByTest: Readonly<Record<string, string>>;
+}
+
+async function capturePopulation(t: TestContext): Promise<PopulationRun> {
+  const root = await createRoot(t, populationFiles());
+  const capture = run([captureCliPath, "--root", root]);
+  assert.strictEqual(capture.status, 0, capture.stderr);
+  const manifest = JSON.parse(
+    await readFile(path.join(root, "coverage", "unit.manifest.json"), "utf8"),
+  ) as CaptureManifest;
+  const runDirectory = path.join(root, "coverage", "runs", manifest.runId);
+  const rawByTest: Record<string, string> = {};
+
+  for (const worker of manifest.workers) {
+    const [rawFile] = worker.raw;
+    assert.ok(rawFile);
+    rawByTest[worker.test] = path.join(runDirectory, "raw", rawFile);
+  }
+
+  return {
+    root,
+    manifestPath: path.join(runDirectory, "manifest.json"),
+    runDirectory,
+    raw: manifest.raw.map((record) => path.join(root, record.path)),
+    rawByTest,
+  };
+}
+
+interface SnapshotRequest {
+  readonly modules: readonly string[];
+  readonly raw: readonly string[];
+}
+
+async function convertSnapshots(
+  t: TestContext,
+  captured: PopulationRun,
+  request: SnapshotRequest,
+): Promise<{ run: ProcessRun; outputPath: string }> {
+  const workspace = await mkdtemp(path.join(tmpdir(), "coverage-producer-snapshots-"));
+
+  t.after(async () => {
+    await rm(workspace, { force: true, recursive: true });
+  });
+
+  const requestPath = path.join(workspace, "request.json");
+  await writeFile(requestPath, JSON.stringify({ run: captured.manifestPath, ...request }));
+  const outputPath = path.join(workspace, "istanbul.json");
+
+  return {
+    run: run([producerCliPath, "--request", requestPath, "--out", outputPath]),
+    outputPath,
+  };
+}
+
+async function projectedFile(
+  outputPath: string,
+  root: string,
+  modulePath: string,
+): Promise<ProjectedCoverage> {
+  const coverage = await readCoverageMap(outputPath);
+  const file = coverage[path.join(root, modulePath)];
+  assert.ok(file, `the producer wrote no record for ${modulePath}`);
+  return projectCoverage(file);
+}
+
+test("converts a run's snapshots into one merged map whose bytes do not depend on their order", async (t) => {
+  // arrange
+  const captured = await capturePopulation(t);
+  const modules = [PAIR_PATH, IDLE_PATH];
+
+  // act
+  const forward = await convertSnapshots(t, captured, { modules, raw: captured.raw });
+  const reversed = await convertSnapshots(t, captured, {
+    modules,
+    raw: [...captured.raw].reverse(),
+  });
+
+  // assert
+  assert.strictEqual(forward.run.status, 0, forward.run.stderr);
+  assert.strictEqual(reversed.run.status, 0, reversed.run.stderr);
+  assert.deepStrictEqual(await readFile(reversed.outputPath), await readFile(forward.outputPath));
+  assert.deepStrictEqual(
+    await projectedFile(forward.outputPath, captured.root, PAIR_PATH),
+    pairCoverage(),
+  );
+  assert.deepStrictEqual(Object.keys(await readCoverageMap(forward.outputPath)).sort(), [
+    path.join(captured.root, IDLE_PATH),
+    path.join(captured.root, PAIR_PATH),
+  ]);
+});
+
+for (const [workerTest, hits] of Object.entries(pairWorkerHits)) {
+  test(`converts the snapshot of ${workerTest} alone to that worker's counters`, async (t) => {
+    // arrange
+    const captured = await capturePopulation(t);
+    const rawPath = captured.rawByTest[workerTest];
+    assert.ok(rawPath);
+
+    // act
+    const conversion = await convertSnapshots(t, captured, {
+      modules: [PAIR_PATH],
+      raw: [rawPath],
+    });
+
+    // assert
+    assert.strictEqual(conversion.run.status, 0, conversion.run.stderr);
+    assert.deepStrictEqual(
+      await projectedFile(conversion.outputPath, captured.root, PAIR_PATH),
+      pairCoverage(hits),
+    );
+  });
+}
+
+test("gives a module the run never loaded the producer's complete zero-execution model", async (t) => {
+  // arrange
+  const captured = await capturePopulation(t);
+
+  // act
+  const conversion = await convertSnapshots(t, captured, { modules: [UNIMPORTED_PATH], raw: [] });
+
+  // assert
+  assert.strictEqual(conversion.run.status, 0, conversion.run.stderr);
+  assert.deepStrictEqual(
+    await projectedFile(conversion.outputPath, captured.root, UNIMPORTED_PATH),
+    unimportedCoverage(),
+  );
+});
+
+test("gives a type-only module an empty record and nothing else", async (t) => {
+  // arrange
+  const captured = await capturePopulation(t);
+  const typesPath = path.join(captured.root, TYPES_PATH);
+
+  // act
+  const conversion = await convertSnapshots(t, captured, { modules: [TYPES_PATH], raw: [] });
+
+  // assert
+  assert.strictEqual(conversion.run.status, 0, conversion.run.stderr);
+  assert.deepStrictEqual(await readCoverageMap(conversion.outputPath), {
+    [typesPath]: {
+      path: typesPath,
+      statementMap: {},
+      fnMap: {},
+      branchMap: {},
+      s: {},
+      f: {},
+      b: {},
+    },
+  });
+});
+
+for (const { name, request, row } of [
+  {
+    name: "a snapshot listed twice",
+    request: (captured: PopulationRun) => ({
+      modules: [PAIR_PATH],
+      raw: [captured.raw[0] ?? "", captured.raw[0] ?? ""],
+    }),
+    row: (captured: PopulationRun) => ({
+      kind: "duplicate-snapshot",
+      path: path.relative(captured.root, captured.raw[0] ?? ""),
+    }),
+  },
+  {
+    name: "a snapshot the run did not record",
+    request: (captured: PopulationRun) => ({
+      modules: [PAIR_PATH],
+      raw: [path.join(captured.runDirectory, "raw", "coverage-1-1700000000000-0.json")],
+    }),
+    row: (captured: PopulationRun) => ({
+      kind: "unknown-snapshot",
+      path: path.join(captured.runDirectory, "raw", "coverage-1-1700000000000-0.json"),
+    }),
+  },
+  {
+    name: "a loaded module no snapshot carries",
+    request: (captured: PopulationRun) => ({
+      modules: [IDLE_PATH],
+      raw: [captured.rawByTest["tests/domain/pair-first.test.ts"] ?? ""],
+    }),
+    row: () => ({ kind: "unobserved-module", path: IDLE_PATH }),
+  },
+  {
+    name: "a module the run did not record",
+    request: () => ({
+      modules: ["extensions/pi-claude-marketplace/domain/absent.ts"],
+      raw: [],
+    }),
+    row: () => ({
+      kind: "module-not-captured",
+      path: "extensions/pi-claude-marketplace/domain/absent.ts",
+    }),
+  },
+]) {
+  test(`refuses ${name} and writes nothing`, async (t) => {
+    // arrange
+    const captured = await capturePopulation(t);
+
+    // act
+    const conversion = await convertSnapshots(t, captured, request(captured));
+
+    // assert
+    assert.deepStrictEqual(
+      { status: conversion.run.status, rows: refusalRows(conversion.run.stderr) },
+      { status: 1, rows: [row(captured)] },
+    );
+    await assert.rejects(readFile(conversion.outputPath));
+  });
+}
+
+test("refuses a snapshot whose bytes changed after the capture", async (t) => {
+  // arrange
+  const captured = await capturePopulation(t);
+  const [rawPath] = captured.raw;
+  assert.ok(rawPath);
+  await appendFile(rawPath, "\n");
+
+  // act
+  const conversion = await convertSnapshots(t, captured, {
+    modules: [PAIR_PATH],
+    raw: [rawPath],
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { status: conversion.run.status, rows: refusalRows(conversion.run.stderr) },
+    { status: 1, rows: [{ kind: "stale-snapshot", path: path.relative(captured.root, rawPath) }] },
+  );
 });
