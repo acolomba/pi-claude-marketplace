@@ -26,7 +26,7 @@ Two full runs of the identical tree. Run 1 is the Task 1 measurement; run 2 is t
 | LCOV `coverage/unit.lcov` | `d82050fd915f31be` | `4dc4b36c2675a794` |
 | Validation receipt | `709fa24a27f44b26` | `4087f35149a7bffa` |
 | Accepted manifest `coverage/unit.manifest.json` | `97c1ca0764d5aba8` | `99556b2f08f1f1db` |
-| Run directory | pruned after its figures were recorded here | `coverage/runs/20260918T175717646Z-4402189b` (809 MB, gitignored) |
+| Run directory | pruned after its figures were recorded here | pruned by 07-08 after activation (section 9.4); the published run is now `20260918T202613550Z-e88ba46e` |
 
 Shared identities:
 
@@ -201,4 +201,59 @@ Certification: the production coverage measurement on the stable tree is complet
 
 ### 8.7 Runtime and tool support
 
-Measured on Node v26.8.2 (V8 14.6.202.34-node.28), linux x64, npm 11.19.1, Fallow 3.23.0, the vendored producer 1.0.6-project.1. CI runs Node 24; its `mergeCoverageRanges` and `mapRangeToLines` are byte-identical to v26.8.2's, so the merge limit in 8.1 applies there too. Node 24 has not executed the capture in this plan; each CI job makes its own capture and binds its own runtime (D-10, 07-08).
+Measured on Node v26.8.2 (V8 14.6.202.34-node.28), linux x64, npm 11.19.1, Fallow 3.23.0, the vendored producer 1.0.6-project.1. CI runs Node 24; its `mergeCoverageRanges` and `mapRangeToLines` are byte-identical to v26.8.2's, so the merge limit in 8.1 applies there too. Node 24 has not executed the capture in this plan; each CI job makes its own capture and binds its own runtime (D-10, section 9).
+
+## 9. Activation (Plan 07-08)
+
+Plan 07-08 wires the pipeline into the local and CI check order and re-measures the final tree through that order. Every figure in this section comes from the run `npm run check` itself made on the final code tree; nothing is carried over from section 2.
+
+### 9.1 What changed
+
+- `package.json`: `test:coverage:unit` runs `coverage:unit:verified`; `npm test` runs `coverage-capture.mjs --plain` (the same `UNIT_TEST_PATTERNS`, no coverage flags, `--test-*` runner options forwarded); `coverage:unit:current` runs `coverage-unit.mjs --reuse-current`; `check` runs `... test:coverage:direct:negative && test:coverage:unit && coverage:unit:negative && coverage:risk && coverage:risk:negative && test:integration ...` with every earlier member kept and `npm test` removed from the chain (one unit launch).
+- `scripts/coverage-capture.mjs` (`38a0f883631d8dd9`): `--plain` mode. `scripts/coverage-unit.mjs` (`783af4d545e374db`): `--reuse-current`, which reuses an accepted bundle only when `coverage-validate.mjs` accepts it now and otherwise runs the four steps; the consumer (`check-coverage-risk.mjs`, unchanged) never reuses or regenerates.
+- `.pre-commit-config.yaml` (`5500c9e72cd1debf`): hooks `npm-coverage-unit` (`coverage:unit:current`) and `npm-coverage-risk` (`coverage:risk`), whole-project, triggered on the inventory an accepted bundle binds (`extensions/**`, `tests/**` without e2e/integration/live-uat, `scripts/**`, `vendor/coverage/**`, the nine resource files).
+- `.github/workflows/ci.yml` (`2ddd1dd9c1689c57`): the `check` job qualifies the producer on its runner (`coverage:producer:build -- --verify`, `coverage:producer:check`) before `npm run check`; ceiling 30 minutes. `sonarcloud.yml` (`618327af54726f34`): the same qualification before `npm run test:coverage`. `lint.yml` (`1c4bb6b23de036b1`): the pre-commit job's ceiling is 30 minutes because `--all-files` runs the two hooks. `sonar-project.properties` (`4a25c100cd9a7085`): `sonar.javascript.lcov.reportPaths=coverage/unit.lcov` unchanged, comment added.
+- `tests/architecture/coverage-metrics-pipeline.test.ts` (`ee6437c098ba7905`, 30 cases): the chain order and single unit launch, the script wiring, the hook order and trigger, the plain mode (whole selection, forwarded option, failing test, usage error), the reuse mode (reuse of an unchanged tree, fresh run after a source change, after a configuration change, and for a captured-only bundle), the consumer's refusal without regeneration and without reading the inherited LCOV path, the CI qualification order, the Sonar input and the Node family; each structural predicate also runs against planted violations. `tests/architecture/pre-commit-hooks.ts` is the hook reader shared with the type-member gate.
+
+No production source under `extensions/` changed. No coverage configuration, census pin, threshold, suppression, direct pin or `.fallowrc.json` value changed; `maxCrap: 0` stays disabled and the policy stays 30.
+
+### 9.2 The final run
+
+`npm run check` on HEAD `e4ca798a8fbe811f708da54b046bf01689904b57` (the final code tree; the documentation commits that follow are not inventoried): exit 0 in 1287 s (21 min 27 s), started 2026-09-18T20:21:52Z. The capture inside the chain is run `20260918T202613550Z-e88ba46e`, started 20:26:13, completed 20:32:24, accepted 20:33:31; 312 workers, 543 raw records, 618 modules loaded, 9 unloaded production sources; inventory `0842aade8a157300` (239 production, 409 tests, 39 tooling, 18 resources). `coverage:risk` in the chain exited 0 on that bundle. `npm run test:coverage:direct:all` afterwards: exit 0 in 494 s, `All-pair run complete: 239 pairs`, `2 pinned shortfall(s) matched scripts/test-coverage-direct.pin.json exactly`.
+
+| Item | Value |
+| --- | --- |
+| Runtime | Node v26.8.2, V8 14.6.202.34-node.28, linux x64, npm 11.19.1 |
+| Accepted manifest `coverage/unit.manifest.json` | `0354c37558e90999` |
+| Map `coverage/unit.istanbul.json` | `b62ee36aa1589112` |
+| LCOV `coverage/unit.lcov` | `9b11e54120f56e0b`; zero `DA:...,0`, `BRDA:...,0` or `FNDA:0,...` entries |
+| Validation receipt | `09d810296ef32bf1` |
+| Captured manifest | `1379c4af0b703d2b` |
+| Capture tooling | `coverage-capture.mjs` `38a0f883631d8dd9`, `coverage-capture.manifest.mjs` `5c02b8820d36e769`, `coverage-capture.runtime.mjs` `be41926f74256e87` |
+| Acceptance tooling | `coverage-unit.mjs` `783af4d545e374db`; the other eight scripts unchanged from section 2 |
+| Producer | `ast-v8-to-istanbul` 1.0.6-project.1, payload `29377dc2bb113e40`, license `7771f0b6f55e76ef` |
+| Consumer | Fallow 3.23.0, policy 30 |
+
+### 9.3 Denominators, deficits and distribution
+
+| Model | Files | Functions | Statements or lines | Branches |
+| --- | --- | --- | --- | --- |
+| Native | 230 records | 1890/1890 | 63825/63825 lines | 9234/9234 blocks |
+| Syntax | 239 | 1865/1865 | 10392/10393 statements | 6633/6653 arms |
+
+Every value equals section 4. The native invariant of D-01 holds on the activated path. `coverage:risk -- --report coverage/unit.risk.json` on the same bundle: 1865 production functions in 239 files, 0 at or above 30, maximum 20.00 (`plugin-browser.ts:108:0 statusTag`), 13092 non-production rows not gated (13030 in section 7 plus the rows of the two new test modules); histogram below 5: 1394, 5 to 9.99: 377, 10 to 19.99: 88, 20 to 29.99: 6, 30 or more: 0; the one partial function is `collectCommandFile` at 16/17 statements and 6.0073; `failures` empty. Distribution, partial function and maximum are identical to section 7, so the 21 deficits of section 6 and their dispositions in section 8 stand unchanged.
+
+### 9.4 Runs made while activating
+
+| Run | Made by | Outcome |
+| --- | --- | --- |
+| `20260918T191519689Z-a047b707` | `npm-coverage-unit` hook, first pre-commit run of the implementation | refused: `tests-failed` (the new gate spelled two production paths outside the registry; `gate-targets.test.ts` D-07-06 failed). The hook ran the capture anew because the validator refused the published bundle with `tool-changed`, `tool-changed` (acceptance) and `stale-input` rows; `npm-coverage-risk` then refused with `missing-manifest`. This is the designed behavior of a stale bundle plus a failing suite. |
+| `20260918T193822785Z-b20c5a35` | the same hook, after the fix | accepted; `npm-coverage-risk` passed |
+| `20260918T195725342Z-bd4ce1cd`, `20260918T201330143Z-e5578996` | the hook on the two pre-commit runs of the CI commit | accepted; the first pre-commit run failed on `fallow health` (cognitive complexity 18 of the new workflow parser), which was split before the second run |
+| `20260918T202613550Z-e88ba46e` | `npm run check` on the final tree | accepted; published bundle |
+
+The superseded run directories (07-07's `4402189b` included) were removed after their identities were recorded; `coverage/runs/` holds the published run (810 MB), and `coverage:validate` exits 0 on it.
+
+### 9.5 Runtime scope
+
+Every figure above is Node v26.8.2. CI's Node 24 executes its own capture on the first push that reaches the workflows; that run binds its own runtime and its own artifacts, and the `check` and `sonarcloud` jobs qualify the installed producer there first. The native merge limit of 8.1 applies to Node 24 by source identity, as before.
