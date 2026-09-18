@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 
+import { UninstallRefusedError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import {
   buildReconcileAppliedCascade,
   buildReconcilePendingNotification,
@@ -11,6 +12,7 @@ import {
   resolvePendingForceInstalls,
   type PendingInstallCandidate,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts";
+import { DependencyCascadeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import type {
@@ -1189,7 +1191,7 @@ describe("buildReconcileAppliedCascade", () => {
 
   test("D-05-16: carries the refusal cause on a plugin-uninstall-failed row that names one", () => {
     // arrange
-    const cause = new Error("required by keeper@mp");
+    const cause = new UninstallRefusedError("dependents remain", "required by keeper@mp");
     const outcomes: readonly PerEntryOutcome[] = [
       {
         kind: "plugin-uninstall-failed",
@@ -1253,6 +1255,48 @@ describe("buildReconcileAppliedCascade", () => {
               status: "failed",
               name: "cr",
               reasons: ["permission denied"],
+              severity: "error",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("RESV-06: carries the dependency-cascade cause on a plugin-install-failed row that names one", () => {
+    // arrange
+    const cause = new DependencyCascadeError(
+      'Dependency "missing@mp" is not declared by its marketplace.',
+      "missing@mp",
+    );
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        reason: "dependency failed",
+        cause,
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "failed",
+              name: "hello",
+              reasons: ["dependency failed"],
+              cause,
               severity: "error",
               needsReload: false,
             },

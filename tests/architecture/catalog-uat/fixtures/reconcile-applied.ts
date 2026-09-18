@@ -326,5 +326,35 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // RESV-06: the load-time counterpart of the standalone dependency-cascade
+    // {dependency failed} row. Reconcile drives ONE orchestrated outcome per
+    // declared plugin, so the requesting plugin's own row carries both the
+    // {dependency failed} token and the failing dependency's own cause line.
+    "reconcile-install-dependency-failed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "hello",
+                reasons: ["dependency failed"],
+                cause: new Error('Dependency "missing@mp" is not declared by its marketplace.'),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };

@@ -65,8 +65,12 @@ const EXPECTED_SECTION_COUNT = 20;
 // removals that stood (209 -> 212).
 // D-01-32: +1 state for the cold git-source `(remote)` row that carries the
 // entry-declared `dependencies:` line after the unresolved marker (212 -> 213).
-const EXPECTED_STATE_COUNT = 213;
-const EXPECTED_UTF8_BYTES = 28_729;
+// RESV-06: +1 state for the load-time counterpart of the dependency-cascade
+// `{dependency failed}` row -- reconcile drives one outcome per declared
+// plugin, so the requesting plugin's own row carries both the token and the
+// failing dependency's cause line (213 -> 214).
+const EXPECTED_STATE_COUNT = 214;
+const EXPECTED_UTF8_BYTES = 28_911;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -355,7 +359,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 213 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 214 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

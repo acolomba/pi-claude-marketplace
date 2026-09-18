@@ -1143,6 +1143,50 @@ test("updateSinglePlugin preserves a generated skill preload from its path sourc
   });
 });
 
+test("PROV-02/PROV-03: update never promotes a dependency record's provenance", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-provenance-"));
+    const previousCwd = process.cwd();
+    t.after(async () => {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    });
+    const locations = locationsFor("project", cwd);
+    await seedPathMarketplace({
+      cwd,
+      marketplaceRoot: path.join(cwd, "mp-src"),
+      marketplaceName: "mp",
+      manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+      installedVersions: { hello: "1.0.0" },
+    });
+    const seededState = await loadState(locations.extensionRoot);
+    const seededRecord = seededState.marketplaces.mp?.plugins.hello;
+    assert.ok(seededRecord !== undefined);
+    seededRecord.provenance = "dependency";
+    await saveState(locations.extensionRoot, seededState);
+    process.chdir(cwd);
+
+    // act
+    const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+    // assert
+    assert.equal(outcome.partition, "updated");
+    const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+    assert.ok(record !== undefined);
+    assert.deepStrictEqual(record, {
+      version: "1.0.1",
+      resolvedSource: path.join(cwd, "mp-src", "plugins", "hello"),
+      compatibility: { installable: true, notes: [], supported: ["skills"], unsupported: [] },
+      resources: { skills: ["hello:tool"], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      enabled: true,
+      provenance: "dependency",
+      installedAt: seededRecord.installedAt,
+      updatedAt: record.updatedAt,
+    });
+  });
+});
+
 test("PDEF-01: update preview detects an agent conflict from a later resolved directory", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-agent-dir-preview-"));

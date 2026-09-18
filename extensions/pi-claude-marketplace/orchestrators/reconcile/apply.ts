@@ -52,7 +52,7 @@ import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import { DependencyCascadeError, errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 import { notifyDiagnostic } from "../../shared/notification-dispatch.ts";
 import { type Reason } from "../../shared/notification-types.ts";
@@ -580,6 +580,17 @@ async function applyPluginInstalls(
         marketplace: op.marketplace,
         plugin: op.plugin,
         reason: classifyOrchestratorThrow(result.error),
+        // RESV-06: only a dependency-cascade failure carries a cause onto
+        // this row. Redact defensively (T-55-02-02 / T-53-02-02) -- the
+        // closure/constraint arms build their message from keys and version
+        // constraints alone, but a dependency's own ledger failure can carry
+        // a path.
+        ...(result.error instanceof DependencyCascadeError && {
+          cause: new DependencyCascadeError(
+            redactAbsolutePaths(result.error.message),
+            result.error.key,
+          ),
+        }),
       });
     }
   }

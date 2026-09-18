@@ -35,7 +35,10 @@
 //                            refused on others
 //   plugin-installed         a newly declared plugin, with the degraded,
 //                            orphaned-rewake and companion variants
-//   plugin-install-failed    a manifest entry whose source tree is gone
+//   plugin-install-failed    a manifest entry whose source tree is gone, an
+//                            install whose dependency the marketplace does not
+//                            declare, and an install whose own manifest entry
+//                            is missing (classification unaffected by RESV-06)
 //   plugin-uninstalled       a declaration deleted under a kept marketplace,
 //                            and the children of a marketplace removal
 //   plugin-uninstall-failed  a refused unstage, both directly and under a
@@ -1822,6 +1825,109 @@ describe("applyReconcile", () => {
       "pi-claude-marketplace/skills-staging/",
       "pi-claude-marketplace/state.json",
     ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("RESV-06: an install whose dependency the marketplace does not declare reports dependency failed and the dependency's own cause", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "install-dependency-failed");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", dependencies: ["missing"] },
+    });
+    const declaration = configBytes({
+      marketplaces: { mp: { source: marketplaceRoot } },
+      plugins: { "hello@mp": {} },
+    });
+    await writeUnder(project.configJsonPath, declaration);
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert: the requesting plugin's row -- the only outcome reconcile drives
+    // for `hello@mp` -- carries {dependency failed} and the dependency's own
+    // cause line, not the {unreadable} probe fallback.
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ hello (failed) {dependency failed}\n" +
+          '    cause: Dependency "missing@mp" is not declared by its marketplace.\n' +
+          "\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await recordFor(project, "mp", "hello"), undefined);
+    assert.equal(await readFile(project.configJsonPath, "utf8"), declaration);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("RESV-06: an install whose OWN manifest entry is missing classifies as before, not as a dependency failure", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "install-own-failure");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {});
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "ghost@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert: no dependency is involved, so the plugin's own PluginShapeError
+    // classification is unaffected by RESV-06.
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ ghost (failed) {not in manifest}\n" +
+          "\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await recordFor(project, "mp", "ghost"), undefined);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });

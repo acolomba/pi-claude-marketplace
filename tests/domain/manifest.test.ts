@@ -185,7 +185,11 @@ describe("loadMarketplaceManifest", () => {
     assert.deepStrictEqual(manifest, {
       name: "marketplace",
       plugins: [
-        { name: "broken", source: { source: "unsupported" }, strict: true },
+        {
+          name: "broken",
+          source: { source: "unsupported" },
+          dependenciesReason: "dependencies.0: Invalid input",
+        },
         {
           name: "healthy",
           source: "./healthy",

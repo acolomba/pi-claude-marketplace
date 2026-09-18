@@ -25,7 +25,11 @@
 
 import path from "node:path";
 
-import { PluginShapeError, StateLockHeldError } from "../../shared/errors.ts";
+import {
+  DependencyCascadeError,
+  PluginShapeError,
+  StateLockHeldError,
+} from "../../shared/errors.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
@@ -33,6 +37,7 @@ import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
+import type { UninstallRefusedError } from "../plugin/uninstall.ts";
 
 export interface OutcomeBase {
   readonly scope: Scope;
@@ -154,6 +159,19 @@ export interface PluginBackfilledOutcome
 export interface PluginInstallFailedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-install-failed";
   readonly reason: Reason;
+  /**
+   * RESV-06: set ONLY when the failure is attributable to a DEPENDENCY
+   * (`reason === "dependency failed"`) -- the projection surfaces it as the
+   * row's cause-chain trailer, mirroring `plugin-uninstall-failed.cause`
+   * (D-05-16). Every other failed install leaves it unset.
+   *
+   * Redacted at the apply.ts push site (T-55-02-02 / T-53-02-02): the
+   * closure/constraint arms build their message from `name@marketplace` keys
+   * and version constraints (never a path), but a dependency's own ledger
+   * failure can carry one, so the value is defensively redacted the way the
+   * invalid-block arm redacts its cause.
+   */
+  readonly cause?: DependencyCascadeError;
 }
 
 /** Plugin uninstall success outcome. */
@@ -179,7 +197,7 @@ export interface PluginUninstallFailedOutcome extends PluginOutcomeBase {
    * declaration-index leaf already redacted, and it chains no `cause` behind
    * it, so there is no path left for the depth-5 cause-chain walker to print.
    */
-  readonly cause?: Error;
+  readonly cause?: UninstallRefusedError;
 }
 
 /**
@@ -384,10 +402,19 @@ export type PerEntryOutcome =
  * `importWarningReason("uninstallable")` so the cross-surface reason stays
  * identical for the same underlying failure.
  *
+ * RESV-06: a `DependencyCascadeError` is checked FIRST -- an install failure
+ * attributable to one of the plugin's dependencies otherwise falls through to
+ * `{unreadable}`, losing the closure/constraint arms' `name@marketplace`
+ * cause entirely.
+ *
  * Exported for direct unit-test exercise of the closed-set mapping
  * (the function is otherwise module-private).
  */
 export function classifyOrchestratorThrow(err: unknown): ContentReason {
+  if (err instanceof DependencyCascadeError) {
+    return "dependency failed";
+  }
+
   if (err instanceof StateLockHeldError) {
     return "lock held";
   }

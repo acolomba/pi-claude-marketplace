@@ -7,6 +7,10 @@ import {
   composeCascadeFailureMessage,
   composeCascadeMemberRows,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts";
+import {
+  causeChainTrailer,
+  DependencyCascadeError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notifyWithContext } from "../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 
 import type {
@@ -707,7 +711,11 @@ describe("cascadeFailureCause", () => {
     const thrown = cascadeFailureCause(subject, ROOT_KEY);
     const rendered = failureRows(subject).find((row) => row.name === "formatter@tools");
 
-    // assert
+    // assert: RESV-06 -- a constraint failure is DependencyCascadeError, keyed
+    // to the failing dependency, so a reconcile-driven outcome can classify it
+    // as {dependency failed}.
+    assert.ok(thrown instanceof DependencyCascadeError);
+    assert.strictEqual(thrown.key, "formatter@tools");
     assert.strictEqual(
       thrown.message,
       'Dependency "formatter@tools" has no release tag satisfying "^2.0.0".',
@@ -716,7 +724,45 @@ describe("cascadeFailureCause", () => {
     assert.strictEqual(rendered.cause?.message, thrown.message);
   });
 
-  test("hands a member failure its own ledger error, chain intact", () => {
+  test("RESV-06 wraps a closure failure's cause in DependencyCascadeError keyed to the failing dependency", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "closure",
+      failure: { ok: false, reason: "not-found", key: "formatter@tools", requiredBy: ROOT_KEY },
+    };
+
+    // act
+    const thrown = cascadeFailureCause(subject, ROOT_KEY);
+
+    // assert
+    assert.ok(thrown instanceof DependencyCascadeError);
+    assert.strictEqual(thrown.key, "formatter@tools");
+    assert.strictEqual(
+      thrown.message,
+      'Dependency "formatter@tools" is not declared by its marketplace.',
+    );
+  });
+
+  test("RESV-06 hands the requesting plugin's own ledger failure through untouched", () => {
+    // arrange: subject.key === rootKey -- the ledger's own error IS the fact,
+    // so classification for a plugin's own (non-dependency) failure is
+    // unaffected.
+    const error = new Error("staging failed");
+    const subject: CascadeFailureSubject = {
+      kind: "member",
+      key: ROOT_KEY,
+      error,
+      rollbackPartials: [],
+    };
+
+    // act
+    const thrown = cascadeFailureCause(subject, ROOT_KEY);
+
+    // assert
+    assert.strictEqual(thrown, error);
+  });
+
+  test("RESV-06 wraps a dependency's own ledger failure in DependencyCascadeError with the cause-chain trailer byte-identical", () => {
     // arrange
     const error = new Error("staging failed", { cause: new Error("EACCES") });
     const subject: CascadeFailureSubject = {
@@ -729,7 +775,12 @@ describe("cascadeFailureCause", () => {
     // act
     const thrown = cascadeFailureCause(subject, ROOT_KEY);
 
-    // assert
-    assert.strictEqual(thrown, error);
+    // assert: chaining `error` itself would repeat its message as two
+    // consecutive links, so the wrapper reuses `error`'s own message and
+    // moves straight to its cause -- the rendered trailer stays
+    // byte-identical to `error`'s own.
+    assert.ok(thrown instanceof DependencyCascadeError);
+    assert.strictEqual(thrown.key, "formatter@tools");
+    assert.strictEqual(causeChainTrailer(thrown), causeChainTrailer(error));
   });
 });

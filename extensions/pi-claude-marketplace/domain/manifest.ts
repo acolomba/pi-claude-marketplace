@@ -41,7 +41,14 @@ export type MarketplaceManifest = Type.Static<typeof MARKETPLACE_SCHEMA>;
 /** JIT-compiled validator (D-07). Call its `Check` (or coercing `Parse`) method. */
 const MARKETPLACE_VALIDATOR = Compile(MARKETPLACE_SCHEMA);
 
-/** Isolates invalid dependency declarations before validating the marketplace. */
+/**
+ * Isolates invalid dependency declarations before validating the marketplace.
+ * The stub's `source` sub-object is unchanged from before -- `info.ts`'s
+ * `isUnsupportedEntrySource` still matches it byte-for-byte -- and the parse
+ * failure now also lands in a new sibling `dependenciesReason` field so
+ * `plugin-resolver.ts` can name the real defect (`dependencies`, not
+ * `source`) instead of reporting an unrecognized source kind.
+ */
 function normalizeDependencyEntries(raw: unknown): unknown {
   if (
     typeof raw !== "object" ||
@@ -56,12 +63,13 @@ function normalizeDependencyEntries(raw: unknown): unknown {
   const entries: readonly unknown[] = raw.plugins;
   let changed = false;
   for (const [index, entry] of entries.entries()) {
-    if (
-      typeof entry !== "object" ||
-      entry === null ||
-      !("dependencies" in entry) ||
-      parseDeclaredDependencies(entry.dependencies).ok
-    ) {
+    if (typeof entry !== "object" || entry === null || !("dependencies" in entry)) {
+      plugins.push(entry);
+      continue;
+    }
+
+    const dependencies = parseDeclaredDependencies(entry.dependencies);
+    if (dependencies.ok) {
       plugins.push(entry);
       continue;
     }
@@ -72,7 +80,11 @@ function normalizeDependencyEntries(raw: unknown): unknown {
       "plugins",
     );
     if ("name" in entry && typeof entry.name === "string" && entry.name.length > 0) {
-      plugins.push({ name: entry.name, source: { source: "unsupported" }, strict: true });
+      plugins.push({
+        name: entry.name,
+        source: { source: "unsupported" },
+        dependenciesReason: dependencies.reason,
+      });
     }
   }
 

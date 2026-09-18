@@ -58,6 +58,52 @@ for (const { mode, resolve } of [
   });
 }
 
+for (const { mode, resolve } of [
+  { mode: "strict", resolve: resolveStrict },
+  { mode: "loose", resolve: resolveLoose },
+]) {
+  test(`${mode} resolution reports the isolated marketplace-entry dependencies defect ahead of an unrelated bad source`, async () => {
+    // arrange -- domain/manifest.ts::normalizeDependencyEntries stamps
+    // `dependenciesReason` onto a marketplace entry whose own `dependencies`
+    // failed to parse; the resolver must report THAT defect even when the
+    // entry's `source` is independently unclassifiable.
+    const context = resolveContext(marketplaceRoot, {});
+    const entry = pluginEntry({
+      source: 42,
+      dependenciesReason: "dependencies.0: Invalid input",
+    });
+
+    // act
+    const resolved = await resolve(entry, context);
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      state: "unavailable",
+      installable: false,
+      name: "p1",
+      notes: ["malformed marketplace entry: dependencies.0: Invalid input"],
+    });
+  });
+}
+
+test("resolveStrict ignores a non-string dependenciesReason (falls through to ordinary preflight)", async () => {
+  // arrange -- no real marketplace entry carries this shape; a non-string
+  // value proves the isolation guard checks the field's TYPE, not just its
+  // presence, and otherwise falls through to ordinary source/dir resolution.
+  const context = resolveContext(marketplaceRoot, {});
+  const entry = pluginEntry({ dependenciesReason: 42 });
+
+  // act
+  const resolvedPlugin = await resolveStrict(entry, context);
+
+  // assert
+  assert.strictEqual(resolvedPlugin.state, "unavailable");
+  assert.ok(
+    resolvedPlugin.notes.some((n) => n.includes("source dir does not exist")),
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+});
+
 /**
  * Build an in-memory ResolveContext. `files` maps absolute paths to either:
  *   - "dir"           -> directory exists

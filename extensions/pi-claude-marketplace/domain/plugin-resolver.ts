@@ -195,6 +195,22 @@ type SourceSupport =
   | { readonly kind: "supported"; readonly source: SupportedParsedSource }
   | { readonly kind: "rejected"; readonly reason: string };
 
+/**
+ * Recognizes `domain/manifest.ts::normalizeDependencyEntries`'s load-time stub
+ * for a marketplace entry whose `dependencies` failed to parse, via the
+ * synthetic `dependenciesReason` field it stamps onto the isolated entry, and
+ * returns the parse-failure detail that field carries. `undefined` for every
+ * real `PluginEntry` -- checked BEFORE source classification runs so an
+ * isolated entry's reported defect names `dependencies`, not `source`.
+ */
+function isolatedDependencyDefectReason(entry: PluginEntry): string | undefined {
+  if (!("dependenciesReason" in entry)) {
+    return undefined;
+  }
+
+  return typeof entry.dependenciesReason === "string" ? entry.dependenciesReason : undefined;
+}
+
 function classifySourceSupport(parsedSource: ParsedSource): SourceSupport {
   switch (parsedSource.kind) {
     case "path":
@@ -285,8 +301,14 @@ async function readManifest(
 
       return { ok: true, manifest: parsed };
     } catch (err: unknown) {
-      // D-01-08 / D-01-09: an unreadable file, a parse throw and a schema
-      // rejection are one rule -- the manifest is present and unusable.
+      // D-01-08 / D-01-09: this catch only ever sees a THROWN failure -- a
+      // rejected stat (manifestCandidateIsFile rethrows anything but ENOENT /
+      // ENOTDIR), an unreadable file, or a JSON.parse syntax error. Schema
+      // rejection and an invalid `dependencies` declaration are direct
+      // `return`s above, inside the same `try`, and never land here. All four
+      // outcomes still end up observably identical to the caller: each
+      // produces the same `malformed plugin.json: ...` reason on the
+      // `unavailable` arm.
       return {
         ok: false,
         reason: `malformed plugin.json: ${err instanceof Error ? err.message : String(err)}`,
@@ -435,6 +457,22 @@ async function preflightStages(
   const partial = emptyResolution();
   // Caller bug if name validation throws -- entry came through PLUGIN_ENTRY_VALIDATOR.
   assertSafeName(entry.name);
+
+  // domain/manifest.ts::normalizeDependencyEntries isolates a marketplace
+  // entry whose declared `dependencies` failed to parse before this resolver
+  // ever sees it. Detected first -- ahead of PR-2's source-kind classification
+  // below -- so the reported defect names the field that is actually broken
+  // (`dependencies`) rather than an unrecognized source kind.
+  const dependencyDefect = isolatedDependencyDefectReason(entry);
+  if (dependencyDefect !== undefined) {
+    return {
+      kind: "unavailable",
+      result: unavailable(entry.name, [
+        ...partial.notes,
+        `malformed marketplace entry: ${dependencyDefect}`,
+      ]),
+    };
+  }
 
   // Classify source. PluginEntry.source is Type.Unknown() per MM-3.
   const parsedSource: ParsedSource = parsePluginSource(entry.source);

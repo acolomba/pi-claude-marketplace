@@ -741,15 +741,22 @@ function applyMarketplaceOutcomeToBlock(
 }
 
 /**
- * D-05-16: the cause a REFUSED uninstall carries onto its reconcile row, so a
- * config-driven refusal renders the same failed row the standalone command
- * does, cause line included. Every other outcome, including a cause-less
- * uninstall failure, answers the empty object and keeps the bare row.
+ * D-05-16 / RESV-06: the cause a REFUSED uninstall or a dependency-cascade
+ * install failure carries onto its reconcile row, so a config-driven failure
+ * renders the same cause line the standalone command / single-plugin install
+ * does. Every other outcome, including a cause-less failure, answers the
+ * empty object and keeps the bare row.
  */
 function failedRowCause(outcome: PerEntryOutcome): { cause?: Error } {
-  return outcome.kind === "plugin-uninstall-failed" && outcome.cause !== undefined
-    ? { cause: outcome.cause }
-    : {};
+  if (outcome.kind === "plugin-uninstall-failed" && outcome.cause !== undefined) {
+    return { cause: outcome.cause };
+  }
+
+  if (outcome.kind === "plugin-install-failed" && outcome.cause !== undefined) {
+    return { cause: outcome.cause };
+  }
+
+  return {};
 }
 
 /**

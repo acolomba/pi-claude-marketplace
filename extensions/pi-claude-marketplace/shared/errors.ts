@@ -739,6 +739,31 @@ function buildPluginShapeMessage(shape: PluginShapeErrorShape): string {
   }
 }
 
+/**
+ * RESV-06: typed marker for a cascade failure attributable to a DEPENDENCY
+ * rather than to the requesting plugin's own ledger. `key` is the failing
+ * subject's `name@marketplace` key.
+ *
+ * Thrown only by `orchestrators/plugin/install-cascade.messaging.ts`'s
+ * `cascadeFailureCause` (the closure, constraint, and non-root member failure
+ * arms), so an orchestrated install outcome can classify as `{dependency
+ * failed}` (`orchestrators/reconcile/apply-outcomes.ts::classifyOrchestratorThrow`)
+ * instead of falling through to the generic `{unreadable}` probe classifier.
+ * The requesting plugin's own ledger failure is never wrapped, so its
+ * classification is unaffected.
+ *
+ * `Error.cause` flows through the standard `ErrorOptions` bag so the depth-5
+ * `causeChainTrailer` walker still surfaces the originating cause.
+ */
+export class DependencyCascadeError extends Error {
+  readonly key: string;
+  constructor(message: string, key: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "DependencyCascadeError";
+    this.key = key;
+  }
+}
+
 export interface ResourcesDiscoverFailure {
   readonly scope: "user" | "project";
   readonly kind: "skills" | "prompts";

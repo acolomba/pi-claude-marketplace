@@ -200,24 +200,29 @@ export type CascadeConstraintFailure =
 /**
  * A closure member whose accumulated constraint has been resolved.
  *
- * Both pin fields are present together and only for a member whose constraint
- * was a real range that a release tag satisfied. An unconstrained member
- * carries neither and installs from whatever ref its marketplace entry names.
+ * `pin` is present only for a member whose constraint was a real range that a
+ * release tag satisfied. An unconstrained member carries no `pin` and installs
+ * from whatever ref its marketplace entry names. Folding the oid and version
+ * into one field keeps them from drifting apart: a producer cannot set one
+ * without the other, and a consumer's single presence check answers "pinned"
+ * for both at once.
  */
 export interface ResolvedCascadeMember extends ClosureMember {
-  /** The object id the selected tag resolves to, which the install pins on. */
-  readonly pinnedOid?: string;
-  /**
-   * The semver the selected tag carries, recorded as the member's version.
-   *
-   * RESV-05 reads a recorded version back against the constraint on the next
-   * install. A git-materialized install otherwise records `sha-<12hex>`, which
-   * `recordedVersionSatisfies`' normalization ladder either rejects outright or
-   * coerces into an arbitrary digit run (D-03-04) -- so the run that pinned the
-   * tag would fail its own constraint the second time it ran. The tag's own
-   * version is the value that makes the pin readable back.
-   */
-  readonly pinnedVersion?: string;
+  readonly pin?: {
+    /** The object id the selected tag resolves to, which the install pins on. */
+    readonly oid: string;
+    /**
+     * The semver the selected tag carries, recorded as the member's version.
+     *
+     * RESV-05 reads a recorded version back against the constraint on the next
+     * install. A git-materialized install otherwise records `sha-<12hex>`, which
+     * `recordedVersionSatisfies`' normalization ladder either rejects outright or
+     * coerces into an arbitrary digit run (D-03-04) -- so the run that pinned the
+     * tag would fail its own constraint the second time it ran. The tag's own
+     * version is the value that makes the pin readable back.
+     */
+    readonly version: string;
+  };
 }
 
 /** Every member's constraint resolved, or the first failure one produced. */
@@ -489,7 +494,7 @@ async function probeMemberPin(
   if (probed.kind === "pinned") {
     return {
       kind: "resolved",
-      member: { ...member, pinnedOid: probed.oid, pinnedVersion: probed.version },
+      member: { ...member, pin: { oid: probed.oid, version: probed.version } },
     };
   }
 

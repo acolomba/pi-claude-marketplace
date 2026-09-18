@@ -576,7 +576,7 @@ function parseOwnManifest(raw: string): OwnManifestRead {
  * D-01-32: the `dependencies` value the plugin's OWN manifest declares, read
  * from the first `MANIFEST_CANDIDATES` location that exists under
  * `pluginRoot`. This is the THIRD reader of that shared ordering, alongside
- * `domain/resolver.ts::readManifest` and
+ * `domain/plugin-resolver.ts::readManifest` and
  * `orchestrators/plugin/shared.ts::resolvePluginVersion` tier 1; it keeps its
  * own I/O and its own error contract, and shares only the ordering (D-01-06).
  *
@@ -593,7 +593,7 @@ function parseOwnManifest(raw: string): OwnManifestRead {
  * rule). Do not generalize it: `defaultEnabled` and every other manifest-side
  * claim on the read surfaces stay entry-sourced, and
  * `entryDeclaresInstallDisabled`'s one-parameter containment argument in
- * `domain/resolver.ts` is untouched.
+ * `domain/unsupported-components.ts` is untouched.
  *
  * NFR-5: reads `<pluginRoot>/<candidate>` only, no network.
  */

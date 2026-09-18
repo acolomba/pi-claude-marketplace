@@ -1442,13 +1442,13 @@ async function installPluginWithTransaction(
         // each dependency under the requesting plugin's version string.
         ledgerOptionsFor: (member) => {
           const isRoot = member.key === rootKey;
-          const pinVersion = member.pinnedVersion ?? (isRoot ? opts.pinVersionOverride : undefined);
+          const pinVersion = member.pin?.version ?? (isRoot ? opts.pinVersionOverride : undefined);
           return buildInstallLedgerOptions(opts, {
             scope,
             cwd,
             marketplace: member.marketplace,
             plugin: member.name,
-            ...(member.pinnedOid !== undefined && { sourcePin: member.pinnedOid }),
+            ...(member.pin !== undefined && { sourcePin: member.pin.oid }),
             ...(pinVersion !== undefined && { pinVersion }),
             // D-04-01: the root is the one member the closure walk never
             // skips, so the key comparison alone decides provenance -- per

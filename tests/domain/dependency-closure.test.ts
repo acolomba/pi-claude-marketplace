@@ -204,6 +204,41 @@ test("D-03-11 a diamond resolves once and reports no cycle -- the one-set walk's
   );
 });
 
+test("D-03-10 one plugin declaring the same dependency twice contributes both ranges", async () => {
+  // arrange: root declares "shared" twice, with different version constraints.
+  const { lookup } = catalog({
+    "root@mp": [
+      { name: "shared", version: "^1.0.0" },
+      { name: "shared", version: "^2.0.0" },
+    ],
+    "shared@mp": [],
+  });
+
+  // act
+  const resolved = await resolveDependencyClosure({
+    rootKey: "root@mp",
+    lookup,
+    installedKeys: new Set(),
+    knownMarketplaces: new Set(["mp"]),
+  });
+
+  // assert
+  assert.deepStrictEqual(resolved, {
+    ok: true,
+    closure: [
+      {
+        key: "shared@mp",
+        name: "shared",
+        marketplace: "mp",
+        requiredBy: "root@mp",
+        ranges: ["^1.0.0", "^2.0.0"],
+      },
+      { key: "root@mp", name: "root", marketplace: "mp", requiredBy: undefined, ranges: [] },
+    ],
+    alreadyInstalled: [],
+  });
+});
+
 test("D-03-11 the memo bounds a layered graph to one lookup per distinct key", async () => {
   // arrange: six layers, each member depending on BOTH members of the next.
   // Without the memo this walk is 2^6 deep; with it, 13 lookups.

@@ -1,4 +1,5 @@
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
+import { DependencyCascadeError } from "../../shared/errors.ts";
 import { ICON_UNINSTALLABLE, pluginRow } from "../../shared/notification-grammar.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
 
@@ -246,16 +247,19 @@ function closureFailureFacts(
   rootKey: string,
 ): CascadeFailureFacts {
   switch (failure.reason) {
-    case "cycle":
+    case "cycle": {
+      // The subject is the key the walk met a second time on its own ancestor
+      // chain, which the walk reports as the chain's last element. A chain the
+      // walk never populated falls back to the root, so a defective report
+      // still renders one coherent row instead of a nameless one.
+      const key = failure.chain.at(-1) ?? rootKey;
       return {
-        // The subject is the key the walk met a second time on its own ancestor
-        // chain, which the walk reports as the chain's last element. A chain the
-        // walk never populated falls back to the root, so a defective report
-        // still renders one coherent row instead of a nameless one.
-        key: failure.chain.at(-1) ?? rootKey,
+        key,
         reasons: ["dependency cycle"],
-        cause: new Error(`Dependency cycle: ${failure.chain.join(" -> ")}.`),
+        cause: new DependencyCascadeError(`Dependency cycle: ${failure.chain.join(" -> ")}.`, key),
       };
+    }
+
     case "marketplace-not-added":
       return {
         key: failure.key,
@@ -264,22 +268,27 @@ function closureFailureFacts(
         // dependency, so the row names the command that would. `<source>` and
         // not the marketplace name, because that is what `marketplace add`
         // takes.
-        cause: new Error(
+        cause: new DependencyCascadeError(
           `Dependency "${failure.key}" requires marketplace "${failure.marketplace}", which is not added. Run marketplace add <source> to add it.`,
+          failure.key,
         ),
       };
     case "not-found":
       return {
         key: failure.key,
         reasons: ["not in manifest"],
-        cause: new Error(`Dependency "${failure.key}" is not declared by its marketplace.`),
+        cause: new DependencyCascadeError(
+          `Dependency "${failure.key}" is not declared by its marketplace.`,
+          failure.key,
+        ),
       };
     case "unusable-declaration":
       return {
         key: failure.key,
         reasons: ["invalid manifest"],
-        cause: new Error(
+        cause: new DependencyCascadeError(
           `Plugin "${failure.key}" declares an unusable dependency (${failure.detail}).`,
+          failure.key,
         ),
       };
   }
@@ -294,15 +303,17 @@ function rangeConflictFacts(
         key: failure.key,
         version: failure.recordedVersion,
         reasons: ["already installed", "version conflict"],
-        cause: new Error(
+        cause: new DependencyCascadeError(
           `Dependency "${failure.key}" is installed at version ${failure.recordedVersion}, which does not satisfy "${failure.range}".`,
+          failure.key,
         ),
       }
     : {
         key: failure.key,
         reasons: ["version conflict"],
-        cause: new Error(
+        cause: new DependencyCascadeError(
           `Dependency "${failure.key}" has contradictory version constraints "${failure.range}" (${failure.detail}).`,
+          failure.key,
         ),
       };
 }
@@ -323,8 +334,9 @@ function constraintFailureFacts(failure: CascadeConstraintFailure): CascadeFailu
       return {
         key: failure.key,
         reasons: ["no matching version"],
-        cause: new Error(
+        cause: new DependencyCascadeError(
           `Dependency "${failure.key}" has no release tag satisfying "${failure.range}".`,
+          failure.key,
         ),
       };
     case "tag-listing-failed":
@@ -336,27 +348,60 @@ function constraintFailureFacts(failure: CascadeConstraintFailure): CascadeFailu
         // usable. An unclassifiable transport failure keeps the inherited
         // `unreadable`.
         reasons: [failure.classification ?? "unreadable"],
-        cause: new Error(
+        cause: new DependencyCascadeError(
           `Dependency "${failure.key}" could not be checked against "${failure.range}" (${failure.classification ?? "tag listing failed"}).`,
+          failure.key,
         ),
       };
     case "range-invalid":
       return {
         key: failure.key,
         reasons: ["invalid version constraint"],
-        cause: new Error(
+        cause: new DependencyCascadeError(
           `Dependency "${failure.key}" declares an unparseable version constraint "${failure.range}" (${failure.detail}).`,
+          failure.key,
         ),
       };
     case "range-too-complex":
       return {
         key: failure.key,
         reasons: ["constraint too complex"],
-        cause: new Error(
+        cause: new DependencyCascadeError(
           `Dependency "${failure.key}" declares version constraints too complex to combine (${failure.detail}).`,
+          failure.key,
         ),
       };
   }
+}
+
+/**
+ * RESV-06: the member arm's cause. The requesting plugin's own ledger failure
+ * (`subject.key === rootKey`) is reported unwrapped -- the ledger's error IS
+ * the fact. A DEPENDENCY's ledger failure (`subject.key !== rootKey`) is
+ * wrapped in `DependencyCascadeError` so an orchestrated install outcome can
+ * classify as `{dependency failed}` instead of the generic `{unreadable}`
+ * probe fallback (`apply-outcomes.ts::classifyOrchestratorThrow`).
+ *
+ * The wrapper carries `subject.error`'s OWN message and moves straight to its
+ * cause, rather than chaining `subject.error` itself: chaining `subject.error`
+ * directly would repeat its message as two consecutive links, because
+ * `causeChainTrailer` renders a link's own message before walking its cause.
+ * Skipping to `subject.error`'s cause keeps the rendered cause-chain trailer
+ * byte-identical to `subject.error`'s own.
+ */
+function memberCause(
+  subject: Extract<CascadeFailureSubject, { readonly kind: "member" }>,
+  rootKey: string,
+): Error {
+  if (subject.key === rootKey) {
+    return subject.error;
+  }
+
+  return new DependencyCascadeError(
+    subject.error.message,
+    subject.key,
+    subject.error.cause === undefined ? undefined : { cause: subject.error.cause },
+  );
 }
 
 /** The subject, brace and cause any cascade failure resolves to. */
@@ -377,7 +422,7 @@ function failureFacts(subject: CascadeFailureSubject, rootKey: string): CascadeF
   return {
     key: subject.key,
     reasons: subject.rollbackPartials.length > 0 ? ["rollback partial"] : [],
-    cause: subject.error,
+    cause: memberCause(subject, rootKey),
     ...(subject.rollbackPartials.length > 0 && { rollbackPartials: subject.rollbackPartials }),
   };
 }

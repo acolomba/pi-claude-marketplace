@@ -13,6 +13,7 @@ import {
   ConcurrentInstallError,
   ConcurrentUninstallError,
   CrossPluginConflictError,
+  DependencyCascadeError,
   errorMessage,
   errorWithCleanupFailures,
   errorWithManualRecovery,
@@ -823,6 +824,58 @@ describe("StateLockHeldError", () => {
         scope: "project",
         lockPath: "/scope/.state-lock",
         cause,
+      },
+    );
+  });
+});
+
+describe("DependencyCascadeError", () => {
+  test("exposes the complete dependency-cascade failure and cause", () => {
+    // arrange
+    const cause = new Error("EACCES");
+
+    // act
+    const error = new DependencyCascadeError("staging failed", "formatter@tools", { cause });
+
+    // assert
+    assert.ok(error instanceof DependencyCascadeError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        key: error.key,
+        cause: error.cause,
+      },
+      {
+        name: "DependencyCascadeError",
+        message: "staging failed",
+        key: "formatter@tools",
+        cause,
+      },
+    );
+  });
+
+  test("carries no cause when none is given", () => {
+    // arrange
+    const key = "formatter@tools";
+
+    // act
+    const error = new DependencyCascadeError("dependency cycle", key);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        key: error.key,
+        cause: error.cause,
+      },
+      {
+        name: "DependencyCascadeError",
+        message: "dependency cycle",
+        key: "formatter@tools",
+        cause: undefined,
       },
     );
   });

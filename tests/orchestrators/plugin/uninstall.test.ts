@@ -5316,6 +5316,84 @@ test("D-05-09: --keep-data covers every plugin --prune removes, and each pruned 
   });
 });
 
+for (const { keepData, expectedDataTree, expectedMessage } of [
+  {
+    keepData: true,
+    expectedDataTree: {
+      tree: ["nested/", "nested/session.bin"],
+      sessionBytes: Buffer.from([0, 7, 255, 10]),
+    },
+    expectedMessage:
+      "● mp [project]\n" +
+      "  ○ x v0.0.1 (uninstalled) {data kept}\n" +
+      "  ○ d1 v0.0.1 (uninstalled) {dependency pruned, data kept}\n" +
+      "\n" +
+      "/reload to pick up changes",
+  },
+  {
+    keepData: false,
+    expectedDataTree: null,
+    expectedMessage:
+      "● mp [project]\n" +
+      "  ○ x v0.0.1 (uninstalled)\n" +
+      "  ○ d1 v0.0.1 (uninstalled) {dependency pruned}\n" +
+      "\n" +
+      "/reload to pick up changes",
+  },
+] satisfies readonly {
+  keepData: boolean;
+  expectedDataTree: DataTree | null;
+  expectedMessage: string;
+}[]) {
+  test(`D-05-09: --prune with keepData ${String(keepData)} applies one disposition to the root and its pruned dependency`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-data-bytes-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedDeclaringMarketplace(
+          locations,
+          "mp",
+          { x: { dependencies: ["d1"] }, d1: { provenance: "dependency" } },
+          cwd,
+        );
+        const rootDataDir = await locations.pluginDataDir("mp", "x");
+        const depDataDir = await locations.pluginDataDir("mp", "d1");
+        for (const dataDir of [rootDataDir, depDataDir]) {
+          await mkdir(path.join(dataDir, "nested"), { recursive: true });
+          await writeFile(
+            path.join(dataDir, "nested", "session.bin"),
+            Buffer.from([0, 7, 255, 10]),
+          );
+        }
+
+        const { ctx, pi, notifications } = makeCtx();
+
+        // act
+        const outcome = await uninstallWithFreshOwner({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "x",
+          keepData,
+          prune: true,
+        });
+
+        // assert
+        assert.equal(outcome, undefined);
+        assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
+        assert.deepStrictEqual(await recordedInventory(locations), {});
+        assert.deepStrictEqual(await readDataTree(rootDataDir), expectedDataTree);
+        assert.deepStrictEqual(await readDataTree(depDataDir), expectedDataTree);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 for (const { title, holder } of [
   {
     title:

@@ -247,8 +247,8 @@ function ledgerOptionsFor(cwd: string): (member: ResolvedCascadeMember) => Insta
     marketplace: member.marketplace,
     plugin: member.name,
     removalOps: createRemovalOps(),
-    ...(member.pinnedOid !== undefined && { sourcePinOverride: member.pinnedOid }),
-    ...(member.pinnedVersion !== undefined && { pinVersionOverride: member.pinnedVersion }),
+    ...(member.pin !== undefined && { sourcePinOverride: member.pin.oid }),
+    ...(member.pin !== undefined && { pinVersionOverride: member.pin.version }),
   });
 }
 
@@ -1409,7 +1409,7 @@ test("RESV-03 the constraint step answers every member, pinning only the constra
   // assert
   assert.deepStrictEqual(resolution, {
     ok: true,
-    members: [{ ...bar, pinnedOid: PINNED_OID, pinnedVersion: "1.4.0" }, foo],
+    members: [{ ...bar, pin: { oid: PINNED_OID, version: "1.4.0" } }, foo],
   });
   assert.deepStrictEqual(
     seen.map((query) => query.pluginName),
