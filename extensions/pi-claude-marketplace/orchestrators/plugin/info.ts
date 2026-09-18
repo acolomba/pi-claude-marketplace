@@ -153,8 +153,8 @@ export interface GetPluginInfoOptions {
 export interface PluginInfoReader {
   readonly readTextFile: (filePath: string) => Promise<string>;
   readonly listDirectory: (directoryPath: string) => Promise<readonly Dirent[]>;
-  /** Follows symlinks; omitted by older readers to use the Node filesystem. */
-  readonly isRegularFile?: (filePath: string) => Promise<boolean>;
+  /** Follows symlinks; true only for a regular file. */
+  readonly isRegularFile: (filePath: string) => Promise<boolean>;
 }
 
 /**
@@ -537,7 +537,7 @@ async function readManifestCandidate(
   absPath: string,
 ): Promise<ManifestCandidateRead> {
   try {
-    if (!(await (reader.isRegularFile ?? isRegularFile)(absPath))) {
+    if (!(await reader.isRegularFile(absPath))) {
       return { kind: "absent" };
     }
 
@@ -566,7 +566,10 @@ function parseOwnManifest(raw: string): OwnManifestRead {
     return OWN_MANIFEST_NOT_READABLE;
   }
 
-  return { kind: "readable", dependencies: (parsed as Record<string, unknown>).dependencies };
+  return {
+    kind: "readable",
+    dependencies: "dependencies" in parsed ? parsed.dependencies : undefined,
+  };
 }
 
 /**
@@ -1171,9 +1174,7 @@ async function buildBlock(args: {
       ? OWN_MANIFEST_NOT_READABLE
       : await readOwnManifestDependencies(reader, ownPluginRoot);
   const dependencyList = renderDependencyList(
-    ownManifest.kind === "readable"
-      ? ownManifest.dependencies
-      : (entry as Record<string, unknown>).dependencies,
+    ownManifest.kind === "readable" ? ownManifest.dependencies : entry.dependencies,
     marketplace,
   );
   if (dependencyList === undefined) {

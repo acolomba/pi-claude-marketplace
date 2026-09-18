@@ -90,7 +90,7 @@ interface MutableDependency {
 }
 
 /**
- * Copy the optional fields that were declared, and report whether the element
+ * Copies the optional fields that were declared, and reports whether the element
  * survives. Absent means not declared and is simply skipped; present but
  * unrenderable makes the whole element unusable (D-01-33).
  */
@@ -111,7 +111,7 @@ function applyOptionalFields(target: MutableDependency, fields: RawFields): bool
   return true;
 }
 
-/** Validate one element's four fields, or report that it is invalid. */
+/** Validates one element's four fields, or reports that it is invalid. */
 function buildDependency(fields: RawFields): DeclaredDependency | undefined {
   if (!isRenderableDependencyToken(fields.name)) {
     return undefined;
@@ -123,31 +123,31 @@ function buildDependency(fields: RawFields): DeclaredDependency | undefined {
 }
 
 /**
- * The bare-string form, split in upstream's precedence order (D-01-27,
+ * Parses the bare-string form in upstream's precedence order (D-01-27,
  * D-01-28): the optional trailing `@^<range>` first, then the optional
  * `@<marketplace>`, then whatever remains is the name. The caret stays part of
  * the range value.
  */
 function parseStringElement(raw: string): DeclaredDependency | undefined {
-  const rangeIdx = raw.indexOf(RANGE_MARKER);
-  const address = rangeIdx === -1 ? raw : raw.slice(0, rangeIdx);
-  const version = rangeIdx === -1 ? undefined : raw.slice(rangeIdx + 1);
+  const rangeIndex = raw.indexOf(RANGE_MARKER);
+  const address = rangeIndex === -1 ? raw : raw.slice(0, rangeIndex);
+  const version = rangeIndex === -1 ? undefined : raw.slice(rangeIndex + 1);
 
-  const atIdx = address.indexOf("@");
-  if (atIdx === -1) {
+  const atIndex = address.indexOf("@");
+  if (atIndex === -1) {
     return buildDependency({ name: address, marketplace: undefined, version, sha: undefined });
   }
 
   return buildDependency({
-    name: address.slice(0, atIdx),
-    marketplace: address.slice(atIdx + 1),
+    name: address.slice(0, atIndex),
+    marketplace: address.slice(atIndex + 1),
     version,
     sha: undefined,
   });
 }
 
 /**
- * The object form. Four named keys are read off the widened record with
+ * Parses the object form. Four named keys are read off the widened record with
  * `=== undefined` absence tests; the record is never spread into the result,
  * so no key beyond the four named ones reaches a `DeclaredDependency`.
  */
@@ -160,20 +160,24 @@ function parseObjectElement(raw: Record<string, unknown>): DeclaredDependency | 
   });
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function parseElement(raw: unknown): DeclaredDependency | undefined {
   if (typeof raw === "string") {
     return parseStringElement(raw);
   }
 
-  if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
-    return parseObjectElement(raw as Record<string, unknown>);
+  if (isPlainObject(raw)) {
+    return parseObjectElement(raw);
   }
 
   return undefined;
 }
 
 /**
- * Parse a complete `dependencies` declaration in declaration order.
+ * Parses a complete `dependencies` declaration in declaration order.
  *
  * Absence and an empty array declare nothing. Any invalid element rejects the
  * entire declaration; callers apply the manifest or marketplace failure policy.

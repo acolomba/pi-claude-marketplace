@@ -2254,6 +2254,17 @@ async function writeUnder(filePath: string, bytes: string): Promise<void> {
   await writeFile(filePath, bytes, "utf8");
 }
 
+/**
+ * The Claude settings document that names `enabledPlugins` under the one
+ * path-sourced fixture marketplace at `marketplaceRoot`.
+ */
+function settingsNaming(marketplaceRoot: string, enabledPlugins: Record<string, boolean>): string {
+  return JSON.stringify({
+    enabledPlugins,
+    extraKnownMarketplaces: { "fixture-mp": { directory: marketplaceRoot } },
+  });
+}
+
 async function seedHookRoute(
   hooksRouting: HooksRouting,
   cwd: string,
@@ -2408,7 +2419,8 @@ test("resolves every collaborator from production when the caller supplies no de
 });
 
 test("D-04-07: promotes a recorded dependency the imported settings name instead of skipping it", async (t) => {
-  // arrange: the first import names `sample` alone, and the cascade records
+  // arrange
+  // The first import names `sample` alone, and the cascade records
   // `dep` as its dependency. The second import names both, which is the user
   // asking for `dep` by name -- so it reaches the install rather than the
   // already-installed skip, and the install's promotion arm flips its record.
@@ -2441,11 +2453,6 @@ test("D-04-07: promotes a recorded dependency the imported settings name instead
     JSON.stringify({ name: "dep", version: "1.0.0" }),
   );
   const settingsPath = path.join(cwd, ".claude", "settings.json");
-  const settingsNaming = (enabledPlugins: Record<string, boolean>): string =>
-    JSON.stringify({
-      enabledPlugins,
-      extraKnownMarketplaces: { "fixture-mp": { directory: marketplaceRoot } },
-    });
   const expectedSecondResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     installedPlugins: [
@@ -2469,7 +2476,7 @@ test("D-04-07: promotes a recorded dependency the imported settings name instead
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"] as const,
   };
-  await writeUnder(settingsPath, settingsNaming({ "sample@fixture-mp": true }));
+  await writeUnder(settingsPath, settingsNaming(marketplaceRoot, { "sample@fixture-mp": true }));
   await importClaudeSettings(importOptions);
   const recordedAfterFirst = await loadState(project.extensionRoot);
   assert.strictEqual(
@@ -2481,7 +2488,7 @@ test("D-04-07: promotes a recorded dependency the imported settings name instead
   // act
   await writeUnder(
     settingsPath,
-    settingsNaming({ "sample@fixture-mp": true, "dep@fixture-mp": true }),
+    settingsNaming(marketplaceRoot, { "sample@fixture-mp": true, "dep@fixture-mp": true }),
   );
   const secondResult = await importClaudeSettings(importOptions);
 
@@ -2506,7 +2513,8 @@ test("D-04-07: promotes a recorded dependency the imported settings name instead
 });
 
 test("D-04-07: promotes a partially installed dependency the imported settings name with the record's own consent", async (t) => {
-  // arrange: the first import adds the marketplace through `base`; a standalone
+  // arrange
+  // The first import adds the marketplace through `base`; a standalone
   // `--partial` install of `sample` then records `dep`, whose unsupported kind
   // makes it partially available, as a partially installed dependency. The
   // second import names all three. Import carries no `--partial` of its own,
@@ -2549,11 +2557,6 @@ test("D-04-07: promotes a partially installed dependency the imported settings n
     JSON.stringify({ name: "dep", version: "1.0.0", experimental: { themes: "./themes" } }),
   );
   const settingsPath = path.join(cwd, ".claude", "settings.json");
-  const settingsNaming = (enabledPlugins: Record<string, boolean>): string =>
-    JSON.stringify({
-      enabledPlugins,
-      extraKnownMarketplaces: { "fixture-mp": { directory: marketplaceRoot } },
-    });
   const expectedSecondResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     installedPlugins: [
@@ -2581,7 +2584,7 @@ test("D-04-07: promotes a partially installed dependency the imported settings n
     hooksRouting,
     selectedScopes: ["project"] as const,
   };
-  await writeUnder(settingsPath, settingsNaming({ "base@fixture-mp": true }));
+  await writeUnder(settingsPath, settingsNaming(marketplaceRoot, { "base@fixture-mp": true }));
   await importClaudeSettings(importOptions);
   const installPlugin = createNodeInstallPlugin(hooksRouting, completionCacheFor(hooksRouting));
   await installPlugin({
@@ -2605,11 +2608,16 @@ test("D-04-07: promotes a partially installed dependency the imported settings n
   // act
   await writeUnder(
     settingsPath,
-    settingsNaming({ "base@fixture-mp": true, "sample@fixture-mp": true, "dep@fixture-mp": true }),
+    settingsNaming(marketplaceRoot, {
+      "base@fixture-mp": true,
+      "sample@fixture-mp": true,
+      "dep@fixture-mp": true,
+    }),
   );
   const secondResult = await importClaudeSettings(importOptions);
 
-  // assert: the same one-field flip the fully-supported record gets
+  // assert
+  // The same one-field flip the fully-supported record gets.
   assert.deepStrictEqual(secondResult, expectedSecondResult);
   assert.deepStrictEqual(
     (await loadState(project.extensionRoot)).marketplaces["fixture-mp"]?.plugins["dep"],
@@ -2628,7 +2636,8 @@ test("D-04-07: promotes a partially installed dependency the imported settings n
 });
 
 test("D-04-07: promotes a disabled dependency the imported settings name and declares it enabled", async (t) => {
-  // arrange: the first import's cascade records `dep`, and the disable verb
+  // arrange
+  // The first import's cascade records `dep`, and the disable verb
   // then takes it off disk and declares `{ enabled: false }` for it. The second
   // import names `dep`, which is the user asking for it by name: the promotion
   // re-materializes the record, and the post-pass writes the enable path's own
@@ -2671,11 +2680,6 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
     "---\nname: tool\n---\n\nBody.\n",
   );
   const settingsPath = path.join(cwd, ".claude", "settings.json");
-  const settingsNaming = (enabledPlugins: Record<string, boolean>): string =>
-    JSON.stringify({
-      enabledPlugins,
-      extraKnownMarketplaces: { "fixture-mp": { directory: marketplaceRoot } },
-    });
   const expectedSecondResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     changedResources: true,
@@ -2703,7 +2707,7 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
     selectedScopes: ["project"] as const,
   };
   const skillDir = path.join(project.skillsTargetDir, "dep:tool");
-  await writeUnder(settingsPath, settingsNaming({ "sample@fixture-mp": true }));
+  await writeUnder(settingsPath, settingsNaming(marketplaceRoot, { "sample@fixture-mp": true }));
   await importClaudeSettings(importOptions);
   await createNodeSetPluginEnabled(hooksRouting)({
     ctx,
@@ -2718,16 +2722,17 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
     ?.plugins["dep"];
   assert.strictEqual(dependencyBefore?.provenance, "dependency");
   assert.strictEqual(dependencyBefore.enabled, false, "the disable verb disabled the dependency");
-  await assert.rejects(stat(skillDir), "and took its skill off disk");
+  await assert.rejects(stat(skillDir), { code: "ENOENT" }, "and took its skill off disk");
 
   // act
   await writeUnder(
     settingsPath,
-    settingsNaming({ "sample@fixture-mp": true, "dep@fixture-mp": true }),
+    settingsNaming(marketplaceRoot, { "sample@fixture-mp": true, "dep@fixture-mp": true }),
   );
   const secondResult = await importClaudeSettings(importOptions);
 
-  // assert: the record is the one the cascade wrote, enabled again and
+  // assert
+  // The record is the one the cascade wrote, enabled again and
   // promoted, with its update time moved; the skill is back on disk; the
   // declaration is the enable path's own; and the reload the row asks for
   // finds nothing to plan.
@@ -2760,7 +2765,8 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
 });
 
 test("D-04-07: declares a promoted dependency enabled in the local file when the disable verb declared it there", async (t) => {
-  // arrange: the first import's cascade records `dep`, and `disable --local`
+  // arrange
+  // The first import's cascade records `dep`, and `disable --local`
   // declares `{ enabled: false }` for it in the local file, whose entry shadows
   // the base entry wholesale (CFG-02). The second import names `dep`: the
   // promotion re-materializes the record, and the post-pass writes the enable
@@ -2804,11 +2810,6 @@ test("D-04-07: declares a promoted dependency enabled in the local file when the
     "---\nname: tool\n---\n\nBody.\n",
   );
   const settingsPath = path.join(cwd, ".claude", "settings.json");
-  const settingsNaming = (enabledPlugins: Record<string, boolean>): string =>
-    JSON.stringify({
-      enabledPlugins,
-      extraKnownMarketplaces: { "fixture-mp": { directory: marketplaceRoot } },
-    });
   const expectedSecondResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     changedResources: true,
@@ -2840,7 +2841,7 @@ test("D-04-07: declares a promoted dependency enabled in the local file when the
     selectedScopes: ["project"] as const,
   };
   const skillDir = path.join(project.skillsTargetDir, "dep:tool");
-  await writeUnder(settingsPath, settingsNaming({ "sample@fixture-mp": true }));
+  await writeUnder(settingsPath, settingsNaming(marketplaceRoot, { "sample@fixture-mp": true }));
   await importClaudeSettings(importOptions);
   await createNodeSetPluginEnabled(hooksRouting)({
     ctx,
@@ -2861,16 +2862,17 @@ test("D-04-07: declares a promoted dependency enabled in the local file when the
     configBytes({ marketplaces: {}, plugins: { "dep@fixture-mp": { enabled: false } } }),
     "and declared the disable in the local file",
   );
-  await assert.rejects(stat(skillDir), "and took its skill off disk");
+  await assert.rejects(stat(skillDir), { code: "ENOENT" }, "and took its skill off disk");
 
   // act
   await writeUnder(
     settingsPath,
-    settingsNaming({ "sample@fixture-mp": true, "dep@fixture-mp": true }),
+    settingsNaming(marketplaceRoot, { "sample@fixture-mp": true, "dep@fixture-mp": true }),
   );
   const secondResult = await importClaudeSettings(importOptions);
 
-  // assert: the record is enabled again and promoted; the skill is back on
+  // assert
+  // The record is enabled again and promoted; the skill is back on
   // disk; the local file carries the enable path's own declaration and the base
   // file the bare key; the merged view reads the local entry; and the reload the
   // row asks for finds nothing to plan.
@@ -2908,7 +2910,8 @@ test("D-04-07: declares a promoted dependency enabled in the local file when the
 });
 
 test("D-04-07: keeps the enabled declaration in the base file when the local file declares only other keys", async (t) => {
-  // arrange: a disabled dependency record, its `{ enabled: false }` in the base
+  // arrange
+  // A disabled dependency record, its `{ enabled: false }` in the base
   // file, and a local file that declares a different key. The file that
   // declares the promoted key takes the stamp (D-103-16); a local file that
   // merely exists does not.
@@ -2974,7 +2977,8 @@ test("D-04-07: keeps the enabled declaration in the base file when the local fil
 });
 
 test("D-04-07: marks a dependency promoted at lock time by the same import's earlier cascade", async (t) => {
-  // arrange: one import names `sample` and then `dep`. The scope's snapshot is
+  // arrange
+  // One import names `sample` and then `dep`. The scope's snapshot is
   // taken once before the loop, so when `sample`'s cascade records `dep`, the
   // `dep` entry still sees no record and reaches the install with nothing to
   // promote at its call site; the install finds the record under its lock and

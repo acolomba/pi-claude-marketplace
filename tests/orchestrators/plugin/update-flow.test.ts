@@ -427,12 +427,9 @@ type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 
 function makePluginRecord(
   version: string,
-  overrides: Partial<PluginRecord["resources"]> & {
-    enabled?: boolean;
-    provenance?: PluginRecord["provenance"];
-  } = {},
+  overrides: Partial<PluginRecord["resources"]> & { enabled?: boolean } = {},
 ): PluginRecord {
-  const { enabled = true, provenance = "explicit", ...resources } = overrides;
+  const { enabled = true, ...resources } = overrides;
   return {
     version,
     resolvedSource: "/tmp",
@@ -447,7 +444,7 @@ function makePluginRecord(
       hooks: resources.hooks ?? [],
     },
     enabled,
-    provenance,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };

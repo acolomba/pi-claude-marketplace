@@ -86,10 +86,6 @@ import type {
   HooksRuntime,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
-import type {
-  UninstallPluginOptions,
-  UninstallPluginOutcome,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { ReconcileStateReader } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import type { ApplyReconcileOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -1366,21 +1362,7 @@ describe("applyReconcile", () => {
     };
     const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
     const completionCache = createCompletionCache();
-    const real = createNodeUninstallPlugin(hooksRouting, completionCache);
-    const calls: string[] = [];
-    function uninstallPlugin(
-      opts: UninstallPluginOptions & { notifications: { mode: "orchestrated" } },
-    ): Promise<UninstallPluginOutcome>;
-    function uninstallPlugin(
-      opts: UninstallPluginOptions,
-    ): Promise<UninstallPluginOutcome | undefined>;
-    function uninstallPlugin(
-      opts: UninstallPluginOptions,
-    ): Promise<UninstallPluginOutcome | undefined> {
-      calls.push(`${opts.plugin}@${opts.marketplace}`);
-      return real(opts);
-    }
-
+    const uninstallPlugin = t.mock.fn(createNodeUninstallPlugin(hooksRouting, completionCache));
     const applyWithRace = applyAfterSelectedStateRace(project, competingState);
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
@@ -1398,7 +1380,6 @@ describe("applyReconcile", () => {
     });
 
     // assert
-    assert.deepStrictEqual(calls, ["gone@mp", "orphan@mp"]);
     assert.deepStrictEqual(notifications, [
       {
         message:
@@ -1415,6 +1396,12 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(
       Object.keys((await loadState(project.extensionRoot)).marketplaces["mp"]?.plugins ?? {}),
       ["orphan", "keeper"],
+    );
+    assert.deepStrictEqual(
+      uninstallPlugin.mock.calls.map(
+        (call) => `${call.arguments[0].plugin}@${call.arguments[0].marketplace}`,
+      ),
+      ["gone@mp", "orphan@mp"],
     );
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();

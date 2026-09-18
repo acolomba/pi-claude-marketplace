@@ -197,7 +197,7 @@ async function resolvePluginRootFsOnly(
 }
 
 /**
- * Parse one candidate's bytes into the `dependencies` value it declares. A
+ * Parses one candidate's bytes into the `dependencies` value it declares. A
  * parse throw, or a payload that is not a JSON object, is a
  * present-but-unusable manifest and reads as the `unusable` arm.
  */
@@ -215,7 +215,7 @@ function parseOwnManifest(raw: string): OwnManifestRead {
 }
 
 /**
- * Read ONE candidate. `undefined` means ABSENT and is the only answer the walk
+ * Reads ONE candidate. `undefined` means ABSENT and is the only answer the walk
  * may continue past; every other answer ENDS the walk (D-01-07).
  *
  * Stat precedes the read so a device node or a FIFO planted at a candidate path
@@ -242,7 +242,7 @@ async function readManifestCandidate(
   return parseOwnManifest(raw);
 }
 
-/** Walk the shared candidate ordering under one plugin root. */
+/** Walks the shared candidate ordering under one plugin root. */
 async function readOwnManifest(
   reader: DependencyDeclarationReader,
   pluginRoot: string,

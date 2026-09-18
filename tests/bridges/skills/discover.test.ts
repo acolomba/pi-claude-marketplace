@@ -29,6 +29,14 @@ function resolvedPlugin(pluginRoot: string, skills: readonly string[]): Resolved
   };
 }
 
+async function writeSkill(skillDirectory: string, name: string): Promise<void> {
+  await mkdir(skillDirectory, { recursive: true });
+  await writeFile(
+    path.join(skillDirectory, "SKILL.md"),
+    `---\nname: ${name}\ndescription: The ${name} skill.\n---\n\nThe ${name} body.\n`,
+  );
+}
+
 test("returns no skills when the plugin declares no skill paths", async (t) => {
   // arrange
   const pluginRoot = await createPluginRoot(t, "skill-discover-empty-");
@@ -404,14 +412,6 @@ test("reports a self skill loss without traversing its nested directories", asyn
     ],
   });
 });
-
-async function writeSkill(skillDirectory: string, name: string): Promise<void> {
-  await mkdir(skillDirectory, { recursive: true });
-  await writeFile(
-    path.join(skillDirectory, "SKILL.md"),
-    `---\nname: ${name}\ndescription: The ${name} skill.\n---\n\nThe ${name} body.\n`,
-  );
-}
 
 test("MANF-03 a declared skill subdir and its conventional parent yield one skill", async (t) => {
   // arrange

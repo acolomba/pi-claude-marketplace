@@ -14,10 +14,11 @@
 // composers -- `composeCascadeFailureMessage` and `composeCascadeMemberRows` --
 // once per failure arm and collects the reasons they emit, so a token the
 // composer stops stamping, or starts stamping, moves the actual set. The arm
-// fixtures are proven TOTAL at compile time: each discriminant list carries an
-// `Exclude<...> extends never` proof, so an arm added to
-// `DependencyClosureResult` or `CascadeConstraintFailure` without a fixture
-// here is a TS2344 build failure rather than a silently narrower sweep.
+// fixtures are proven TOTAL at compile time -- the closure list by the `Record`
+// key set it satisfies, the constraint list by an `Exclude<...> extends never`
+// proof on `kind` -- so an arm added to `DependencyClosureResult` or
+// `CascadeConstraintFailure` without a fixture here is a build failure rather
+// than a silently narrower sweep.
 
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -131,36 +132,30 @@ const CONSTRAINT_FAILURES = {
 } as const satisfies Record<string, CascadeConstraintFailure>;
 
 /**
- * Totality proofs. Each resolves to `never` only when every arm of the union
- * has a fixture above; a non-`never` result is a TS2344 compile error, so an
- * arm added without a fixture cannot reach a green run.
- *
- * The constraint half is proven on `kind` alone -- the `why` split is a second
- * discriminant the key strings carry, and a `kind` covered by one fixture is a
- * `kind` this gate reaches.
+ * Totality proof for the constraint arms. `CLOSURE_FAILURES` needs none: the
+ * `Record` it satisfies is keyed by the arm discriminant, so a missing arm is
+ * already a missing property. `CONSTRAINT_FAILURES` is keyed by `string`
+ * because the `why` split doubles one `kind`, so its proof is on `kind` alone:
+ * `AssertNever` accepts `never` only, and a `kind` without a fixture leaves
+ * `UncoveredConstraintArm` non-`never`, a TS2344 compile error.
  */
-type _AssertNever<T extends never> = T;
-type _UncoveredClosureArm = Exclude<ClosureFailure["reason"], keyof typeof CLOSURE_FAILURES>;
-type _UncoveredConstraintArm = Exclude<
+type AssertNever<T extends never> = T;
+type UncoveredConstraintArm = Exclude<
   CascadeConstraintFailure["kind"],
   (typeof CONSTRAINT_FAILURES)[keyof typeof CONSTRAINT_FAILURES]["kind"]
 >;
-type _ArmCoverageProof = [
-  _AssertNever<_UncoveredClosureArm>,
-  _AssertNever<_UncoveredConstraintArm>,
-];
-void (undefined as unknown as _ArmCoverageProof);
+void ([] satisfies AssertNever<UncoveredConstraintArm>[]);
 
 /** Every reason the cascade's failure block stamps, across every arm. */
 function stampedFailureReasons(): ReadonlySet<Reason> {
   const stamped = new Set<Reason>();
-  const collect = (rows: readonly { readonly reasons?: readonly Reason[] }[]): void => {
+  function collect(rows: readonly { readonly reasons?: readonly Reason[] }[]): void {
     for (const row of rows) {
       for (const reason of row.reasons ?? []) {
         stamped.add(reason);
       }
     }
-  };
+  }
 
   for (const failure of Object.values(CLOSURE_FAILURES)) {
     collect(
@@ -187,14 +182,19 @@ function stampedFailureReasons(): ReadonlySet<Reason> {
   return stamped;
 }
 
+/** Reads the doc section under `heading`, up to the next `## ` heading. */
+async function readDocSection(heading: string): Promise<string> {
+  const doc = await readFile(path.join(REPO_ROOT, DOC_REL), "utf8");
+  const start = doc.indexOf(heading);
+  assert.notStrictEqual(start, -1, `${DOC_REL}: the "${heading}" section is gone`);
+
+  const next = doc.indexOf("\n## ", start + 1);
+  return next === -1 ? doc.slice(start) : doc.slice(start, next);
+}
+
 /** Every `{token}` the doc's failure table names, in table order. */
 async function documentedFailureReasons(): Promise<readonly string[]> {
-  const doc = await readFile(path.join(REPO_ROOT, DOC_REL), "utf8");
-  const heading = doc.indexOf("## Why a dependency can fail");
-  assert.notStrictEqual(heading, -1, `${DOC_REL}: the failure section heading is gone`);
-
-  const next = doc.indexOf("\n## ", heading + 1);
-  const section = next === -1 ? doc.slice(heading) : doc.slice(heading, next);
+  const section = await readDocSection("## Why a dependency can fail");
   return [...section.matchAll(/^\|\s*`\{([^}]+)\}`\s*\|/gmu)].map((match) => match[1] ?? "");
 }
 
@@ -247,13 +247,12 @@ test("RESV-06 the skip section names the reason a disabled dependency's row carr
   assert.ok(skipped !== undefined, "the disabled skip still renders a skipped row");
 
   // act
-  const doc = await readFile(path.join(REPO_ROOT, DOC_REL), "utf8");
+  const section = await readDocSection("## What happens to a dependency you already installed");
 
   // assert
-  for (const reason of skipped.reasons) {
-    assert.ok(
-      doc.includes(reason),
-      `${DOC_REL}: the skipped dependency's row carries {${reason}} and the document never names it`,
-    );
-  }
+  assert.deepStrictEqual(
+    skipped.reasons.filter((reason) => !section.includes(reason)),
+    [],
+    `${DOC_REL}: the skipped dependency's row carries reasons the skip section never names`,
+  );
 });

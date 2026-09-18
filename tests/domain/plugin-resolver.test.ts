@@ -32,9 +32,9 @@ for (const { mode, resolve } of [
 ]) {
   test(`${mode} resolution rejects invalid dependencies in the selected manifest`, async (t) => {
     // arrange
-    const marketplaceRoot = await mkdtemp(path.join(os.tmpdir(), "invalid-dependencies-"));
-    t.after(() => rm(marketplaceRoot, { recursive: true, force: true }));
-    const pluginRoot = path.join(marketplaceRoot, "host");
+    const temporaryMarketplace = await mkdtemp(path.join(os.tmpdir(), "invalid-dependencies-"));
+    t.after(() => rm(temporaryMarketplace, { recursive: true, force: true }));
+    const pluginRoot = path.join(temporaryMarketplace, "host");
     await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
     await writeFile(
       path.join(pluginRoot, ".claude-plugin", "plugin.json"),
@@ -45,7 +45,7 @@ for (const { mode, resolve } of [
     // act
     const resolved = await resolve(
       { name: "host", source: "./host", dependencies: ["entry"] },
-      { marketplaceRoot },
+      { marketplaceRoot: temporaryMarketplace },
     );
 
     // assert

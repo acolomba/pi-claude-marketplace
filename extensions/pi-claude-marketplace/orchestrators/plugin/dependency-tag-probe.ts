@@ -125,7 +125,7 @@ interface TagListingRequest {
 }
 
 /**
- * Read the repository's tags, serving a memoized listing where one is held.
+ * Reads the repository's tags, serving a memoized listing where one is held.
  *
  * A throw becomes the failure arm rather than escaping, and the memo entry is
  * dropped on failure so a later attempt in the same cascade re-queries instead
@@ -155,7 +155,7 @@ async function listCandidateTags(request: TagListingRequest): Promise<TagListing
 }
 
 /**
- * Read one advertised tag as a pin for this dependency, or as nothing.
+ * Reads one advertised tag as a pin for this dependency, or as nothing.
  *
  * The prefix test is what keeps the probe from resolving an arbitrary unpinned
  * ref: a tag that does not carry THIS dependency's own release prefix is never
@@ -177,7 +177,7 @@ function readPinCandidate(tag: RemoteTag, prefix: string, range: string): Pinned
 }
 
 /**
- * Pick the highest-versioned satisfying tag, or report that none satisfies.
+ * Picks the highest-versioned satisfying tag, or reports that none satisfies.
  *
  * The satisfaction test is `domain/dependency-range.ts`'s, not a second
  * evaluator: one module owns what it means for a version to satisfy a range,
@@ -203,7 +203,7 @@ function selectHighestSatisfyingTag(
 }
 
 /**
- * Resolve a constrained dependency to the highest release tag on its source
+ * Resolves a constrained dependency to the highest release tag on its source
  * repository that satisfies the constraint.
  *
  * The query URL is the source's canonical clone URL carried to its wire form

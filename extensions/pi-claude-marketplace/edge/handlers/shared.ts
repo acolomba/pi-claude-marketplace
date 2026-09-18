@@ -29,30 +29,44 @@ export interface ConsumeLongFlags {
   readonly consumeLongFlags: readonly string[];
 }
 
+/** The scan every caller receives: the scope-target verdict and the residual argument text. */
+export interface LocalFlagScan {
+  readonly local: boolean;
+  readonly residualArgs: string;
+}
+
+/** The consuming-mode scan: the accepted flags the scan removed, on top of `LocalFlagScan`. */
+export interface ConsumedFlagScan extends LocalFlagScan {
+  readonly consumedFlags: ReadonlySet<string>;
+}
+
 /**
- * Extracts local and accepted boolean flags in one position-independent scan.
- * Scope/value pairs remain for the downstream parser. Array-form callers keep
- * their pass-through flags and legacy residual shape; consuming callers receive
- * a flag set and reject unknown short options as well as unknown long options.
+ * Extracts the scope-target flag, and in consuming mode the caller's accepted
+ * boolean flags, in one position-independent scan. A `--scope <value>` pair
+ * stays in the residual for the downstream parser. Array-form callers keep
+ * their pass-through flags verbatim in the residual and only an unknown long
+ * flag is rejected; consuming callers receive the consumed flags as a set and
+ * every unknown option, short or long, is rejected. Returns `undefined` once
+ * the usage error is notified, so the caller returns early.
  */
 export function extractLocalFlag(
   args: string,
   ctx: ExtensionCommandContext,
   usage: string,
   flags: ConsumeLongFlags,
-): { local: boolean; residualArgs: string; consumedFlags: ReadonlySet<string> } | undefined;
+): ConsumedFlagScan | undefined;
 export function extractLocalFlag(
   args: string,
   ctx: ExtensionCommandContext,
   usage: string,
   flags?: readonly string[],
-): { local: boolean; residualArgs: string } | undefined;
+): LocalFlagScan | undefined;
 export function extractLocalFlag(
   args: string,
   ctx: ExtensionCommandContext,
   usage: string,
   flags: readonly string[] | ConsumeLongFlags = [],
-): { local: boolean; residualArgs: string; consumedFlags?: ReadonlySet<string> } | undefined {
+): LocalFlagScan | ConsumedFlagScan | undefined {
   const consuming = "consumeLongFlags" in flags;
   const acceptedFlags = consuming ? flags.consumeLongFlags : flags;
   const consumedFlags = new Set<string>();
@@ -90,31 +104,28 @@ export function extractLocalFlag(
     }
   }
 
-  // WR-03: the two modes deliberately part company on a SCOPE_TARGET_FLAG token
-  // sitting in the `--scope` VALUE position. Array-form callers strip every such
-  // token regardless of position, so `install --scope --local foo@bar` reaches
-  // the downstream parser as `--scope foo@bar` and it complains about the
+  // WR-03: the two modes differ on a SCOPE_TARGET_FLAG token sitting in the
+  // `--scope` VALUE position. Array-form callers strip every such token
+  // regardless of position, so `install --scope --local foo@bar` reaches the
+  // downstream parser as `--scope foo@bar` and it complains about the
   // positional. Consuming callers keep the token verbatim, so the same input
-  // reaches the parser as `--scope --local foo@bar` and it names the offending
-  // value itself -- the better message, and the reason the split exists rather
-  // than being an oversight. Both modes still remove a SCOPE_TARGET_FLAG token
-  // in every other position (the loop pops it above).
+  // reaches the parser as `--scope --local foo@bar` and its message names the
+  // offending value. Both modes remove a SCOPE_TARGET_FLAG token in every other
+  // position (the loop pops it above).
   const residualArgs = residualTokens
     .filter((token) => consuming || token !== SCOPE_TARGET_FLAG)
     .join(" ");
-  // IN-03: the consuming overload promises a NON-optional `consumedFlags`, but
-  // the implementation signature types it optional and TypeScript checks an
-  // overload against its implementation only loosely -- returning the consuming
-  // branch without the field would compile and break `consumedFlags.has(...)` at
-  // the call site at runtime. The `satisfies` is what makes the omission a
-  // compile error here, where the branch is chosen.
-  return consuming
-    ? ({ local, residualArgs, consumedFlags } satisfies {
-        local: boolean;
-        residualArgs: string;
-        consumedFlags: ReadonlySet<string>;
-      })
-    : { local, residualArgs };
+  if (consuming) {
+    // IN-03: the consuming overload promises `consumedFlags`, but TypeScript
+    // checks an overload against the implementation signature only loosely,
+    // and that signature admits a plain `LocalFlagScan` -- returning this
+    // branch without the field would compile and break `consumedFlags.has(...)`
+    // at the call site at runtime. The `satisfies` makes the omission a compile
+    // error here, where the branch is chosen.
+    return { local, residualArgs, consumedFlags } satisfies ConsumedFlagScan;
+  }
+
+  return { local, residualArgs };
 }
 
 /**

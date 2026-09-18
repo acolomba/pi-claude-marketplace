@@ -72,6 +72,7 @@ import type {
 } from "./install-outcome.ts";
 import type { InstallMsg } from "./install.messaging.ts";
 import type { ClosureLookupResult, ClosureSubject } from "../../domain/dependency-closure.ts";
+import type { PluginConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
@@ -426,7 +427,7 @@ async function hydrateInstalledHooks(args: {
  * would add `"marketplaces": {}` to a file that declares none.
  */
 async function writeOrchestratedDeclarations(args: {
-  readonly current: Parameters<typeof writePluginConfigEntry>[0];
+  readonly current: ScopeConfig;
   readonly targetConfigPath: string;
   readonly scopeRoot: string;
   readonly plugin: string;
@@ -851,8 +852,8 @@ interface PromotionArgs {
   readonly locations: ScopedLocations;
   readonly orchestrated: boolean;
   readonly config: {
-    readonly current: Parameters<typeof writeAdoptingConfigEntries>[0]["current"];
-    readonly sibling: Parameters<typeof writeAdoptingConfigEntries>[0]["sibling"];
+    readonly current: ScopeConfig;
+    readonly sibling: ScopeConfig | undefined;
     readonly targetConfigPath: string;
   };
   readonly capture: InstallFailureCapture;
@@ -948,7 +949,7 @@ function refusesPromotion(opts: InstallPluginOptions, record: PluginInstallRecor
  */
 async function declarePromotedPlugin(
   args: PromotionArgs,
-  pluginPatch: Parameters<typeof writeAdoptingConfigEntries>[0]["pluginPatch"],
+  pluginPatch: Partial<PluginConfigEntry>,
 ): Promise<void> {
   if (args.orchestrated) {
     return;

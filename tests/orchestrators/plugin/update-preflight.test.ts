@@ -26,11 +26,7 @@ import type { NotificationContext } from "../../../extensions/pi-claude-marketpl
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 
-function pluginRecord(
-  version: string,
-  enabled = true,
-  provenance: PluginRecord["provenance"] = "explicit",
-): PluginRecord {
+function pluginRecord(version: string, enabled = true): PluginRecord {
   return {
     version,
     resolvedSource: "/previous/plugin",
@@ -43,7 +39,7 @@ function pluginRecord(
       hooks: ["hello"],
     },
     enabled,
-    provenance,
+    provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };

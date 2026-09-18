@@ -171,7 +171,7 @@ async function readRecordDeclarations(
 }
 
 /**
- * Index every record in the scope except `exclude`, stopping at the FIRST
+ * Indexes every record in the scope except `exclude`, stopping at the FIRST
  * record whose declarations cannot be established.
  */
 export async function buildScopeDeclarationIndex(

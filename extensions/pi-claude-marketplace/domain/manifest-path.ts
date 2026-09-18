@@ -6,7 +6,7 @@
 // decides which file describes a plugin shipping both (MANF-01, MANF-02).
 //
 // Every reader that looks for a manifest walks this list instead of joining a
-// path of its own: `domain/resolver.ts::readManifest`,
+// path of its own: `domain/plugin-resolver.ts::readManifest`,
 // `orchestrators/plugin/shared.ts::resolvePluginVersion` tier 1, the
 // `orchestrators/plugin/info.ts` dependency read, and
 // `orchestrators/plugin/dependency-declaration-read.ts`, the cascade's read of

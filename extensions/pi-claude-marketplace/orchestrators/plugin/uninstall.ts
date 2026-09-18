@@ -282,9 +282,9 @@ const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
  * the typed-cause dispatch in `orchestrators/marketplace/remove.ts`: the
  * refusal carries its own token and is classified FIRST (before the errno
  * fallthrough could read it as `unreadable`), then instanceof
- * `AgentsUnstageFailureError`, `NodeJS.ErrnoException.code` second,
- * permissive fallback last. Closed-set Reasons live in
- * `shared/notification-types.ts::REASONS`.
+ * `StateLockHeldError`, then instanceof `AgentsUnstageFailureError`, then
+ * `NodeJS.ErrnoException.code`, permissive fallback last. Closed-set Reasons
+ * live in `shared/notification-types.ts::REASONS`.
  */
 function narrowCascadeFailure(cause: Error): ContentReason {
   if (cause instanceof UninstallRefusedError) {
@@ -726,10 +726,10 @@ async function sweepPluginFromConfigLayers(
 /**
  * IN-05: the post-commit cleanup's inputs as one bag rather than six
  * positionals. TypeScript accepts a function of FEWER parameters where more are
- * expected, so with positionals a five-parameter double injected through
- * `UninstallTransaction.runPostCommitCleanup` still satisfied the `typeof` seam
- * while silently ignoring the data disposition. A missing bag field is a compile
- * error in any double instead.
+ * expected, so a positional signature would let a five-parameter double
+ * injected through `UninstallTransaction.runPostCommitCleanup` satisfy the
+ * `typeof` seam while silently ignoring the data disposition. A missing bag
+ * field is a compile error in any double.
  */
 interface PostUninstallCleanupOptions {
   readonly completionCache: CompletionCache;
@@ -873,13 +873,13 @@ function emitAlreadyGone(args: {
 function buildUninstalledRow(
   plugin: string,
   removedVersion: string | undefined,
-  keepData: boolean | undefined,
+  keepData: boolean,
 ): PluginUninstalledMessage {
   return {
     status: "uninstalled",
     name: plugin,
     ...(removedVersion !== undefined && { version: removedVersion }),
-    ...(keepData === true && { reasons: ["data kept"] as const }),
+    ...(keepData && { reasons: ["data kept"] as const }),
     // D-03/D-06: realized uninstall transition -> info, reloads Pi resources.
     severity: "info",
     needsReload: true,
@@ -1215,7 +1215,7 @@ async function uninstallPluginWithTransaction(
   // PRUNE-04: the cardinality stays `single` with members present -- the user
   // named ONE plugin, and the pruned rows are that uninstall's consequence
   // (the install cascade's precedent), so no tally line joins the report.
-  const uninstalledRow = buildUninstalledRow(plugin, removedVersion, opts.keepData);
+  const uninstalledRow = buildUninstalledRow(plugin, removedVersion, keepData);
   notifyWithContext(
     ctx,
     pi,

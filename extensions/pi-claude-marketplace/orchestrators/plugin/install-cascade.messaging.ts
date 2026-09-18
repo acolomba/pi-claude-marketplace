@@ -233,7 +233,14 @@ export function composeCascadeMemberRows(args: {
   return sortRows(rows, args.scope);
 }
 
-/** The subject, brace and cause a closure failure resolves to. */
+/**
+ * The subject, brace and cause a closure failure resolves to.
+ *
+ * The exhaustive `switch` deliberately has no runtime default: under
+ * `noImplicitReturns`, a future fifth `DependencyClosureResult` failure reason
+ * makes this function fail typecheck instead of falling through to a `default`
+ * arm no case can ever reach.
+ */
 function closureFailureFacts(
   failure: Extract<DependencyClosureResult, { readonly ok: false }>,
   rootKey: string,
@@ -300,7 +307,14 @@ function rangeConflictFacts(
       };
 }
 
-/** The subject, brace and cause a constraint failure resolves to. */
+/**
+ * The subject, brace and cause a constraint failure resolves to.
+ *
+ * The exhaustive `switch` deliberately has no runtime default: under
+ * `noImplicitReturns`, a future sixth `CascadeConstraintFailure` kind makes
+ * this function fail typecheck instead of falling through to a `default` arm
+ * no case can ever reach.
+ */
 function constraintFailureFacts(failure: CascadeConstraintFailure): CascadeFailureFacts {
   switch (failure.kind) {
     case "range-conflict":

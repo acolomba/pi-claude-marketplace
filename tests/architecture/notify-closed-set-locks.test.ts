@@ -50,7 +50,7 @@ test("OUT-08: REASONS is the closed 56-entry reason set", () => {
   // (43 -> 44).
   // DATA-01 / WR-06: +1 for `data kept`, uninstall's data-disposition marker --
   // the token that separates the preserving branch from the destructive default
-  // the two used to render byte-identically (44 -> 45).
+  // (44 -> 45).
   // RESV-02..06: +7 for the dependency-cascade vocabulary -- `no matching
   // version`, `version conflict`, `constraint too complex`, `invalid version
   // constraint`, `dependency marketplace not added`, `dependency cycle` and

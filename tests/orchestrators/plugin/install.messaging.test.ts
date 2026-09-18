@@ -577,11 +577,13 @@ describe("composeInstallFailureMessage", () => {
 
 describe("composePromotedRow", () => {
   test("D-04-07: composes an installed row carrying the promotion brace at info severity with no reload", () => {
-    // arrange
-    const args = { plugin: "linter", version: "3.0.0", scope: "user" as const, needsReload: false };
-
     // act
-    const row = composePromotedRow(args);
+    const row = composePromotedRow({
+      plugin: "linter",
+      version: "3.0.0",
+      scope: "user",
+      needsReload: false,
+    });
 
     // assert
     assert.deepStrictEqual(row, {
@@ -597,11 +599,13 @@ describe("composePromotedRow", () => {
   });
 
   test("D-04-07: stamps the reload hint the caller reports for a re-materialized record", () => {
-    // arrange
-    const args = { plugin: "linter", version: "3.0.0", scope: "user" as const, needsReload: true };
-
     // act
-    const row = composePromotedRow(args);
+    const row = composePromotedRow({
+      plugin: "linter",
+      version: "3.0.0",
+      scope: "user",
+      needsReload: true,
+    });
 
     // assert
     assert.deepStrictEqual(row, {
@@ -617,11 +621,13 @@ describe("composePromotedRow", () => {
   });
 
   test("D-04-07: carries the promotion brace both surfaces spell once", () => {
-    // arrange
-    const args = { plugin: "linter", version: "3.0.0", scope: "user" as const, needsReload: false };
-
     // act
-    const row = composePromotedRow(args);
+    const row = composePromotedRow({
+      plugin: "linter",
+      version: "3.0.0",
+      scope: "user",
+      needsReload: false,
+    });
 
     // assert: the very tuple import's promoted row reads, so the two surfaces
     // cannot drift apart in token set or order.

@@ -69,7 +69,11 @@ import { makeUninstallHandler } from "../../../../extensions/pi-claude-marketpla
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
-import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
+import {
+  buildInstalledPluginRecord,
+  mergeMarketplaceIntoState,
+  type SeededResources,
+} from "../marketplace-seed.ts";
 
 import type {
   HooksRouting,
@@ -251,7 +255,10 @@ function alphaManifestPath(workspace: HermeticWorkspace): string {
   return path.join(workspace.cwd, "alpha-src", ".claude-plugin", "marketplace.json");
 }
 
-const EMPTY_RESOURCES = { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] };
+/** Fresh empty inventory axes, so no two seeded records share an array. */
+function emptyResources(): SeededResources {
+  return { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] };
+}
 
 /**
  * Seed `demo@alpha` (installed by name) into one scope. With
@@ -273,11 +280,11 @@ async function seedInstalledPlugin(
     manifestPath: alphaManifestPath(workspace),
     marketplaceRoot: path.join(workspace.cwd, "alpha-src"),
     plugins: {
-      demo: buildInstalledPluginRecord({ version: "1.0.0" }, { ...EMPTY_RESOURCES }),
+      demo: buildInstalledPluginRecord({ version: "1.0.0" }, emptyResources()),
       ...(withOrphanedDependency && {
         dep: buildInstalledPluginRecord(
           { version: "1.0.0", provenance: "dependency" },
-          { ...EMPTY_RESOURCES },
+          emptyResources(),
         ),
       }),
     },
@@ -342,7 +349,12 @@ async function seedBothScopes(workspace: HermeticWorkspace): Promise<void> {
  * manifest entry, which declares nothing.
  */
 async function seedOrphanedDependency(workspace: HermeticWorkspace): Promise<void> {
-  await seedInstalledPlugin(workspace, "project", workspace.projectRoot, true);
+  await seedInstalledPlugin(
+    workspace,
+    "project",
+    workspace.projectRoot,
+    /* withOrphanedDependency= */ true,
+  );
   await seedInstalledPlugin(workspace, "user", workspace.userRoot);
   await seedPluginData(workspace.projectRoot);
   await seedPluginData(workspace.userRoot);

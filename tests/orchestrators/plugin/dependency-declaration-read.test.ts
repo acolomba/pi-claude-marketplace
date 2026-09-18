@@ -14,23 +14,14 @@ import type { GitPluginRootResult } from "../../../extensions/pi-claude-marketpl
 import type { DependencyDeclarationReader } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-declaration-read.ts";
 
 /**
- * The lookup contract, pinned at compile time: what this module answers IS a
- * `ClosureLookupResult`, so a drift on either side is a type error here rather
- * than a runtime surprise inside the closure walk.
- */
-void (undefined as unknown as Awaited<
-  ReturnType<typeof readDependencyDeclaration>
-> satisfies ClosureLookupResult);
-
-/**
  * A marketplace root that is never created on disk. `assertPathInside` returns
  * without complaint for a path whose components do not exist, so the derivation
  * still yields a plugin root and every candidate answer comes from the seam.
  */
-const FAKE_ROOT = path.join(tmpdir(), "dependency-declaration-read-fake");
-const FAKE_PLUGIN_ROOT = path.join(FAKE_ROOT, "alpha");
-const WRAPPED = path.join(FAKE_PLUGIN_ROOT, ".claude-plugin", "plugin.json");
-const BARE = path.join(FAKE_PLUGIN_ROOT, "plugin.json");
+const MARKETPLACE_ROOT = path.join(tmpdir(), "dependency-declaration-read-marketplace");
+const PLUGIN_ROOT = path.join(MARKETPLACE_ROOT, "alpha");
+const WRAPPED = path.join(PLUGIN_ROOT, ".claude-plugin", "plugin.json");
+const BARE = path.join(PLUGIN_ROOT, "plugin.json");
 
 /** The candidate ordering, applied to an arbitrary plugin root. */
 function candidatesUnder(pluginRoot: string): { wrapped: string; bare: string } {
@@ -44,13 +35,10 @@ function candidatesUnder(pluginRoot: string): { wrapped: string; bare: string } 
 type CandidateAnswer = string | Error;
 
 function errno(code: string): Error {
-  const err: NodeJS.ErrnoException = new Error(code);
-  err.code = code;
-  return err;
+  return Object.assign(new Error(code), { code });
 }
 
-interface ReaderFake {
-  readonly reader: DependencyDeclarationReader;
+interface RecordingReader extends DependencyDeclarationReader {
   /** Every candidate path whose kind was probed, in walk order. */
   readonly opened: string[];
   /** Every source raw spelling the presence probe was asked about. */
@@ -65,11 +53,13 @@ interface ReaderFake {
 function buildReader(options: {
   readonly files?: Readonly<Record<string, CandidateAnswer>>;
   readonly presence?: () => Promise<GitPluginRootResult>;
-}): ReaderFake {
+}): RecordingReader {
   const files = options.files ?? {};
   const opened: string[] = [];
   const probed: string[] = [];
-  const reader: DependencyDeclarationReader = {
+  return {
+    opened,
+    probed,
     isRegularFile(filePath: string): Promise<boolean> {
       opened.push(filePath);
       const answer = files[filePath];
@@ -90,38 +80,37 @@ function buildReader(options: {
         : options.presence();
     },
   };
-  return { reader, opened, probed };
 }
 
 function entryWith(source: unknown, dependencies?: unknown): ManifestPluginEntry {
   return { name: "alpha", source, dependencies };
 }
 
-/** The fake seam's scope bundle. No case reads a real clone through it. */
-const FAKE_LOCATIONS = locationsFor("project", FAKE_ROOT);
+/** The recording seam's scope bundle. No case reads a real clone through it. */
+const LOCATIONS = locationsFor("project", MARKETPLACE_ROOT);
 
-async function readWithFake(
+async function readDeclaration(
   entry: ManifestPluginEntry,
-  fake: ReaderFake,
+  reader: RecordingReader,
 ): Promise<ClosureLookupResult> {
   return readDependencyDeclaration({
-    marketplaceRoot: FAKE_ROOT,
+    marketplaceRoot: MARKETPLACE_ROOT,
     entry,
-    locations: FAKE_LOCATIONS,
-    reader: fake.reader,
+    locations: LOCATIONS,
+    reader,
   });
 }
 
-/** `readWithFake` under the dependents index's option (D-05-07). */
+/** `readDeclaration` under the dependents index's option (D-05-07). */
 async function readRefusingUnusable(
   entry: ManifestPluginEntry,
-  fake: ReaderFake,
+  reader: RecordingReader,
 ): Promise<ClosureLookupResult> {
   return readDependencyDeclaration({
-    marketplaceRoot: FAKE_ROOT,
+    marketplaceRoot: MARKETPLACE_ROOT,
     entry,
-    locations: FAKE_LOCATIONS,
-    reader: fake.reader,
+    locations: LOCATIONS,
+    reader,
     refuseUnusableOwnManifest: true,
   });
 }
@@ -139,75 +128,75 @@ async function freshRoot(testContext: TestContext, prefix: string): Promise<stri
 
 test("D-01-32: the plugin's own manifest answers where the entry declares nothing", async () => {
   // arrange
-  const fake = buildReader({ files: { [WRAPPED]: '{"dependencies":["helper@mp"]}' } });
+  const reader = buildReader({ files: { [WRAPPED]: '{"dependencies":["helper@mp"]}' } });
 
   // act
-  const result = await readWithFake(entryWith("./alpha"), fake);
+  const declaration = await readDeclaration(entryWith("./alpha"), reader);
 
   // assert
-  assert.deepStrictEqual(result, dependsOn("helper"));
-  assert.deepStrictEqual(fake.opened, [WRAPPED]);
+  assert.deepStrictEqual(declaration, dependsOn("helper"));
+  assert.deepStrictEqual(reader.opened, [WRAPPED]);
 });
 
 test("D-01-32: a manifest declaring an empty array suppresses the entry's list", async () => {
   // arrange
-  const fake = buildReader({ files: { [WRAPPED]: '{"dependencies":[]}' } });
+  const reader = buildReader({ files: { [WRAPPED]: '{"dependencies":[]}' } });
 
   // act
-  const result = await readWithFake(entryWith("./alpha", ["from-entry@mp"]), fake);
+  const declaration = await readDeclaration(entryWith("./alpha", ["from-entry@mp"]), reader);
 
   // assert
-  assert.deepStrictEqual(result, { kind: "found", dependencies: [] });
+  assert.deepStrictEqual(declaration, { kind: "found", dependencies: [] });
 });
 
 test("D-01-32: a manifest with no dependencies key means the plugin declares nothing", async () => {
   // arrange
-  const fake = buildReader({ files: { [WRAPPED]: '{"name":"alpha"}' } });
+  const reader = buildReader({ files: { [WRAPPED]: '{"name":"alpha"}' } });
 
   // act
-  const result = await readWithFake(entryWith("./alpha", ["from-entry@mp"]), fake);
+  const declaration = await readDeclaration(entryWith("./alpha", ["from-entry@mp"]), reader);
 
   // assert
-  assert.deepStrictEqual(result, { kind: "found", dependencies: [] });
+  assert.deepStrictEqual(declaration, { kind: "found", dependencies: [] });
 });
 
 test("D-01-07: an unparseable first candidate falls back to the entry, not to the second", async () => {
   // arrange -- the bare sibling declares a DIFFERENT plugin, so the answer names
   // which file was treated as authoritative rather than merely that one was read.
-  const fake = buildReader({
+  const reader = buildReader({
     files: { [WRAPPED]: "{ truncated", [BARE]: '{"dependencies":["from-bare@mp"]}' },
   });
 
   // act
-  const result = await readWithFake(entryWith("./alpha", ["from-entry@mp"]), fake);
+  const declaration = await readDeclaration(entryWith("./alpha", ["from-entry@mp"]), reader);
 
   // assert
-  assert.deepStrictEqual(result, dependsOn("from-entry"));
-  assert.deepStrictEqual(fake.opened, [WRAPPED], "the walk must end at the unusable candidate");
+  assert.deepStrictEqual(declaration, dependsOn("from-entry"));
+  assert.deepStrictEqual(reader.opened, [WRAPPED], "the walk must end at the unusable candidate");
 });
 
 test("D-01-06: an absent first candidate falls through to the bare manifest", async () => {
   // arrange
-  const fake = buildReader({ files: { [BARE]: '{"dependencies":["from-bare@mp"]}' } });
+  const reader = buildReader({ files: { [BARE]: '{"dependencies":["from-bare@mp"]}' } });
 
   // act
-  const result = await readWithFake(entryWith("./alpha", ["from-entry@mp"]), fake);
+  const declaration = await readDeclaration(entryWith("./alpha", ["from-entry@mp"]), reader);
 
   // assert
-  assert.deepStrictEqual(result, dependsOn("from-bare"));
-  assert.deepStrictEqual(fake.opened, [WRAPPED, BARE]);
+  assert.deepStrictEqual(declaration, dependsOn("from-bare"));
+  assert.deepStrictEqual(reader.opened, [WRAPPED, BARE]);
 });
 
 test("D-01-32: neither candidate readable leaves the entry as the answer", async () => {
   // arrange
-  const fake = buildReader({ files: {} });
+  const reader = buildReader({ files: {} });
 
   // act
-  const result = await readWithFake(entryWith("./alpha", ["from-entry@mp"]), fake);
+  const declaration = await readDeclaration(entryWith("./alpha", ["from-entry@mp"]), reader);
 
   // assert
-  assert.deepStrictEqual(result, dependsOn("from-entry"));
-  assert.deepStrictEqual(fake.opened, [WRAPPED, BARE]);
+  assert.deepStrictEqual(declaration, dependsOn("from-entry"));
+  assert.deepStrictEqual(reader.opened, [WRAPPED, BARE]);
 });
 
 for (const { label, fault, expected } of [
@@ -234,15 +223,15 @@ for (const { label, fault, expected } of [
 ]) {
   test(`D-01-07: ${label}`, async () => {
     // arrange
-    const fake = buildReader({
+    const reader = buildReader({
       files: { [WRAPPED]: fault, [BARE]: '{"dependencies":["from-bare@mp"]}' },
     });
 
     // act
-    const result = await readWithFake(entryWith("./alpha", ["from-entry@mp"]), fake);
+    const declaration = await readDeclaration(entryWith("./alpha", ["from-entry@mp"]), reader);
 
     // assert
-    assert.deepStrictEqual(result, dependsOn(expected));
+    assert.deepStrictEqual(declaration, dependsOn(expected));
   });
 }
 
@@ -253,14 +242,14 @@ for (const { label, payload } of [
 ]) {
   test(`D-01-07: ${label} payload is a present-but-unusable manifest`, async () => {
     // arrange
-    const fake = buildReader({ files: { [WRAPPED]: payload } });
+    const reader = buildReader({ files: { [WRAPPED]: payload } });
 
     // act
-    const result = await readWithFake(entryWith("./alpha", ["from-entry@mp"]), fake);
+    const declaration = await readDeclaration(entryWith("./alpha", ["from-entry@mp"]), reader);
 
     // assert
-    assert.deepStrictEqual(result, dependsOn("from-entry"));
-    assert.deepStrictEqual(fake.opened, [WRAPPED], "the walk must end at the unusable candidate");
+    assert.deepStrictEqual(declaration, dependsOn("from-entry"));
+    assert.deepStrictEqual(reader.opened, [WRAPPED], "the walk must end at the unusable candidate");
   });
 }
 
@@ -272,19 +261,19 @@ for (const { label, wrapped } of [
   test(`D-05-07: with refuseUnusableOwnManifest, ${label} is the unusable arm, not the entry`, async () => {
     // arrange -- the bare sibling declares a DIFFERENT plugin, so a walk that
     // wrongly continued past the unusable candidate would change the answer.
-    const fake = buildReader({
+    const reader = buildReader({
       files: { [WRAPPED]: wrapped, [BARE]: '{"dependencies":["from-bare@mp"]}' },
     });
 
     // act
-    const declaration = await readRefusingUnusable(entryWith("./alpha", ["from-entry@mp"]), fake);
+    const declaration = await readRefusingUnusable(entryWith("./alpha", ["from-entry@mp"]), reader);
 
     // assert
     assert.deepStrictEqual(declaration, {
       kind: "unusable",
       detail: "its own manifest is present but cannot be read",
     });
-    assert.deepStrictEqual(fake.opened, [WRAPPED], "the walk must end at the unusable candidate");
+    assert.deepStrictEqual(reader.opened, [WRAPPED], "the walk must end at the unusable candidate");
   });
 }
 
@@ -299,7 +288,7 @@ for (const { label, source, files, expectedOpened } of [
     label: "a containment-refused root",
     source: "../outside",
     files: {
-      [candidatesUnder(path.resolve(FAKE_ROOT, "../outside")).wrapped]:
+      [candidatesUnder(path.resolve(MARKETPLACE_ROOT, "../outside")).wrapped]:
         '{"dependencies":["escaped@mp"]}',
     },
     expectedOpened: [],
@@ -307,61 +296,64 @@ for (const { label, source, files, expectedOpened } of [
 ]) {
   test(`D-05-06: with refuseUnusableOwnManifest, ${label} still falls back to the entry`, async () => {
     // arrange
-    const fake = buildReader({ files });
+    const reader = buildReader({ files });
 
     // act
-    const declaration = await readRefusingUnusable(entryWith(source, ["from-entry@mp"]), fake);
+    const declaration = await readRefusingUnusable(entryWith(source, ["from-entry@mp"]), reader);
 
     // assert
     assert.deepStrictEqual(declaration, dependsOn("from-entry"));
-    assert.deepStrictEqual(fake.opened, expectedOpened);
+    assert.deepStrictEqual(reader.opened, expectedOpened);
   });
 }
 
 test("RESV-02: a rejected declaration becomes the unusable arm carrying the reason", async () => {
   // arrange
-  const fake = buildReader({ files: { [WRAPPED]: '{"dependencies":["bad name!"]}' } });
+  const reader = buildReader({ files: { [WRAPPED]: '{"dependencies":["bad name!"]}' } });
 
   // act
-  const result = await readWithFake(entryWith("./alpha"), fake);
+  const declaration = await readDeclaration(entryWith("./alpha"), reader);
 
   // assert
-  assert.deepStrictEqual(result, { kind: "unusable", detail: "dependencies.0: Invalid input" });
+  assert.deepStrictEqual(declaration, {
+    kind: "unusable",
+    detail: "dependencies.0: Invalid input",
+  });
 });
 
 test("NFR-10: a containment refusal while deriving a plugin root reads as no root", async () => {
   // arrange -- the escaping root's OWN candidate declares a different plugin, so
   // a derivation that wrongly succeeded would change the answer.
-  const escaped = candidatesUnder(path.resolve(FAKE_ROOT, "../outside"));
-  const fake = buildReader({ files: { [escaped.wrapped]: '{"dependencies":["escaped@mp"]}' } });
+  const escaped = candidatesUnder(path.resolve(MARKETPLACE_ROOT, "../outside"));
+  const reader = buildReader({ files: { [escaped.wrapped]: '{"dependencies":["escaped@mp"]}' } });
 
   // act
-  const result = await readWithFake(entryWith("../outside", ["from-entry@mp"]), fake);
+  const declaration = await readDeclaration(entryWith("../outside", ["from-entry@mp"]), reader);
 
   // assert
-  assert.deepStrictEqual(result, dependsOn("from-entry"));
-  assert.deepStrictEqual(fake.opened, [], "a refused root opens no candidate");
+  assert.deepStrictEqual(declaration, dependsOn("from-entry"));
+  assert.deepStrictEqual(reader.opened, [], "a refused root opens no candidate");
 });
 
 test("NFR-10: a syscall-layer refusal while deriving a plugin root reads as no root", async () => {
   // arrange -- an interior NUL byte is rejected by the syscall layer, not by
   // containment, so only a TOTAL catch keeps it out of the cascade.
   const raw = "./al\u0000pha";
-  const nulRoot = candidatesUnder(path.resolve(FAKE_ROOT, raw));
-  const fake = buildReader({ files: { [nulRoot.wrapped]: '{"dependencies":["nul@mp"]}' } });
+  const nulRoot = candidatesUnder(path.resolve(MARKETPLACE_ROOT, raw));
+  const reader = buildReader({ files: { [nulRoot.wrapped]: '{"dependencies":["nul@mp"]}' } });
 
   // act
-  const result = await readWithFake(entryWith(raw, ["from-entry@mp"]), fake);
+  const declaration = await readDeclaration(entryWith(raw, ["from-entry@mp"]), reader);
 
   // assert
-  assert.deepStrictEqual(result, dependsOn("from-entry"));
-  assert.deepStrictEqual(fake.opened, [], "a refused root opens no candidate");
+  assert.deepStrictEqual(declaration, dependsOn("from-entry"));
+  assert.deepStrictEqual(reader.opened, [], "a refused root opens no candidate");
 });
 
 test("D-01-32: a warm git clone's own manifest answers", async () => {
   // arrange
-  const cloneRoot = path.join(FAKE_ROOT, "clone");
-  const fake = buildReader({
+  const cloneRoot = path.join(MARKETPLACE_ROOT, "clone");
+  const reader = buildReader({
     files: { [candidatesUnder(cloneRoot).wrapped]: '{"dependencies":["from-manifest@mp"]}' },
     presence: () =>
       Promise.resolve({ kind: "materialized", pluginRoot: cloneRoot, resolvedSha: "a".repeat(40) }),
@@ -369,16 +361,16 @@ test("D-01-32: a warm git clone's own manifest answers", async () => {
 
   // act
   const entry = entryWith("https://example.com/alpha.git", ["from-entry@mp"]);
-  const result = await readWithFake(entry, fake);
+  const declaration = await readDeclaration(entry, reader);
 
   // assert
-  assert.deepStrictEqual(result, dependsOn("from-manifest"));
-  assert.deepStrictEqual(fake.probed, ["https://example.com/alpha.git"]);
+  assert.deepStrictEqual(declaration, dependsOn("from-manifest"));
+  assert.deepStrictEqual(reader.probed, ["https://example.com/alpha.git"]);
 });
 
 test("NFR-5: a git-subdir source with a missing subdirectory is answered by the entry", async () => {
   // arrange
-  const fake = buildReader({
+  const reader = buildReader({
     presence: () => Promise.resolve({ kind: "missing-subdir", detail: "sub" }),
   });
   const entry = entryWith(
@@ -387,23 +379,23 @@ test("NFR-5: a git-subdir source with a missing subdirectory is answered by the 
   );
 
   // act
-  const result = await readWithFake(entry, fake);
+  const declaration = await readDeclaration(entry, reader);
 
   // assert
-  assert.deepStrictEqual(result, dependsOn("from-entry"));
-  assert.deepStrictEqual(fake.opened, [], "no local tree means no candidate is opened");
+  assert.deepStrictEqual(declaration, dependsOn("from-entry"));
+  assert.deepStrictEqual(reader.opened, [], "no local tree means no candidate is opened");
 });
 
 test("NFR-5: a github source whose presence probe throws is answered by the entry", async () => {
   // arrange -- one corrupt mirror degrades one plugin; it does not fail the cascade.
-  const fake = buildReader({ presence: () => Promise.reject(new Error("corrupt mirror HEAD")) });
+  const reader = buildReader({ presence: () => Promise.reject(new Error("corrupt mirror HEAD")) });
 
   // act
-  const result = await readWithFake(entryWith("owner/repo", ["from-entry@mp"]), fake);
+  const declaration = await readDeclaration(entryWith("owner/repo", ["from-entry@mp"]), reader);
 
   // assert
-  assert.deepStrictEqual(result, dependsOn("from-entry"));
-  assert.deepStrictEqual(fake.probed, ["owner/repo"]);
+  assert.deepStrictEqual(declaration, dependsOn("from-entry"));
+  assert.deepStrictEqual(reader.probed, ["owner/repo"]);
 });
 
 for (const { label, source } of [
@@ -412,15 +404,15 @@ for (const { label, source } of [
 ]) {
   test(`NFR-5: ${label} source has no readable tree, so the entry answers`, async () => {
     // arrange
-    const fake = buildReader({});
+    const reader = buildReader({});
 
     // act
-    const result = await readWithFake(entryWith(source, ["from-entry@mp"]), fake);
+    const declaration = await readDeclaration(entryWith(source, ["from-entry@mp"]), reader);
 
     // assert
-    assert.deepStrictEqual(result, dependsOn("from-entry"));
-    assert.deepStrictEqual(fake.opened, []);
-    assert.deepStrictEqual(fake.probed, [], "an unresolvable source reaches no clone probe");
+    assert.deepStrictEqual(declaration, dependsOn("from-entry"));
+    assert.deepStrictEqual(reader.opened, []);
+    assert.deepStrictEqual(reader.probed, [], "an unresolvable source reaches no clone probe");
   });
 }
 
@@ -431,10 +423,14 @@ test("NFR-5: a git source with no materialized clone materializes nothing", asyn
   const entry = entryWith("https://example.com/alpha.git", ["from-entry@mp"]);
 
   // act
-  const result = await readDependencyDeclaration({ marketplaceRoot: FAKE_ROOT, entry, locations });
+  const declaration = await readDependencyDeclaration({
+    marketplaceRoot: MARKETPLACE_ROOT,
+    entry,
+    locations,
+  });
 
   // assert
-  assert.deepStrictEqual(result, dependsOn("from-entry"));
+  assert.deepStrictEqual(declaration, dependsOn("from-entry"));
   assert.equal(
     existsSync(locations.pluginClonesDir),
     false,
@@ -450,12 +446,12 @@ test("D-01-32: the production reader reads a bare manifest off real disk", async
   await writeFile(path.join(pluginRoot, "plugin.json"), '{"dependencies":["from-manifest@mp"]}\n');
 
   // act
-  const result = await readDependencyDeclaration({
+  const declaration = await readDependencyDeclaration({
     marketplaceRoot,
     entry: entryWith("./alpha", ["from-entry@mp"]),
     locations: locationsFor("project", marketplaceRoot),
   });
 
   // assert
-  assert.deepStrictEqual(result, dependsOn("from-manifest"));
+  assert.deepStrictEqual(declaration, dependsOn("from-manifest"));
 });

@@ -35,7 +35,10 @@ import {
   renderVersion,
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
-import type { Reason } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import type {
+  PluginInfoMessage,
+  Reason,
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 test("exports notification grammar from its named owner", () => {
   // arrange
@@ -456,7 +459,8 @@ for (const [status, glyph] of [
 
 test("renders the entry-declared dependencies line after the unresolved marker (D-01-32)", () => {
   // arrange
-  const message = {
+  const message: PluginInfoMessage = {
+    kind: "plugin-info",
     marketplaceName: "official",
     marketplaceScope: "user",
     marketplaceDetails: { autoupdate: false },
@@ -469,7 +473,7 @@ test("renders the entry-declared dependencies line after the unresolved marker (
   };
 
   // act
-  const rendered = renderPluginInfo(message as never, bothLoadedProbe());
+  const rendered = renderPluginInfo(message, bothLoadedProbe());
 
   // assert
   assert.equal(
@@ -480,7 +484,8 @@ test("renders the entry-declared dependencies line after the unresolved marker (
 
 test("renders no dependencies line for an unresolved row whose list is empty", () => {
   // arrange
-  const message = {
+  const message: PluginInfoMessage = {
+    kind: "plugin-info",
     marketplaceName: "official",
     marketplaceScope: "user",
     marketplaceDetails: { autoupdate: false },
@@ -488,7 +493,7 @@ test("renders no dependencies line for an unresolved row whose list is empty", (
   };
 
   // act
-  const rendered = renderPluginInfo(message as never, bothLoadedProbe());
+  const rendered = renderPluginInfo(message, bothLoadedProbe());
 
   // assert
   assert.equal(

@@ -278,8 +278,9 @@ test("returns the failure arm for an unclassifiable listing throw instead of rej
 test("classifies an unreachable host on the failure arm", async () => {
   // arrange
   const queried: string[] = [];
-  const transportFailure: NodeJS.ErrnoException = new Error("getaddrinfo ENOTFOUND example.com");
-  transportFailure.code = "ENOTFOUND";
+  const transportFailure = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), {
+    code: "ENOTFOUND",
+  });
   const seam = failingWith(transportFailure, queried);
 
   // act

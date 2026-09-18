@@ -20,8 +20,8 @@ import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/p
  * record still derives a plugin root and every own-manifest answer comes from
  * the injected reader.
  */
-const FAKE_ROOT = path.join(tmpdir(), "dependency-index-fake");
-const FAKE_LOCATIONS = locationsFor("project", FAKE_ROOT);
+const SCOPE_ROOT = path.join(tmpdir(), "dependency-index-scope");
+const LOCATIONS = locationsFor("project", SCOPE_ROOT);
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -34,7 +34,7 @@ interface RecordSeed {
 function pluginRecord(seed: RecordSeed = {}): PluginRecord {
   return {
     version: "1.0.0",
-    resolvedSource: path.join(FAKE_ROOT, "plugins", "x"),
+    resolvedSource: path.join(SCOPE_ROOT, "plugins", "x"),
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
     enabled: seed.enabled ?? true,
@@ -48,12 +48,12 @@ function marketplaceRecord(
   name: string,
   plugins: Readonly<Record<string, RecordSeed>>,
 ): MarketplaceRecord {
-  const root = path.join(FAKE_ROOT, name);
+  const root = path.join(SCOPE_ROOT, name);
   return {
     name,
     scope: "project",
     source: pathSource(`./${name}`),
-    addedFromCwd: FAKE_ROOT,
+    addedFromCwd: SCOPE_ROOT,
     manifestPath: path.join(root, ".claude-plugin", "marketplace.json"),
     marketplaceRoot: root,
     plugins: Object.fromEntries(
@@ -116,47 +116,53 @@ function ownManifests(files: Readonly<Record<string, string>> = {}): DependencyD
 }
 
 function errno(code: string): Error {
-  const err: NodeJS.ErrnoException = new Error(`${code}: open '${path.join(FAKE_ROOT, "mp")}'`);
-  err.code = code;
-  return err;
+  return Object.assign(new Error(`${code}: open '${path.join(SCOPE_ROOT, "mp")}'`), { code });
 }
 
-const MP = marketplaceRecord("mp", {
-  app: {},
-  helper: { provenance: "dependency" },
-  paused: { enabled: false },
-});
-const OTHER = marketplaceRecord("other", { kit: {} });
+/** The marketplace under test: one explicit, one dependency-provenance, one disabled record. */
+function mpRecord(): MarketplaceRecord {
+  return marketplaceRecord("mp", {
+    app: {},
+    helper: { provenance: "dependency" },
+    paused: { enabled: false },
+  });
+}
 
-function indexEntries(result: ScopeDeclarationIndexResult): Record<string, string[]> {
-  assert.equal(result.ok, true);
-  return result.ok
-    ? Object.fromEntries([...result.index].map(([holder, declared]) => [holder, [...declared]]))
+function otherRecord(): MarketplaceRecord {
+  return marketplaceRecord("other", { kit: {} });
+}
+
+function indexEntries(walk: ScopeDeclarationIndexResult): Record<string, string[]> {
+  assert.equal(walk.ok, true);
+  return walk.ok
+    ? Object.fromEntries([...walk.index].map(([holder, declared]) => [holder, [...declared]]))
     : {};
 }
 
 test("D-05-06: every record except the excluded one is indexed by the keys it declares", async () => {
   // arrange
+  const mp = mpRecord();
+  const other = otherRecord();
   const loadManifest = manifestLoader({
-    [MP.manifestPath]: manifestOf("mp", {
+    [mp.manifestPath]: manifestOf("mp", {
       app: { dependencies: ["helper", { name: "kit", marketplace: "other" }] },
       helper: {},
       paused: { dependencies: ["helper@mp"] },
     }),
-    [OTHER.manifestPath]: manifestOf("other", { kit: { dependencies: ["app@mp"] } }),
+    [other.manifestPath]: manifestOf("other", { kit: { dependencies: ["app@mp"] } }),
   });
 
   // act
-  const result = await buildScopeDeclarationIndex({
-    state: stateOf(MP, OTHER),
-    locations: FAKE_LOCATIONS,
+  const walk = await buildScopeDeclarationIndex({
+    state: stateOf(mp, other),
+    locations: LOCATIONS,
     exclude: "helper@mp",
     reader: ownManifests(),
     loadManifest,
   });
 
   // assert
-  assert.deepStrictEqual(indexEntries(result), {
+  assert.deepStrictEqual(indexEntries(walk), {
     "app@mp": ["helper@mp", "kit@other"],
     "paused@mp": ["helper@mp"],
     "kit@other": ["app@mp"],
@@ -165,24 +171,26 @@ test("D-05-06: every record except the excluded one is indexed by the keys it de
 
 test("D-05-10: every indexed record is a candidate carrying its provenance and the snapshot's own objects, the excluded target omitted", async () => {
   // arrange
-  const state = stateOf(MP, OTHER);
+  const mp = mpRecord();
+  const other = otherRecord();
+  const state = stateOf(mp, other);
   const loadManifest = manifestLoader({
-    [MP.manifestPath]: manifestOf("mp", { app: {}, helper: {}, paused: {} }),
-    [OTHER.manifestPath]: manifestOf("other", { kit: {} }),
+    [mp.manifestPath]: manifestOf("mp", { app: {}, helper: {}, paused: {} }),
+    [other.manifestPath]: manifestOf("other", { kit: {} }),
   });
 
   // act
-  const result = await buildScopeDeclarationIndex({
+  const walk = await buildScopeDeclarationIndex({
     state,
-    locations: FAKE_LOCATIONS,
+    locations: LOCATIONS,
     exclude: "app@mp",
     reader: ownManifests(),
     loadManifest,
   });
 
   // assert
-  assert.equal(result.ok, true);
-  const candidates = result.ok ? result.candidates : [];
+  assert.equal(walk.ok, true);
+  const candidates = walk.ok ? walk.candidates : [];
   assert.deepStrictEqual(
     candidates.map(({ key, provenance, plugin, marketplace }) => ({
       key,
@@ -202,8 +210,9 @@ test("D-05-10: every indexed record is a candidate carrying its provenance and t
 
 test("D-05-04: a disabled record and a dependency-provenance record both hold their declarations", async () => {
   // arrange
+  const mp = mpRecord();
   const loadManifest = manifestLoader({
-    [MP.manifestPath]: manifestOf("mp", {
+    [mp.manifestPath]: manifestOf("mp", {
       app: {},
       helper: { dependencies: ["base"] },
       paused: { dependencies: ["base"] },
@@ -211,16 +220,16 @@ test("D-05-04: a disabled record and a dependency-provenance record both hold th
   });
 
   // act
-  const result = await buildScopeDeclarationIndex({
-    state: stateOf(MP),
-    locations: FAKE_LOCATIONS,
+  const walk = await buildScopeDeclarationIndex({
+    state: stateOf(mp),
+    locations: LOCATIONS,
     exclude: "app@mp",
     reader: ownManifests(),
     loadManifest,
   });
 
   // assert
-  assert.deepStrictEqual(indexEntries(result), {
+  assert.deepStrictEqual(indexEntries(walk), {
     "helper@mp": ["base@mp"],
     "paused@mp": ["base@mp"],
   });
@@ -228,29 +237,30 @@ test("D-05-04: a disabled record and a dependency-provenance record both hold th
 
 test("D-05-06: a record's own manifest outranks its marketplace entry", async () => {
   // arrange
+  const mp = mpRecord();
   const loadManifest = manifestLoader({
-    [MP.manifestPath]: manifestOf("mp", {
+    [mp.manifestPath]: manifestOf("mp", {
       app: { dependencies: ["from-entry"] },
       helper: {},
       paused: {},
     }),
   });
   const reader = ownManifests({
-    [path.join(MP.marketplaceRoot, "plugins", "app", ".claude-plugin", "plugin.json")]:
+    [path.join(mp.marketplaceRoot, "plugins", "app", ".claude-plugin", "plugin.json")]:
       '{"dependencies":["from-manifest@other"]}',
   });
 
   // act
-  const result = await buildScopeDeclarationIndex({
-    state: stateOf(MP),
-    locations: FAKE_LOCATIONS,
+  const walk = await buildScopeDeclarationIndex({
+    state: stateOf(mp),
+    locations: LOCATIONS,
     exclude: "paused@mp",
     reader,
     loadManifest,
   });
 
   // assert
-  assert.deepStrictEqual(indexEntries(result), {
+  assert.deepStrictEqual(indexEntries(walk), {
     "app@mp": ["from-manifest@other"],
     "helper@mp": [],
   });
@@ -258,8 +268,9 @@ test("D-05-06: a record's own manifest outranks its marketplace entry", async ()
 
 test("PRUNE-05: a sha-pinned or version-ranged declaration still holds its key", async () => {
   // arrange
+  const mp = mpRecord();
   const loadManifest = manifestLoader({
-    [MP.manifestPath]: manifestOf("mp", {
+    [mp.manifestPath]: manifestOf("mp", {
       app: {
         dependencies: [
           { name: "helper", sha: "0123456789abcdef0123456789abcdef01234567" },
@@ -272,16 +283,16 @@ test("PRUNE-05: a sha-pinned or version-ranged declaration still holds its key",
   });
 
   // act
-  const result = await buildScopeDeclarationIndex({
-    state: stateOf(MP),
-    locations: FAKE_LOCATIONS,
+  const walk = await buildScopeDeclarationIndex({
+    state: stateOf(mp),
+    locations: LOCATIONS,
     exclude: "paused@mp",
     reader: ownManifests(),
     loadManifest,
   });
 
   // assert
-  assert.deepStrictEqual(indexEntries(result), {
+  assert.deepStrictEqual(indexEntries(walk), {
     "app@mp": ["helper@mp", "base@other"],
     "helper@mp": [],
   });
@@ -293,37 +304,38 @@ test("PRUNE-05: excluding the only record reads no manifest and yields an empty 
   const loadManifest = manifestLoader({});
 
   // act
-  const result = await buildScopeDeclarationIndex({
+  const walk = await buildScopeDeclarationIndex({
     state: stateOf(solo),
-    locations: FAKE_LOCATIONS,
+    locations: LOCATIONS,
     exclude: "only@solo",
     reader: ownManifests(),
     loadManifest,
   });
 
   // assert
-  assert.deepStrictEqual(indexEntries(result), {});
+  assert.deepStrictEqual(indexEntries(walk), {});
 });
 
 test("D-05-07: a record its marketplace does not list ends the walk as not in manifest", async () => {
   // arrange
+  const mp = mpRecord();
   const loadManifest = manifestLoader({
-    [MP.manifestPath]: manifestOf("mp", { app: {}, paused: {} }),
+    [mp.manifestPath]: manifestOf("mp", { app: {}, paused: {} }),
   });
 
   // act
-  const result = await buildScopeDeclarationIndex({
-    state: stateOf(MP),
-    locations: FAKE_LOCATIONS,
+  const walk = await buildScopeDeclarationIndex({
+    state: stateOf(mp),
+    locations: LOCATIONS,
     exclude: "app@mp",
     reader: ownManifests(),
     loadManifest,
   });
 
   // assert
-  assert.equal(result.ok, false);
+  assert.equal(walk.ok, false);
   assert.deepStrictEqual(
-    result.ok ? undefined : { declarer: result.declarer, message: result.cause.message },
+    walk.ok ? undefined : { declarer: walk.declarer, message: walk.cause.message },
     {
       declarer: "helper@mp",
       message: "cannot read the dependencies of helper@mp: not declared by its marketplace",
@@ -333,8 +345,9 @@ test("D-05-07: a record its marketplace does not list ends the walk as not in ma
 
 test("D-05-07: an unusable declaration ends the walk as invalid manifest with the parser's field path", async () => {
   // arrange
+  const mp = mpRecord();
   const loadManifest = manifestLoader({
-    [MP.manifestPath]: manifestOf("mp", {
+    [mp.manifestPath]: manifestOf("mp", {
       app: {},
       helper: { dependencies: [42] },
       paused: {},
@@ -342,18 +355,18 @@ test("D-05-07: an unusable declaration ends the walk as invalid manifest with th
   });
 
   // act
-  const result = await buildScopeDeclarationIndex({
-    state: stateOf(MP),
-    locations: FAKE_LOCATIONS,
+  const walk = await buildScopeDeclarationIndex({
+    state: stateOf(mp),
+    locations: LOCATIONS,
     exclude: "app@mp",
     reader: ownManifests(),
     loadManifest,
   });
 
   // assert
-  assert.equal(result.ok, false);
+  assert.equal(walk.ok, false);
   assert.deepStrictEqual(
-    result.ok ? undefined : { declarer: result.declarer, message: result.cause.message },
+    walk.ok ? undefined : { declarer: walk.declarer, message: walk.cause.message },
     {
       declarer: "helper@mp",
       message: "cannot read the dependencies of helper@mp: dependencies.0: Invalid input",
@@ -364,18 +377,19 @@ test("D-05-07: an unusable declaration ends the walk as invalid manifest with th
 test("D-05-07: a corrupt own manifest beside a silent entry ends the walk naming the record", async () => {
   // arrange -- the entry carries no `dependencies`, so a read that let the
   // entry answer for the corrupt file would index helper as declaring nothing.
+  const mp = mpRecord();
   const loadManifest = manifestLoader({
-    [MP.manifestPath]: manifestOf("mp", { app: {}, helper: {}, paused: {} }),
+    [mp.manifestPath]: manifestOf("mp", { app: {}, helper: {}, paused: {} }),
   });
   const reader = ownManifests({
-    [path.join(MP.marketplaceRoot, "plugins", "helper", ".claude-plugin", "plugin.json")]:
+    [path.join(mp.marketplaceRoot, "plugins", "helper", ".claude-plugin", "plugin.json")]:
       "{ truncated",
   });
 
   // act
   const walk = await buildScopeDeclarationIndex({
-    state: stateOf(MP),
-    locations: FAKE_LOCATIONS,
+    state: stateOf(mp),
+    locations: LOCATIONS,
     exclude: "app@mp",
     reader,
     loadManifest,
@@ -418,21 +432,22 @@ const LOAD_FAILURES: readonly LoadFailureCase[] = [
 for (const { title, thrown, message } of LOAD_FAILURES) {
   test(title, async () => {
     // arrange
-    const loadManifest = manifestLoader({ [MP.manifestPath]: thrown });
+    const mp = mpRecord();
+    const loadManifest = manifestLoader({ [mp.manifestPath]: thrown });
 
     // act
-    const result = await buildScopeDeclarationIndex({
-      state: stateOf(MP),
-      locations: FAKE_LOCATIONS,
+    const walk = await buildScopeDeclarationIndex({
+      state: stateOf(mp),
+      locations: LOCATIONS,
       exclude: "paused@mp",
       reader: ownManifests(),
       loadManifest,
     });
 
     // assert
-    assert.equal(result.ok, false);
+    assert.equal(walk.ok, false);
     assert.deepStrictEqual(
-      result.ok ? undefined : { declarer: result.declarer, message: result.cause.message },
+      walk.ok ? undefined : { declarer: walk.declarer, message: walk.cause.message },
       { declarer: "app@mp", message },
     );
   });
@@ -440,46 +455,48 @@ for (const { title, thrown, message } of LOAD_FAILURES) {
 
 test("T-05-04: the load-failure cause line redacts the absolute path and chains no cause", async () => {
   // arrange
-  const loadManifest = manifestLoader({ [MP.manifestPath]: errno("EACCES") });
+  const mp = mpRecord();
+  const loadManifest = manifestLoader({ [mp.manifestPath]: errno("EACCES") });
 
   // act
-  const result = await buildScopeDeclarationIndex({
-    state: stateOf(MP),
-    locations: FAKE_LOCATIONS,
+  const walk = await buildScopeDeclarationIndex({
+    state: stateOf(mp),
+    locations: LOCATIONS,
     exclude: "paused@mp",
     reader: ownManifests(),
     loadManifest,
   });
 
   // assert
-  assert.equal(result.ok, false);
+  assert.equal(walk.ok, false);
   assert.deepStrictEqual(
-    result.ok ? undefined : { message: result.cause.message, cause: result.cause.cause },
+    walk.ok ? undefined : { message: walk.cause.message, cause: walk.cause.cause },
     { message: "cannot read the dependencies of app@mp: EACCES: open 'mp'", cause: undefined },
   );
 });
 
 test("D-05-07: the first unreadable record wins over a later one", async () => {
   // arrange
-  const loadManifest = manifestLoader({
-    [MP.manifestPath]: manifestOf("mp", { app: {}, helper: {}, paused: {} }),
-    [OTHER.manifestPath]: errno("ENOENT"),
-  });
   const firstUnreadable = marketplaceRecord("mp", { app: {}, missing: {}, paused: {} });
+  const other = otherRecord();
+  const loadManifest = manifestLoader({
+    [firstUnreadable.manifestPath]: manifestOf("mp", { app: {}, helper: {}, paused: {} }),
+    [other.manifestPath]: errno("ENOENT"),
+  });
 
   // act
-  const result = await buildScopeDeclarationIndex({
-    state: stateOf(firstUnreadable, OTHER),
-    locations: FAKE_LOCATIONS,
+  const walk = await buildScopeDeclarationIndex({
+    state: stateOf(firstUnreadable, other),
+    locations: LOCATIONS,
     exclude: "app@mp",
     reader: ownManifests(),
     loadManifest,
   });
 
   // assert
-  assert.equal(result.ok, false);
+  assert.equal(walk.ok, false);
   assert.deepStrictEqual(
-    result.ok ? undefined : { declarer: result.declarer, message: result.cause.message },
+    walk.ok ? undefined : { declarer: walk.declarer, message: walk.cause.message },
     {
       declarer: "missing@mp",
       message: "cannot read the dependencies of missing@mp: not declared by its marketplace",
@@ -514,12 +531,12 @@ test("D-05-06: with no seams injected the index is read from the real manifest c
   };
 
   // act
-  const result = await buildScopeDeclarationIndex({
+  const walk = await buildScopeDeclarationIndex({
     state: stateOf(onDisk),
     locations: locationsFor("project", root),
     exclude: "helper@mp",
   });
 
   // assert
-  assert.deepStrictEqual(indexEntries(result), { "app@mp": ["helper@mp"] });
+  assert.deepStrictEqual(indexEntries(walk), { "app@mp": ["helper@mp"] });
 });

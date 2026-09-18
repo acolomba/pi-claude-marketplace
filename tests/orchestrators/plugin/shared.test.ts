@@ -1355,6 +1355,29 @@ describe("resolvePluginVersion", () => {
     });
   });
 
+  for (const { label, manifest } of [
+    { label: "declares no version", manifest: "{}" },
+    { label: "is null", manifest: "null" },
+    { label: "is a bare string", manifest: '"2.0.0"' },
+  ]) {
+    test(`uses the marketplace entry when the manifest ${label}`, async () => {
+      // arrange
+      await withTempScopes(async ({ root }) => {
+        const pluginRoot = path.join(root, "alpha");
+        await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+        await writeFile(path.join(pluginRoot, ".claude-plugin", "plugin.json"), manifest);
+        const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
+        const installable = makeMaterializablePlugin(pluginRoot);
+
+        // act
+        const version = await resolvePluginVersion(entry, installable);
+
+        // assert
+        assert.equal(version, "1.0.0");
+      });
+    });
+  }
+
   test("uses the marketplace entry when the manifest cannot be parsed", async () => {
     // arrange
     await withTempScopes(async ({ root }) => {
@@ -1373,8 +1396,8 @@ describe("resolvePluginVersion", () => {
   });
 
   test("uses the entry version when a symlink loop prevents probing the wrapped manifest", async () => {
+    // arrange
     await withTempScopes(async ({ root }) => {
-      // arrange
       const pluginRoot = path.join(root, "alpha");
       const wrapper = path.join(pluginRoot, ".claude-plugin");
       await mkdir(pluginRoot, { recursive: true });
@@ -1392,8 +1415,8 @@ describe("resolvePluginVersion", () => {
   });
 
   test("uses the bare manifest version when the wrapper is a regular file", async () => {
+    // arrange
     await withTempScopes(async ({ root }) => {
-      // arrange
       const pluginRoot = path.join(root, "alpha");
       await mkdir(pluginRoot, { recursive: true });
       await writeFile(path.join(pluginRoot, ".claude-plugin"), "not a directory");
@@ -1423,63 +1446,63 @@ describe("resolvePluginVersion", () => {
       // assert
       assert.equal(version, "hash-e3b0c44298fc");
     });
+  });
 
-    test("MANF-01 reads tier 1 from a manifest at the bare plugin.json path", async () => {
-      // arrange
-      await withTempScopes(async ({ root }) => {
-        const pluginRoot = path.join(root, "alpha");
-        await mkdir(pluginRoot, { recursive: true });
-        await writeFile(path.join(pluginRoot, "plugin.json"), JSON.stringify({ version: "2.0.0" }));
-        const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
-        const installable = makeMaterializablePlugin(pluginRoot);
+  test("MANF-01 reads tier 1 from a manifest at the bare plugin.json path", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(pluginRoot, { recursive: true });
+      await writeFile(path.join(pluginRoot, "plugin.json"), JSON.stringify({ version: "2.0.0" }));
+      const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
 
-        // act
-        const version = await resolvePluginVersion(entry, installable);
+      // act
+      const version = await resolvePluginVersion(entry, installable);
 
-        // assert
-        assert.equal(version, "2.0.0");
-      });
+      // assert
+      assert.equal(version, "2.0.0");
     });
+  });
 
-    test("MANF-02 prefers the wrapped manifest version over a bare sibling", async () => {
-      // arrange
-      await withTempScopes(async ({ root }) => {
-        const pluginRoot = path.join(root, "alpha");
-        await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
-        await writeFile(
-          path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-          JSON.stringify({ version: "2.0.0" }),
-        );
-        await writeFile(path.join(pluginRoot, "plugin.json"), JSON.stringify({ version: "9.9.9" }));
-        const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
-        const installable = makeMaterializablePlugin(pluginRoot);
+  test("MANF-02 prefers the wrapped manifest version over a bare sibling", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ version: "2.0.0" }),
+      );
+      await writeFile(path.join(pluginRoot, "plugin.json"), JSON.stringify({ version: "9.9.9" }));
+      const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
 
-        // act
-        const version = await resolvePluginVersion(entry, installable);
+      // act
+      const version = await resolvePluginVersion(entry, installable);
 
-        // assert
-        assert.equal(version, "2.0.0");
-      });
+      // assert
+      assert.equal(version, "2.0.0");
     });
+  });
 
-    // D-01-07: the walk falls through on ABSENCE ONLY, so an unparseable wrapped
-    // manifest drops to tier 2 rather than to its readable bare sibling.
-    test("D-01-07 falls to the marketplace entry when the wrapped manifest is unparseable", async () => {
-      // arrange
-      await withTempScopes(async ({ root }) => {
-        const pluginRoot = path.join(root, "alpha");
-        await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
-        await writeFile(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "{");
-        await writeFile(path.join(pluginRoot, "plugin.json"), JSON.stringify({ version: "9.9.9" }));
-        const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
-        const installable = makeMaterializablePlugin(pluginRoot);
+  // D-01-07: the walk falls through on ABSENCE ONLY, so an unparseable wrapped
+  // manifest drops to tier 2 rather than to its readable bare sibling.
+  test("D-01-07 falls to the marketplace entry when the wrapped manifest is unparseable", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+      await writeFile(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "{");
+      await writeFile(path.join(pluginRoot, "plugin.json"), JSON.stringify({ version: "9.9.9" }));
+      const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
 
-        // act
-        const version = await resolvePluginVersion(entry, installable);
+      // act
+      const version = await resolvePluginVersion(entry, installable);
 
-        // assert
-        assert.equal(version, "1.0.0");
-      });
+      // assert
+      assert.equal(version, "1.0.0");
     });
   });
 });

@@ -98,6 +98,7 @@ import type { DependencyRangeIntersection } from "../../domain/dependency-range.
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { RemoteTag } from "../../platform/git.ts";
 import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
 
 /** Materialization operations the cascade drives, injectable for fault tests. */
@@ -776,7 +777,7 @@ export async function runInstallCascade(
     alreadyInstalled: closure.alreadyInstalled,
     ledgerOptionsFor: options.ledgerOptionsFor,
     tagProbe: options.tagProbe ?? probeDependencyTags,
-    tagMemo: new Map(),
+    tagMemo: new Map<string, readonly RemoteTag[]>(),
     ...(options.marketplaceRecordFor !== undefined && {
       marketplaceRecordFor: options.marketplaceRecordFor,
     }),
@@ -792,7 +793,7 @@ export async function runInstallCascade(
     marketplaceAbsent: false,
     attempting: undefined,
     members: [],
-    materialized: new Set(),
+    materialized: new Set<string>(),
   };
   const phases: readonly Phase<CascadeRun>[] = constraints.members.map((member) =>
     buildMemberPhase(options, seam, transaction, member),

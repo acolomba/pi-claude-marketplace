@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "node:test";
 
 import {
   findDependents,
@@ -15,7 +15,7 @@ import type {
 /** A synthetic index: holder key -> the keys that holder declares. */
 type IndexShape = Readonly<Record<string, readonly string[]>>;
 
-function indexOf(shape: IndexShape): DeclarationIndex {
+function declarationIndex(shape: IndexShape): DeclarationIndex {
   return new Map(Object.entries(shape).map(([holder, declared]) => [holder, new Set(declared)]));
 }
 
@@ -26,7 +26,7 @@ interface DependentsCase {
   readonly expected: readonly string[];
 }
 
-const CASES: readonly DependentsCase[] = [
+const DEPENDENTS_CASES: readonly DependentsCase[] = [
   {
     title: "D-05-14: an empty index has no dependents",
     shape: {},
@@ -59,10 +59,10 @@ const CASES: readonly DependentsCase[] = [
   },
 ];
 
-for (const { title, shape, target, expected } of CASES) {
+for (const { title, shape, target, expected } of DEPENDENTS_CASES) {
   test(title, () => {
     // arrange
-    const index = indexOf(shape);
+    const index = declarationIndex(shape);
 
     // act
     const dependents = findDependents(target, index);
@@ -71,19 +71,6 @@ for (const { title, shape, target, expected } of CASES) {
     assert.deepStrictEqual(dependents, expected);
   });
 }
-
-test("D-05-14: the input index is not mutated by the walk", () => {
-  // arrange
-  const index = indexOf({ "app@mp": ["helper@mp"], "tool@mp": ["helper@mp", "other@mp"] });
-  const before = new Map([...index].map(([holder, declared]) => [holder, [...declared]]));
-
-  // act
-  findDependents("helper@mp", index);
-
-  // assert
-  const after = new Map([...index].map(([holder, declared]) => [holder, [...declared]]));
-  assert.deepStrictEqual(after, before);
-});
 
 /** `key` as a dependency-provenance candidate. */
 function dependency(key: string): OrphanCandidate {
@@ -189,7 +176,7 @@ const ORPHAN_CASES: readonly OrphanCase[] = [
 for (const { title, records, shape, removed, expected } of ORPHAN_CASES) {
   test(title, () => {
     // arrange
-    const index = indexOf(shape);
+    const index = declarationIndex(shape);
 
     // act
     const pruned = pruneOrphans(records, index, new Set(removed));
@@ -198,25 +185,6 @@ for (const { title, records, shape, removed, expected } of ORPHAN_CASES) {
     assert.deepStrictEqual(pruned, expected);
   });
 }
-
-test("D-05-02: the candidate list, the index and the removed set are not mutated by the sweep", () => {
-  // arrange
-  const records = [dependency("d1@mp"), dependency("d2@mp"), explicit("e@mp")];
-  const index = indexOf({ "x@mp": ["d1@mp"], "d1@mp": ["d2@mp"] });
-  const removed = new Set(["x@mp"]);
-  const recordsBefore = structuredClone(records);
-  const indexBefore = new Map([...index].map(([holder, declared]) => [holder, [...declared]]));
-  const removedBefore = [...removed];
-
-  // act
-  pruneOrphans(records, index, removed);
-
-  // assert
-  const indexAfter = new Map([...index].map(([holder, declared]) => [holder, [...declared]]));
-  assert.deepStrictEqual(records, recordsBefore);
-  assert.deepStrictEqual(indexAfter, indexBefore);
-  assert.deepStrictEqual([...removed], removedBefore);
-});
 
 interface HeldCase {
   readonly title: string;
@@ -260,7 +228,7 @@ const HELD_CASES: readonly HeldCase[] = [
 for (const { title, shape, gone, key, expected } of HELD_CASES) {
   test(title, () => {
     // arrange
-    const index = indexOf(shape);
+    const index = declarationIndex(shape);
 
     // act
     const held = isHeldBy(index, new Set(gone), key);

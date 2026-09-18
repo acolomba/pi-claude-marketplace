@@ -28,6 +28,7 @@ import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts"
 import {
   CrossPluginConflictError,
   errorMessage,
+  isErrnoException,
   MarketplaceNotFoundError,
 } from "../../shared/errors.ts";
 import { notify, notifyDiagnostic } from "../../shared/notification-dispatch.ts";
@@ -810,9 +811,7 @@ export async function writeAdoptingConfigEntries(opts: {
     ...(adoptedSource !== undefined && {
       marketplaces: { [opts.marketplace]: { source: adoptedSource } },
     }),
-    plugins: {
-      [`${opts.plugin}@${opts.marketplace}`]: opts.pluginPatch,
-    },
+    plugins: { [`${opts.plugin}@${opts.marketplace}`]: opts.pluginPatch },
   });
 }
 
@@ -953,8 +952,8 @@ async function manifestCandidateExists(manifestPath: string): Promise<boolean> {
   try {
     return (await stat(manifestPath)).isFile();
   } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    return code !== "ENOENT" && code !== "ENOTDIR";
+    const absent = isErrnoException(err) && (err.code === "ENOENT" || err.code === "ENOTDIR");
+    return !absent;
   }
 }
 
@@ -976,19 +975,29 @@ async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | u
       continue;
     }
 
+    let parsed: unknown;
     try {
-      const parsed: unknown = JSON.parse(await readFile(manifestPath, "utf8"));
-      const pluginJsonVersion = (parsed as { version?: unknown }).version;
-      return typeof pluginJsonVersion === "string" && pluginJsonVersion.length > 0
-        ? pluginJsonVersion
-        : undefined;
+      parsed = JSON.parse(await readFile(manifestPath, "utf8"));
     } catch {
       // Present and unusable: tier 2 / tier 3 cover it.
       return undefined;
     }
+
+    return usableDeclaredVersion(parsed);
   }
 
   return undefined;
+}
+
+/** The `version` a parsed manifest declares when it is a non-empty string. */
+function usableDeclaredVersion(parsed: unknown): string | undefined {
+  if (typeof parsed !== "object" || parsed === null || !("version" in parsed)) {
+    return undefined;
+  }
+
+  return typeof parsed.version === "string" && parsed.version.length > 0
+    ? parsed.version
+    : undefined;
 }
 
 /**

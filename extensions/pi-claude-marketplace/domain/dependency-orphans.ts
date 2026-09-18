@@ -34,10 +34,10 @@
 export type DeclarationIndex = ReadonlyMap<string, ReadonlySet<string>>;
 
 /**
- * The holder keys whose declared set contains `target`, in `localeCompare`
- * order -- the ordering every other rendered name list in this extension uses.
- * An empty index or a target nobody declares yields `[]`. The input map is
- * never mutated.
+ * Lists the holder keys whose declared set contains `target`, in
+ * `localeCompare` order -- the ordering every other rendered name list in this
+ * extension uses. An empty index or a target nobody declares yields `[]`. The
+ * input map is never mutated.
  */
 export function findDependents(target: string, index: DeclarationIndex): readonly string[] {
   const dependents: string[] = [];
@@ -61,9 +61,9 @@ export interface OrphanCandidate {
 }
 
 /**
- * Whether any holder outside `gone` declares `key` -- the ONE-PASS question,
- * with no fixpoint behind it: a holder in `gone` is absent, every other holder
- * is present whatever `gone` implies about its own orphan status.
+ * Reports whether any holder outside `gone` declares `key` -- the ONE-PASS
+ * question, with no fixpoint behind it: a holder in `gone` is absent, every
+ * other holder is present whatever `gone` implies about its own orphan status.
  *
  * `pruneOrphans` marks a whole batch gone on the assumption that every key
  * in it will be removed; when a removal fails, that key's holder is still
@@ -82,8 +82,8 @@ export function isHeldBy(index: DeclarationIndex, gone: ReadonlySet<string>, key
 }
 
 /**
- * The keys `--prune` removes, in removal order, given every record in the
- * scope, the declaration index over those records, and the keys already
+ * Computes the keys `--prune` removes, in removal order, given every record in
+ * the scope, the declaration index over those records, and the keys already
  * removed (the named plugin).
  *
  * D-05-01: the sweep is whole-scope -- a candidate nothing declares is pruned

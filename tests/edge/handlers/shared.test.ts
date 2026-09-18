@@ -33,7 +33,10 @@ import { passThroughFlagNames } from "../../../extensions/pi-claude-marketplace/
 import { extractLocalFlag } from "../../../extensions/pi-claude-marketplace/edge/handlers/shared.ts";
 import { createNotificationBoundary } from "../notification-boundary.ts";
 
-import type { ConsumeLongFlags } from "../../../extensions/pi-claude-marketplace/edge/handlers/shared.ts";
+import type {
+  ConsumedFlagScan,
+  ConsumeLongFlags,
+} from "../../../extensions/pi-claude-marketplace/edge/handlers/shared.ts";
 
 type Scan = NonNullable<ReturnType<typeof extractLocalFlag>>;
 
@@ -276,53 +279,58 @@ test("reports the flag off with an empty residual when no argument text is suppl
 test("consuming mode returns an empty flag set when no boolean is present", () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
-  const options: ConsumeLongFlags = { consumeLongFlags: ["--keep-data"] };
+  const flags: ConsumeLongFlags = { consumeLongFlags: ["--keep-data"] };
 
   // act
-  const scanned = extractLocalFlag("alpha@official", ctx, ENABLE_USAGE, options);
+  const scanned = extractLocalFlag("alpha@official", ctx, ENABLE_USAGE, flags);
 
   // assert
   assert.deepStrictEqual(scanned, {
     local: false,
     residualArgs: "alpha@official",
-    consumedFlags: new Set(),
-  });
+    consumedFlags: new Set<string>(),
+  } satisfies ConsumedFlagScan);
   assert.deepStrictEqual(notifications, []);
   verifyBoundary();
 });
 
-for (const { args, local, residualArgs, flags } of [
+for (const { args, local, residualArgs, consumedFlags } of [
   {
     args: "--keep-data alpha@official",
     local: false,
     residualArgs: "alpha@official",
-    flags: ["--keep-data"],
+    consumedFlags: ["--keep-data"],
   },
   {
     args: "alpha@official --keep-data",
     local: false,
     residualArgs: "alpha@official",
-    flags: ["--keep-data"],
+    consumedFlags: ["--keep-data"],
   },
   {
     args: "--keep-data --local alpha@official --keep-data --local --scope project",
     local: true,
     residualArgs: "alpha@official --scope project",
-    flags: ["--keep-data"],
+    consumedFlags: ["--keep-data"],
   },
   {
     args: "--scope user --keep-data alpha@official",
     local: false,
     residualArgs: "--scope user alpha@official",
-    flags: ["--keep-data"],
+    consumedFlags: ["--keep-data"],
   },
-  { args: "--keep-data --scope", local: false, residualArgs: "--scope", flags: ["--keep-data"] },
-  { args: "", local: false, residualArgs: "", flags: [] },
+  {
+    args: "--keep-data --scope",
+    local: false,
+    residualArgs: "--scope",
+    consumedFlags: ["--keep-data"],
+  },
+  { args: "", local: false, residualArgs: "", consumedFlags: [] },
   {
     args: "--another alpha@official --keep-data",
     local: false,
     residualArgs: "alpha@official",
-    flags: ["--another", "--keep-data"],
+    consumedFlags: ["--another", "--keep-data"],
   },
 ]) {
   test(`consuming mode extracts the supplied booleans from "${args}"`, () => {
@@ -335,7 +343,11 @@ for (const { args, local, residualArgs, flags } of [
     });
 
     // assert
-    assert.deepStrictEqual(scanned, { local, residualArgs, consumedFlags: new Set(flags) });
+    assert.deepStrictEqual(scanned, {
+      local,
+      residualArgs,
+      consumedFlags: new Set(consumedFlags),
+    } satisfies ConsumedFlagScan);
     assert.deepStrictEqual(notifications, []);
     verifyBoundary();
   });
@@ -355,19 +367,21 @@ for (const scopeValue of ["--keep-data", "--local", "--delete-data", "-y", "--ye
     assert.deepStrictEqual(scanned, {
       local: false,
       residualArgs: `--scope ${scopeValue} alpha@official`,
-      consumedFlags: new Set(),
-    });
+      consumedFlags: new Set<string>(),
+    } satisfies ConsumedFlagScan);
     assert.deepStrictEqual(notifications, []);
     verifyBoundary();
   });
 }
 
 for (const flag of ["--delete-data", "-y", "--yes", "--prune", "--keep-data=false", "-"]) {
-  for (const placement of ["before", "after"]) {
-    test(`consuming mode rejects "${flag}" ${placement} the reference`, () => {
+  for (const { args, placement } of [
+    { args: `${flag} alpha@official`, placement: "before the reference" },
+    { args: `alpha@official ${flag}`, placement: "after the reference" },
+  ]) {
+    test(`consuming mode rejects "${flag}" ${placement}`, () => {
       // arrange
       const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-      const args = placement === "before" ? `${flag} alpha@official` : `alpha@official ${flag}`;
 
       // act
       const scanned = extractLocalFlag(args, ctx, ENABLE_USAGE, {

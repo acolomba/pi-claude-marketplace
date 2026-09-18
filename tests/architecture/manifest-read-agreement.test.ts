@@ -46,16 +46,20 @@ import {
   materializeMarketplaceTree,
   mergeMarketplaceIntoState,
 } from "../edge/handlers/marketplace-seed.ts";
+import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 import type { ClosureLookupResult } from "../../extensions/pi-claude-marketplace/domain/dependency-closure.ts";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  NotificationContext,
+  ToolInventory,
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 /** The marketplace entry every case resolves. Its own version is tier 2. */
 const ENTRY: PluginEntry = { name: "alpha", source: "./alpha", version: "1.0.0" };
 
 /**
- * Plant a marketplace root holding one plugin directory, writing whichever
+ * Plants a marketplace root holding one plugin directory, writing whichever
  * manifest locations the case names. A location left unnamed is absent from
  * disk, which is the only condition either reader may fall through on.
  */
@@ -127,10 +131,8 @@ test("both readers tolerate a plugin declaring no manifest at either path", asyn
   assert.strictEqual(version, "1.0.0");
 });
 
-// ---------------------------------------------------------------------------
 // D-01-32: the third reader. `info` opens the same planted file, and treats it
 // as outranking the marketplace entry rather than merely reading it.
-// ---------------------------------------------------------------------------
 
 /** What the marketplace ENTRY declares -- the mirror that can go stale. */
 const ENTRY_DEPENDENCY = "stale-dep@mp";
@@ -138,8 +140,8 @@ const ENTRY_DEPENDENCY = "stale-dep@mp";
 const MANIFEST_DEPENDENCY = "fresh-dep@mp";
 
 /**
- * The fourth reader, driven against the very same planted tree: the read the
- * install cascade resolves a plugin's dependencies through.
+ * Reads the planted tree through the fourth reader: the read the install
+ * cascade resolves a plugin's dependencies through.
  */
 async function readCascadeDeclaration(
   marketplaceRoot: string,
@@ -152,7 +154,7 @@ async function readCascadeDeclaration(
   });
 }
 
-/** The parsed form of a `<name>@mp` token either side may declare. */
+/** Builds the parsed form of a `<name>@mp` token either side may declare. */
 function declares(name: string): ClosureLookupResult {
   return { kind: "found", dependencies: [{ name, marketplace: "mp" }] };
 }
@@ -173,41 +175,40 @@ for (const { label, prepare } of [
     },
   },
 ]) {
-  test(`all four readers stop at ${label} instead of using the bare sibling`, async () => {
-    await withHermeticHome(async ({ home, cwd }) => {
-      // arrange
-      const marketplaceRoot = await seedScopedMarketplace(home, cwd);
-      const previousResolution = await resolveStrict(ENTRY, { marketplaceRoot });
-      requireInstallable(previousResolution);
-      // A wrong dependency fallback must change info's result before the
-      // resolver's unavailable row can suppress the selected dependencies.
-      await writeFile(
-        path.join(marketplaceRoot, "alpha", "plugin.json"),
-        '{"name":"alpha","version":"9.9.9","dependencies":[42]}',
-      );
-      await prepare(path.join(marketplaceRoot, "alpha"));
-      const { ctx, pi, notifications } = makeCtx();
+  test(`all four readers stop at ${label} instead of using the bare sibling`, async (t) => {
+    // arrange
+    const { agentDir, cwd } = await createHermeticEnvironment(t, "manifest-read-agreement-");
+    const marketplaceRoot = await seedScopedMarketplace(agentDir, cwd);
+    const previousResolution = await resolveStrict(ENTRY, { marketplaceRoot });
+    requireInstallable(previousResolution);
+    // A wrong dependency fallback must change info's result before the
+    // resolver's unavailable row can suppress the selected dependencies.
+    await writeFile(
+      path.join(marketplaceRoot, "alpha", "plugin.json"),
+      '{"name":"alpha","version":"9.9.9","dependencies":[42]}',
+    );
+    await prepare(path.join(marketplaceRoot, "alpha"));
+    const { ctx, pi, notifications } = makeCtx();
 
-      // act
-      const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
-      const version = await resolvePluginVersion(ENTRY, previousResolution);
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
-      const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
+    // act
+    const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
+    const version = await resolvePluginVersion(ENTRY, previousResolution);
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
 
-      // assert -- the fourth reader falls back to the ENTRY, so the bare
-      // sibling's rejected `[42]` list cannot reach it either.
-      assert.deepStrictEqual(
-        { state: resolved.state, version, notifications, declaration },
-        {
-          state: "unavailable",
-          version: "1.0.0",
-          notifications: [
-            "● mp [user] <no autoupdate>\n  ⊘ alpha v1.0.0 (unavailable) {unsupported source}",
-          ],
-          declaration: declares("stale-dep"),
-        },
-      );
-    });
+    // assert -- the fourth reader falls back to the ENTRY, so the bare
+    // sibling's rejected `[42]` list cannot reach it either.
+    assert.deepStrictEqual(
+      { state: resolved.state, version, notifications, declaration },
+      {
+        state: "unavailable",
+        version: "1.0.0",
+        notifications: [
+          "● mp [user] <no autoupdate>\n  ⊘ alpha v1.0.0 (unavailable) {unsupported source}",
+        ],
+        declaration: declares("stale-dep"),
+      },
+    );
   });
 }
 
@@ -229,85 +230,64 @@ for (const { label, prepare } of [
     },
   },
 ]) {
-  test(`all four readers fall through ${label} to the bare manifest`, async () => {
-    await withHermeticHome(async ({ home, cwd }) => {
-      // arrange
-      const marketplaceRoot = await seedScopedMarketplace(home, cwd);
-      await prepare(path.join(marketplaceRoot, "alpha"));
-      const { ctx, pi, notifications } = makeCtx();
+  test(`all four readers fall through ${label} to the bare manifest`, async (t) => {
+    // arrange
+    const { agentDir, cwd } = await createHermeticEnvironment(t, "manifest-read-agreement-");
+    const marketplaceRoot = await seedScopedMarketplace(agentDir, cwd);
+    await prepare(path.join(marketplaceRoot, "alpha"));
+    const { ctx, pi, notifications } = makeCtx();
 
-      // act
-      const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
-      requireInstallable(resolved);
-      const version = await resolvePluginVersion(ENTRY, resolved);
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
-      const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
+    // act
+    const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
+    requireInstallable(resolved);
+    const version = await resolvePluginVersion(ENTRY, resolved);
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
 
-      // assert
-      assert.deepStrictEqual(
-        { state: resolved.state, version, notifications, declaration },
-        {
-          state: "installable",
-          version: "9.9.9",
-          notifications: [
-            "● mp [user] <no autoupdate>\n  ○ alpha v1.0.0 (available)\n    dependencies: fresh-dep@mp",
-          ],
-          declaration: declares("fresh-dep"),
-        },
-      );
-    });
+    // assert
+    assert.deepStrictEqual(
+      { state: resolved.state, version, notifications, declaration },
+      {
+        state: "installable",
+        version: "9.9.9",
+        notifications: [
+          "● mp [user] <no autoupdate>\n  ○ alpha v1.0.0 (available)\n    dependencies: fresh-dep@mp",
+        ],
+        declaration: declares("fresh-dep"),
+      },
+    );
   });
 }
 
-function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: string[] } {
+/**
+ * Builds the two ports `getPluginInfo` takes: a recording notifier and an
+ * empty tool inventory.
+ */
+function makeCtx(): { ctx: NotificationContext; pi: ToolInventory; notifications: string[] } {
   const notifications: string[] = [];
-  const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
-  const ctx = {
+  const pi: ToolInventory = { getAllTools: () => [] };
+  const ctx: NotificationContext = {
     ui: {
-      notify: (m: string): void => {
-        notifications.push(m);
+      notify: (message) => {
+        notifications.push(message);
       },
     },
-    pi,
-  } as unknown as ExtensionContext;
+  };
   return { ctx, pi, notifications };
 }
 
 /**
- * `getPluginInfo` resolves the user-scope agent directory from HOME, so its
- * half needs the swap the other two do not: they take an explicit
- * `marketplaceRoot` and touch nothing outside it.
+ * Plants a user-scope path-source marketplace under the hermetic agent
+ * directory, whose ONLY plugin manifest is the bare one, and whose entry
+ * declares a DIFFERENT dependency than that manifest. Returns the marketplace
+ * root, so the two direct-reader halves can be driven against the very same
+ * tree `info` will read.
  */
-async function withHermeticHome<T>(fn: (env: { home: string; cwd: string }) => Promise<T>) {
-  const originalHome = process.env.HOME;
-  const home = await mkdtemp(path.join(tmpdir(), "manifest-read-agreement-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "manifest-read-agreement-cwd-"));
-  process.env.HOME = home;
-  try {
-    return await fn({ home, cwd });
-  } finally {
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
-    }
-
-    await rm(home, { recursive: true, force: true, maxRetries: 3 });
-    await rm(cwd, { recursive: true, force: true, maxRetries: 3 });
-  }
-}
-
-/**
- * Plant a user-scope path-source marketplace whose ONLY plugin manifest is the
- * bare one, and whose entry declares a DIFFERENT dependency than that manifest.
- * Returns the marketplace root, so the two direct-reader halves can be driven
- * against the very same tree `info` will read.
- */
-async function seedScopedMarketplace(home: string, cwd: string): Promise<string> {
+async function seedScopedMarketplace(agentDir: string, cwd: string): Promise<string> {
   const locations = locationsFor("user", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
 
-  const marketplaceRoot = path.join(home, ".pi", "agent", "marketplaces", "mp");
+  const marketplaceRoot = path.join(agentDir, "marketplaces", "mp");
   await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
   await writeFile(
@@ -344,26 +324,30 @@ async function seedScopedMarketplace(home: string, cwd: string): Promise<string>
   return marketplaceRoot;
 }
 
-test("all four readers locate one bare manifest, and two let it outrank the entry", async () => {
-  await withHermeticHome(async ({ home, cwd }) => {
-    // arrange -- one tree, one manifest, at the bare candidate only.
-    const marketplaceRoot = await seedScopedMarketplace(home, cwd);
-    const { ctx, pi, notifications } = makeCtx();
+test("all four readers locate one bare manifest, and two let it outrank the entry", async (t) => {
+  // arrange -- one tree, one manifest, at the bare candidate only.
+  const { agentDir, cwd } = await createHermeticEnvironment(t, "manifest-read-agreement-");
+  const marketplaceRoot = await seedScopedMarketplace(agentDir, cwd);
+  const { ctx, pi, notifications } = makeCtx();
 
-    // act
-    const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
-    requireInstallable(resolved);
-    const version = await resolvePluginVersion(ENTRY, resolved);
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
-    const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
+  // act
+  const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
+  requireInstallable(resolved);
+  const version = await resolvePluginVersion(ENTRY, resolved);
+  await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+  const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
 
-    // assert -- readers one and two found the file; readers three and four not
-    // only found it but preferred it to the entry's competing claim.
-    assert.strictEqual(resolved.defaultEnabled, false);
-    assert.strictEqual(version, "9.9.9");
-    assert.strictEqual(notifications.length, 1);
-    assert.match(notifications[0]!, new RegExp(`dependencies: ${MANIFEST_DEPENDENCY}`));
-    assert.doesNotMatch(notifications[0]!, new RegExp(ENTRY_DEPENDENCY));
-    assert.deepStrictEqual(declaration, declares("fresh-dep"));
-  });
+  // assert -- readers one and two found the file; readers three and four not
+  // only found it but preferred it to the entry's competing claim.
+  assert.deepStrictEqual(
+    { defaultEnabled: resolved.defaultEnabled, version, notifications, declaration },
+    {
+      defaultEnabled: false,
+      version: "9.9.9",
+      notifications: [
+        "● mp [user] <no autoupdate>\n  ○ alpha v1.0.0 (available)\n    dependencies: fresh-dep@mp",
+      ],
+      declaration: declares("fresh-dep"),
+    },
+  );
 });

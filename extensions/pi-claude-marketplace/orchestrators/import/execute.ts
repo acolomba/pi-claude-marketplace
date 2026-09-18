@@ -714,23 +714,23 @@ type PlannedPluginBucket = "install-failed" | "installed" | "unexpected-failure"
  * CR-01: the returned bucket is what the caller discards, not what it acts on --
  * every consumer reads the populated `result` buckets instead. The declared
  * return type is the mechanism: see `PlannedPluginBucket`.
+ *
+ * @param promoting D-04-07: the recorded dependency this entry promotes, when
+ *   the scope's snapshot already recorded it as one. ENBL-07: a partially
+ *   installed record was accepted in that shape when the cascade wrote it, so
+ *   the settings that name it consent to the record as it stands, not to a new
+ *   degradation; the promotion's `--partial` gate reads that consent here.
+ *   Import never installs a fresh plugin partially, so the flag is set for no
+ *   other entry. The record also says whether the promotion enables it.
+ *   Whether the install promoted at all is read off its outcome, not this
+ *   record: the snapshot is taken once per scope, so a dependency an earlier
+ *   entry's cascade recorded in this same import has no record here and is
+ *   promoted at lock time.
  */
 async function installOnePlannedPlugin(
   opts: ImportClaudeSettingsOptions,
   result: MutableImportResult,
   plugin: PlannedPlugin,
-  /**
-   * D-04-07: the recorded dependency this entry promotes, when the scope's
-   * snapshot already recorded it as one. ENBL-07: a partially installed record
-   * was accepted in that shape when the cascade wrote it, so the settings that
-   * name it consent to the record as it stands, not to a new degradation; the
-   * promotion's `--partial` gate reads that consent here. Import never
-   * installs a fresh plugin partially, so the flag is set for no other entry.
-   * The record also says whether the promotion enables it. Whether the install
-   * promoted at all is read off its outcome, not this record: the snapshot is
-   * taken once per scope, so a dependency an earlier entry's cascade recorded
-   * in this same import has no record here and is promoted at lock time.
-   */
   promoting?: PluginInstallRecord,
 ): Promise<PlannedPluginBucket> {
   const installPlugin = installPluginFn(opts.deps, opts.hooksRouting, opts.completionCache);

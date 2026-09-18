@@ -64,7 +64,6 @@ import type {
   PluginBackfilledOutcome,
   PluginEnabledOutcome,
   PluginInstalledOutcome,
-  PluginUninstallFailedOutcome,
 } from "./apply-outcomes.ts";
 import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
@@ -744,24 +743,13 @@ function applyMarketplaceOutcomeToBlock(
 /**
  * D-05-16: the cause a REFUSED uninstall carries onto its reconcile row, so a
  * config-driven refusal renders the same failed row the standalone command
- * does, cause line included. Every other failed kind, and every cause-less
- * uninstall failure, answers `undefined` and keeps the bare row.
+ * does, cause line included. Every other outcome, including a cause-less
+ * uninstall failure, answers the empty object and keeps the bare row.
  */
-function failedRowCause(
-  outcome: Extract<
-    PerEntryOutcome,
-    {
-      kind:
-        | "plugin-install-failed"
-        | "plugin-uninstall-failed"
-        | "plugin-enable-failed"
-        | "plugin-disable-failed";
-    }
-  >,
-): Pick<PluginUninstallFailedOutcome, "cause"> | undefined {
+function failedRowCause(outcome: PerEntryOutcome): { cause?: Error } {
   return outcome.kind === "plugin-uninstall-failed" && outcome.cause !== undefined
     ? { cause: outcome.cause }
-    : undefined;
+    : {};
 }
 
 /**

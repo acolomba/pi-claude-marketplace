@@ -41,7 +41,7 @@ export type MarketplaceManifest = Type.Static<typeof MARKETPLACE_SCHEMA>;
 /** JIT-compiled validator (D-07). Call its `Check` (or coercing `Parse`) method. */
 const MARKETPLACE_VALIDATOR = Compile(MARKETPLACE_SCHEMA);
 
-/** Isolate invalid dependency declarations before validating the marketplace. */
+/** Isolates invalid dependency declarations before validating the marketplace. */
 function normalizeDependencyEntries(raw: unknown): unknown {
   if (
     typeof raw !== "object" ||
@@ -83,11 +83,11 @@ function normalizeDependencyEntries(raw: unknown): unknown {
  * NFR-8 / D-14: the sole marketplace.json read+parse+validate. This is the ONLY
  * marketplace.json file read in the repo (CACHE-06) and the injected loader
  * behind the cache. Valid entries retain the RAW JSON.parse value (WR-01),
- * including key order and extra fields. Invalid dependency entries become
- * unsupported stubs, or are dropped when unnamed, as in Claude Code (`update.ts`
- * JSON.stringifys it; `info.ts` reads `parsed.description`). Keep this focused on
- * path-based reads only: no cache state, invalidation, or caller-specific error
- * wrapping belongs here.
+ * including key order and extra fields (`update.ts` JSON.stringifys it;
+ * `info.ts` reads `parsed.description`). Invalid dependency entries become
+ * unsupported stubs, or are dropped when unnamed, as in Claude Code. Keep this
+ * focused on path-based reads only: no cache state, invalidation, or
+ * caller-specific error wrapping belongs here.
  */
 async function loadMarketplaceManifestUncached(manifestPath: string): Promise<MarketplaceManifest> {
   const raw = await readFile(manifestPath, "utf8");

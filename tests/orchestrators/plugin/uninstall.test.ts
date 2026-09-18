@@ -381,8 +381,49 @@ test("PU-1: cascade order observable end-state -- all four bridges' resources re
   });
 });
 
+/** A surviving plugin data tree: its inventory plus the seeded session bytes. */
+interface DataTree {
+  readonly tree: readonly string[];
+  readonly sessionBytes: Buffer | null;
+}
+
+/**
+ * The plugin data tree under `dataDir`, or `null` once the directory itself is
+ * gone: the deleting disposition removes the directory, not only its contents,
+ * so the two dispositions differ in exactly this value.
+ */
+async function readDataTree(dataDir: string): Promise<DataTree | null> {
+  if (!(await pathExists(dataDir))) {
+    return null;
+  }
+
+  const sessionFile = path.join(dataDir, "nested", "session.bin");
+  return {
+    tree: await retryTree(dataDir),
+    sessionBytes: (await pathExists(sessionFile)) ? await readFile(sessionFile) : null,
+  };
+}
+
+// WR-06: the preserving disposition stamps `{data kept}`; the two deleting
+// cases (false and omitted) keep the byte-frozen bare row, so the brace is
+// exactly as discriminating as the data tree beside it.
 for (const scope of ["user", "project"] as const) {
-  for (const keepData of [true, false, undefined]) {
+  for (const { keepData, expectedDataTree, expectedReasonBrace } of [
+    {
+      keepData: true,
+      expectedDataTree: {
+        tree: ["nested/", "nested/session.bin"],
+        sessionBytes: Buffer.from([0, 7, 255, 10]),
+      },
+      expectedReasonBrace: " {data kept}",
+    },
+    { keepData: false, expectedDataTree: null, expectedReasonBrace: "" },
+    { keepData: undefined, expectedDataTree: null, expectedReasonBrace: "" },
+  ] satisfies readonly {
+    keepData: boolean | undefined;
+    expectedDataTree: DataTree | null;
+    expectedReasonBrace: string;
+  }[]) {
     test(`uninstall preserves nested data only when keepData is true (${String(keepData)}, ${scope})`, async () => {
       // arrange
       await withHermeticHome(async () => {
@@ -454,20 +495,7 @@ for (const scope of ["user", "project"] as const) {
             agents: [],
             corruptions: [],
           });
-          assert.strictEqual(await pathExists(dataDir), keepData === true);
-          if (keepData === true) {
-            assert.deepStrictEqual(await readdir(dataDir), ["nested"]);
-            assert.deepStrictEqual(await readdir(path.join(dataDir, "nested")), ["session.bin"]);
-            assert.deepStrictEqual(
-              await readFile(path.join(dataDir, "nested", "session.bin")),
-              Buffer.from([0, 7, 255, 10]),
-            );
-          }
-
-          // WR-06: the preserving disposition stamps `{data kept}`; the two
-          // deleting cases (false and omitted) keep the byte-frozen bare row,
-          // so the brace is exactly as discriminating as the data tree above.
-          const expectedReasonBrace = keepData === true ? " {data kept}" : "";
+          assert.deepStrictEqual(await readDataTree(dataDir), expectedDataTree);
           assert.deepStrictEqual(notifications, [
             {
               message: `● mp [${scope}]\n  ○ hello v0.0.1 (uninstalled)${expectedReasonBrace}\n\n/reload to pick up changes`,
@@ -5034,8 +5062,10 @@ test("D-05-05: a declarer installed only in the OTHER scope is not consulted", a
           message: "● mp [project]\n  ○ helper v0.0.1 (uninstalled)\n\n/reload to pick up changes",
         },
       ]);
-      const state = await loadState(locations.extensionRoot);
-      assert.deepStrictEqual(Object.keys(state.marketplaces["mp"]?.plugins ?? {}), []);
+      assert.deepStrictEqual(await recordedInventory(locations), {});
+      assert.deepStrictEqual(await recordedInventory(userLocations), {
+        "app@mp": ["mp-app-skill"],
+      });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5068,21 +5098,17 @@ test("D-05-14: the orchestrated refusal returns the typed failed outcome and emi
       });
 
       // assert
-      assert.equal(outcome.status, "failed");
-      const error = outcome.status === "failed" ? outcome.error : undefined;
-      assert.ok(error instanceof UninstallRefusedError);
-      assert.deepStrictEqual(
-        { ...outcome, error: { reason: error.reason, message: error.message } },
-        {
-          status: "failed",
-          reason: "dependents remain",
-          error: { reason: "dependents remain", message: "required by app@mp" },
-          cause: "required by app@mp",
-        },
-      );
+      assert.deepStrictEqual(outcome, {
+        status: "failed",
+        reason: "dependents remain",
+        error: new UninstallRefusedError("dependents remain", "required by app@mp"),
+        cause: "required by app@mp",
+      });
       assert.deepStrictEqual(notifications, []);
-      const state = await loadState(locations.extensionRoot);
-      assert.ok(state.marketplaces["mp"]?.plugins["helper"] !== undefined);
+      assert.deepStrictEqual(await recordedInventory(locations), {
+        "helper@mp": ["mp-helper-skill"],
+        "app@mp": ["mp-app-skill"],
+      });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5152,7 +5178,9 @@ async function seedDataDirs(
 ): Promise<() => Promise<Record<string, boolean>>> {
   const dirs: Record<string, string> = {};
   for (const key of keys) {
-    const [plugin, marketplace] = key.split("@") as [string, string];
+    const separator = key.indexOf("@");
+    const plugin = key.slice(0, separator);
+    const marketplace = key.slice(separator + 1);
     const dir = await locations.pluginDataDir(marketplace, plugin);
     await mkdir(dir, { recursive: true });
     await writeFile(path.join(dir, "session"), "kept\n");
@@ -5584,22 +5612,25 @@ function cascadeFailingFor(
   };
 }
 
-const PRUNE_PARTIAL_FAILURE_NOTIFICATION = (reason: string): NotifyRecord => ({
-  message:
-    "A plugin operation needs attention.\n" +
-    "\n" +
-    "● mp [project]\n" +
-    "  ○ x v0.0.1 (uninstalled)\n" +
-    "  ○ d1 v0.0.1 (uninstalled) {dependency pruned}\n" +
-    "\n" +
-    "● mp2 [project]\n" +
-    "  ○ o v0.0.1 (uninstalled) {dependency pruned}\n" +
-    `  ⊘ d2 v0.0.1 (failed) {${reason}}\n` +
-    "    cause: Agents unstage refused: foreign content\n" +
-    "\n" +
-    "/reload to pick up changes",
-  severity: "warning",
-});
+/** The sweep report when `d2` alone fails to unstage, by the reason its row carries. */
+function prunePartialFailureNotification(reason: string): NotifyRecord {
+  return {
+    message:
+      "A plugin operation needs attention.\n" +
+      "\n" +
+      "● mp [project]\n" +
+      "  ○ x v0.0.1 (uninstalled)\n" +
+      "  ○ d1 v0.0.1 (uninstalled) {dependency pruned}\n" +
+      "\n" +
+      "● mp2 [project]\n" +
+      "  ○ o v0.0.1 (uninstalled) {dependency pruned}\n" +
+      `  ⊘ d2 v0.0.1 (failed) {${reason}}\n` +
+      "    cause: Agents unstage refused: foreign content\n" +
+      "\n" +
+      "/reload to pick up changes",
+    severity: "warning",
+  };
+}
 
 test("D-05-13: a pruned member whose agents refuse to unstage renders a warning row, keeps its whole record, and rolls nothing back", async () => {
   await withHermeticHome(async () => {
@@ -5627,9 +5658,7 @@ test("D-05-13: a pruned member whose agents refuse to unstage renders a warning 
 
       // assert
       assert.equal(outcome, undefined);
-      assert.deepStrictEqual(notifications, [
-        PRUNE_PARTIAL_FAILURE_NOTIFICATION("source mismatch"),
-      ]);
+      assert.deepStrictEqual(notifications, [prunePartialFailureNotification("source mismatch")]);
       assert.deepStrictEqual(await recordedInventory(locations), { "d2@mp2": ["mp2-d2-skill"] });
       assert.deepStrictEqual(await stagedSkills(locations, PRUNE_SCOPE_SKILLS), {
         "mp-x-skill": false,
@@ -5726,7 +5755,7 @@ test("D-05-13: a pruned member that partially unstaged keeps a record shrunk to 
 
       // assert
       assert.equal(outcome, undefined);
-      assert.deepStrictEqual(notifications, [PRUNE_PARTIAL_FAILURE_NOTIFICATION("unreadable")]);
+      assert.deepStrictEqual(notifications, [prunePartialFailureNotification("unreadable")]);
       assert.deepStrictEqual(await recordedInventory(locations), { "d2@mp2": [] });
     } finally {
       await rm(cwd, { recursive: true, force: true });

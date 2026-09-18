@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { parseDeclaredDependencies } from "../../extensions/pi-claude-marketplace/domain/dependencies.ts";
 import {
   resolveDependencyClosure,
   toClosureLookupResult,
@@ -10,7 +9,10 @@ import {
   type ClosureMember,
 } from "../../extensions/pi-claude-marketplace/domain/dependency-closure.ts";
 
-import type { DeclaredDependency } from "../../extensions/pi-claude-marketplace/domain/dependencies.ts";
+import type {
+  DeclaredDependency,
+  parseDeclaredDependencies,
+} from "../../extensions/pi-claude-marketplace/domain/dependencies.ts";
 
 void ({
   key: "helper@mp",
@@ -40,27 +42,31 @@ function catalog(graph: Graph): { readonly lookup: ClosureLookup; readonly asked
   };
 }
 
-for (const { label, raw, expected } of [
+for (const { label, parsed, expected } of [
   {
     label: "a declaration that parses",
-    raw: ["bar@mp"],
+    parsed: { ok: true, dependencies: [{ name: "bar", marketplace: "mp" }] },
     expected: { kind: "found", dependencies: [{ name: "bar", marketplace: "mp" }] },
   },
   {
     label: "a declaration that does not parse",
-    raw: 42,
+    parsed: { ok: false, reason: "dependencies: expected an array" },
     expected: { kind: "unusable", detail: "dependencies: expected an array" },
   },
-] satisfies readonly { label: string; raw: unknown; expected: ClosureLookupResult }[]) {
+] satisfies readonly {
+  label: string;
+  parsed: ReturnType<typeof parseDeclaredDependencies>;
+  expected: ClosureLookupResult;
+}[]) {
   test(`RESV-01 a catalog read reports ${label}`, () => {
     // arrange
-    const parsed = parseDeclaredDependencies(raw);
+    const expectedLooked = expected;
 
     // act
     const looked = toClosureLookupResult(parsed);
 
     // assert
-    assert.deepStrictEqual(looked, expected);
+    assert.deepStrictEqual(looked, expectedLooked);
   });
 }
 

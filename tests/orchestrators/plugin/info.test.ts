@@ -1537,6 +1537,7 @@ test("OPIC-F27: required reader preserves an available-row directory failure and
     const calls: string[] = [];
     let raised: unknown;
     const reader: PluginInfoReader = {
+      isRegularFile: async (filePath) => (await stat(filePath)).isFile(),
       readTextFile: (filePath) => readFile(filePath, "utf8"),
       listDirectory: async (directoryPath) => {
         calls.push(directoryPath);
@@ -2640,6 +2641,7 @@ test("OPIC-F27: required reader preserves a state-only file failure and reason o
     const lists: string[] = [];
     let raised: unknown;
     const reader: PluginInfoReader = {
+      isRegularFile: async (filePath) => (await stat(filePath)).isFile(),
       readTextFile: async (filePath) => {
         reads.push(filePath);
         if (filePath === file) {
@@ -7507,54 +7509,66 @@ async function renderOwnManifestCase(opts: {
 }
 
 test("D-01-32: a bare plugin.json outranks the marketplace entry's dependency list", async () => {
-  // arrange / act
-  const message = await renderOwnManifestCase({
+  // arrange
+  const manifests = {
     entryDependencies: ["stale@mp"],
     bare: JSON.stringify({ name: "host", dependencies: ["fresh@mp"] }),
-  });
+  };
+
+  // act
+  const message = await renderOwnManifestCase(manifests);
 
   // assert
   assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: fresh@mp`);
 });
 
 test("D-01-32: the wrapped manifest outranks a bare sibling, matching the shared ordering", async () => {
-  // arrange / act
-  const message = await renderOwnManifestCase({
+  // arrange
+  const manifests = {
     entryDependencies: ["stale@mp"],
     wrapped: JSON.stringify({ name: "host", dependencies: ["wrapped-dep@mp"] }),
     bare: JSON.stringify({ name: "host", dependencies: ["bare-dep@mp"] }),
-  });
+  };
+
+  // act
+  const message = await renderOwnManifestCase(manifests);
 
   // assert
   assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: wrapped-dep@mp`);
 });
 
 test("D-01-32: a readable manifest declaring nothing omits the line; the entry does not reappear", async () => {
-  // arrange / act
-  const message = await renderOwnManifestCase({
-    entryDependencies: ["stale@mp"],
-    bare: JSON.stringify({ name: "host" }),
-  });
+  // arrange
+  const manifests = { entryDependencies: ["stale@mp"], bare: JSON.stringify({ name: "host" }) };
+
+  // act
+  const message = await renderOwnManifestCase(manifests);
 
   // assert
   assert.equal(message, DEPENDENCY_BLOCK_HEAD.trimEnd());
 });
 
 test("D-01-32: a plugin with no manifest at either candidate falls back to the entry", async () => {
-  // arrange / act
-  const message = await renderOwnManifestCase({ entryDependencies: ["from-entry@mp"] });
+  // arrange
+  const manifests = { entryDependencies: ["from-entry@mp"] };
+
+  // act
+  const message = await renderOwnManifestCase(manifests);
 
   // assert
   assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: from-entry@mp`);
 });
 
 test("D-01-07: an unparseable first candidate ends the walk; the bare sibling never rescues it", async () => {
-  // arrange / act
-  const message = await renderOwnManifestCase({
+  // arrange
+  const manifests = {
     entryDependencies: ["from-entry@mp"],
     wrapped: "{ not json",
     bare: JSON.stringify({ name: "host", dependencies: [42] }),
-  });
+  };
+
+  // act
+  const message = await renderOwnManifestCase(manifests);
 
   // assert
   assert.equal(
@@ -7564,11 +7578,11 @@ test("D-01-07: an unparseable first candidate ends the walk; the bare sibling ne
 });
 
 test("a non-object own manifest stops before the bare sibling", async () => {
-  // arrange / act
-  const message = await renderOwnManifestCase({
-    wrapped: "[]",
-    bare: '{"dependencies":[42]}',
-  });
+  // arrange
+  const manifests = { wrapped: "[]", bare: '{"dependencies":[42]}' };
+
+  // act
+  const message = await renderOwnManifestCase(manifests);
 
   // assert
   assert.equal(
@@ -7850,9 +7864,15 @@ test("D-01-32: a WARM git clone's plugin.json supplies the dependency list, not 
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
 
     // assert
-    const msg = notifications[0]!.message;
-    assert.match(msg, /dependencies: fresh@mp/, msg);
-    assert.doesNotMatch(msg, /stale@mp/, msg);
+    assert.deepEqual(
+      notifications.map(({ message }) => message),
+      [
+        "● mp [user] <no autoupdate>\n" +
+          "  ○ gplug v1.0.0 (available)\n" +
+          "    skills: warm-skill\n" +
+          "    dependencies: fresh@mp",
+      ],
+    );
   });
 });
 

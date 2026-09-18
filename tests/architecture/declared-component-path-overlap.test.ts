@@ -69,7 +69,7 @@ test("overlapping declared and conventional command roots install each source on
 });
 
 /**
- * Plant a marketplace root holding one plugin whose manifest lives at the BARE
+ * Plants a marketplace root holding one plugin whose manifest lives at the BARE
  * `<pluginRoot>/plugin.json` -- the location that makes these plugins
  * interesting -- plus one skill directory per name in `skillNames`, each under
  * the conventional `skills/` parent.
@@ -101,7 +101,7 @@ async function plantPlugin(
   return marketplaceRoot;
 }
 
-/** Resolve the planted plugin against real disk and discover its skills. */
+/** Resolves the planted plugin against real disk and discovers its skills. */
 async function discoverPlanted(
   marketplaceRoot: string,
   pluginName: string,

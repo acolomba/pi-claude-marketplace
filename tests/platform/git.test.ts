@@ -384,7 +384,7 @@ function isExpectedDiscoveryError(error: unknown, caller: "git.clone" | "git.fet
   return true;
 }
 
-function expectedPublicRequests(): readonly RecordedHttpRequest[] {
+function expectedPublicRequests(): readonly [RecordedHttpRequest, RecordedHttpRequest] {
   return [
     {
       url: `${REMOTE_URL}/info/refs?service=git-upload-pack`,
@@ -409,9 +409,9 @@ function expectedPublicRequests(): readonly RecordedHttpRequest[] {
  * The same two-request envelope a ref resolution sends, carrying the tag
  * listing's own ls-refs command instead.
  */
-function expectedTagRequests(): readonly RecordedHttpRequest[] {
+function expectedTagRequests(): readonly [RecordedHttpRequest, RecordedHttpRequest] {
   const [discovery, listRefs] = expectedPublicRequests();
-  return [discovery!, { ...listRefs!, body: expectedListTagsBody() }];
+  return [discovery, { ...listRefs, body: expectedListTagsBody() }];
 }
 
 function expectedDiscoveryRequest(
@@ -1093,7 +1093,7 @@ describe("resolveRemoteRef", () => {
       {
         ...expectedPublicRequests()[1],
         headers: {
-          ...expectedPublicRequests()[1]!.headers,
+          ...expectedPublicRequests()[1].headers,
           Authorization: "Basic dXNlcjpzZWNyZXQ=",
         },
       },
@@ -1175,7 +1175,7 @@ describe("listRemoteTags", () => {
 
     // assert
     await assert.rejects(listing, { name: "HttpError", message: "HTTP Error: 401 Unauthorized" });
-    assert.deepStrictEqual(requests, [expectedTagRequests()[0]!]);
+    assert.deepStrictEqual(requests, [expectedTagRequests()[0]]);
   });
 
   test("RESV-03: the supplied credential bundle is what the tag query authenticates with", async (t) => {
@@ -1207,18 +1207,18 @@ describe("listRemoteTags", () => {
       reject: [],
     });
     assert.deepStrictEqual(requests, [
-      expectedTagRequests()[0]!,
+      expectedTagRequests()[0],
       {
-        ...expectedTagRequests()[0]!,
+        ...expectedTagRequests()[0],
         headers: {
           "Git-Protocol": "version=2",
           Authorization: "Basic dXNlcjpzZWNyZXQ=",
         },
       },
       {
-        ...expectedTagRequests()[1]!,
+        ...expectedTagRequests()[1],
         headers: {
-          ...expectedTagRequests()[1]!.headers,
+          ...expectedTagRequests()[1].headers,
           Authorization: "Basic dXNlcjpzZWNyZXQ=",
         },
       },

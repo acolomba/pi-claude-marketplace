@@ -49,12 +49,12 @@ export const REASONS = [
   "marketplace in project scope",
   "workflows",
   // DATA-01 / WR-06: the uninstall row's disposition marker. Uninstall destroys
-  // the plugin's data directory by default, so the two dispositions rendered
-  // byte-identically and neither outcome was reportable: the operator who typed
-  // `--keep-data` got no confirmation it took effect, and the one who omitted it
-  // got no signal that a data tree was destroyed. The token rides the PRESERVING
-  // branch, which keeps the default row byte-frozen (D-02-01) while making the
-  // two branches distinguishable.
+  // the plugin's data directory by default, and without a marker the two
+  // dispositions render the same row: the operator who typed `--keep-data`
+  // needs confirmation it took effect, and the one who omitted it needs to know
+  // a data tree was destroyed. The token rides the PRESERVING branch, which
+  // keeps the default row byte-frozen (D-02-01) while making the two branches
+  // distinguishable.
   "data kept",
   // RESV-03: the dependency's source advertises no release tag inside the
   // effective constraint. The outcome the operator can act on, kept separate
@@ -273,7 +273,7 @@ export interface PluginReinstalledMessage extends TransitionMessageBase {
  * WR-06: `reasons` carries the data disposition (`data kept`) and nothing else
  * today. The field is optional, so every producer that has nothing to report --
  * `marketplace remove`'s per-plugin rows, the default uninstall -- composes the
- * same brace-less row it always did.
+ * brace-less row.
  */
 export interface PluginUninstalledMessage extends TransitionMessageBase {
   readonly status: "uninstalled";

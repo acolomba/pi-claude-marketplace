@@ -284,7 +284,7 @@ async function readManifest(
       }
 
       return { ok: true, manifest: parsed };
-    } catch (err) {
+    } catch (err: unknown) {
       // D-01-08 / D-01-09: an unreadable file, a parse throw and a schema
       // rejection are one rule -- the manifest is present and unusable.
       return {

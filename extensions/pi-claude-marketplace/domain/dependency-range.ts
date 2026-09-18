@@ -55,13 +55,11 @@ const UNION = "||";
 /** The range that admits every version, which is what no constraint means. */
 const WILDCARD = "*";
 
-/** Why an intersection produced no range. */
-export type DependencyRangeFailureReason = "invalid" | "disjoint" | "too-complex";
-
 /**
  * The effective constraint N declared ranges come to, or the named reason they
  * come to none.
  *
+ * `reason` is the closed vocabulary of why an intersection produced no range.
  * `detail` is diagnostic text assembled from measurements and field positions
  * only. It never carries the raw text of a declared range, so one element's
  * content can never be reported against another element's failure.
@@ -70,7 +68,7 @@ export type DependencyRangeIntersection =
   | { readonly ok: true; readonly range: string }
   | {
       readonly ok: false;
-      readonly reason: DependencyRangeFailureReason;
+      readonly reason: "invalid" | "disjoint" | "too-complex";
       readonly detail: string;
     };
 
@@ -78,7 +76,7 @@ export type DependencyRangeIntersection =
 type IntersectionFailure = Extract<DependencyRangeIntersection, { ok: false }>;
 
 /**
- * Measure the whole input before anything is parsed, so an input too large to
+ * Measures the whole input before anything is parsed, so an input too large to
  * process cheaply never reaches the parser that would make it expensive.
  */
 function checkTotalInputSize(ranges: readonly string[]): IntersectionFailure | undefined {
@@ -99,7 +97,7 @@ function checkTotalInputSize(ranges: readonly string[]): IntersectionFailure | u
 }
 
 /**
- * Split a canonical range into its alternative branches.
+ * Splits a canonical range into its alternative branches.
  *
  * `validRange` renders a union as trimmed comparator sets joined by a bare
  * `||`, so splitting on that operator recovers exactly the branches it built.
@@ -112,7 +110,7 @@ function splitUnionBranches(canonical: string): readonly string[] {
 }
 
 /**
- * Validate every declared range and reduce each to its branches.
+ * Validates every declared range and reduces each to its branches.
  *
  * A rejection names the position of the offending input and the number of
  * inputs, never the text of any of them.
@@ -138,7 +136,7 @@ function splitEveryInput(
 }
 
 /**
- * Compare the PROJECTED conjunct count against the cap at every fold step,
+ * Compares the PROJECTED conjunct count against the cap at every fold step,
  * before a single product is allocated.
  *
  * The running product after the first input is that input's own branch count,
@@ -166,7 +164,7 @@ function checkProjectedConjuncts(
   return undefined;
 }
 
-/** Join every branch of one accumulator with every branch of the next. */
+/** Joins every branch of one accumulator with every branch of the next. */
 function crossProduct(left: readonly string[], right: readonly string[]): readonly string[] {
   const product: string[] = [];
   for (const one of left) {
@@ -179,7 +177,7 @@ function crossProduct(left: readonly string[], right: readonly string[]): readon
 }
 
 /**
- * Whether a conjunct admits any version at all.
+ * Reports whether a conjunct admits any version at all.
  *
  * The minimum-version test IS the disjointness detection, and a range
  * validator cannot stand in for it: `validRange(">=2.0.0 <1.0.0")` succeeds
@@ -193,7 +191,7 @@ function isSatisfiableConjunct(conjunct: string): boolean {
 }
 
 /**
- * Fold the ranges declared for one dependency name into the single effective
+ * Folds the ranges declared for one dependency name into the single effective
  * range that admits exactly the versions all of them admit.
  *
  * An empty accumulator is no constraint and intersects to the wildcard. Both
@@ -236,7 +234,8 @@ export function intersectDependencyRanges(ranges: readonly string[]): Dependency
 }
 
 /**
- * Whether a range constrains nothing, so no candidate search is owed for it.
+ * Reports whether a range constrains nothing, so no candidate search is owed
+ * for it.
  *
  * The test is canonicalization, not string identity. `validRange` collapses
  * every unconstrained spelling onto the same wildcard -- `*`, `x`, `>=0.0.0`,
@@ -250,7 +249,8 @@ export function isUnconstrainedRange(range: string): boolean {
 }
 
 /**
- * Whether the version RECORDED for an installed plugin satisfies a range.
+ * Reports whether the version RECORDED for an installed plugin satisfies a
+ * range.
  *
  * D-03-04: a recorded version with no real semver form -- this project's
  * PI-7 content-hash (`hash-<12hex>`) or git-sha (`sha-<12hex>`) fallback --
@@ -268,7 +268,7 @@ export function recordedVersionSatisfies(recorded: string, range: string): boole
 }
 
 /**
- * Bound a range for a user-visible reason, marking how much was dropped.
+ * Bounds a range for a user-visible reason, marking how much was dropped.
  *
  * An intersected range is synthesized rather than declared, so it carries no
  * declared length bound of its own -- see `MAX_RENDERED_RANGE_CHARS`.

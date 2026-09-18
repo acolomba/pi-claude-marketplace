@@ -88,6 +88,7 @@ import type {
   EnableDegradationSignals,
   EnableDisablePluginOutcome,
 } from "../plugin/enable-disable.ts";
+import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
 
 /** Reads the one state snapshot selected by the reconcile read pass. */
 export interface ReconcileStateReader {
@@ -351,7 +352,7 @@ async function applyMarketplaceAdds(
  * reporting it would claim work this reconcile did not perform.
  */
 async function applyOnePluginUninstall(
-  uninstallPlugin: ReturnType<typeof createNodeUninstallPlugin>,
+  uninstallPlugin: UninstallPluginOperation,
   opts: ApplyReconcileOptions,
   op: PlannedPluginUninstall,
 ): Promise<PerEntryOutcome | undefined> {
@@ -434,8 +435,10 @@ async function applyPluginUninstalls(
     opts.uninstallPlugin ?? createNodeUninstallPlugin(opts.hooksRouting, opts.completionCache);
   let pending = plan.pluginsToUninstall;
   for (;;) {
-    const refused: { readonly op: PlannedPluginUninstall; readonly outcome: PerEntryOutcome }[] =
-      [];
+    const refused: Array<{
+      readonly op: PlannedPluginUninstall;
+      readonly outcome: PerEntryOutcome;
+    }> = [];
     let settled = 0;
     for (const op of pending) {
       const outcome = await applyOnePluginUninstall(uninstallPlugin, opts, op);

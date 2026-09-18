@@ -14,11 +14,14 @@
 // description, catalog order -- and a future `complete: false` entry is what
 // would make the drop arm discriminable again.
 //
-// Two cases name SCOPE_TARGET_FLAG in their expectation on purpose: the promise
-// there is the identity relation between two exports (the name
-// passThroughFlagNames drops is the one SCOPE_TARGET_FLAG holds). Writing the
-// literal instead would restate the drift guard's exact per-verb pin.
-// parseFlagNames never reads SCOPE_TARGET_FLAG, so the relation is not circular.
+// A case that names an exported flag constant in its expectation does so on
+// purpose: the promise there is the identity relation between two exports (the
+// name passThroughFlagNames drops is the one SCOPE_TARGET_FLAG holds; the names
+// it keeps for uninstall are the ones KEEP_DATA_FLAG and PRUNE_FLAG hold, which
+// the uninstall handler maps onto its `keepData` and `prune` options -- WR-01).
+// Writing the literal instead would restate the drift guard's exact per-verb
+// pin. parseFlagNames never reads those constants, so the relation is not
+// circular.
 //
 // No exhaustiveness claim: the module holds no switch and no closed-union
 // dispatch, so a missing-arm plant has no target here.
@@ -189,15 +192,9 @@ test("passThroughFlagNames drops the scope target and keeps the uninstall preser
   assert.deepStrictEqual(passThroughNames, expectedPassThroughNames);
 });
 
-test("WR-01: KEEP_DATA_FLAG is the very name uninstall passes through to its handler", () => {
-  // The identity relation between two exports, in the shape the two
-  // SCOPE_TARGET_FLAG cases above already use: the handler maps this constant
-  // onto its `keepData` option, so a catalog rename that left the constant
-  // behind would silently stop preserving data. Naming the literal here instead
-  // would restate the drift guard's per-verb pin rather than the relation.
-
+test("WR-01 / D-05-10: KEEP_DATA_FLAG and PRUNE_FLAG are the very names uninstall passes through to its handler", () => {
   // arrange
-  const expectedPassThroughNames = [KEEP_DATA_FLAG, "--prune"];
+  const expectedPassThroughNames = [KEEP_DATA_FLAG, PRUNE_FLAG];
 
   // act
   const passThroughNames = passThroughFlagNames("uninstall");
@@ -205,24 +202,7 @@ test("WR-01: KEEP_DATA_FLAG is the very name uninstall passes through to its han
 
   // assert
   assert.deepStrictEqual(passThroughNames, expectedPassThroughNames);
-  assert.deepStrictEqual(parseNames, new Set([KEEP_DATA_FLAG, "--prune", SCOPE_TARGET_FLAG]));
-});
-
-test("WR-01 / D-05-10: PRUNE_FLAG is the very name uninstall passes through to its handler", () => {
-  // Same identity relation as the KEEP_DATA_FLAG case: the handler maps this
-  // constant onto its `prune` option, so a catalog rename that left the constant
-  // behind would silently turn the sweep off while the command reported success.
-
-  // arrange
-  const expectedPassThroughNames = ["--keep-data", PRUNE_FLAG];
-
-  // act
-  const passThroughNames = passThroughFlagNames("uninstall");
-  const parseNames = parseFlagNames("uninstall");
-
-  // assert
-  assert.deepStrictEqual(passThroughNames, expectedPassThroughNames);
-  assert.deepStrictEqual(parseNames, new Set(["--keep-data", PRUNE_FLAG, SCOPE_TARGET_FLAG]));
+  assert.deepStrictEqual(parseNames, new Set([KEEP_DATA_FLAG, PRUNE_FLAG, SCOPE_TARGET_FLAG]));
 });
 
 test("passThroughFlagNames keeps the remaining parse-accepted flags in catalog declaration order", () => {

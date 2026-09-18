@@ -134,7 +134,7 @@ async function collectSelfSkillDir(
 }
 
 /**
- * Enumerate the skill subdirs of ONE `componentPaths.skills` element, in
+ * Enumerates the skill subdirs of ONE `componentPaths.skills` element, in
  * stable `localeCompare` order, threading each through the same two dedup
  * collections `collectSelfSkillDir` uses.
  */

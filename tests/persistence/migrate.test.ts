@@ -14,6 +14,15 @@ void ({ marketplaces: { alpha: {} }, mutated: true } satisfies MigrationResult);
 // @ts-expect-error MigrationResult contains only object-valued marketplace rows.
 void ({ marketplaces: { alpha: null }, mutated: true } satisfies MigrationResult);
 
+/** A fresh plugin record in the pre-D-04-03 shape: every required field but `provenance`. */
+function pluginRecordWithoutProvenance(version = "1.0.0"): Record<string, unknown> {
+  return {
+    version,
+    enabled: true,
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+  };
+}
+
 test("normalizes a complete legacy marketplace in place", () => {
   // arrange
   const extensionRoot = path.join(path.sep, "extension-root");
@@ -803,11 +812,6 @@ test("D-04-03: leaves a present provenance untouched, including one the schema r
 test("D-04-03: fills every provenance-less record across marketplaces independently", () => {
   // arrange
   const extensionRoot = path.join(path.sep, "extension-root");
-  const record = (): Record<string, unknown> => ({
-    version: "1.0.0",
-    enabled: true,
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
-  });
   const legacyState = {
     schemaVersion: 2,
     marketplaces: {
@@ -816,8 +820,8 @@ test("D-04-03: fills every provenance-less record across marketplaces independen
         manifestPath: "/custom/alpha/marketplace.json",
         marketplaceRoot: "/custom/alpha",
         plugins: {
-          "plugin-one": record(),
-          "plugin-two": { ...record(), provenance: "dependency" },
+          "plugin-one": pluginRecordWithoutProvenance(),
+          "plugin-two": { ...pluginRecordWithoutProvenance(), provenance: "dependency" },
         },
       },
       beta: {
@@ -825,7 +829,7 @@ test("D-04-03: fills every provenance-less record across marketplaces independen
         manifestPath: "/custom/beta/marketplace.json",
         marketplaceRoot: "/custom/beta",
         plugins: {
-          "plugin-three": record(),
+          "plugin-three": pluginRecordWithoutProvenance(),
         },
       },
     },
@@ -837,8 +841,8 @@ test("D-04-03: fills every provenance-less record across marketplaces independen
         manifestPath: "/custom/alpha/marketplace.json",
         marketplaceRoot: "/custom/alpha",
         plugins: {
-          "plugin-one": { ...record(), provenance: "explicit" },
-          "plugin-two": { ...record(), provenance: "dependency" },
+          "plugin-one": { ...pluginRecordWithoutProvenance(), provenance: "explicit" },
+          "plugin-two": { ...pluginRecordWithoutProvenance(), provenance: "dependency" },
         },
       },
       beta: {
@@ -846,7 +850,7 @@ test("D-04-03: fills every provenance-less record across marketplaces independen
         manifestPath: "/custom/beta/marketplace.json",
         marketplaceRoot: "/custom/beta",
         plugins: {
-          "plugin-three": { ...record(), provenance: "explicit" },
+          "plugin-three": { ...pluginRecordWithoutProvenance(), provenance: "explicit" },
         },
       },
     },
@@ -867,11 +871,6 @@ test("D-04-03: fills every provenance-less record across marketplaces independen
 test("D-04-03: reads every record of a multi-marketplace legacy document as explicit and replays as a fixed point", () => {
   // arrange
   const extensionRoot = path.join(path.sep, "extension-root");
-  const record = (version: string): Record<string, unknown> => ({
-    version,
-    enabled: true,
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
-  });
   const legacyState = {
     schemaVersion: 2,
     marketplaces: {
@@ -879,13 +878,19 @@ test("D-04-03: reads every record of a multi-marketplace legacy document as expl
         name: "alpha",
         manifestPath: "/custom/alpha/marketplace.json",
         marketplaceRoot: "/custom/alpha",
-        plugins: { "plugin-one": record("1.0.0"), "plugin-two": record("1.1.0") },
+        plugins: {
+          "plugin-one": pluginRecordWithoutProvenance("1.0.0"),
+          "plugin-two": pluginRecordWithoutProvenance("1.1.0"),
+        },
       },
       beta: {
         name: "beta",
         manifestPath: "/custom/beta/marketplace.json",
         marketplaceRoot: "/custom/beta",
-        plugins: { "plugin-three": record("2.0.0"), "plugin-four": record("2.1.0") },
+        plugins: {
+          "plugin-three": pluginRecordWithoutProvenance("2.0.0"),
+          "plugin-four": pluginRecordWithoutProvenance("2.1.0"),
+        },
       },
     },
   };
@@ -895,8 +900,8 @@ test("D-04-03: reads every record of a multi-marketplace legacy document as expl
       manifestPath: "/custom/alpha/marketplace.json",
       marketplaceRoot: "/custom/alpha",
       plugins: {
-        "plugin-one": { ...record("1.0.0"), provenance: "explicit" },
-        "plugin-two": { ...record("1.1.0"), provenance: "explicit" },
+        "plugin-one": { ...pluginRecordWithoutProvenance("1.0.0"), provenance: "explicit" },
+        "plugin-two": { ...pluginRecordWithoutProvenance("1.1.0"), provenance: "explicit" },
       },
     },
     beta: {
@@ -904,8 +909,8 @@ test("D-04-03: reads every record of a multi-marketplace legacy document as expl
       manifestPath: "/custom/beta/marketplace.json",
       marketplaceRoot: "/custom/beta",
       plugins: {
-        "plugin-three": { ...record("2.0.0"), provenance: "explicit" },
-        "plugin-four": { ...record("2.1.0"), provenance: "explicit" },
+        "plugin-three": { ...pluginRecordWithoutProvenance("2.0.0"), provenance: "explicit" },
+        "plugin-four": { ...pluginRecordWithoutProvenance("2.1.0"), provenance: "explicit" },
       },
     },
   };

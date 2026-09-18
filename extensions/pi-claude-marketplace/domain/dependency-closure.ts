@@ -48,8 +48,8 @@
 
 import {
   isRenderableDependencyToken,
-  parseDeclaredDependencies,
   type DeclaredDependency,
+  type parseDeclaredDependencies,
 } from "./dependencies.ts";
 
 /**
@@ -90,7 +90,7 @@ export interface ClosureSubject {
 export type ClosureLookup = (subject: ClosureSubject) => Promise<ClosureLookupResult>;
 
 /**
- * Map a `parseDeclaredDependencies` result onto a catalog read result.
+ * Maps a `parseDeclaredDependencies` result onto a catalog read result.
  *
  * It lives here rather than in each lookup implementation so the parse-failure
  * arm has ONE definition, and so a reader whose own source can never produce a
@@ -151,13 +151,13 @@ export type DependencyClosureResult =
       readonly reason: "marketplace-not-added";
       readonly key: string;
       readonly marketplace: string;
-      readonly requiredBy: string | undefined;
+      readonly requiredBy: string;
     }
   | {
       readonly ok: false;
       readonly reason: "not-found";
       readonly key: string;
-      readonly requiredBy: string | undefined;
+      readonly requiredBy: string;
     }
   | {
       readonly ok: false;
@@ -187,12 +187,20 @@ interface MutableMember {
   readonly ranges: string[];
 }
 
-/** One edge into a key: the key itself plus what the declaring side said. */
+/**
+ * One edge into a key: the key itself plus what the declaring side said. The
+ * root's own entry has no declaring side.
+ */
 interface WalkEdge {
   readonly key: string;
   readonly parts: KeyParts;
-  readonly requiredBy: string | undefined;
+  readonly requiredBy?: string;
   readonly range?: string;
+}
+
+/** An edge a declaration produced, so the declaring key is always known. */
+interface DependencyEdge extends WalkEdge {
+  readonly requiredBy: string;
 }
 
 /** Mutable walk state, allocated once per `resolveDependencyClosure` call. */
@@ -205,19 +213,13 @@ interface WalkContext {
   readonly skipped: MutableMember[];
 }
 
-/** What the guard chain decided about an edge. */
-type GuardVerdict =
-  | { readonly kind: "walk" }
-  | { readonly kind: "stop" }
-  | { readonly kind: "failed"; readonly failure: ClosureFailure };
-
 /** A child edge, or the failure its declaration produced. */
 type ChildEdge =
-  | { readonly kind: "edge"; readonly edge: WalkEdge }
+  | { readonly kind: "edge"; readonly edge: DependencyEdge }
   | { readonly kind: "failed"; readonly failure: ClosureFailure };
 
 /**
- * Split a key on its FIRST `@`. The dependency token alphabet admits no `@`, so
+ * Splits a key on its FIRST `@`. The dependency token alphabet admits no `@`, so
  * the split is unambiguous and both halves must still pass the allowlist --
  * every key reaching this module renders verbatim into a line-oriented row.
  */
@@ -237,8 +239,8 @@ function splitKey(key: string): KeyParts | undefined {
 }
 
 /**
- * Record the edge against its member, creating the member on first sight, and
- * append the declared range.
+ * Records the edge against its member, creating the member on first sight, and
+ * appends the declared range.
  *
  * D-03-10: this runs BEFORE every guard, so a diamond's second edge still
  * contributes its constraint even though the memo short-circuits the walk.
@@ -264,48 +266,8 @@ function recordEdge(ctx: WalkContext, edge: WalkEdge): MutableMember {
 }
 
 /**
- * The guard chain, in the one order that is load-bearing:
- * already-installed -> marketplace-known -> cycle -> memo.
+ * Builds the edge one declared dependency points at.
  *
- * RESV-05 precedes D-03-08 deliberately: a dependency that is already
- * installed is skipped BEFORE its marketplace is checked, which is what keeps a
- * previously-installed plugin whose marketplace has since been removed from
- * failing the cascade.
- */
-function guardEdge(ctx: WalkContext, edge: WalkEdge, member: MutableMember): GuardVerdict {
-  const isRoot = edge.key === ctx.options.rootKey;
-  if (!isRoot && ctx.options.installedKeys.has(edge.key)) {
-    if (!ctx.skipped.includes(member)) {
-      ctx.skipped.push(member);
-    }
-
-    return { kind: "stop" };
-  }
-
-  if (!isRoot && !ctx.options.knownMarketplaces.has(edge.parts.marketplace)) {
-    return {
-      kind: "failed",
-      failure: {
-        ok: false,
-        reason: "marketplace-not-added",
-        key: edge.key,
-        marketplace: edge.parts.marketplace,
-        requiredBy: edge.requiredBy,
-      },
-    };
-  }
-
-  if (ctx.path.includes(edge.key)) {
-    return {
-      kind: "failed",
-      failure: { ok: false, reason: "cycle", chain: [...ctx.path, edge.key] },
-    };
-  }
-
-  return ctx.visited.has(edge.key) ? { kind: "stop" } : { kind: "walk" };
-}
-
-/**
  * RESV-02: a declaration that names no marketplace resolves in the DECLARING
  * plugin's marketplace; one that names a marketplace resolves there. The
  * filled-in value is re-checked against the token allowlist before it becomes
@@ -357,12 +319,12 @@ function buildChildEdge(args: {
       key: `${args.dependency.name}@${marketplace}`,
       parts: { name: args.dependency.name, marketplace },
       requiredBy: args.declaringKey,
-      ...(args.dependency.version !== undefined && { range: args.dependency.version }),
+      ...(args.dependency.version === undefined ? {} : { range: args.dependency.version }),
     },
   };
 }
 
-/** Walk one plugin's declared dependencies in declaration order. */
+/** Walks one plugin's declared dependencies in declaration order. */
 async function walkChildren(
   ctx: WalkContext,
   declaringKey: string,
@@ -375,7 +337,7 @@ async function walkChildren(
       return child.failure;
     }
 
-    const failure = await walkEdge(ctx, child.edge);
+    const failure = await walkDependencyEdge(ctx, child.edge);
     if (failure !== undefined) {
       return failure;
     }
@@ -385,21 +347,69 @@ async function walkChildren(
 }
 
 /**
- * The recursive step. Returns the first failure, or `undefined` once this key
- * and everything below it is resolved.
+ * Records a declared edge and walks it unless one of the two guards only a
+ * dependency is subject to stops it. With `walkEdge`'s pair this is the guard
+ * chain, in the one order that is load-bearing:
+ * already-installed -> marketplace-known -> cycle -> memo.
+ *
+ * RESV-05 precedes D-03-08 deliberately: a dependency that is already
+ * installed is skipped BEFORE its marketplace is checked, which is what keeps a
+ * previously-installed plugin whose marketplace has since been removed from
+ * failing the cascade.
+ *
+ * An edge back to the root is exempt from both, exactly as the root's own
+ * entry is; `walkEdge` then reports it as the cycle it is.
+ */
+async function walkDependencyEdge(
+  ctx: WalkContext,
+  edge: DependencyEdge,
+): Promise<ClosureFailure | undefined> {
+  const member = recordEdge(ctx, edge);
+  const isRoot = edge.key === ctx.options.rootKey;
+  if (!isRoot && ctx.options.installedKeys.has(edge.key)) {
+    if (!ctx.skipped.includes(member)) {
+      ctx.skipped.push(member);
+    }
+
+    return undefined;
+  }
+
+  if (!isRoot && !ctx.options.knownMarketplaces.has(edge.parts.marketplace)) {
+    return {
+      ok: false,
+      reason: "marketplace-not-added",
+      key: edge.key,
+      marketplace: edge.parts.marketplace,
+      requiredBy: edge.requiredBy,
+    };
+  }
+
+  return walkEdge(ctx, edge, member);
+}
+
+/**
+ * Walks one edge -- the recursive step -- and returns the first failure, or
+ * `undefined` once this key and everything below it is resolved.
+ *
+ * The two guards here apply to the root and to a declared dependency alike:
+ * cycle, then memo. `path.includes` is the ONLY cycle test and `visited` the
+ * ONLY memo (D-03-11), and the cycle test runs first because a key on its own
+ * ancestor chain is in the memo too.
  *
  * `path.pop()` runs on the success return only: a failure abandons the stack
  * mid-walk, which is what lets the cycle arm report the whole chain.
  */
-async function walkEdge(ctx: WalkContext, edge: WalkEdge): Promise<ClosureFailure | undefined> {
-  const member = recordEdge(ctx, edge);
-  const verdict = guardEdge(ctx, edge, member);
-  if (verdict.kind === "stop") {
-    return undefined;
+async function walkEdge(
+  ctx: WalkContext,
+  edge: WalkEdge,
+  member: MutableMember,
+): Promise<ClosureFailure | undefined> {
+  if (ctx.path.includes(edge.key)) {
+    return { ok: false, reason: "cycle", chain: [...ctx.path, edge.key] };
   }
 
-  if (verdict.kind === "failed") {
-    return verdict.failure;
+  if (ctx.visited.has(edge.key)) {
+    return undefined;
   }
 
   ctx.visited.add(edge.key);
@@ -412,7 +422,10 @@ async function walkEdge(ctx: WalkContext, edge: WalkEdge): Promise<ClosureFailur
     return { ok: false, reason: "unusable-declaration", key: edge.key, detail: looked.detail };
   }
 
-  if (looked.kind === "absent" && edge.key !== ctx.options.rootKey) {
+  // The root's entry is the only edge with no declaring side, and an edge back
+  // to the root never reaches this point (the cycle guard reports it first), so
+  // this is the root's catalog-absent exemption.
+  if (looked.kind === "absent" && edge.requiredBy !== undefined) {
     return { ok: false, reason: "not-found", key: edge.key, requiredBy: edge.requiredBy };
   }
 
@@ -429,7 +442,7 @@ async function walkEdge(ctx: WalkContext, edge: WalkEdge): Promise<ClosureFailur
 }
 
 /**
- * Resolve the closure of `rootKey`, or report the first reason it cannot be
+ * Resolves the closure of `rootKey`, or reports the first reason it cannot be
  * resolved.
  *
  * Pure and network-free: every catalog read goes through `options.lookup`, and
@@ -457,11 +470,8 @@ export async function resolveDependencyClosure(
     skipped: [],
   };
 
-  const failure = await walkEdge(ctx, {
-    key: options.rootKey,
-    parts: rootParts,
-    requiredBy: undefined,
-  });
+  const root: WalkEdge = { key: options.rootKey, parts: rootParts };
+  const failure = await walkEdge(ctx, root, recordEdge(ctx, root));
 
   return failure ?? { ok: true, closure: ctx.order, alreadyInstalled: ctx.skipped };
 }

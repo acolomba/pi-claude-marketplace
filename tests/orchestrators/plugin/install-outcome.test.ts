@@ -1063,6 +1063,8 @@ test("RESV-03: a source pin override materializes the pinned commit, not the ent
 
   // assert: the override rides the source's `sha`, which is what routes the
   // probe down its already-pinned arm rather than adding a second one.
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.version, "sha-0123456789ab");
   assert.deepStrictEqual(probed, [
     {
       kind: "url",
@@ -1071,8 +1073,6 @@ test("RESV-03: a source pin override materializes the pinned commit, not the ent
       url: "https://example.com/org/repo",
     },
   ]);
-  assert.ok(ledgerOutcome.kind === "installed");
-  assert.equal(ledgerOutcome.summary.version, "sha-0123456789ab");
 });
 
 test("the callback reaches the real clone probe through the ledger's own cache, credential, and memo seams", async (t) => {

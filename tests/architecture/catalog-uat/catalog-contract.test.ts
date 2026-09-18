@@ -35,6 +35,9 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const CATALOG_PATH = path.join(REPO_ROOT, "docs/output-catalog.md");
 const EXPECTED_MODULE_COUNT = 20;
 const EXPECTED_SECTION_COUNT = 20;
+// D-01-22 / D-01-30: +1 state for plugin info's constraint parenthetical --
+// one `dependencies:` block carrying a version range alone, a sha alone, and
+// both together (190 -> 191).
 // WR-06 / DATA-01: +1 state for uninstall's `success-keep-data` row, the
 // preserving disposition's `{data kept}` brace (191 -> 192).
 // RESV-01..06: +12 states for the dependency cascade -- its success block, the

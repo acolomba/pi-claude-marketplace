@@ -462,19 +462,6 @@ function conflictingMarketplaceRecord(
 }
 
 /**
- * Build a plugin source tree on disk and seed a path-source marketplace
- * pointing at it. Returns the absolute paths for downstream assertions.
- *
- * The marketplace manifest is written under `<marketplaceRoot>/.claude-plugin/marketplace.json`.
- * The plugin tree lives at `<marketplaceRoot>/plugins/<plugin>/`.
- */
-/**
- * The plugin's OWN `.claude-plugin/plugin.json`. SNM-34 fixture knob: its
- * `version` is distinct from the marketplace `entry.version` (`pluginVersion`)
- * -- `undefined` preserves the legacy `0.0.1` shape, a string sets that
- * version, and `null` omits the field so the tier-1 read finds none.
- */
-/**
  * The one dependency element every declaring fixture carries, on both the
  * plugin's own manifest and its marketplace entry. It names `some-other-plugin`
  * in the declaring marketplace unless the case addresses another one -- the
@@ -491,6 +478,19 @@ function seededDependencyElement(opts: {
   };
 }
 
+/**
+ * Build a plugin source tree on disk and seed a path-source marketplace
+ * pointing at it. Returns the absolute paths for downstream assertions.
+ *
+ * The marketplace manifest is written under `<marketplaceRoot>/.claude-plugin/marketplace.json`.
+ * The plugin tree lives at `<marketplaceRoot>/plugins/<plugin>/`.
+ */
+/**
+ * The plugin's OWN `.claude-plugin/plugin.json`. SNM-34 fixture knob: its
+ * `version` is distinct from the marketplace `entry.version` (`pluginVersion`)
+ * -- `undefined` preserves the legacy `0.0.1` shape, a string sets that
+ * version, and `null` omits the field so the tier-1 read finds none.
+ */
 function buildSeededPluginManifest(
   pluginName: string,
   opts: {
@@ -3184,12 +3184,14 @@ test("RESV-06 / NFR-3: a failed cascade never reaches tx.save() and replays the 
       // the bridges create idempotently and reuse, not per-plugin artifacts, and
       // nothing discovers or reconciles an empty one. What must not survive is a
       // file or a record.
-      const artifacts = async (): Promise<readonly string[]> =>
-        (await retryTree(locations.scopeRoot)).filter((entry) => !entry.endsWith("/"));
+      async function artifacts(): Promise<readonly string[]> {
+        return (await retryTree(locations.scopeRoot)).filter((entry) => !entry.endsWith("/"));
+      }
+
       const beforeArtifacts = await artifacts();
       const { ctx, notifications, pi } = makeCtx();
-      const install = async (): Promise<Awaited<ReturnType<InstallOperation>>> =>
-        installPlugin({
+      async function install(): Promise<Awaited<ReturnType<InstallOperation>>> {
+        return installPlugin({
           ctx,
           cwd,
           marketplace: "mp",
@@ -3198,6 +3200,7 @@ test("RESV-06 / NFR-3: a failed cascade never reaches tx.save() and replays the 
           plugin: "hello",
           scope: "project",
         });
+      }
 
       // act
       const first = await install();
@@ -3558,7 +3561,7 @@ test("RESV-01 / D-04-04: an orchestrated install records its cascade dependency 
         await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
       const { applyReconcile } =
         await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
-      const reconcilePass = async (): Promise<void> => {
+      async function reconcilePass(): Promise<void> {
         const pass = makeCtx();
         await applyReconcile({
           ctx: pass.ctx,
@@ -3572,7 +3575,7 @@ test("RESV-01 / D-04-04: an orchestrated install records its cascade dependency 
           pass.notifications.filter((n) => n.severity === "error"),
           [],
         );
-      };
+      }
 
       // act
       await reconcilePass();
@@ -3646,6 +3649,8 @@ test("D-04-05 / CMP-3: a dependency adopted from a user-scope marketplace surviv
         dependencyMarketplace: "deps-mp",
       });
       const install = makeCtx();
+
+      // act
       const outcome = await installPlugin({
         ctx: install.ctx,
         pi: install.pi,
@@ -3654,6 +3659,8 @@ test("D-04-05 / CMP-3: a dependency adopted from a user-scope marketplace surviv
         marketplace: "mp",
         plugin: "hello",
       });
+
+      // assert
       assert.equal(outcome.status, "installed");
       const installed = await loadState(projectLocations.extensionRoot);
       assert.equal(
@@ -3799,8 +3806,9 @@ test("CMP-3 / D-03-08: a project install off a user-scope marketplace resolves a
         declareDependencies: true,
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
-
       const { ctx, pi, notifications } = makeCtx();
+
+      // act
       const outcome = await installPlugin({
         ctx,
         pi,
@@ -5302,7 +5310,9 @@ test("D-04-07: installing a dependency by name flips its provenance and nothing 
       // arrange
       const locations = locationsFor("project", cwd);
       const { before, ctx, pi } = await seedDependencyInstalled(cwd, installPlugin);
-      const dependencyBefore = before.marketplaces["mp"]?.plugins["some-other-plugin"];
+      const marketplaceBefore = before.marketplaces["mp"];
+      assert.ok(marketplaceBefore !== undefined);
+      const dependencyBefore = marketplaceBefore.plugins["some-other-plugin"];
       assert.ok(dependencyBefore !== undefined);
 
       // act
@@ -5318,20 +5328,20 @@ test("D-04-07: installing a dependency by name flips its provenance and nothing 
       // assert: the whole document, so a rewritten version, timestamp or
       // resource list on the promoted record -- or any change to `hello`'s
       // record -- fails here, not only a wrong provenance.
-      const expected: ExtensionState = {
+      const expectedState: ExtensionState = {
         ...before,
         marketplaces: {
           ...before.marketplaces,
           mp: {
-            ...before.marketplaces["mp"]!,
+            ...marketplaceBefore,
             plugins: {
-              ...before.marketplaces["mp"]!.plugins,
+              ...marketplaceBefore.plugins,
               "some-other-plugin": { ...dependencyBefore, provenance: "explicit" },
             },
           },
         },
       };
-      assert.deepStrictEqual(await loadState(locations.extensionRoot), expected);
+      assert.deepStrictEqual(await loadState(locations.extensionRoot), expectedState);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -6522,9 +6532,9 @@ test("RESV-01: the caller's version pin reaches the named plugin and no dependen
         declareDependencies: true,
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
+      const { ctx, pi } = makeCtx();
 
       // act
-      const { ctx, pi } = makeCtx();
       const outcome = await installPlugin({
         ctx,
         pi,
@@ -6584,9 +6594,9 @@ test("RESV-01 / WR-03: a cascade-installed dependency's hooks reach the routing 
         ],
       });
       assert.equal(ownerRuntime.getRoutingBucket("PreToolUse").length, 0);
+      const { ctx, pi } = makeCtx();
 
       // act
-      const { ctx, pi } = makeCtx();
       const outcome = await runtimeInstallPlugin({
         ctx,
         pi,
@@ -6598,11 +6608,15 @@ test("RESV-01 / WR-03: a cascade-installed dependency's hooks reach the routing 
 
       // assert
       assert.equal(outcome.status, "installed");
-      const bucket = ownerRuntime.getRoutingBucket("PreToolUse");
-      assert.equal(bucket.length, 1, "the dependency's hooks are routable without a reload");
-      assert.equal(bucket[0]?.pluginId, "some-other-plugin");
-      assert.equal(bucket[0]?.scope, "project");
-      assert.equal(bucket[0]?.handlerDecl["command"], "echo dependency");
+      assert.deepStrictEqual(
+        ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => ({
+          pluginId: entry.pluginId,
+          scope: entry.scope,
+          command: entry.handlerDecl.command,
+        })),
+        [{ pluginId: "some-other-plugin", scope: "project", command: "echo dependency" }],
+        "the dependency's hooks are routable without a reload",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -9441,7 +9455,9 @@ test("RESV-01: a post-save routing rebuild failure leaves the install recorded w
         marketplaceRoot: path.join(cwd, "mp-src"),
         pluginName: "hooky",
       });
-      const rebuild = t.mock.method(hooksRouting, "rebuildRoutingTables", () => {
+      const schedule: string[] = [];
+      t.mock.method(hooksRouting, "rebuildRoutingTables", () => {
+        schedule.push("post-save:rebuild:failed");
         throw new Error("post-save routing rebuild denied");
       });
       const locations = locationsFor("project", cwd);
@@ -9467,7 +9483,7 @@ test("RESV-01: a post-save routing rebuild failure leaves the install recorded w
         version: "0.0.1",
       });
       assert.deepStrictEqual(notifications, []);
-      assert.strictEqual(rebuild.mock.callCount(), 1);
+      assert.deepStrictEqual(schedule, ["post-save:rebuild:failed"]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "pi-claude-marketplace/",
         "pi-claude-marketplace/data/",

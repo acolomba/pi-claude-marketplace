@@ -137,7 +137,14 @@ test("D-05-09: composePrunedRow under keepData says why the plugin went before w
 
 test("D-05-11: a pruned row renders through the uninstalled arm with its brace and no soft-dep marker", () => {
   // arrange
-  const prunedRow = composePrunedRow({ plugin: "shared-lib", version: "2.0.0", keepData: true });
+  const prunedRow: PluginUninstalledMessage = {
+    status: "uninstalled",
+    name: "shared-lib",
+    version: "2.0.0",
+    reasons: ["dependency pruned", "data kept"],
+    severity: "info",
+    needsReload: true,
+  };
   const probe: SoftDepStatus = { piSubagentsLoaded: false, piMcpAdapterLoaded: false };
 
   // act
@@ -177,12 +184,22 @@ test("PRUNE-04: composeRemovalBlocks groups members under their marketplaces in 
     severity: "info",
     needsReload: true,
   };
-  const toolingRow = composePrunedRow({ plugin: "tooling", version: "3.0.0", keepData: false });
-  const sharedLibRow = composePrunedRow({
-    plugin: "shared-lib",
+  const toolingRow: PluginUninstalledMessage = {
+    status: "uninstalled",
+    name: "tooling",
+    version: "3.0.0",
+    reasons: ["dependency pruned"],
+    severity: "info",
+    needsReload: true,
+  };
+  const sharedLibRow: PluginUninstalledMessage = {
+    status: "uninstalled",
+    name: "shared-lib",
     version: "2.0.0",
-    keepData: false,
-  });
+    reasons: ["dependency pruned"],
+    severity: "info",
+    needsReload: true,
+  };
   const failedRow: PluginFailedMessage = {
     status: "failed",
     name: "base",

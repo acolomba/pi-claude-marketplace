@@ -147,7 +147,7 @@ function collectGuardedSources(): ReadonlyMap<string, string> {
 const EXT_SOURCES = collectExtensionSources();
 const GUARDED_SOURCES = collectGuardedSources();
 
-/** Mask only upstream's source sentinel, never a plugin-status homonym. */
+/** Masks only upstream's source sentinel, never a plugin-status homonym. */
 function maskUpstreamSourceSentinel(file: string, content: string): string {
   if (
     file === "extensions/pi-claude-marketplace/domain/manifest.ts" ||
@@ -167,12 +167,15 @@ const STATUS_GUARDED_SOURCES = new Map(
   [...GUARDED_SOURCES].map(([file, content]) => [file, maskUpstreamSourceSentinel(file, content)]),
 );
 
-test("the upstream source mask preserves a retired status literal in the same file", () => {
+test("D-75-01 guard: the upstream source mask preserves a retired status literal in the same file", () => {
+  // arrange
   const file = "extensions/pi-claude-marketplace/domain/manifest.ts";
   const content = 'source: { source: "unsupported" }, status: "unsupported"';
 
+  // act
   const masked = maskUpstreamSourceSentinel(file, content);
 
+  // assert
   assert.equal(masked, 'source: UPSTREAM_SENTINEL, status: "unsupported"');
 });
 

@@ -673,9 +673,9 @@ export function renderUninstalledRow(
     "(uninstalled)",
     // WR-06: the row's only reason today is uninstall's `data kept` disposition,
     // and the field is optional, so a producer with nothing to report composes
-    // the brace-less row byte for byte. Both soft-dep flags stay hard-coded
-    // false: MSG-SD-3 keeps `{requires pi-...}` markers off uninstall rows by
-    // construction (the variant has no `dependencies` field to read).
+    // the brace-less row. Both soft-dep flags stay hard-coded false: MSG-SD-3
+    // keeps `{requires pi-...}` markers off uninstall rows by construction (the
+    // variant has no `dependencies` field to read).
     composeReasons(p.reasons, false, false, probe),
   ]);
 }
@@ -1337,7 +1337,7 @@ function appendResolvedComponentLines(
 }
 
 /**
- * Append the optional `    dependencies: <list>` line. Both `renderPluginInfo`
+ * Appends the optional `    dependencies: <list>` line. Both `renderPluginInfo`
  * arms end with this line, so it is LAST: after every per-kind line on the
  * resolved arm and after the `components: not resolved` marker on the
  * unresolved arm (INFO-02 / D-01-32).

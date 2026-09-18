@@ -99,6 +99,14 @@ void ({
   reason: "permission denied",
 } satisfies PluginUninstallFailedOutcome);
 void ({
+  kind: "plugin-uninstall-failed",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  reason: "dependents remain",
+  cause: new Error("still needed by linter@official"),
+} satisfies PluginUninstallFailedOutcome);
+void ({
   kind: "plugin-enabled",
   scope: "user",
   marketplace: "official",

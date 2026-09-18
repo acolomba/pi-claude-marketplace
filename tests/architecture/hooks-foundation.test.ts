@@ -44,9 +44,8 @@ test("ENBL-02 / D-04-03: STATE_SCHEMA.schemaVersion is Type.Union([Literal(1), L
   // Asserting the anyOf structure pins the migration contract: v1
   // (pre-enabled), v2 (enabled, ENBL-02) and v3 (provenance, D-04-03) on-disk
   // formats are all accepted. The widening to v3 is the D-04-03 provenance
-  // migration -- a required field filled with "explicit" before validation --
-  // and this test was updated with it; any future widening to v4 requires
-  // this test to be updated again.
+  // migration -- a required field filled with "explicit" before validation.
+  // Any future widening to v4 requires this test to be updated.
   assert.ok(Array.isArray(versionSchema.anyOf), "schemaVersion must be a union (anyOf present)");
   const anyOf = versionSchema.anyOf as Array<Record<string, unknown>>;
   assert.equal(anyOf.length, 3, "schemaVersion union must have exactly three members (1, 2 and 3)");
