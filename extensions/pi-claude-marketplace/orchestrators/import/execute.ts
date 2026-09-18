@@ -38,7 +38,7 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
-import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
+import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { IMPORT_CONTEXT, type ImportMsg } from "./execute.messaging.ts";
@@ -164,6 +164,17 @@ export interface UnexpectedPluginFailureOutcome {
    */
   readonly reason: "unexpected-failure" | "dependency-failed";
   readonly cause: string;
+  /**
+   * T-55-02-02 / T-53-02-02: the redacted, rebuilt onward cause chain beyond
+   * `cause`'s head, present only when the failure's `Error` itself carries
+   * one. `buildImportNotificationMarketplaces` threads it onto the rendered
+   * row's `Error.cause` so the notification grammar's cause-chain walker
+   * renders the chain exactly once, the way
+   * `orchestrators/reconcile/apply.ts::redactedDependencyCascadeError`
+   * rebuilds a dependency's own ledger failure. Omitted when `error` carries
+   * no onward cause (`exactOptionalPropertyTypes`).
+   */
+  readonly causeChain?: Error;
 }
 
 // Public readonly result shape. Internal mutation uses MutableImportResult.
@@ -401,6 +412,21 @@ function importWarningReason(reason: RenderedWarningReason): ContentReason {
   }
 }
 
+/**
+ * WR-03: the row's cause as one Error. `UnexpectedPluginFailureOutcome.cause`
+ * carries the redacted head text, always populated; wrapping it in an Error
+ * lets the depth-5 cause-chain trailer emit a diagnostic line instead of
+ * discarding the message. T-55-02-02 / T-53-02-02: `causeChain` (when
+ * present) becomes that Error's OWN `.cause` rather than being re-embedded in
+ * the head text, so the trailer walker renders the onward chain exactly once
+ * instead of a second time over a pre-flattened string.
+ */
+function unexpectedFailureCause(outcome: UnexpectedPluginFailureOutcome): Error {
+  return outcome.causeChain === undefined
+    ? new Error(outcome.cause)
+    : new Error(outcome.cause, { cause: outcome.causeChain });
+}
+
 /** Maps an `UnexpectedPluginFailureOutcome.reason` onto its rendered token. */
 function unexpectedFailureReason(reason: UnexpectedPluginFailureOutcome["reason"]): ContentReason {
   switch (reason) {
@@ -520,11 +546,7 @@ function buildImportNotificationMarketplaces(
       status: "failed",
       name: o.plugin,
       reasons: [unexpectedFailureReason(o.reason)],
-      // WR-03: `UnexpectedPluginFailureOutcome.cause` carries the original
-      // failure as a string (`errorMessage(err)`); wrap it in an Error so the
-      // depth-5 cause-chain trailer emits a diagnostic line instead of
-      // discarding the message. `cause` is always populated on this outcome.
-      cause: new Error(o.cause),
+      cause: unexpectedFailureCause(o),
       // D-03/D-06: an unexpected import failure -> error, no reload.
       severity: "error",
       needsReload: false,
@@ -1231,13 +1253,48 @@ function isEmptyPatch(batch: ImportConfigPatch): boolean {
 }
 
 /**
+ * Push ONE `UnexpectedPluginFailureOutcome`, rendering `error` exactly once:
+ * the head is `redactAbsolutePaths(errorMessage(error))` and the onward
+ * chain (when `error` carries one) is `redactCauseChain(error.cause)` --
+ * mirroring `orchestrators/reconcile/apply.ts::redactedDependencyCascadeError`.
+ * Keeping the head and the chain as separate fields, rather than a single
+ * pre-joined `head + trailer` string, is what lets
+ * `buildImportNotificationMarketplaces` rebuild ONE `Error` with a real
+ * `.cause` link for the notification grammar to walk, instead of the walker
+ * re-rendering an already-flattened trailer embedded in the head text.
+ */
+function pushUnexpectedFailure(
+  result: MutableImportResult,
+  plugin: PlannedPluginImport,
+  reason: UnexpectedPluginFailureOutcome["reason"],
+  error: Error,
+): void {
+  const causeChain = redactCauseChain(error.cause);
+  result.unexpectedPluginFailures.push({
+    kind: "plugin-failure",
+    scope: plugin.scope,
+    plugin: plugin.ref.plugin,
+    marketplace: plugin.ref.marketplace,
+    ref: refLabel(plugin),
+    reason,
+    cause: redactAbsolutePaths(errorMessage(error)),
+    ...(causeChain !== undefined && { causeChain }),
+  });
+}
+
+/**
  * Recover the semantic dispatch from the typed `Error` in the collapsed
  * `status: "failed"` outcome. `PluginShapeError.kind === "already-installed"`
  * and `ConcurrentInstallError` both route to the skip bucket;
  * `not-in-manifest` and `(no-)not-installable` route to the
- * unavailable / uninstallable warnings; a `DependencyCascadeError` (RESV-06)
- * routes to `unexpectedPluginFailures` with `reason: "dependency-failed"`;
- * everything else lands there with `reason: "unexpected-failure"`.
+ * unavailable / uninstallable warnings, carrying the caller's pre-formatted
+ * `cause` text verbatim (`ImportWarningOutcome.cause` has no rendered
+ * cause-chain slot, so there is nothing to double-render there); a
+ * `DependencyCascadeError` (RESV-06) routes to `unexpectedPluginFailures`
+ * with `reason: "dependency-failed"`; everything else lands there with
+ * `reason: "unexpected-failure"`. Both `unexpectedPluginFailures` pushes go
+ * through `pushUnexpectedFailure`, which derives its head and cause chain
+ * from `error` directly rather than from the pre-formatted `cause` string.
  *
  * Mirrors the instanceof ladder in
  * `orchestrators/reconcile/apply-outcomes.ts::classifyOrchestratorThrow`,
@@ -1250,19 +1307,7 @@ function dispatchFailedOutcome(
   cause: string,
 ): void {
   if (error instanceof DependencyCascadeError) {
-    result.unexpectedPluginFailures.push({
-      kind: "plugin-failure",
-      scope: plugin.scope,
-      plugin: plugin.ref.plugin,
-      marketplace: plugin.ref.marketplace,
-      ref: refLabel(plugin),
-      reason: "dependency-failed",
-      // T-55-02-02 / T-53-02-02: `cause` is the formatted head plus the
-      // cause-chain trailer, and a dependency's own ledger failure can carry
-      // an absolute path in either, so the whole text is redacted here, as
-      // the reconcile row redacts its chain.
-      cause: redactAbsolutePaths(cause),
-    });
+    pushUnexpectedFailure(result, plugin, "dependency-failed", error);
     return;
   }
 
@@ -1301,15 +1346,7 @@ function dispatchFailedOutcome(
     }
   }
 
-  result.unexpectedPluginFailures.push({
-    kind: "plugin-failure",
-    scope: plugin.scope,
-    plugin: plugin.ref.plugin,
-    marketplace: plugin.ref.marketplace,
-    ref: refLabel(plugin),
-    reason: "unexpected-failure",
-    cause,
-  });
+  pushUnexpectedFailure(result, plugin, "unexpected-failure", error);
 }
 
 export async function importClaudeSettings(

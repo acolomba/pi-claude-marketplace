@@ -359,6 +359,7 @@ function failedUnexpectedly(
   marketplace: string,
   scope: Scope,
   cause: string,
+  causeChain?: Error,
 ): UnexpectedFailure {
   return {
     cause,
@@ -368,6 +369,7 @@ function failedUnexpectedly(
     reason: "unexpected-failure",
     ref: `${plugin}@${marketplace}`,
     scope,
+    ...(causeChain !== undefined && { causeChain }),
   };
 }
 
@@ -376,6 +378,7 @@ function failedDependency(
   marketplace: string,
   scope: Scope,
   cause: string,
+  causeChain?: Error,
 ): UnexpectedFailure {
   return {
     cause,
@@ -385,6 +388,7 @@ function failedDependency(
     reason: "dependency-failed",
     ref: `${plugin}@${marketplace}`,
     scope,
+    ...(causeChain !== undefined && { causeChain }),
   };
 }
 
@@ -1430,6 +1434,165 @@ test("records a dependency-cascade failure with the dependency-failed reason", a
         `  ● ${surviving[1]} (installed)\n` +
         "  ⊘ target (failed) {dependency failed}\n" +
         `    cause: ${redactedCause}\n\n` +
+        "Import: 1 failure, 3 successes\n\n" +
+        "/reload to pick up changes",
+      severity: "error",
+    },
+  ]);
+  assert.deepStrictEqual(attempted, order);
+  verifyBoundary();
+});
+
+// A dependency's own ledger failure can itself wrap a nested cause (e.g. an
+// errno from the bridge that staged it). `dispatchFailedOutcome` must render
+// that chain exactly once: the row's `cause:` line joins the head and the
+// nested link with " -> ", never a second `cause:` line grown from
+// re-wrapping an already-flattened trailer (T-55-02-02 / T-53-02-02).
+test("records a dependency-cascade failure whose ledger error carries a nested cause without double-rendering it", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "install-dependency-cascade-nested-cause");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2);
+  const headCause = 'Dependency "lib@mp" could not be staged: command "lib:deploy" failed.';
+  const nestedCause = new Error(
+    "EACCES: permission denied, open '/home/user/.pi/agent/plugin-clones/lib/deploy.md'",
+  );
+  const redactedNestedMessage = "EACCES: permission denied, open 'deploy.md'";
+  const order = ["before", "target", "after"];
+  const surviving = order.filter((plugin) => plugin !== "target");
+  const attempted: string[] = [];
+  const expectedResult: ClaudeImportExecutionResult = {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("mp", "user")],
+    changedResources: true,
+    installedPlugins: surviving.map((plugin) => installed(plugin, "mp", "user")),
+    unexpectedPluginFailures: [
+      failedDependency("target", "mp", "user", headCause, new Error(redactedNestedMessage)),
+    ],
+  };
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: (options) => {
+        attempted.push(options.plugin);
+        return Promise.resolve(
+          options.plugin === "target"
+            ? failedInstallOutcome(
+                new DependencyCascadeError(headCause, "lib@mp", { cause: nestedCause }),
+                // The dispatcher derives its row from the typed error, not this
+                // pre-flattened string -- an arbitrary placeholder proves it.
+                "unused-flattened-cause",
+              )
+            : installedOutcome(),
+        );
+      },
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: Object.fromEntries(order.map((plugin) => [`${plugin}@mp`, true])),
+            extraKnownMarketplaces: { mp: { directory: "./mp" } },
+          }),
+        ),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, expectedResult);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n" +
+        "● mp [user] (added)\n" +
+        `  ● ${surviving[0]} (installed)\n` +
+        `  ● ${surviving[1]} (installed)\n` +
+        "  ⊘ target (failed) {dependency failed}\n" +
+        `    cause: ${headCause} -> ${redactedNestedMessage}\n\n` +
+        "Import: 1 failure, 3 successes\n\n" +
+        "/reload to pick up changes",
+      severity: "error",
+    },
+  ]);
+  assert.deepStrictEqual(attempted, order);
+  verifyBoundary();
+});
+
+// The generic `unexpected-failure` fallthrough shares the same defect surface
+// as the dependency-cascade arm: any orchestrated error with a nested cause
+// (e.g. a bridge-staging error wrapping an errno) must render its chain
+// exactly once.
+test("records an unexpected plugin failure whose error carries a nested cause without double-rendering it", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "install-unexpected-nested-cause");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2);
+  const headCause = 'command "target:build" of plugin "target" could not be staged';
+  const nestedCause = new Error(
+    "EACCES: permission denied, open '/home/user/.pi/agent/plugin-clones/target/build.md'",
+  );
+  const redactedNestedMessage = "EACCES: permission denied, open 'build.md'";
+  const order = ["before", "target", "after"];
+  const surviving = order.filter((plugin) => plugin !== "target");
+  const attempted: string[] = [];
+  const expectedResult: ClaudeImportExecutionResult = {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("mp", "user")],
+    changedResources: true,
+    installedPlugins: surviving.map((plugin) => installed(plugin, "mp", "user")),
+    unexpectedPluginFailures: [
+      failedUnexpectedly("target", "mp", "user", headCause, new Error(redactedNestedMessage)),
+    ],
+  };
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: (options) => {
+        attempted.push(options.plugin);
+        return Promise.resolve(
+          options.plugin === "target"
+            ? failedInstallOutcome(
+                new Error(headCause, { cause: nestedCause }),
+                // The dispatcher derives its row from the typed error, not this
+                // pre-flattened string -- an arbitrary placeholder proves it.
+                "unused-flattened-cause",
+              )
+            : installedOutcome(),
+        );
+      },
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: Object.fromEntries(order.map((plugin) => [`${plugin}@mp`, true])),
+            extraKnownMarketplaces: { mp: { directory: "./mp" } },
+          }),
+        ),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, expectedResult);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n" +
+        "● mp [user] (added)\n" +
+        `  ● ${surviving[0]} (installed)\n` +
+        `  ● ${surviving[1]} (installed)\n` +
+        "  ⊘ target (failed) {not in manifest}\n" +
+        `    cause: ${headCause} -> ${redactedNestedMessage}\n\n` +
         "Import: 1 failure, 3 successes\n\n" +
         "/reload to pick up changes",
       severity: "error",
