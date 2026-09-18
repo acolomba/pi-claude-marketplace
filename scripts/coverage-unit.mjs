@@ -1,7 +1,7 @@
 // `npm run coverage:unit:verified`: one native unit run, converted, validated
 // and published as one accepted bundle (D-01, D-02, D-04, D-07, D-10).
 //
-//   node scripts/coverage-unit.mjs [--root <dir>]
+//   node scripts/coverage-unit.mjs [--root <dir>] [--reuse-current]
 //
 // The steps run in order, each one a shipping command-line tool of this
 // pipeline, and the run stops at the first refusal:
@@ -27,6 +27,14 @@
 // a usage error exits 2. The LCOV is the runner's own output and is never
 // rewritten (D-01). No test runs twice: the raw snapshots of the one native
 // run feed the conversion (D-10).
+//
+// `--reuse-current` is the orchestration step the pre-commit hooks run
+// (D-10). When the published bundle is accepted and `coverage-validate.mjs`
+// accepts it now, against this tree, this tooling, this runtime and the
+// installed producer, the bundle is reported as reused and no test runs;
+// otherwise the four steps run in full. Only this producer reuses: a
+// consumer such as `coverage:risk` refuses the same stale bundle and
+// regenerates nothing.
 
 import { spawnSync } from "node:child_process";
 import {
@@ -82,14 +90,18 @@ class AcceptanceError extends Error {
 }
 
 function parseArguments(args) {
-  const options = { root: projectRoot };
+  const options = { root: projectRoot, reuseCurrent: false };
 
   for (let index = 0; index < args.length; index += 1) {
-    if (args[index] === "--root" && args[index + 1] !== undefined) {
+    if (args[index] === "--reuse-current") {
+      options.reuseCurrent = true;
+    } else if (args[index] === "--root" && args[index + 1] !== undefined) {
       options.root = path.resolve(args[index + 1]);
       index += 1;
     } else {
-      throw new UsageError(`Unknown option: ${args[index]}. Pass --root <dir>.`);
+      throw new UsageError(
+        `Unknown option: ${args[index]}. Pass --root <dir> and/or --reuse-current.`,
+      );
     }
   }
 
@@ -113,11 +125,19 @@ function rowsIn(stderr) {
     .map((line) => JSON.parse(line));
 }
 
+// A tool's stderr is re-emitted indented, so this command's own rows stay
+// the only rows a reader of this command's stderr sees.
+function relayStderr(stderr) {
+  if (stderr !== "") {
+    process.stderr.write(
+      `${stderr.replace(/^(?=.)/gmu, "    ")}${stderr.endsWith("\n") ? "" : "\n"}`,
+    );
+  }
+}
+
 // Runs one tool of the pipeline. Its stdout streams through; its stderr is
-// re-emitted indented, so this command's own rows stay the only rows a
-// reader of this command's stderr sees. A launch failure, a signal and a
-// refusal are three different rows; `failuresOf` reads the refused tool's
-// own rows.
+// relayed. A launch failure, a signal and a refusal are three different
+// rows; `failuresOf` reads the refused tool's own rows.
 function runStep(kind, name, args, root, failuresOf = rowsIn) {
   const completed = spawnSync(process.execPath, [scriptPath(name), ...args], {
     cwd: root,
@@ -126,12 +146,7 @@ function runStep(kind, name, args, root, failuresOf = rowsIn) {
     stdio: ["ignore", "inherit", "pipe"],
   });
   const stderr = completed.stderr ?? "";
-
-  if (stderr !== "") {
-    process.stderr.write(
-      `${stderr.replace(/^(?=.)/gmu, "    ")}${stderr.endsWith("\n") ? "" : "\n"}`,
-    );
-  }
+  relayStderr(stderr);
 
   if (completed.error !== undefined) {
     throw new AcceptanceError(`${name} did not launch`, [
@@ -285,12 +300,57 @@ function publish(root, bundle, accepted) {
   }
 }
 
-function report(accepted) {
+// The published bundle's state, or `undefined` without a readable pointer.
+function publishedState(root) {
+  try {
+    return readJson(path.join(root, PUBLIC_MANIFEST_PATH)).state;
+  } catch {
+    return undefined;
+  }
+}
+
+// The accepted bundle `coverage-validate.mjs` accepts now, or `undefined`
+// when none is published or the validator refuses it. A refusal (exit 1) is
+// the one answer that selects a fresh run, and its rows are relayed so the
+// reader sees why; any other failure of the validator is an error.
+function currentAccepted(root) {
+  if (publishedState(root) !== "accepted") {
+    return undefined;
+  }
+
+  const completed = spawnSync(
+    process.execPath,
+    [scriptPath("coverage-validate.mjs"), "--root", root],
+    { cwd: root, encoding: "utf8", maxBuffer: CHILD_OUTPUT_BUDGET, stdio: "pipe" },
+  );
+  relayStderr(completed.stderr ?? "");
+
+  if (completed.error !== undefined || completed.signal !== null) {
+    throw new AcceptanceError("coverage-validate.mjs did not answer", [
+      { kind: "readback", outcome: completed.error?.message ?? `signal ${completed.signal}` },
+    ]);
+  }
+
+  if (completed.status === 1) {
+    process.stderr.write("The published bundle is not current; the unit suite runs anew.\n");
+    return undefined;
+  }
+
+  if (completed.status !== 0) {
+    throw new AcceptanceError(`coverage-validate.mjs exited ${completed.status}`, [
+      { kind: "readback", status: completed.status },
+    ]);
+  }
+
+  return readJson(path.join(root, PUBLIC_MANIFEST_PATH));
+}
+
+function report(accepted, verb) {
   const { population, denominators } = accepted.acceptance;
   const { native, syntax } = denominators;
   const ratio = (counter) => `${counter.hit ?? counter.covered}/${counter.found ?? counter.total}`;
   process.stdout.write(
-    `Coverage unit verified: ${accepted.runId}: ${population.production} production file(s), ${population.loaded} loaded, ${population.unloaded.length} unloaded (${population.typeOnly} type-only, ${population.executable} executable); native ${ratio(native.lines)} line(s), ${ratio(native.functions)} function(s), ${ratio(native.branches)} branch(es); syntax ${ratio(syntax.functions)} function(s), ${ratio(syntax.statements)} statement(s), ${ratio(syntax.branchArms)} branch arm(s) -> ${PUBLIC_MANIFEST_PATH}\n`,
+    `Coverage unit ${verb}: ${accepted.runId}: ${population.production} production file(s), ${population.loaded} loaded, ${population.unloaded.length} unloaded (${population.typeOnly} type-only, ${population.executable} executable); native ${ratio(native.lines)} line(s), ${ratio(native.functions)} function(s), ${ratio(native.branches)} branch(es); syntax ${ratio(syntax.functions)} function(s), ${ratio(syntax.statements)} statement(s), ${ratio(syntax.branchArms)} branch arm(s) -> ${PUBLIC_MANIFEST_PATH}\n`,
   );
 }
 
@@ -325,7 +385,14 @@ function main() {
   const options = parseArguments(process.argv.slice(2));
 
   try {
-    report(verifiedRun(options.root));
+    const current = options.reuseCurrent ? currentAccepted(options.root) : undefined;
+
+    if (current === undefined) {
+      report(verifiedRun(options.root), "verified");
+    } else {
+      report(current, "reused");
+    }
+
     return 0;
   } catch (error) {
     refuse(options.root, error);

@@ -509,15 +509,13 @@ test("registers coverage:capture as a package script", async () => {
   assert.strictEqual(script, "node scripts/coverage-capture.mjs");
 });
 
-test("selects exactly the population npm test names, one worker per file", async (t) => {
+test("selects exactly the unit population npm test runs, one worker per file", async (t) => {
   // arrange
   const root = await createRoot(t, unitFixture());
-  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as {
-    scripts: Readonly<Record<string, string>>;
-  };
-  const expectedPatterns = [...(packageJson.scripts.test ?? "").matchAll(/"([^"]+)"/gu)].map(
-    (match) => match[1],
-  );
+  const expectedPatterns = [
+    "tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,scripts,shared,transaction}/**/*.test.ts",
+    "tests/index.test.ts",
+  ];
   const expectedTests = ["tests/domain/parity.test.ts", "tests/index.test.ts"];
 
   // act

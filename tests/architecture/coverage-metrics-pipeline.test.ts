@@ -36,7 +36,7 @@ import {
 import { captureCliPath, createRoot, refusalRows, run } from "../scripts/coverage-run-support.ts";
 import { populationFiles } from "../scripts/coverage-unit-fixtures.ts";
 
-import { PACKAGE_JSON_REL } from "./gate-targets.ts";
+import { NETWORK_FREE_TARGETS, PACKAGE_JSON_REL } from "./gate-targets.ts";
 import { readLocalHooks } from "./pre-commit-hooks.ts";
 import { REPO_ROOT } from "./source-scan.ts";
 
@@ -162,7 +162,7 @@ function risk(root: string): ProcessRun {
 
 /** The first line of a producer's report: its verb and the run it names. */
 function reported(completed: ProcessRun): { verb: string; runId: string } {
-  const match = /^Coverage unit (?<verb>verified|reused): (?<runId>\S+):/u.exec(completed.stdout);
+  const match = /^Coverage unit (?<verb>verified|reused): (?<runId>\S+):/mu.exec(completed.stdout);
   assert.ok(match?.groups, `${completed.stdout}\n${completed.stderr}`);
   return { verb: match.groups.verb ?? "", runId: match.groups.runId ?? "" };
 }
@@ -301,10 +301,11 @@ test("the coverage hooks trigger on every input an accepted bundle binds and on 
   // arrange
   const hooks = readLocalHooks(await readRepoFile(PRE_COMMIT_REL));
   const trigger = new RegExp(hooks.get(UNIT_HOOK_ID)?.files ?? "(?!)");
+  // A production source, spelled through the registry (D-07-05).
+  const productionSource: (typeof NETWORK_FREE_TARGETS)[number] =
+    "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
   const inputs = [
-    // Production sources and the resources beside them.
-    "extensions/pi-claude-marketplace/domain/source.ts",
-    "extensions/pi-claude-marketplace/edge/browser/plugin-browser.ts",
+    productionSource,
     // The unit test tree and its support files, fixtures included.
     "tests/domain/source.test.ts",
     "tests/scripts/coverage-run-support.ts",
@@ -362,7 +363,20 @@ test("the plain mode runs the whole unit selection without capturing anything", 
 
 test("the plain mode forwards a runner option to the selection", async (t) => {
   // arrange
-  const root = await createRoot(t, populationFiles());
+  const root = await createRoot(t, {
+    "package.json": `${JSON.stringify({ name: "fixture", type: "module" })}\n`,
+    "tests/index.test.ts": `import assert from "node:assert/strict";
+import test from "node:test";
+
+test("counts once", () => {
+  assert.equal(1, 1);
+});
+
+test("doubles twice", () => {
+  assert.equal(2, 2);
+});
+`,
+  });
 
   // act
   const tested = plain(root, "--test-name-pattern=doubles");

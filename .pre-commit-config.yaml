@@ -168,3 +168,32 @@ repos:
         language: system
         pass_filenames: false
         files: '^(scripts/check-unused-type-members(\.[a-z]+)?\.(mjs|json)|extensions/pi-claude-marketplace/edge/types\.ts|tests/edge/types\.test\.ts|tsconfig\.json|package(-lock)?\.json|\.pre-commit-config\.yaml)$'
+      # METRIC-01 / D-10. The verified unit capture: one native unit run whose
+      # LCOV, Istanbul map and accepted manifest are bound to the tree by
+      # content. This hook is the producer. It reuses the published bundle when
+      # `coverage:validate` accepts it against the staged tree now (a bundle
+      # that `npm run check` or an earlier commit made of these exact bytes);
+      # otherwise it runs the unit suite once, about eight minutes. The trigger
+      # is the inventory an accepted bundle binds: production sources and their
+      # resources, the unit test tree, the tooling, the vendored producer and
+      # the configuration files. A change none of them carries cannot stale the
+      # bundle, so it runs nothing here. Workflows are not bundle inputs; the
+      # `workflow-install-scripts` hook is their gate.
+      - id: npm-coverage-unit
+        name: npm unit coverage (verified bundle)
+        entry: npm run coverage:unit:current
+        language: system
+        pass_filenames: false
+        files: '^(extensions/.*|tests/(?!e2e/|integration/|live-uat/).*|scripts/.*|vendor/coverage/.*|\.fallowrc\.json|\.pre-commit-config\.yaml|\.prettierignore|\.prettierrc\.json|eslint\.config\.js|package(-lock)?\.json|sonar-project\.properties|tsconfig\.json)$'
+      # METRIC-02 / D-06. The CRAP policy of 30 over every production function,
+      # read from the bundle the hook above produced. The consumer validates the
+      # bundle again and refuses a missing or stale one; it never captures. The
+      # negative runners of both tools ride inside the unit suite itself
+      # (`tests/scripts/*.negative.test.ts`), so a fresh capture has already
+      # exercised them on this tree.
+      - id: npm-coverage-risk
+        name: npm coverage risk
+        entry: npm run coverage:risk
+        language: system
+        pass_filenames: false
+        files: '^(extensions/.*|tests/(?!e2e/|integration/|live-uat/).*|scripts/.*|vendor/coverage/.*|\.fallowrc\.json|\.pre-commit-config\.yaml|\.prettierignore|\.prettierrc\.json|eslint\.config\.js|package(-lock)?\.json|sonar-project\.properties|tsconfig\.json)$'

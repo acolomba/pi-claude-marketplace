@@ -22,6 +22,12 @@
 // `--verify` reads a published bundle back the way a consumer must, refusing
 // stale inputs, changed tooling, a different runtime or any digest mismatch.
 //
+// `--plain` runs the same selection under the runner alone: no coverage flags,
+// no runtime import, no run directory. It is what `npm test` runs, so ordinary
+// and captured execution select the unit suite from one definition (D-10).
+// Options of the runner's own `--test-*` family are forwarded to it in their
+// `--test-name-pattern=<regex>` form; any other argument is a usage error.
+//
 // `--root <dir>` runs against an isolated fixture root that follows the same
 // directory layout and selection rules as the repository.
 
@@ -65,23 +71,38 @@ import {
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const runtimeImport = `--import=${new URL("./coverage-capture.runtime.mjs", import.meta.url).href}`;
 const rawFileName = /^coverage-(?<pid>\d+)-\d{13}-\d+\.json$/u;
+// The runner's own option family, in the one-token form `node` accepts.
+const runnerOption = /^--test-[a-z-]+(?:=.*)?$/u;
+const USAGE = "Pass --root <dir> and/or --verify, or --plain with --test-* runner options.";
 
 class UsageError extends Error {}
 
 function parseArguments(args) {
-  const options = { root: projectRoot, verify: false };
+  const options = { root: projectRoot, verify: false, plain: false, forwarded: [] };
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
 
     if (argument === "--verify") {
       options.verify = true;
+    } else if (argument === "--plain") {
+      options.plain = true;
     } else if (argument === "--root" && args[index + 1] !== undefined) {
       options.root = path.resolve(args[index + 1]);
       index += 1;
+    } else if (runnerOption.test(argument)) {
+      options.forwarded.push(argument);
     } else {
-      throw new UsageError(`Unknown option: ${argument}. Pass --root <dir> and/or --verify.`);
+      throw new UsageError(`Unknown option: ${argument}. ${USAGE}`);
     }
+  }
+
+  if (options.verify && options.plain) {
+    throw new UsageError(`--verify and --plain exclude each other. ${USAGE}`);
+  }
+
+  if (options.forwarded.length > 0 && !options.plain) {
+    throw new UsageError(`${options.forwarded.join(" ")} applies to --plain only. ${USAGE}`);
   }
 
   if (!existsSync(options.root)) {
@@ -186,14 +207,18 @@ function runnerEnvironment(run) {
   return { actual, recorded };
 }
 
-function runnerArguments(run) {
+// `TEST_CONCURRENCY` reaches the runner the way the npm scripts pass it.
+function concurrencyArguments() {
   const concurrency = process.env.TEST_CONCURRENCY;
+  return concurrency === undefined || concurrency === ""
+    ? []
+    : [`--test-concurrency=${concurrency}`];
+}
 
+function runnerArguments(run) {
   return [
     "--test",
-    ...(concurrency === undefined || concurrency === ""
-      ? []
-      : [`--test-concurrency=${concurrency}`]),
+    ...concurrencyArguments(),
     ...NATIVE_COVERAGE_FLAGS,
     `--test-reporter-destination=${run.runPrefix}/unit.lcov`,
     ...UNIT_TEST_PATTERNS,
@@ -654,11 +679,35 @@ function verifyRun(root) {
   return 1;
 }
 
+// The ordinary unit run: the authoritative selection under the runner alone,
+// its output inherited and its exit status returned. Nothing is written.
+function plainRun(root, forwarded) {
+  const runner = spawnSync(
+    process.execPath,
+    ["--test", ...concurrencyArguments(), ...forwarded, ...UNIT_TEST_PATTERNS],
+    { cwd: root, stdio: "inherit" },
+  );
+
+  if (runner.error !== undefined) {
+    throw runner.error;
+  }
+
+  if (runner.signal !== null) {
+    throw new Error(`node --test ended by signal ${runner.signal}`);
+  }
+
+  return runner.status;
+}
+
 function main() {
   const options = parseArguments(process.argv.slice(2));
 
   if (options.verify) {
     return verifyRun(options.root);
+  }
+
+  if (options.plain) {
+    return plainRun(options.root, options.forwarded);
   }
 
   refuseForeignLoaders();
