@@ -81,6 +81,7 @@
     "coverage:producer": "node scripts/coverage-producer.mjs",
     "coverage:producer:build": "node scripts/build-coverage-producer.mjs",
     "coverage:producer:check": "node --test tests/scripts/coverage-producer.test.ts",
+    "coverage:risk": "node scripts/check-coverage-risk.mjs",
     "coverage:unit:negative": "node scripts/coverage-unit.negative.mjs",
     "coverage:unit:verified": "node scripts/coverage-unit.mjs",
     "coverage:validate": "node scripts/coverage-validate.mjs",

@@ -1,0 +1,10 @@
+{
+  "kind": "pi-claude-marketplace-coverage-risk-policy",
+  "schemaVersion": 1,
+  "maxCrap": 30,
+  "consumer": {
+    "name": "fallow",
+    "version": "3.23.0",
+    "report": { "kind": "health", "schemaVersion": 11 }
+  }
+}
