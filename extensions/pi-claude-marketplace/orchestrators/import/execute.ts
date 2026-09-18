@@ -791,15 +791,15 @@ async function installOnePlannedPlugin(
       ...(promoting !== undefined && !promoting.compatibility.installable && { partial: true }),
     });
   } catch (err) {
-    result.unexpectedPluginFailures.push({
-      kind: "plugin-failure",
-      scope: plugin.scope,
-      plugin: plugin.ref.plugin,
-      marketplace: plugin.ref.marketplace,
-      ref: refLabel(plugin),
-      reason: "unexpected-failure",
-      cause: errorMessage(err),
-    });
+    // The orchestrated install never re-throws by contract, so this is a
+    // defensive arm; it takes the same redacted head-plus-chain route as a
+    // returned failure so no path can leak through it either.
+    pushUnexpectedFailure(
+      result,
+      plugin,
+      "unexpected-failure",
+      err instanceof Error ? err : new Error(errorMessage(err)),
+    );
     return "unexpected-failure";
   }
 

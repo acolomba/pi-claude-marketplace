@@ -1306,6 +1306,15 @@ for (const { cause, installPlugin, order, title } of [
     order: ["target", "before", "after"],
     title: "an installer that throws on the first plugin",
   },
+  {
+    cause: "host crash",
+    installPlugin: (plugin: string): Promise<InstallOutcome> =>
+      // A rejection that is not an Error still lands on the row as its text.
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the non-Error arm is the case under test.
+      plugin === "target" ? Promise.reject("host crash") : Promise.resolve(installedOutcome()),
+    order: ["target", "before", "after"],
+    title: "an installer that rejects with a bare string",
+  },
 ] satisfies readonly {
   readonly cause: string;
   readonly installPlugin: (plugin: string) => Promise<InstallOutcome>;
