@@ -1946,13 +1946,24 @@ describe("applyReconcile", () => {
     });
     const commandFile = path.join(marketplaceRoot, "plugins", "bar", "commands", "deploy.md");
     if (typeof process.getuid === "function" && process.getuid() === 0) {
-      throw new Error("this case cannot deny reads as root; run this suite as a non-root user");
+      t.skip("cannot deny reads as root; run this suite as a non-root user");
+      return;
     }
 
-    // No restore is registered: removing the tree only needs write access on
-    // its parent directories, which `createHermeticEnvironment`'s own
-    // teardown already has -- an unreadable file underneath is still
-    // removable.
+    // Save the mode and register its restoration before mutating, so the
+    // permission bits come back even when an assertion below throws. The
+    // restore itself tolerates ENOENT: `createHermeticScopes`'s tree-removal
+    // hook, registered ahead of this one, may already have deleted the file.
+    const { mode: originalMode } = await stat(commandFile);
+    t.after(async () => {
+      try {
+        await chmod(commandFile, originalMode & 0o777);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw error;
+        }
+      }
+    });
     await chmod(commandFile, 0o000);
     const declaration = configBytes({
       marketplaces: { mp: { source: marketplaceRoot } },

@@ -38,6 +38,7 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { IMPORT_CONTEXT, type ImportMsg } from "./execute.messaging.ts";
@@ -1256,7 +1257,11 @@ function dispatchFailedOutcome(
       marketplace: plugin.ref.marketplace,
       ref: refLabel(plugin),
       reason: "dependency-failed",
-      cause,
+      // T-55-02-02 / T-53-02-02: `cause` is the formatted head plus the
+      // cause-chain trailer, and a dependency's own ledger failure can carry
+      // an absolute path in either, so the whole text is redacted here, as
+      // the reconcile row redacts its chain.
+      cause: redactAbsolutePaths(cause),
     });
     return;
   }

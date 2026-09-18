@@ -36,10 +36,10 @@ export function assertNever(x: never): never {
  * mitigation). One constant rather than a literal per walker, so a change to
  * the bound cannot drift out of sync across walkers.
  */
-const CAUSE_CHAIN_MAX_DEPTH = 5;
+export const CAUSE_CHAIN_MAX_DEPTH = 5;
 
 /** Whether a chain link carries a further, non-self-referencing cause. */
-function hasOnwardCause(err: unknown): boolean {
+export function hasOnwardCause(err: unknown): boolean {
   return err instanceof Error && err.cause !== undefined && err.cause !== err;
 }
 
@@ -175,7 +175,14 @@ export function causeChainTrailer(err: unknown): string {
   return `${PREFIX}${rendered.join(JOINER)}`;
 }
 
-function linkMessage(c: unknown): string {
+/**
+ * One cause-chain link's display text: a `CleanupContextError` appends its
+ * cleanup facts, any other `Error` renders its message, a string renders
+ * verbatim, and anything else renders through `Object.prototype.toString`.
+ * Exported so `shared/redact-absolute-paths.ts`'s `redactCauseChain` renders
+ * a rebuilt link exactly as `causeChainTrailer` would render the original.
+ */
+export function linkMessage(c: unknown): string {
   if (c instanceof CleanupContextError) {
     const details = c.cleanupFailures.map(renderCleanupFailure).join("; ");
     return `${c.message} (cleanup: ${details})`;

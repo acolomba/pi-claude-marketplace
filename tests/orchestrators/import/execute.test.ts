@@ -1375,7 +1375,11 @@ test("records a dependency-cascade failure with the dependency-failed reason", a
   // arrange
   const { cwd } = await createHermeticScopes(t, "install-dependency-cascade");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2);
-  const cause = 'Dependency "lib@mp" has no release tag satisfying "^2.0.0".';
+  // The dependency's own ledger failure names a staged file by absolute
+  // path; the row must carry only its basename (T-55-02-02 / T-53-02-02).
+  const cause =
+    'Dependency "lib@mp" failed: malformed JSON at /home/user/.pi/agent/plugin-clones/lib/plugin.json';
+  const redactedCause = 'Dependency "lib@mp" failed: malformed JSON at plugin.json';
   const order = ["before", "target", "after"];
   const surviving = order.filter((plugin) => plugin !== "target");
   const attempted: string[] = [];
@@ -1384,7 +1388,7 @@ test("records a dependency-cascade failure with the dependency-failed reason", a
     addedMarketplaces: [added("mp", "user")],
     changedResources: true,
     installedPlugins: surviving.map((plugin) => installed(plugin, "mp", "user")),
-    unexpectedPluginFailures: [failedDependency("target", "mp", "user", cause)],
+    unexpectedPluginFailures: [failedDependency("target", "mp", "user", redactedCause)],
   };
 
   // act
@@ -1425,7 +1429,7 @@ test("records a dependency-cascade failure with the dependency-failed reason", a
         `  ● ${surviving[0]} (installed)\n` +
         `  ● ${surviving[1]} (installed)\n` +
         "  ⊘ target (failed) {dependency failed}\n" +
-        `    cause: ${cause}\n\n` +
+        `    cause: ${redactedCause}\n\n` +
         "Import: 1 failure, 3 successes\n\n" +
         "/reload to pick up changes",
       severity: "error",

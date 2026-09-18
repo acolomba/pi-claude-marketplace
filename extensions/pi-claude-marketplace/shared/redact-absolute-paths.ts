@@ -1,3 +1,5 @@
+import { CAUSE_CHAIN_MAX_DEPTH, hasOnwardCause, linkMessage } from "./errors.ts";
+
 /**
  * Collapses absolute paths in diagnostic text to their basenames.
  *
@@ -13,48 +15,17 @@ export function redactAbsolutePaths(text: string): string {
 }
 
 /**
- * Depth bound mirrored from `shared/errors.ts`'s module-private
- * `CAUSE_CHAIN_MAX_DEPTH` (T-13-04 DoS mitigation), copied rather than
- * imported since the source constant is not exported there. Keeps this
- * walker's cap in lockstep with `causeChainTrailer`'s own cap, so a chain
- * longer than the bound reports truncated the same way here as it would
- * there.
+ * Yields each chain link from `error`, stopping at `maxDepth` or the chain's
+ * own end. Reuses `shared/errors.ts`'s `hasOnwardCause` so this walker's
+ * cycle guard and onward-cause test can never drift from `causeChainTrailer`'s.
  */
-const CAUSE_CHAIN_MAX_DEPTH = 5;
-
-/**
- * Whether a chain link is an `Error` carrying a further, non-self-referencing
- * cause. Mirrors `shared/errors.ts`'s module-private `hasOnwardCause`.
- */
-function hasOnwardCause(err: unknown): err is Error {
-  return err instanceof Error && err.cause !== undefined && err.cause !== err;
-}
-
-/**
- * One link's display text. Mirrors `shared/errors.ts`'s module-private
- * `linkMessage` for the `Error` and non-`Error` arms (an `Error` renders its
- * message, a string renders verbatim, anything else renders through
- * `Object.prototype.toString`); the `CleanupContextError`-specific arm is not
- * reproduced here, since a dependency's ledger failure never carries one.
- */
-function linkText(link: unknown): string {
-  if (link instanceof Error) {
-    return link.message;
-  }
-
-  if (typeof link === "string") {
-    return link;
-  }
-
-  return Object.prototype.toString.call(link);
-}
-
-/** Yields each chain link from `error`, stopping at `maxDepth` or the chain's own end. */
 function* causeChainLinks(error: unknown, maxDepth: number): Generator {
   let current: unknown = error;
   for (let depth = 0; depth < maxDepth; depth++) {
     yield current;
-    if (!hasOnwardCause(current)) {
+    // `hasOnwardCause` already proved this instanceof check true; repeating
+    // it narrows `current` for `.cause` without an `as Error` cast.
+    if (!hasOnwardCause(current) || !(current instanceof Error)) {
       return;
     }
 
@@ -94,7 +65,7 @@ export function redactCauseChain(
   let chain: Error | undefined = truncated
     ? new Error("(cause chain continues beyond the depth bound)")
     : undefined;
-  for (const message of links.map((link) => redactAbsolutePaths(linkText(link))).reverse()) {
+  for (const message of links.map((link) => redactAbsolutePaths(linkMessage(link))).reverse()) {
     chain = chain === undefined ? new Error(message) : new Error(message, { cause: chain });
   }
 
