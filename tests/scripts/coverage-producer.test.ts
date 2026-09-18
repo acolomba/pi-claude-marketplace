@@ -657,6 +657,46 @@ test("refuses the installed producer when the lockfile no longer resolves it to 
   );
 });
 
+// The qualification is what tells the maintained delivery from a tampered
+// `node_modules`, so it must decide before the producer's own top-level code
+// runs in the loading process. The child records every module its loader
+// evaluates and reports whether the producer package was among them.
+test("refuses the installed producer before any of its code runs", async (t) => {
+  // arrange
+  const otherRoot = await mkdtemp(path.join(tmpdir(), "coverage-producer-lock-"));
+  t.after(async () => {
+    await rm(otherRoot, { force: true, recursive: true });
+  });
+  const specifier = JSON.stringify(adapterModuleUrl);
+
+  // act
+  const loaded = run([
+    "--input-type=module",
+    "-e",
+    `import { registerHooks } from "node:module";
+const evaluated = [];
+registerHooks({ load(url, context, next) { evaluated.push(url); return next(url, context); } });
+const adapter = await import(${specifier});
+let refusal;
+try {
+  await adapter.loadProducer(undefined, { root: ${JSON.stringify(otherRoot)} });
+} catch (error) {
+  refusal = { name: error.name, kinds: error.failures.map((failure) => failure.kind) };
+}
+process.stdout.write(JSON.stringify({
+  refusal,
+  producerEvaluated: evaluated.some((url) => url.includes("/node_modules/ast-v8-to-istanbul/")),
+}));`,
+  ]);
+
+  // assert
+  assert.strictEqual(loaded.status, 0, loaded.stderr);
+  assert.deepStrictEqual(JSON.parse(loaded.stdout), {
+    refusal: { name: "ProducerError", kinds: ["producer-location", "lock-resolution"] },
+    producerEvaluated: false,
+  });
+});
+
 interface DeliveryMutant {
   readonly name: string;
   readonly mutate: (vendor: string) => Promise<void>;

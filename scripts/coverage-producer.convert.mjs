@@ -133,12 +133,13 @@ function deliveryFailures(identity, root) {
 }
 
 /**
- * Imports the producer and records exactly which bytes were imported: the
- * entry file's digest, the package version and directory, the license
- * digest, and the delivery qualification. Without `entry` the installed
- * package is resolved from this module and must be the maintained delivery
- * under `options.root` (this repository by default), or the load throws.
- * An explicit `entry` is a control: it loads regardless, with its
+ * Qualifies the producer from its bytes on disk, then imports it, and records
+ * exactly which bytes were imported: the entry file's digest, the package
+ * version and directory, the license digest, and the delivery qualification.
+ * Without `entry` the installed package is resolved from this module and must
+ * be the maintained delivery under `options.root` (this repository by
+ * default), or the load throws before any producer code runs in this
+ * process. An explicit `entry` is a control: it loads regardless, with its
  * qualification failures recorded.
  */
 export async function loadProducer(entry, options = {}) {
@@ -148,12 +149,6 @@ export async function loadProducer(entry, options = {}) {
       ? import.meta.resolve(PRODUCER_PACKAGE)
       : pathToFileURL(path.resolve(entry)).href;
   const entryPath = fileURLToPath(entryUrl);
-  const loaded = await import(entryUrl);
-
-  if (typeof loaded.convert !== "function") {
-    throw new ProducerError(`${entryPath} does not export a convert function`);
-  }
-
   const { directory, version } = producerPackage(entryPath);
   const licensePath = path.join(directory, "LICENSE");
   const identity = {
@@ -171,6 +166,12 @@ export async function loadProducer(entry, options = {}) {
       `The installed ${PRODUCER_PACKAGE} is not the maintained delivery:\n${rows}`,
       failures,
     );
+  }
+
+  const loaded = await import(entryUrl);
+
+  if (typeof loaded.convert !== "function") {
+    throw new ProducerError(`${entryPath} does not export a convert function`);
   }
 
   return {
