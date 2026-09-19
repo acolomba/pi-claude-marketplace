@@ -145,14 +145,14 @@ Parity with upstream tag resolution for relative-path plugins. Today any
 non-wildcard constraint on a path-source dependency fails
 `{no matching version}`, so constraints are unusable on the common case.
 
-- [ ] **TAGS-01**: A constrained dependency whose marketplace entry is a
+- [x] **TAGS-01**: A constrained dependency whose marketplace entry is a
   relative path resolves the constraint against the marketplace repository's
   `{name}--v{version}` tags, read from the local marketplace clone without
   network (NFR-5).
 - [ ] **TAGS-02**: When no tag satisfies the constraint, the marketplace's
   current copy is installed and the constraint is checked at load (LOAD-01)
   rather than failing the install.
-- [ ] **TAGS-03**: A constrained path-source dependency with a satisfying tag
+- [x] **TAGS-03**: A constrained path-source dependency with a satisfying tag
   installs the plugin as it stands at that tag, not the marketplace's current
   copy.
 
@@ -274,9 +274,9 @@ this milestone.
 | LOAD-01 | Phase 6 | Complete |
 | LOAD-02 | Phase 6 | Complete |
 | LOAD-03 | Phase 6 | Complete |
-| TAGS-01 | Phase 7 | Pending |
+| TAGS-01 | Phase 7 | Complete |
 | TAGS-02 | Phase 7 | Pending |
-| TAGS-03 | Phase 7 | Pending |
+| TAGS-03 | Phase 7 | Complete |
 | EDEP-01 | Phase 8 | Pending |
 | EDEP-02 | Phase 8 | Pending |
 | EDEP-03 | Phase 8 | Pending |
