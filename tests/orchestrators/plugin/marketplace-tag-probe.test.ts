@@ -172,7 +172,14 @@ describe("probeMarketplaceTags", () => {
 
     const result = await probeMarketplaceTags(options({ seam: fake.seam }));
 
-    assert.strictEqual(result.kind, "tag-listing-failed");
+    // WR-11: the whole value, not just `kind` -- an implementation that
+    // swallowed the peel error and substituted a generic message would still
+    // pass a `kind`-only assertion, losing the only diagnostic this arm
+    // carries.
+    assert.deepStrictEqual(result, {
+      kind: "tag-listing-failed",
+      cause: new Error("cannot peel formatter--v1.0.0"),
+    });
     assert.strictEqual(fake.listTagsCalls.length, 1);
   });
 
