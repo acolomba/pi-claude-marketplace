@@ -85,6 +85,16 @@ export interface CheckoutOptions {
   ref: string;
   /** Default false. Set true to keep working-tree files at HEAD. */
   noCheckout?: boolean;
+  /**
+   * Default false. isomorphic-git's checkout skips writing a file whose
+   * index entry already matches the target commit, even when the file is
+   * absent from the actual working tree (it diffs index vs. commit, not
+   * disk vs. commit). Set true when `dir`'s work tree may be empty or
+   * incomplete relative to its own index -- for example a `.git`-only copy
+   * checked out into a fresh, empty directory -- so every file the target
+   * tree names gets written regardless of what the index already claims.
+   */
+  force?: boolean;
 }
 
 export interface ResolveRefOptions {
@@ -221,6 +231,7 @@ export async function checkout(opts: CheckoutOptions): Promise<void> {
     dir: opts.dir,
     ref: opts.ref,
     ...(opts.noCheckout !== undefined && { noCheckout: opts.noCheckout }),
+    ...(opts.force !== undefined && { force: opts.force }),
   });
 }
 

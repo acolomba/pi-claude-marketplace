@@ -614,15 +614,18 @@ export async function resolveGitPluginRootWithSubdir(
  * marketplace-local release tag's tree into `plugin-clones/<key>/`, without
  * ever mutating the marketplace clone's own working tree, HEAD, or index.
  *
- * Construction (D-07-04, developer-confirmed): copy-then-checkout, the SAME
- * construction `seedOnePluginMirror` already uses for the structurally
- * identical problem. The tag is checked out inside a COPY's own gitdir, never
- * against a `gitdir` naming the marketplace clone -- verified against the
- * installed isomorphic-git source that a checkout writes `${gitdir}/index`
- * regardless of `noUpdateHead`, which would silently desync the marketplace
- * clone's own index. Copying `.git` along with the tree means every index
- * read and write lands on the copy; the marketplace clone is never opened by
- * any git API at all.
+ * Construction (D-07-04, developer-confirmed): copy ONLY the marketplace's
+ * `.git` dir into an otherwise-empty staging dir, then check the tag out
+ * there. The tag is checked out inside a COPY's own gitdir, never against a
+ * `gitdir` naming the marketplace clone -- verified against the installed
+ * isomorphic-git source that a checkout writes `${gitdir}/index` regardless
+ * of `noUpdateHead`, which would silently desync the marketplace clone's own
+ * index. Copying `.git` alone (not the work tree) means every index read and
+ * write lands on the copy, the marketplace clone is never opened by any git
+ * API at all, AND the checkout is the only thing that ever writes into the
+ * work tree -- an untracked or gitignored file in the marketplace root
+ * cannot ride along, because the staging dir never had a work tree to copy
+ * one from.
  *
  * Keying: `pluginCloneKey(marketplaceUrl, tagOid)`, the SAME key shape a
  * pinned git-source clone uses, so `clone-gc.ts::deriveLiveCloneKeys` needs no
@@ -661,13 +664,26 @@ export async function materializeMarketplaceTagClone(args: {
   // content): no re-copy, no re-checkout.
   if (!(await pathExists(dest))) {
     const staging = await args.locations.sourcesStagingDir(randomUUID());
-    await mkdir(path.dirname(staging), { recursive: true });
-    // Copy the working tree AND `.git` -- the checkout below runs against
-    // this copy's own gitdir, never the marketplace clone's.
-    await cp(args.marketplaceRoot, staging, { recursive: true });
+    // Copy ONLY the gitdir into an otherwise-empty staging dir. A checkout
+    // never removes untracked/ignored files from an existing work tree, so
+    // starting from a copy of the marketplace's live work tree would let
+    // anything not part of the tag's tree (untracked files, gitignored
+    // trees) ride along into the cache. Starting empty means the checkout
+    // below is the ONLY thing that writes into the work tree, and it writes
+    // exactly the tag's tree.
+    await mkdir(staging, { recursive: true });
+    await cp(path.join(args.marketplaceRoot, ".git"), path.join(staging, ".git"), {
+      recursive: true,
+    });
 
     try {
-      await gitOps.checkout({ dir: staging, ref: args.tagOid });
+      // `force: true` -- the copied `.git`'s index already matches `tagOid`
+      // whenever the tag names the marketplace's current HEAD (the common
+      // case for a freshly-tagged release), so a non-forced checkout would
+      // see index === target tree and write nothing at all, leaving the
+      // empty staging dir empty. Forcing makes the checkout compare against
+      // the actual (empty) work tree instead of trusting the index.
+      await gitOps.checkout({ dir: staging, ref: args.tagOid, force: true });
     } catch (err) {
       const leak = await cleanupStaging(removalOps, staging, "marketplace tag clone staging");
       throw appendLeakToError(err, leak);

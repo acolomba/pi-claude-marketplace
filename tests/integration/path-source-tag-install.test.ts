@@ -239,6 +239,86 @@ test("TAGS-01/TAGS-03: a constrained path-source dependency installs from the ma
   assert.deepStrictEqual(after, before);
 });
 
+test("CR-01: an untracked file in the marketplace root does not leak into the materialized tag clone", async (t) => {
+  // arrange: plant files the tag's tree does not contain -- one gitignored,
+  // one plainly untracked, at both the marketplace root and inside the
+  // plugin's own directory. A materialization that copies the marketplace's
+  // live work tree before checking the tag out would carry all of them into
+  // `plugin-clones/<key>/`; extracting the tag's tree into an empty staging
+  // dir must not.
+  const environment = await createHermeticEnvironment(t, "path-source-tag-untracked-");
+  const { marketplaceRoot } = await buildTaggedMarketplace(environment.cwd);
+  await writeFile(path.join(marketplaceRoot, ".gitignore"), "*.secret\n");
+  await writeFile(
+    path.join(marketplaceRoot, "top-level.secret"),
+    "should never leave the marketplace checkout\n",
+  );
+  await writeFile(
+    path.join(marketplaceRoot, "plugins", "formatter", "leaked.secret"),
+    "should never leave the marketplace checkout\n",
+  );
+  await writeFile(
+    path.join(marketplaceRoot, "plugins", "formatter", "UNTRACKED.txt"),
+    "never committed\n",
+  );
+  const locations = locationsFor("project", environment.cwd);
+  const addCtx = makeCtx(environment.cwd);
+  const installCtx = makeCtx(environment.cwd);
+  const completionCache = createCompletionCache();
+  const installPlugin = createNodeInstallPlugin(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache,
+  );
+
+  // act
+  await addMarketplace({
+    ctx: addCtx.ctx,
+    pi: addCtx.pi,
+    scope: "project",
+    cwd: environment.cwd,
+    completionCache,
+    rawSource: marketplaceRoot,
+  });
+  await installPlugin({
+    ctx: installCtx.ctx,
+    pi: installCtx.pi,
+    scope: "project",
+    cwd: environment.cwd,
+    marketplace: "acme",
+    plugin: "app",
+  });
+
+  // assert
+  const state = await loadState(locations.extensionRoot);
+  const formatterRecord = state.marketplaces.acme?.plugins.formatter;
+  assert.ok(
+    formatterRecord !== undefined,
+    `formatter did not install: ${JSON.stringify(installCtx.notifications)}`,
+  );
+  assert.ok(
+    formatterRecord.resolvedSource.includes(`${path.sep}plugin-clones${path.sep}`),
+    `resolvedSource does not sit inside plugin-clones/: ${formatterRecord.resolvedSource}`,
+  );
+  // `resolvedSource` is `<plugin-clones>/<key>/plugins/formatter` (the
+  // git-subdir root); its grandparent is the whole materialized clone.
+  const cloneRoot = path.resolve(formatterRecord.resolvedSource, "..", "..");
+  assert.strictEqual(
+    fs.existsSync(path.join(cloneRoot, "top-level.secret")),
+    false,
+    "a gitignored file at the marketplace root leaked into the materialized tag clone",
+  );
+  assert.strictEqual(
+    fs.existsSync(path.join(formatterRecord.resolvedSource, "leaked.secret")),
+    false,
+    "a gitignored file under the plugin's own directory leaked into the materialized tag clone",
+  );
+  assert.strictEqual(
+    fs.existsSync(path.join(formatterRecord.resolvedSource, "UNTRACKED.txt")),
+    false,
+    "an untracked file leaked into the materialized tag clone",
+  );
+});
+
 /**
  * Builds a real git repository marketplace declaring TWO independently-tagged
  * path-source plugins (`formatter--v1.0.0`, `linter--v1.0.0`) and one
