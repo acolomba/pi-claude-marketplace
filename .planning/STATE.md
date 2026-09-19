@@ -5,11 +5,11 @@ milestone_name: transitive-dependencies
 current_phase: 07
 current_phase_name: Marketplace-repository tag resolution for path-source dependencies
 status: planning
-stopped_at: Phase 06 complete, ready to plan Phase 07
-last_updated: "2026-09-19T11:31:12.044Z"
+stopped_at: Phase 07 context gathered
+last_updated: "2026-09-19T15:00:12.013Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 06 complete, transitioned to Phase 07
-state_head: 66ccffe9d85d8f6818d8fa1b065ea2c65f4ae32f
+state_head: 83dbf7da8d143727c92f35a31029a42839690e8a
 progress:
   total_phases: 12
   completed_phases: 6
@@ -922,11 +922,12 @@ hit the same wall; convert it rather than re-disclosing it.
 | 260913-n7w | Fix the FIFO state server so each reader open receives exactly one payload | 2026-09-13 | e4f12cce | Complete | [260913-n7w-fix-the-fifo-state-server-reader-pairing](./quick/260913-n7w-fix-the-fifo-state-server-reader-pairing/) |
 | 260913-l07 | Fix every remaining zizmor finding, drop the severity floor, and simplify the gate comments | 2026-09-13 | 729348b4 | Complete | [260913-l07-fix-remaining-zizmor-findings-and-simpli](./quick/260913-l07-fix-remaining-zizmor-findings-and-simpli/) |
 | 260913-f6a | Gate the two SonarQube workflow findings, githubactions:S6505 and githubactions:S7637 | 2026-09-13 | 8a8a0396..69797ebc | Complete | [260913-f6a-gate-sonar-workflow-findings-s6505-and-s](./quick/260913-f6a-gate-sonar-workflow-findings-s6505-and-s/) |
+
 ## Session Continuity
 
-**Stopped at:** Phase 06 complete, ready to plan Phase 07
+**Stopped at:** Phase 07 context gathered
 
-**Resume file:** None
+**Resume file:** .planning/phases/07-marketplace-repo-tag-resolution/07-CONTEXT.md
 `HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
 content was folded into `04-CONTEXT.md`: the supersession warning and the
 ordering constraint into `<decisions>`, and the operational anti-patterns
@@ -936,7 +937,7 @@ carried-notes block under `<specifics>`.
 
 **Read beside it:** `.planning/phases/04-install-provenance/04-CONTEXT.md`
 
-Last session: 2026-09-19T02:56:45.979Z
+Last session: 2026-09-19T15:00:11.774Z
 resumed a paused Phase 4 discussion, answered its two open questions (the
 config-write reversal lands entirely in Phase 4 in a fixed order; reconcile
 keeps sweeping genuine orphans with one exemption), wrote `04-CONTEXT.md` and
