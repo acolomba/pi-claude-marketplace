@@ -1,5 +1,19 @@
 {
-  "model_profile": "quality",
+  "model_profile": "adaptive",
+  "model_overrides": {
+    "gsd-code-reviewer": "opus"
+  },
+  "dynamic_routing": {
+    "enabled": true,
+    "tier_models": { "light": "haiku", "standard": "sonnet", "heavy": "opus" },
+    "escalate_on_failure": true,
+    "max_escalations": 2
+  },
+  "effort": {
+    "agent_overrides": {
+      "gsd-planner": "max"
+    }
+  },
   "commit_docs": true,
   "parallelization": true,
   "search_gitignored": false,
