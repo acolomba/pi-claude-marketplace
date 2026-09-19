@@ -507,6 +507,7 @@ together with its three bridge declaration sites. Next is 06-10.
 | Phase 07 P07 | 1h 12m | 2 tasks | 8 files |
 | Phase 07 P08 | 2h 21m | 3 tasks | 14 files |
 | Phase 08 P01 | 56 min | 3 tasks | 1 files |
+| Phase 08 P02 | 7 min | 3 tasks | 6 files |
 
 ## Decisions
 
