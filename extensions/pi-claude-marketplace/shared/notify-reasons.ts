@@ -309,6 +309,15 @@ type CommandPrivateReason =
   // succeeded -- it is not an idempotent reason (a copy installed, which is
   // not a no-op) and not a failure reason (nothing failed). The constraint
   // itself is checked at load by the LOAD-01 check, not here.
+  //
+  // D-07-03 locks this reason's severity at `info`, a deliberate divergence
+  // from Claude Code's own `warning` for the same fallback: the install
+  // itself always succeeds, and the load-time check is what actually flags
+  // and disables a dependent once the fallback copy is genuinely out of
+  // range. `companionSeverity` (not this reason) still raises the row to
+  // `warning` when the member's own soft-dep companion is unloaded, so a
+  // real degradation is never masked. Do not raise this reason's severity to
+  // match `warning` without recording a decision that supersedes D-07-03.
   | "dependency current copy"
   // RESV-05: the skipped dependency is recorded but disabled, so it
   // materialized nothing. It joins `already installed` in the same brace and

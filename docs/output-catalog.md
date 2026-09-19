@@ -819,13 +819,11 @@ A plugin operation needs attention.
 
 The same skip, against a record that is DISABLED. A disabled record keeps its inventory and its name reservations while its artifacts are off disk (ENBL-18 / ENBL-19), so `helper` installed against a dependency that materialized nothing. `{already installed}` alone is in the idempotent closed set and would report that as fine; `{dependency disabled}` names it, and `skipSeverity` reads the pair and computes `warning`, which raises the block. The install still stands and the dependency is still untouched -- enablement is never decided on a dependency's behalf (see `docs/plugin-enablement.md`), so the row is the whole remedy and `/claude:plugin enable linter@tools` is the user's move.
 
-### Dependency cascade -- a path-source dependency falls back to the marketplace's current copy (TAGS-02 / D-07-03 / WR-05)
+### Dependency cascade -- a path-source dependency falls back to the marketplace's current copy (TAGS-02 / D-07-03)
 
 <!-- catalog-state: dependency-cascade-fallback-current-copy -->
 
 ```text
-A plugin operation needs attention.
-
 ● official [user]
   ● formatter@tools v2.1.0 (installed) {dependency current copy}
   ● helper v1.0.0 (installed)
@@ -833,7 +831,7 @@ A plugin operation needs attention.
 /reload to pick up changes
 ```
 
-`formatter` is a PATH-source dependency (declared with a relative `source`, the common case for a marketplace's own plugins) whose marketplace clone carries no release tag satisfying `helper`'s declared constraint. Rather than failing the whole install the way the git-backed arm below does, the cascade installs the marketplace's CURRENT copy instead and names it on the dependency's own row. The constraint itself is left unenforced here: the load-time check is what disables `helper` later if the fallback copy turns out to be genuinely out of range. The token rides an `installed` row and never a failure row, because the install DID succeed -- but `helper` installed against a dependency at an unverified version, so the row (and the block) raises to `warning`, matching Claude Code's own severity for this same fallback. A member whose companion is also unloaded reports no less than that: `companionSeverity`'s range tops out at `warning` too.
+`formatter` is a PATH-source dependency (declared with a relative `source`, the common case for a marketplace's own plugins) whose marketplace clone carries no release tag satisfying `helper`'s declared constraint. Rather than failing the whole install the way the git-backed arm below does, the cascade installs the marketplace's CURRENT copy instead and names it on the dependency's own row with a quiet `info`-level note (D-07-03) -- a deliberate divergence from upstream, which surfaces this exact fallback as a warning. The constraint itself is left unenforced here: the load-time check is what disables `helper` later if the fallback copy turns out to be genuinely out of range. The token rides an `installed` row and never a failure row, because the install DID succeed; it never raises the row's severity on its own, and a member whose companion is unloaded still reports that genuine SEV-01 degradation on top of it.
 
 ### Dependency cascade -- no release tag satisfies the constraint (RESV-03)
 

@@ -96,10 +96,7 @@ const EXPECTED_SECTION_COUNT = 20;
 // -- an `installed` row carrying `{dependency current copy}` when no
 // marketplace tag satisfied the constraint (217 -> 218).
 const EXPECTED_STATE_COUNT = 218;
-// WR-05: the fallback row raises to `warning`, so its documented example
-// gains the `A plugin operation needs attention.\n\n` block header (+37
-// bytes: 29,798 -> 29,835).
-const EXPECTED_UTF8_BYTES = 29_835;
+const EXPECTED_UTF8_BYTES = 29_798;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
