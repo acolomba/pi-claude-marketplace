@@ -15,8 +15,9 @@
 //   getPluginIndex(path, scope, marketplace, rebuild, { now? })
 //     - memory hit AND now() - loadedAt <= 10 minutes -> return cached
 //     - memory miss OR TTL expiry -> drop memory + read file
-//         - file hit (schema-OK) -> hydrate memory + return
-//         - file ENOENT/corrupt/schema mismatch -> rebuild path (below)
+//         - file hit (schema-OK) AND fresh (lastRefreshedAt within 10
+//           minutes) -> hydrate memory + return
+//         - file ENOENT/corrupt/schema mismatch/stale -> rebuild path (below)
 //     - rebuild path:
 //         - rebuild() returns rows -> atomicWriteJson + hydrate + return
 //         - rebuild() throws ManifestSoftFailError -> atomicWriteJson the
@@ -47,6 +48,7 @@ import Type from "typebox";
 import { Compile } from "typebox/compile";
 
 import { atomicWriteJson } from "./atomic-json.ts";
+import { hookDebugLog } from "./debug-log.ts";
 import { errorMessage } from "./errors.ts";
 
 import type { Scope } from "./types.ts";
@@ -167,7 +169,11 @@ async function readPluginIndexFile(filePath: string): Promise<PluginIndexFileRes
   let raw: string;
   try {
     raw = await readFile(filePath, "utf8");
-  } catch {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      hookDebugLog(`plugin-index cache read failed for ${filePath}: ${errorMessage(err)}`);
+    }
+
     return undefined;
   }
 
@@ -241,7 +247,8 @@ async function getPluginIndexWithMemory(
   if (fromFile !== undefined) {
     if (pluginIndexFileIsFresh(fromFile, now)) {
       // Poison rows hydrate as [] without re-running rebuild (TC-8: stay
-      // soft-failed until explicit invalidation; reads return [] forever).
+      // soft-failed until explicit invalidation, or until the file's own
+      // 10-min TTL expires and the next read falls through to rebuild).
       if (fromFile.isPoisoned) {
         memPluginIndex.set(key, { rows: [], loadedAt: now() });
         return [];
@@ -269,6 +276,9 @@ async function getPluginIndexWithMemory(
         _loadError: errorMessage(err.cause),
       };
       await atomicWriteJson(pluginCachePath, poison);
+      hookDebugLog(
+        `plugin-index rebuild soft-failed for ${scope}/${marketplace}; caching poison: ${errorMessage(err.cause)}`,
+      );
       memPluginIndex.set(key, { rows: [], loadedAt: now() });
       return [];
     }

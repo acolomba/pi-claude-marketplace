@@ -57,6 +57,7 @@ import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/
 import { loadMergedScopeConfig, type MergedConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import {
   type MarketplaceDetails,
@@ -438,7 +439,13 @@ async function loadMarketplaceManifestSoftly(
   try {
     const manifest = await loadManifestSoftly(mpRecord.manifestPath);
     return { ok: true, manifest };
-  } catch {
+  } catch (err) {
+    // BOUND-03 / D-95-05: the failure stays off every rendered row (the
+    // marketplace header's bare `(failed)` form and the per-plugin
+    // `unverified` arm both suppress the reason deliberately), so this is
+    // debug-only -- otherwise a corrupt/unreadable manifest.json left no
+    // trace anywhere.
+    hookDebugLog(`list: manifest load failed for ${mpRecord.manifestPath}: ${errorMessage(err)}`);
     return { ok: false };
   }
 }

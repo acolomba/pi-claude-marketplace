@@ -87,6 +87,7 @@ import {
 } from "../../bridges/skills/index.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CleanupContextError,
   errorMessage,
@@ -422,10 +423,9 @@ function appendCleanupFailure(
 //    staleness.
 //  - PHASE3_FAILURE_PHASES + Phase3Phase: closed-set tuple for the per-bridge
 //    finalize gating. `Phase3Failure.phase` is already declared as the closed
-//    union `"skills" | "commands" | "agents" | "mcp"` in shared/errors.ts, so
-//    the tuple here is a runtime mirror of the type for explicit Set<Phase3Phase>
-//    construction inside `finalizeUpdateRecord`. A future fifth bridge surfaces
-//    here as a TS error.
+//    union `"skills" | "commands" | "agents" | "hooks" | "mcp"` in
+//    shared/errors.ts, so the tuple here is a runtime mirror of the type for
+//    explicit Set<Phase3Phase> construction inside `finalizeUpdateRecord`.
 //
 // The intent-mark marker is internal-only: shared/notification-grammar.ts and
 // shared/notification-summary.ts do not read `compatibility.notes`; the only
@@ -595,26 +595,39 @@ function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: Plug
  * Runs on the all-success arm only; an aggregated phase-3 failure leaves the
  * OLD config in place, mirroring the SC#2 compatibility/resolvedSource
  * decision.
+ *
+ * Called AFTER `finalizeUpdateRecord`'s `withStateGuard` has already
+ * committed the new record, so a throw here is post-commit hygiene, not a
+ * finalize failure: state.json is already truthful, only the hot
+ * cache/routing table is stale. Mirrors `uninstall.ts::dropCachedHooks` --
+ * self-contained try/catch, debug-only log, never propagates -- so the
+ * caller cannot mistake this for a `state finalize failed` outcome.
  */
 async function refreshHooksCacheAfterUpdate(
   args: ThreePhaseArgs,
   installable: MaterializablePlugin,
 ): Promise<void> {
   const { plugin, marketplace } = args;
-  args.hooksRouting.removePluginConfigFromCache(args.scope, marketplace, plugin);
-  if (installable.hooksConfigPath !== undefined) {
-    await args.hooksRouting.readAndCachePluginHooks({
-      scope: args.scope,
-      marketplace,
-      plugin,
-      resolvedSource: asAbsolutePluginRoot(installable.pluginRoot),
-      hooksJsonPath: path.join(installable.pluginRoot, installable.hooksConfigPath),
-      cwd: args.cwd,
-      logPrefix: "update",
-    });
-  }
+  try {
+    args.hooksRouting.removePluginConfigFromCache(args.scope, marketplace, plugin);
+    if (installable.hooksConfigPath !== undefined) {
+      await args.hooksRouting.readAndCachePluginHooks({
+        scope: args.scope,
+        marketplace,
+        plugin,
+        resolvedSource: asAbsolutePluginRoot(installable.pluginRoot),
+        hooksJsonPath: path.join(installable.pluginRoot, installable.hooksConfigPath),
+        cwd: args.cwd,
+        logPrefix: "update",
+      });
+    }
 
-  args.hooksRouting.rebuildRoutingTables();
+    args.hooksRouting.rebuildRoutingTables();
+  } catch (cacheErr) {
+    hookDebugLog(
+      `update: post-finalize cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)} -- hooks for this plugin remain stale until /reload rebuilds routing from state.json`,
+    );
+  }
 }
 
 /**
@@ -626,7 +639,10 @@ async function refreshHooksCacheAfterUpdate(
  * 1. PER-BRIDGE (independent across bridges): for each of skills /
  *    commands / agents / mcp, if `!failedPhases.has(bridge)` then write
  *    `sRecord.resources.<schemaField> = handles.<bridge>.result.recorded
- *    .map(r => r.generatedName)`. SC#2: do NOT
+ *    .map(r => r.generatedName)`. Hooks follows the same
+ *    `!failedPhases.has("hooks")` gate but writes `sRecord.resources.hooks`
+ *    and `sRecord.hookEntries` from `installable.hooksConfigPath` /
+ *    `hookEntries` instead (see `applyPerBridgeResources`). SC#2: do NOT
  *    gate per-bridge writes on `phase3aFailures.length === 0`; the
  *    independent per-bridge gate is the load-bearing structural contract.
  *
@@ -634,6 +650,7 @@ async function refreshHooksCacheAfterUpdate(
  *      skills    -> resources.skills
  *      commands  -> resources.prompts   (asymmetric, schema-locked)
  *      agents    -> resources.agents
+ *      hooks     -> resources.hooks, hookEntries
  *      mcp       -> resources.mcpServers
  *
  * 2. ALL-OR-NOTHING (version bump + installable flip + resolvedSource):
@@ -1105,8 +1122,9 @@ export async function swapPluginUpdate(
   if (preflight.resolvedSha !== undefined) {
     try {
       await args.cleanupClones(args.locations);
-    } catch {
+    } catch (err) {
       // D-19-01: a GC failure never fails the update; the next pass retries.
+      hookDebugLog(`update: clone GC failed for ${plugin}@${marketplace}: ${errorMessage(err)}`);
     }
   }
 
@@ -1197,12 +1215,15 @@ async function dropPluginCompletionCache(args: ThreePhaseArgs): Promise<void> {
       args.scope,
       args.marketplace,
     );
-  } catch {
+  } catch (err) {
     // Per D-19-01 direct-path completion-cache-refresh warnings are
     // swallowed silently. The cache-refresh side effect still fires
     // above; only the user-visible standalone-mode warning surface is
     // gone. The cascade path is unaffected (no separate warning emission
     // in cascade mode).
+    hookDebugLog(
+      `update: completion-cache drop failed for ${args.plugin}@${args.marketplace}: ${errorMessage(err)}`,
+    );
   }
 }
 

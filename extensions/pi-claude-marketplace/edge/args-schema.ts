@@ -9,6 +9,7 @@
 // This keeps this module independent of `ExtensionContext` and lets
 // tests inject a spy.
 
+import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 
 import { parseArgs, type ParsedArgs } from "./args.ts";
@@ -27,6 +28,10 @@ function parseArgsOrNotify(
   try {
     return parseArgs(args);
   } catch (err) {
+    // parseArgs only throws the two controlled AP-2 diagnostics (bad/missing
+    // --scope value), which are already safe to surface verbatim; logging
+    // here just gives a debug trail if that ever stops being true.
+    hookDebugLog(`parseArgs failed: ${errorMessage(err)}`, "args");
     onError(errorMessage(err));
     return undefined;
   }

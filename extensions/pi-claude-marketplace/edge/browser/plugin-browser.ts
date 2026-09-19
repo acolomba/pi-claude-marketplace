@@ -26,7 +26,8 @@ import {
 } from "@earendil-works/pi-tui";
 
 import { DynamicBorder, type Theme } from "../../platform/pi-api.ts";
-import { assertNever } from "../../shared/errors.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
+import { assertNever, errorMessage } from "../../shared/errors.ts";
 import {
   pluginScopeOrFallback,
   pluginVersion,
@@ -308,6 +309,8 @@ export class PluginBrowser {
       const mp = this.marketplaces.find((m) => `${m.scope}:${m.name}` === item.value);
       if (mp !== undefined) {
         this.showPlugins(mp);
+      } else {
+        hookDebugLog(`marketplace selection had no match for value "${item.value}"`, "browser");
       }
     };
 
@@ -350,7 +353,11 @@ export class PluginBrowser {
       }
 
       this.buildPluginsList(mp);
-    } catch {
+    } catch (err) {
+      hookDebugLog(
+        `plugin load failed for ${mp.name} [${mp.scope}]: ${errorMessage(err)}`,
+        "browser",
+      );
       if (epoch !== this.loadEpoch) {
         return;
       }
@@ -391,6 +398,11 @@ export class PluginBrowser {
       const plugin = this.pluginsByName.get(item.value);
       if (plugin !== undefined) {
         this.showActions(mp, plugin);
+      } else {
+        hookDebugLog(
+          `plugin selection had no match for value "${item.value}" in ${mp.name}`,
+          "browser",
+        );
       }
     };
 

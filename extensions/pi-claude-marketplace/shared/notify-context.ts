@@ -1,3 +1,5 @@
+import { hookDebugLog } from "./debug-log.ts";
+import { errorMessage } from "./errors.ts";
 import {
   emitContextCascade,
   emitReconcileAppliedContextCascade,
@@ -23,7 +25,7 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
  * the shared severity/summary/reload + single `ctx.ui.notify` seam in
  * `notification-summary.ts` (`emitContextCascade`).
  *
- * The legacy `notify(ctx, pi, message)` in `notify.ts` keeps serving
+ * The legacy `notify(ctx, pi, message)` in `notification-dispatch.ts` keeps serving
  * not-yet-migrated call sites (it still drives the central renderPluginRow /
  * renderMpHeader switches) until every command routes through this module;
  * removing those central switches is a later plan. Both paths share the same
@@ -339,10 +341,11 @@ function dispatchRow<Status extends string, Msg extends PluginNotificationMessag
     // localized write is the seam that lets the fallback contribute its severity.
     try {
       (row as WritableRowSeverity).severity = "error";
-    } catch {
+    } catch (err) {
       // A frozen/sealed out-of-band row rejects the write in ESM strict mode. The
       // throw must not escape the single `ctx.ui.notify` seam, so degrade: keep
       // whatever severity was already stamped and still render the diagnostic.
+      hookDebugLog(`dispatchRow: severity write rejected for frozen row: ${errorMessage(err)}`);
     }
 
     return `${"name" in row ? row.name : "?"} (failed) {internal: no render arm for "${row.status}"}`;

@@ -42,7 +42,7 @@
 //   3. POST-STATE cleanup (after guard returns):
 //        - invalidate marketplace names and the target plugin-index cache
 //        - per-plugin data dirs (always)
-//        - marketplace data dir + GitHub clone dir (ONLY when failedPlugins.length === 0; MR-7)
+//        - marketplace data dir + clone dir (github/url sources; ONLY when failedPlugins.length === 0; MR-7)
 //        - cleanup failures are SWALLOWED silently per D-18-01.
 //   4. Compose user-visible output via one `notify(opts.ctx, opts.pi, ...)` call.
 //
@@ -56,6 +56,7 @@ import { loadConfig } from "../../persistence/config-io.ts";
 import { deleteMarketplaceConfigEntryWithCascade } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
@@ -171,9 +172,10 @@ async function removePath(pathPromise: Promise<string>): Promise<void> {
   // Nothing surfaces these cleanup failures to the user.
   try {
     await rm(await pathPromise, { recursive: true, force: true });
-  } catch {
+  } catch (err) {
     // Cleanup is a hygienic concern, not part of the state contract.
     // Per D-18-01: never the primary user-facing failure path.
+    hookDebugLog(`post-remove path cleanup failed: ${errorMessage(err)}`);
   }
 }
 
@@ -616,8 +618,9 @@ async function runPostRemoveCleanup(args: {
   try {
     await completionCache.invalidateMarketplaceNames(locations.marketplaceNamesCacheFile, scope);
     await completionCache.dropMarketplaceCache(await locations.pluginCacheFile(name), scope, name);
-  } catch {
+  } catch (err) {
     // D-18-01: cache hygiene is never the primary user-facing path.
+    hookDebugLog(`post-remove cache invalidation failed: ${errorMessage(err)}`);
   }
 
   for (const cleaned of args.successfullyUnstaged) {
@@ -636,8 +639,9 @@ async function runPostRemoveCleanup(args: {
 
   try {
     await garbageCollectPluginClones(locations);
-  } catch {
+  } catch (err) {
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+    hookDebugLog(`post-remove plugin-clone GC failed: ${errorMessage(err)}`);
   }
 }
 

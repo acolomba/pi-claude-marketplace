@@ -128,7 +128,9 @@ export const REINSTALL_CONTEXT = {
  *   was NOT updated by reinstall; the header is a pure label).
  * - Manual-recovery outcomes are folded into the cascade `plugins[]` array
  *   as `PluginManualRecoveryMessage` variants.
- * - Severity + reload-hint are computed by notify().
+ * - Each row's severity + reload-hint are set explicitly by its producer;
+ *   notify() aggregates those per-row fields into the cascade's overall
+ *   trailer.
  * - Per-marketplace iteration order is honored end-to-end: the orchestrator
  *   pre-sorts via `compareByNameThenScope`; notify() does NOT sort
  *   marketplaces[] or plugins[].
@@ -140,8 +142,9 @@ export const REINSTALL_CONTEXT = {
 //   (orchestrator-controlled iteration; notify does not sort).
 // - Discriminators by status: "reinstalled" / "skipped" / "failed" /
 //   "manual recovery".
-// - Severity + "/reload to pick up changes" trailer are computed by notify();
-//   callers MUST NOT compose them.
+// - Each row's severity + reload-hint are set explicitly by its producer;
+//   notify() aggregates them into the cascade's overall "/reload to pick up
+//   changes" trailer. Callers MUST NOT compose that trailer themselves.
 // - Reference: catalog UAT plugin-reinstall fixtures.
 export function renderReinstallPartitionAndNotify(
   ctx: NotificationContext,

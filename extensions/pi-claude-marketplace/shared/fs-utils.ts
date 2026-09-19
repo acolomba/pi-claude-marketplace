@@ -260,7 +260,9 @@ export interface RollbackReplacementInput {
  *  2. Restore every backup (reverse order). Re-creates the destination
  *     parent before renaming back, in case the post-replacement state
  *     pruned the directory. Failures become leaks.
- *  3. Best-effort `cleanupStaging` on the staging + backup directories.
+ *  3. Optional `beforeCleanup` bridge-specific step (e.g. the agents bridge
+ *     restoring `agents-index.json`), run after backups are restored.
+ *  4. Best-effort `cleanupStaging` on the staging + backup directories.
  *
  * The returned readonly array is frozen so callers can splice it into
  * `appendLeakToError` chains without defensive copies.

@@ -78,9 +78,15 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
 /**
  * Emit one summary-composed payload at the sole Pi notification boundary.
  *
- * Module-private: every public delivery path in this file routes through it, so
- * each of those paths' emitted bytes and one-call-per-invocation discipline is
- * this seam's contract.
+ * Module-private: the state-change dispatch paths -- `notify`,
+ * `emitContextCascade`, `emitUpdateNoOpCascade`, and
+ * `emitReconcileAppliedContextCascade` (the latter three via the shared
+ * `emitCascadeWith` helper) -- route through it, so those paths' emitted
+ * bytes and one-call-per-invocation discipline are this seam's contract. The
+ * remaining public functions (`notifyUsageError`, `notifyUsageInfo`,
+ * `notifyDiagnostic`, `notifyAsyncRewakeSummary`, `notifyStopHookOverrideCap`,
+ * `makeRawNotifyFn`) carry no summary/tally/reload-hint to compose, so they
+ * call `ctx.ui.notify` directly instead.
  */
 function emitWithSummary(
   ctx: NotificationContext,

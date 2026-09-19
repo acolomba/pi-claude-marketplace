@@ -1,7 +1,8 @@
 // Strict-mode resolver coverage. 1:1 mapping between PR-2 cases and tests
-// (9 tests for the 9 cases). Plus PR-3 multi, PR-4 implicit-by-convention
-// (positive + negative), PR-5 dependencies, PR-6 requireInstallable
-// narrowing/throwing, and one MM-5 happy path.
+// (12 tests covering 8 of the 9 cases -- case 5 has no dedicated test).
+// Plus PR-3 multi, PR-4 implicit-by-convention (positive + negative),
+// PR-5 dependencies, PR-6 requireInstallable narrowing/throwing, and one
+// MM-5 happy path.
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
@@ -3444,7 +3445,7 @@ test("resolveStrict reports a root-level manifest validation error", async () =>
   );
 });
 
-test("resolveStrict reports a non-Error manifest read rejection", async () => {
+test("resolveStrict propagates a non-Error manifest read rejection (not wrapped as malformed)", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./manifest-read-rejection");
   const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
@@ -3469,19 +3470,11 @@ test("resolveStrict reports a non-Error manifest read rejection", async () => {
     },
   };
 
-  // act
-  const resolvedPlugin = await resolveStrict(
-    pluginEntry({ source: "./manifest-read-rejection" }),
-    context,
+  // act & assert
+  await assert.rejects(
+    () => resolveStrict(pluginEntry({ source: "./manifest-read-rejection" }), context),
+    (error: unknown) => error === manifestReadFailure,
   );
-
-  // assert
-  assert.deepStrictEqual(resolvedPlugin, {
-    state: "unavailable",
-    installable: false,
-    name: "p1",
-    notes: ["malformed plugin.json: manifest read failure"],
-  });
 });
 
 test("resolveStrict unwraps a standalone mcpServers document", async () => {
@@ -3515,7 +3508,7 @@ test("resolveStrict unwraps a standalone mcpServers document", async () => {
   });
 });
 
-test("resolveStrict reports a non-Error standalone mcp read rejection", async () => {
+test("resolveStrict propagates a non-Error standalone mcp read rejection (not wrapped as malformed)", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./mcp-read-rejection");
   const mcpPath = path.join(localRoot, ".mcp.json");
@@ -3540,19 +3533,11 @@ test("resolveStrict reports a non-Error standalone mcp read rejection", async ()
     },
   };
 
-  // act
-  const resolvedPlugin = await resolveStrict(
-    pluginEntry({ source: "./mcp-read-rejection" }),
-    context,
+  // act & assert
+  await assert.rejects(
+    () => resolveStrict(pluginEntry({ source: "./mcp-read-rejection" }), context),
+    (error: unknown) => error === mcpReadFailure,
   );
-
-  // assert
-  assert.deepStrictEqual(resolvedPlugin, {
-    state: "unavailable",
-    installable: false,
-    name: "p1",
-    notes: ["malformed mcpServers (.mcp.json): standalone mcp read failure"],
-  });
 });
 
 test("requireInstallable classifies an update of the partial true arm", async () => {

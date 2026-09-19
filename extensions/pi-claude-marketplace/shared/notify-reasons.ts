@@ -94,7 +94,7 @@ export function companionSeverity(
 /**
  * D-09: unsupported-components / soft-dep reasons -- the topic group the user
  * named explicitly (hooks / LSP / workflows / companion-extension soft deps /
- * unsupported source / no-longer-installable).
+ * unsupported source / unsupported component / no-longer-installable).
  */
 type UnsupportedReason =
   | "unsupported hooks"
@@ -161,10 +161,12 @@ export type FailureReason =
  * declaration explains what an install would produce. One group, two tenses,
  * the same cause.
  *
- * Declared as a bare union rather than as a `[...] as const` tuple like its
- * three sibling groups. Those tuples exist because something consumes them at
- * RUNTIME (`IDEMPOTENT_REASONS` builds `IDEMPOTENT_REASON_SET`); this group has
- * no such consumer, and a tuple that only ever feeds `(typeof X)[number]` is an
+ * Declared as a bare union rather than as a `[...] as const` tuple. Of its
+ * three sibling groups only `IdempotentReason` is such a tuple, because
+ * `IDEMPOTENT_REASONS` builds a runtime `Set` (`IDEMPOTENT_REASON_SET`) that
+ * `skipSeverity` consumes; `UnsupportedReason` and `FailureReason` are bare
+ * unions for the same reason this group is: nothing consumes them at
+ * RUNTIME, and a tuple that only ever feeds `(typeof X)[number]` is an
  * unreferenced runtime value. Add a member by extending the union; convert back
  * to a tuple if and when a runtime consumer appears.
  */
@@ -249,7 +251,7 @@ export function malformedReasonsForKinds(
  * `plugins remain` for `marketplace remove`, `orphan rewake` for `install`)
  * are NOT declared here -- they belong to the owning command's module. The
  * structural `"marketplace not added"` marketplace-absent marker is likewise not a shared
- * topic reason (it is excluded from `ContentReason` in `notify.ts`).
+ * topic reason (it is excluded from `ContentReason` in `notification-types.ts`).
  */
 type SharedTopicReason = IdempotentReason | UnsupportedReason | FailureReason | DeclaredStateReason;
 
@@ -258,7 +260,7 @@ type SharedTopicReason = IdempotentReason | UnsupportedReason | FailureReason | 
  * proof -- they are owned by their command modules, not exported as a
  * shared group. `"marketplace not added"` and its two scope-qualified siblings are the three
  * structural marketplace-absent markers (all excluded from `ContentReason` in
- * `notify.ts`); they are included here solely so the coverage proof sees the
+ * `notification-types.ts`); they are included here solely so the coverage proof sees the
  * full closed set.
  */
 type CommandPrivateReason =

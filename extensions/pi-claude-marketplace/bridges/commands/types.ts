@@ -8,9 +8,11 @@
 // The "staged" branch carries the absolute `stagingRoot` plus the
 // per-file `_renamePairs` and `_previousNames` consumed by
 // `commitPreparedCommands`. Underscore-prefixed fields are bridge-internal
-// commit state -- they are intentionally NOT re-exported from the barrel
-// (`bridges/commands/index.ts`) so external consumers cannot read or
-// mutate them.
+// commit state -- the naming convention marks them as not-for-external-use,
+// but TS gives no runtime or type-level privacy: this type is itself
+// re-exported from the barrel (`bridges/commands/index.ts`), so the fields
+// stay structurally visible to anyone importing it. External consumers are
+// expected not to read or mutate them; nothing enforces that beyond review.
 //
 // `StageCommandsCommitResult.recorded` (W-05) gives the install/update
 // orchestrators the per-command (sourcePath, targetPath) records needed to

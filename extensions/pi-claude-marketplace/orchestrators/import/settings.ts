@@ -113,9 +113,10 @@ function mergeClaudeSettings(
 
 /**
  * Reads and shallow-merges a scope's Claude `settings.json` and
- * `settings.local.json` (local takes precedence per known section), tolerant
- * of a missing or malformed file -- either is reported as a diagnostic and
- * treated as empty rather than failing the read.
+ * `settings.local.json` (local takes precedence per known section). A
+ * missing file is treated as empty with no diagnostic; a malformed file (or
+ * any other read failure) is reported as a diagnostic and also treated as
+ * empty rather than failing the read.
  */
 export async function loadMergedClaudeSettingsForScope(
   scope: Scope,

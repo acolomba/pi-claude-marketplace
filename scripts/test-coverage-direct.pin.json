@@ -30,19 +30,21 @@
     },
     {
       "sourcePath": "extensions/pi-claude-marketplace/domain/mcp-resolution.ts",
-      "reading": "branches 45/46",
-      "findingIds": ["BABYSIT-01"],
+      "reading": "branches 43/45",
+      "findingIds": ["BABYSIT-01", "domain-silentfailure"],
       "reasons": [
-        "106: readReferencedMcp's catch replaced an unjustified `(error as SyntaxError).message` cast with `error instanceof Error ? error.message : String(error)` (google-style: runtime check preferred over an unchecked assertion). The `: String(error)` arm is unreachable in practice -- `JSON.parse` only ever throws a genuine `SyntaxError` (an `Error` subclass) on malformed input -- but the guard is kept for defense-in-depth rather than re-introducing the unchecked cast."
+        "109: readReferencedMcp's catch replaced an unjustified `(error as SyntaxError).message` cast with `error instanceof Error ? error.message : String(error)` (google-style: runtime check preferred over an unchecked assertion). The `: String(error)` arm is unreachable in practice -- `JSON.parse` only ever throws a genuine `SyntaxError` (an `Error` subclass) on malformed input -- but the guard is kept for defense-in-depth rather than re-introducing the unchecked cast.",
+        "57: readStandaloneMcp's catch now guards only `JSON.parse` (the fs read moved above the `try` so an EACCES-class failure propagates instead of being mislabeled `malformed mcpServers`). Same `error instanceof Error ? error.message : String(error)` shape as line 109's, and the `: String(error)` arm is unreachable for the same reason -- `JSON.parse` never throws a non-Error value."
       ]
     },
     {
       "sourcePath": "extensions/pi-claude-marketplace/domain/plugin-resolver.ts",
-      "reading": "branches 108/110, lines 632/637",
+      "reading": "branches 106/109, lines 635/640",
       "findingIds": ["BABYSIT-01"],
       "reasons": [
         "201-204: classifySourceSupport's new `default: return assertNever(parsedSource, ...)` arm over ParsedSource.kind (google-style exhaustive-switch requirement, NFR-7); unreachable because every kind is already listed in the preceding cases.",
-        "357: deriveSourcePluginRoot's new `default: return assertNever(r, ...)` arm over GitPluginRootResult.kind, same NFR-7 pattern; unreachable for the same reason."
+        "360: deriveSourcePluginRoot's new `default: return assertNever(r, ...)` arm over GitPluginRootResult.kind, same NFR-7 pattern; unreachable for the same reason.",
+        "readManifest's fs read now sits above its `try` (domain-silentfailure fix: an EACCES-class failure propagates instead of being mislabeled `malformed plugin.json`), which drops the function's total branch count by one and shifts every line reference below it by +3."
       ]
     }
   ]

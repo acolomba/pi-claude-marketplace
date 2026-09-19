@@ -155,12 +155,13 @@ export type EnableDegradationSignals = LedgerDegradationSignals;
  * - `"enabled"` -- the enable branch re-materialized the plugin.
  * - `"disabled"` -- the disable branch cascaded-unstaged the artifacts and
  *   reset `resources.*` while preserving the state record.
- * - `"skipped"` -- the idempotent already-enabled / already-disabled arm.
- *   The `reason` carries the standalone benign Reason for parity with the
+ * - `"skipped"` -- the idempotent already-enabled / already-disabled arm, or
+ *   the `not-recorded` arm reported as `reason: "not installed"`. The
+ *   `reason` carries the standalone benign Reason for parity with the
  *   standalone rendering token set.
- * - `"failed"` -- enable / disable / not-recorded / invalid-config /
- *   marketplace-not-added paths. `reason` typed `Reason` so the
- *   structural `"marketplace not added"` sentinel can flow through the same field.
+ * - `"failed"` -- enable / disable / invalid-config / marketplace-not-added
+ *   paths. `reason` typed `Reason` so the structural `"marketplace not
+ *   added"` sentinel can flow through the same field.
  */
 export type EnableDisablePluginOutcome =
   | ({ readonly status: "enabled"; readonly version?: string } & EnableDisableSubject &
@@ -1121,8 +1122,8 @@ function emitEnableDisableFailedRow(args: {
 /**
  * T-53-02-02: rewrite a `loadState` Error so its message carries the basename
  * of the failing path instead of the absolute path. The chained `cause` is
- * preserved unchanged (the renderer's 4-space-indent trailer surfaces the
- * top-level message only).
+ * intentionally dropped -- the renderer's 4-space-indent trailer surfaces the
+ * top-level message only, so there is nothing downstream that would read it.
  */
 function sanitizeStateLoadError(err: Error): Error {
   const original = errorMessage(err);

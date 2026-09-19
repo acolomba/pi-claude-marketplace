@@ -63,17 +63,19 @@ describe("prepareStageMcpServers", () => {
     assert.strictEqual(await pathExists(locations.mcpJsonPath), false);
   });
 
-  test("ignores an ambient user MCP server during project staging", async (t) => {
-    // arrange
-    await createHermeticEnvironment(t, "mcp-stage-ambient-");
+  test("rejects a project server that collides with an ambient user-scope MCP server", async (t) => {
+    // arrange -- same hermetic environment for both the ambient user-scope
+    // file and the project scope, so the ambient file lands in the exact
+    // pi-user-scope collision slot the project stage checks (MC-4).
+    const { cwd } = await createHermeticEnvironment(t, "mcp-stage-ambient-");
     const ambientMcpPath = locationsFor("user", "/ambient-cwd").mcpJsonPath;
     const ambientBytes = '{"mcpServers":{"ambient":{"command":"host-only"}}}\n';
     await mkdir(path.dirname(ambientMcpPath), { recursive: true });
     await writeFile(ambientMcpPath, ambientBytes);
-    const { cwd, locations } = await createProjectScope(t, "mcp-stage-isolated-");
+    const locations = locationsFor("project", cwd);
 
     // act
-    const prepared = await prepareStageMcpServers({
+    const collision = await prepareStageMcpServers({
       locations,
       cwd,
       marketplaceName: "catalog",
@@ -81,13 +83,28 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       servers: { ambient: { command: "case-owned" } },
-    });
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
 
     // assert
-    assert.strictEqual(prepared.kind, "staged");
+    assert.ok(collision instanceof McpServerCollisionError);
+    assert.deepStrictEqual(
+      {
+        name: collision.name,
+        message: collision.message,
+        serverName: collision.serverName,
+        owningPath: collision.owningPath,
+      },
+      {
+        name: "McpServerCollisionError",
+        message: `Refusing to stage MCP server "ambient": already exists in ${ambientMcpPath}.`,
+        serverName: "ambient",
+        owningPath: ambientMcpPath,
+      },
+    );
     assert.strictEqual(await readFile(ambientMcpPath, "utf8"), ambientBytes);
-
-    abortPreparedMcp(prepared);
   });
 
   test("replaces owned servers and preserves complete foreign content", async (t) => {

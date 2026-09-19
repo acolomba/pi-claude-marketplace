@@ -25,13 +25,15 @@
 //                  -> source-mismatch (report-only)
 //
 //     Each driven orchestrator call passes `notifications: { mode:
-//     "orchestrated" }`. The removal and uninstall loops wrap their call in a
+//     "orchestrated" }`. Every one of the five loops wraps its call in a
 //     try/catch so an unexpected throw becomes a typed `failed` outcome
-//     (RECON-03 soft-fail): both entrypoints resolve their target BEFORE
-//     entering their own failure handling, so a state file another process is
-//     mid-write reaches this boundary. The add, install and toggle loops carry
-//     no catch, because those three entrypoints handle every throw internally
-//     and always answer with a typed outcome -- see the note above each loop.
+//     (RECON-03 soft-fail) instead of aborting the whole cascade: the removal
+//     and uninstall loops need it because both entrypoints resolve their
+//     target BEFORE entering their own failure handling, so a state file
+//     another process is mid-write reaches this boundary; the add, install
+//     and toggle loops need it as defense-in-depth even though their three
+//     entrypoints are documented to handle every throw internally and always
+//     answer with a typed outcome -- see the note above each loop.
 //   - SINGLE notify() emission per applyReconcile invocation (IL-2 /
 //     RECON-04). Empty-and-clean reconciles are SILENT (NFR-2 / A4) -- the
 //     orchestrator skips the notify() call when no outcomes accumulated AND
@@ -51,6 +53,7 @@ import path from "node:path";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 import { notifyDiagnostic } from "../../shared/notification-dispatch.ts";
@@ -226,6 +229,13 @@ async function applyMarketplaceRemoves(
       });
       foldRemoveOutcome(result, op.scope, op.marketplace, outcomes);
     } catch (err) {
+      // The row carries only the closed-set `reason` (T-55-02-02); trace the
+      // original error so an unrecognized throw isn't discarded with zero
+      // record anywhere.
+      hookDebugLog(
+        `applyMarketplaceRemoves: unexpected throw for ${op.marketplace}: ${errorMessage(err)}`,
+        "reconcile",
+      );
       outcomes.push({
         kind: "mp-remove-failed",
         scope: op.scope,
@@ -298,14 +308,15 @@ function foldRemoveOutcome(
 }
 
 /**
- * RECON-03 note: unlike the removal and uninstall loops, this one carries NO
- * per-entry try/catch. `addMarketplace` resolves its locations and parses its
+ * RECON-03 note: `addMarketplace` resolves its locations and parses its
  * source with two total functions and then enters one try whose catch routes
  * every classified AND unclassified error through `handleAddFailure`, which in
  * orchestrated mode always returns a typed outcome; the post-guard cache and
  * mirror-seeding steps swallow their own failures. No statement on the path
- * can therefore throw past the entrypoint, and a catch here would be a branch
- * no input reaches.
+ * is documented to throw past the entrypoint, but the per-entry try/catch
+ * below is defense-in-depth (mirrors the removal and uninstall loops): an
+ * unenforced assumption broken by a future refactor must not silently drop
+ * this scope's whole cascade.
  */
 async function applyMarketplaceAdds(
   opts: ApplyReconcileOptions,
@@ -313,29 +324,38 @@ async function applyMarketplaceAdds(
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
   for (const op of plan.marketplacesToAdd) {
-    const result = await addMarketplace({
-      ctx: opts.ctx,
-      pi: opts.pi,
-      scope: op.scope,
-      cwd: opts.cwd,
-      rawSource: op.source,
-      completionCache: opts.completionCache,
-      notifications: { mode: "orchestrated" },
-      ...(opts.gitOps !== undefined && { gitOps: opts.gitOps }),
-    });
-    if (result.status === "added") {
-      // CR-01: render the row on the name the record was actually created
-      // under (`result.name` is the MANIFEST-derived name, which the
-      // declared config key does not have to match). The planner's
-      // source-based matching (plan.ts::findRecordedBySource) makes the
-      // next reconcile converge on that recorded name.
-      outcomes.push({ kind: "mp-added", scope: op.scope, marketplace: result.name });
-    } else {
+    try {
+      const result = await addMarketplace({
+        ctx: opts.ctx,
+        pi: opts.pi,
+        scope: op.scope,
+        cwd: opts.cwd,
+        rawSource: op.source,
+        completionCache: opts.completionCache,
+        notifications: { mode: "orchestrated" },
+        ...(opts.gitOps !== undefined && { gitOps: opts.gitOps }),
+      });
+      if (result.status === "added") {
+        // CR-01: render the row on the name the record was actually created
+        // under (`result.name` is the MANIFEST-derived name, which the
+        // declared config key does not have to match). The planner's
+        // source-based matching (plan.ts::buildMarketplaceClaims) makes the
+        // next reconcile converge on that recorded name.
+        outcomes.push({ kind: "mp-added", scope: op.scope, marketplace: result.name });
+      } else {
+        outcomes.push({
+          kind: "mp-add-failed",
+          scope: op.scope,
+          marketplace: op.marketplace,
+          reason: result.reason,
+        });
+      }
+    } catch (err) {
       outcomes.push({
         kind: "mp-add-failed",
         scope: op.scope,
         marketplace: op.marketplace,
-        reason: result.reason,
+        reason: classifyOrchestratorThrow(err),
       });
     }
   }
@@ -383,6 +403,13 @@ async function applyPluginUninstalls(
         });
       }
     } catch (err) {
+      // The row carries only the closed-set `reason` (T-55-02-02); trace the
+      // original error so an unrecognized throw isn't discarded with zero
+      // record anywhere.
+      hookDebugLog(
+        `applyPluginUninstalls: unexpected throw for ${op.plugin}@${op.marketplace}: ${errorMessage(err)}`,
+        "reconcile",
+      );
       outcomes.push({
         kind: "plugin-uninstall-failed",
         scope: op.scope,
@@ -395,13 +422,14 @@ async function applyPluginUninstalls(
 }
 
 /**
- * RECON-03 note: unlike the removal and uninstall loops, this one carries NO
- * per-entry try/catch. `installPlugin` documents that it never re-throws: its
+ * RECON-03 note: `installPlugin` documents that it never re-throws: its
  * whole body sits inside one try whose catch returns a typed failed outcome in
  * orchestrated mode, and the only awaited statement after that catch collects
  * post-commit warnings behind its own swallowing guards. No statement on the
- * path can therefore throw past the entrypoint, and a catch here would be a
- * branch no input reaches.
+ * path is documented to throw past the entrypoint, but the per-entry
+ * try/catch below is defense-in-depth (mirrors the removal and uninstall
+ * loops): an unenforced assumption broken by a future refactor must not
+ * silently drop this scope's whole cascade.
  */
 async function applyPluginInstalls(
   opts: ApplyReconcileOptions,
@@ -410,107 +438,117 @@ async function applyPluginInstalls(
 ): Promise<void> {
   const installPlugin = createInstallOperation(opts.hooksRouting, opts.completionCache);
   for (const op of plan.pluginsToInstall) {
-    const result = await installPlugin({
-      ctx: opts.ctx,
-      pi: opts.pi,
-      scope: op.scope,
-      cwd: opts.cwd,
-      marketplace: op.marketplace,
-      plugin: op.plugin,
-      notifications: { mode: "orchestrated" },
-      // DFEN-04 / D-102-04: unconditional on this path. A user who hand-adds
-      // a bare `"p@mp": {}` entry has declared WHICH plugin, not WHETHER it
-      // is enabled -- which is the gap the plugin's own `defaultEnabled`
-      // exists to fill. An entry that DOES carry `enabled` is untouched: the
-      // install's own precedence gate answers only the absent key.
-      applyDefaultEnabled: true,
-      // DFEN-05 / D-102-04: address the physical file the declaration lives
-      // in, from the merge provenance the planner recorded. Both the
-      // precedence read and the stamp follow this selection; a base-file read
-      // under a local declaration reports `enabled` absent even when the local
-      // entry says otherwise, and a base-file stamp under a local declaration
-      // is invisible to the merged view. Conditional spread because
-      // `exactOptionalPropertyTypes` rejects an explicit `undefined`.
-      ...(op.configSource === "local" && { local: true }),
-    });
+    try {
+      const result = await installPlugin({
+        ctx: opts.ctx,
+        pi: opts.pi,
+        scope: op.scope,
+        cwd: opts.cwd,
+        marketplace: op.marketplace,
+        plugin: op.plugin,
+        notifications: { mode: "orchestrated" },
+        // DFEN-04 / D-102-04: unconditional on this path. A user who hand-adds
+        // a bare `"p@mp": {}` entry has declared WHICH plugin, not WHETHER it
+        // is enabled -- which is the gap the plugin's own `defaultEnabled`
+        // exists to fill. An entry that DOES carry `enabled` is untouched: the
+        // install's own precedence gate answers only the absent key.
+        applyDefaultEnabled: true,
+        // DFEN-05 / D-102-04: address the physical file the declaration lives
+        // in, from the merge provenance the planner recorded. Both the
+        // precedence read and the stamp follow this selection; a base-file read
+        // under a local declaration reports `enabled` absent even when the local
+        // entry says otherwise, and a base-file stamp under a local declaration
+        // is invisible to the merged view. Conditional spread because
+        // `exactOptionalPropertyTypes` rejects an explicit `undefined`.
+        ...(op.configSource === "local" && { local: true }),
+      });
 
-    if (result.status === "installed" && result.landedDisabled === true) {
-      // DFEN-04: the install ran whole and then unstaged, because the
-      // plugin's declaration said so. Reuse the EXISTING disabled outcome
-      // kind rather than reporting `(installed)` over a record that is
-      // disabled -- one row contradicting its own record teaches the user to
-      // distrust every other row in the same cascade. The projection's
-      // `(disabled)` arm hard-codes both soft-dep flags false (ENBL-15 /
-      // D-100-06), so this push needs no `dependencies` counterpart.
-      //
-      // The row inherits that arm's `needsReload: true` while the standalone
-      // install-disabled row stamps `false`. The asymmetry is deliberate:
-      // nothing net entered or left Pi's resource view inside the standalone
-      // command, whereas this row shares the realized-transition arm every
-      // other reconcile disable uses.
-      outcomes.push({
-        kind: "plugin-disabled",
-        scope: op.scope,
-        marketplace: op.marketplace,
-        plugin: op.plugin,
-        // DFEN-04 / OUT-01: name the author-declared cause, exactly as the
-        // standalone row does. This is the surface that needs it MOST -- the
-        // user hand-added a bare entry and reloaded, and without the token a
-        // plugin silently arrives inert under a row indistinguishable from a
-        // disable they asked for.
-        reasons: ["installs disabled"],
-        // OUT-04 / D-102-10: same reason -- an unrequested disable has to name
-        // the remedy. The toggle arm below stamps neither field.
-        enableHint: true,
-        // The version slot every other reconcile `(disabled)` row fills.
-        ...(result.version !== undefined && { version: result.version }),
-        // S2 / PR #51: the post-commit warnings are collected on this path
-        // exactly as on the install path -- none of the collection sites are
-        // gated on the disabled verdict -- so drop them here and a permission
-        // error on `pluginDataDir` or a preserved foreign agent file is
-        // silently discarded, though both are still on disk.
-        ...(result.postCommitWarnings !== undefined &&
-          result.postCommitWarnings.length > 0 && {
-            postCommitWarnings: result.postCommitWarnings,
-          }),
-      });
-    } else if (result.status === "installed") {
-      outcomes.push({
-        kind: "plugin-installed",
-        scope: op.scope,
-        marketplace: op.marketplace,
-        plugin: op.plugin,
-        dependencies: dependenciesFromInstall(result),
-        // S2 / PR #51: propagate post-commit warnings so the cascade
-        // caller can surface them to the operator (mirrors the
-        // `pushDiagnostic` channel in
-        // `import/execute.ts::installOnePlannedPlugin`).
-        ...(result.postCommitWarnings !== undefined &&
-          result.postCommitWarnings.length > 0 && {
-            postCommitWarnings: result.postCommitWarnings,
-          }),
-        // SURF-05 / D-63-08 / IN-07: propagate the orphan-rewake flag so the
-        // reconcile composer pushes the `orphan rewake` token onto the
-        // `(installed)` row, exactly as the enable arm below already does for
-        // the same ledger run. Omitted when false (NREG-01).
-        ...(result.orphanRewake === true && { orphanRewake: true }),
-        // WARN-01 / D-86-03: propagate the degraded-component kinds so the
-        // reconcile composer can raise the `(installed)` row to `warning`
-        // and push the `malformed skill` / `malformed command` token.
-        // Omitted when empty (NREG-01), mirroring the postCommitWarnings
-        // conditional spread above.
-        ...(result.degradedKinds !== undefined &&
-          result.degradedKinds.length > 0 && {
-            degradedKinds: result.degradedKinds,
-          }),
-      });
-    } else {
+      if (result.status === "installed" && result.landedDisabled === true) {
+        // DFEN-04: the install ran whole and then unstaged, because the
+        // plugin's declaration said so. Reuse the EXISTING disabled outcome
+        // kind rather than reporting `(installed)` over a record that is
+        // disabled -- one row contradicting its own record teaches the user to
+        // distrust every other row in the same cascade. The projection's
+        // `(disabled)` arm hard-codes both soft-dep flags false (ENBL-15 /
+        // D-100-06), so this push needs no `dependencies` counterpart.
+        //
+        // The row inherits that arm's `needsReload: true` while the standalone
+        // install-disabled row stamps `false`. The asymmetry is deliberate:
+        // nothing net entered or left Pi's resource view inside the standalone
+        // command, whereas this row shares the realized-transition arm every
+        // other reconcile disable uses.
+        outcomes.push({
+          kind: "plugin-disabled",
+          scope: op.scope,
+          marketplace: op.marketplace,
+          plugin: op.plugin,
+          // DFEN-04 / OUT-01: name the author-declared cause, exactly as the
+          // standalone row does. This is the surface that needs it MOST -- the
+          // user hand-added a bare entry and reloaded, and without the token a
+          // plugin silently arrives inert under a row indistinguishable from a
+          // disable they asked for.
+          reasons: ["installs disabled"],
+          // OUT-04 / D-102-10: same reason -- an unrequested disable has to name
+          // the remedy. The toggle arm below stamps neither field.
+          enableHint: true,
+          // The version slot every other reconcile `(disabled)` row fills.
+          ...(result.version !== undefined && { version: result.version }),
+          // S2 / PR #51: the post-commit warnings are collected on this path
+          // exactly as on the install path -- none of the collection sites are
+          // gated on the disabled verdict -- so drop them here and a permission
+          // error on `pluginDataDir` or a preserved foreign agent file is
+          // silently discarded, though both are still on disk.
+          ...(result.postCommitWarnings !== undefined &&
+            result.postCommitWarnings.length > 0 && {
+              postCommitWarnings: result.postCommitWarnings,
+            }),
+        });
+      } else if (result.status === "installed") {
+        outcomes.push({
+          kind: "plugin-installed",
+          scope: op.scope,
+          marketplace: op.marketplace,
+          plugin: op.plugin,
+          dependencies: dependenciesFromInstall(result),
+          // S2 / PR #51: propagate post-commit warnings so the cascade
+          // caller can surface them to the operator (mirrors the
+          // `pushDiagnostic` channel in
+          // `import/execute.ts::installOnePlannedPlugin`).
+          ...(result.postCommitWarnings !== undefined &&
+            result.postCommitWarnings.length > 0 && {
+              postCommitWarnings: result.postCommitWarnings,
+            }),
+          // SURF-05 / D-63-08 / IN-07: propagate the orphan-rewake flag so the
+          // reconcile composer pushes the `orphan rewake` token onto the
+          // `(installed)` row, exactly as the enable arm below already does for
+          // the same ledger run. Omitted when false (NREG-01).
+          ...(result.orphanRewake === true && { orphanRewake: true }),
+          // WARN-01 / D-86-03: propagate the degraded-component kinds so the
+          // reconcile composer can raise the `(installed)` row to `warning`
+          // and push the `malformed skill` / `malformed command` token.
+          // Omitted when empty (NREG-01), mirroring the postCommitWarnings
+          // conditional spread above.
+          ...(result.degradedKinds !== undefined &&
+            result.degradedKinds.length > 0 && {
+              degradedKinds: result.degradedKinds,
+            }),
+        });
+      } else {
+        outcomes.push({
+          kind: "plugin-install-failed",
+          scope: op.scope,
+          marketplace: op.marketplace,
+          plugin: op.plugin,
+          reason: classifyOrchestratorThrow(result.error),
+        });
+      }
+    } catch (err) {
       outcomes.push({
         kind: "plugin-install-failed",
         scope: op.scope,
         marketplace: op.marketplace,
         plugin: op.plugin,
-        reason: classifyOrchestratorThrow(result.error),
+        reason: classifyOrchestratorThrow(err),
       });
     }
   }
@@ -561,12 +599,13 @@ function degradationFromEnable(
 }
 
 /**
- * RECON-03 note: unlike the removal and uninstall loops, this one carries NO
- * per-entry try/catch. `setPluginEnabled` documents that it never re-throws:
- * its cross-scope resolution and its transaction each sit inside a try whose
+ * RECON-03 note: `setPluginEnabled` documents that it never re-throws: its
+ * cross-scope resolution and its transaction each sit inside a try whose
  * catch returns a typed failed outcome in orchestrated mode, and what follows
- * is a pure mapping. No statement on the path can therefore throw past the
- * entrypoint, and a catch here would be a branch no input reaches.
+ * is a pure mapping. No statement on the path is documented to throw past the
+ * entrypoint, but the per-entry try/catch below is defense-in-depth (mirrors
+ * the removal and uninstall loops): an unenforced assumption broken by a
+ * future refactor must not silently drop this scope's whole cascade.
  */
 async function applyPluginToggles(
   opts: ApplyReconcileOptions,
@@ -581,52 +620,63 @@ async function applyPluginToggles(
   // pair (e.g. enable:true + successStatus:"disabled").
   const successStatus: "enabled" | "disabled" = axes.enable ? "enabled" : "disabled";
   for (const op of ops) {
-    // Y3 (PR #51): the orchestrated overload of setPluginEnabled returns
-    // `Promise<EnableDisablePluginOutcome>` (no `| undefined`), so a
-    // `if (result === undefined) continue` silent-vanish guard would be a
-    // compile error. Closes S6's fourth loop without
-    // duplicating the fail-loud wording in
-    // `import/execute.ts::addOnePlannedMarketplace` (the type makes the
-    // branch unreachable instead of routing through a row).
-    const result = await setPluginEnabled({
-      ctx: opts.ctx,
-      pi: opts.pi,
-      cwd: opts.cwd,
-      marketplace: op.marketplace,
-      plugin: op.plugin,
-      enable: axes.enable,
-      scope: op.scope,
-      notifications: { mode: "orchestrated" },
-    });
+    try {
+      // Y3 (PR #51): the orchestrated overload of setPluginEnabled returns
+      // `Promise<EnableDisablePluginOutcome>` (no `| undefined`), so a
+      // `if (result === undefined) continue` silent-vanish guard would be a
+      // compile error. Closes S6's fourth loop without
+      // duplicating the fail-loud wording in
+      // `import/execute.ts::addOnePlannedMarketplace` (the type makes the
+      // branch unreachable instead of routing through a row).
+      const result = await setPluginEnabled({
+        ctx: opts.ctx,
+        pi: opts.pi,
+        cwd: opts.cwd,
+        marketplace: op.marketplace,
+        plugin: op.plugin,
+        enable: axes.enable,
+        scope: op.scope,
+        notifications: { mode: "orchestrated" },
+      });
 
-    if (result.status === successStatus) {
-      // ENBL-07 / SURF-05 / WARN-01: only the enable arm carries degradation
-      // signals (a disable materializes nothing, so it degrades nothing). The
-      // literal comparison is what narrows the union -- `successStatus` is a
-      // variable, so the guard above does not narrow on its own.
-      const degradation: EnableDegradationSignals =
-        result.status === "enabled" ? degradationFromEnable(result) : {};
-      outcomes.push(
-        axes.buildSuccess({
-          scope: op.scope,
-          marketplace: op.marketplace,
-          plugin: op.plugin,
-          ...(result.version !== undefined && { version: result.version }),
-          ...(Object.keys(degradation).length > 0 && { degradation }),
-        }),
-      );
-    } else if (result.status === "failed") {
+      if (result.status === successStatus) {
+        // ENBL-07 / SURF-05 / WARN-01: only the enable arm carries degradation
+        // signals (a disable materializes nothing, so it degrades nothing). The
+        // literal comparison is what narrows the union -- `successStatus` is a
+        // variable, so the guard above does not narrow on its own.
+        const degradation: EnableDegradationSignals =
+          result.status === "enabled" ? degradationFromEnable(result) : {};
+        outcomes.push(
+          axes.buildSuccess({
+            scope: op.scope,
+            marketplace: op.marketplace,
+            plugin: op.plugin,
+            ...(result.version !== undefined && { version: result.version }),
+            ...(Object.keys(degradation).length > 0 && { degradation }),
+          }),
+        );
+      } else if (result.status === "failed") {
+        outcomes.push(
+          axes.buildFailed({
+            scope: op.scope,
+            marketplace: op.marketplace,
+            plugin: op.plugin,
+            reason: result.reason,
+          }),
+        );
+      }
+      // skipped (idempotent) -> intentionally drop; the steady state isn't a
+      // user-visible action.
+    } catch (err) {
       outcomes.push(
         axes.buildFailed({
           scope: op.scope,
           marketplace: op.marketplace,
           plugin: op.plugin,
-          reason: result.reason,
+          reason: classifyOrchestratorThrow(err),
         }),
       );
     }
-    // skipped (idempotent) -> intentionally drop; the steady state isn't a
-    // user-visible action.
   }
 }
 
@@ -743,9 +793,10 @@ async function applyPlan(
 /**
  * RECON-01..05: the load-time apply orchestrator. Fans out across both
  * scopes project-first (or just the explicit scope when `opts.scope` is
- * set), per-scope read pass under withStateGuard (migrate -> load -> plan),
- * per-scope apply pass with NO outer lock, single notify() emission per
- * invocation (IL-2) -- empty-and-clean reconciles are SILENT (NFR-2 / A4).
+ * set), per-scope read pass under withLockedStateTransaction (migrate ->
+ * load -> plan), per-scope apply pass with NO outer lock, single notify()
+ * emission per invocation (IL-2) -- empty-and-clean reconciles are SILENT
+ * (NFR-2 / A4).
  *
  * Returns `void`; the side effects are the orchestrator-driven state
  * mutations + the single notify() call (when non-empty).
@@ -811,7 +862,7 @@ async function applyReconcileWithReader(
     // BFILL-01 / BFILL-02 / D-68-03: load-time backfill sibling step. Runs in
     // the no-outer-lock apply region (CR-01) after applyPlan so re-materialized
     // promotions ride the same single cascade (RECON-04). Gated on the version
-    // stamp; stamps the running version whenever the gate opened. WR-02: a
+    // stamp; stamps the running version whenever the gate opened. WR-01: a
     // transient lock-held / EACCES throw is coerced to a structured row so it
     // never aborts the cascade.
     await applyBackfillForScopeIsolated(opts, scope, readResult, outcomes);

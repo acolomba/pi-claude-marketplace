@@ -14,8 +14,10 @@
 //   POST-state-commit: rm -rf pluginDataDir; leaks SWALLOWED per
 //   D-19-01 -- the underlying rm() still runs, only the user-visible
 //   warning surface is gone.
-//   PU-8 reload hint: computed by notify() from PluginUninstalledMessage
-//  (uninstalled is in the state-changing variant set).
+//   PU-8 reload hint: set explicitly on the row (severity: "info",
+//   needsReload: true, D-03/D-06) because uninstalled is a realized,
+//   state-changing transition; notify() aggregates it into the cascade's
+//   overall trailer.
 //
 // Each outcome arm emits one notify() call with a single
 // MarketplaceNotificationMessage. Post-state cleanup failures (cache-refresh,
@@ -194,9 +196,10 @@ export const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
  * Narrow an Error thrown out of `cascadeUnstagePlugin` (PU-7 propagation
  * path) to a closed-set Reason for `PluginFailedMessage.reasons`. Mirrors
  * the typed-cause dispatch in `orchestrators/marketplace/remove.ts`:
- * instanceof `AgentsUnstageFailureError` first,
- * `NodeJS.ErrnoException.code` second, permissive fallback last. Closed-set
- * Reasons live in `shared/notification-types.ts::REASONS`.
+ * instanceof `StateLockHeldError` first (-> "lock held"), then
+ * `AgentsUnstageFailureError`, then `NodeJS.ErrnoException.code`, permissive
+ * fallback last. Closed-set Reasons live in
+ * `shared/notification-types.ts::REASONS`.
  */
 function narrowCascadeFailure(cause: Error): ContentReason {
   if (cause instanceof StateLockHeldError) {
@@ -477,8 +480,11 @@ async function runPostUninstallCleanup(
       scope,
       marketplace,
     );
-  } catch {
+  } catch (err) {
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+    hookDebugLog(
+      `uninstall: completion-cache drop failed for ${plugin}@${marketplace}: ${errorMessage(err)}`,
+    );
   }
 
   // NFR-10: resolve OUTSIDE the try. `pluginDataDir` is not a path join -- it
@@ -490,14 +496,18 @@ async function runPostUninstallCleanup(
 
   try {
     await rm(dataDir, { recursive: true, force: true });
-  } catch {
+  } catch (err) {
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+    hookDebugLog(
+      `uninstall: plugin data dir removal failed for ${plugin}@${marketplace}: ${errorMessage(err)}`,
+    );
   }
 
   try {
     await garbageCollectPluginClones(locations);
-  } catch {
+  } catch (err) {
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+    hookDebugLog(`uninstall: clone GC failed for ${plugin}@${marketplace}: ${errorMessage(err)}`);
   }
 }
 
@@ -794,9 +804,10 @@ async function uninstallPluginWithTransaction(
 
   await transaction.runPostCommitCleanup(completionCache, locations, scope, marketplace, plugin);
 
-  // PU-8 reload hint: computed by notify from the
-  // PluginUninstalledMessage status (uninstalled is in the state-changing
-  // variant set). The reload-hint trigger is per-variant status, not
+  // PU-8 reload hint: set explicitly on the row below (severity: "info",
+  // needsReload: true, D-03/D-06) because uninstall is a realized,
+  // state-changing transition; notify() aggregates each row's fields into
+  // the cascade's overall trailer -- a per-variant-status decision, not a
   // per-cascade resource count. Control reaches this point only when
   // alreadyGone is false (early-returned above) AND the catch did not
   // intercept a cascade failure (early-returned via `emitCascadeFailure`),

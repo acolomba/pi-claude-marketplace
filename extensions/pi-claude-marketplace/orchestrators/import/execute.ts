@@ -11,6 +11,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
+import { notifyDiagnostic } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type MarketplaceStatus,
@@ -308,6 +309,14 @@ interface MarketplaceBlock {
   readonly name: string;
   readonly scope: Scope;
   status: ImportBlockStatus;
+  /**
+   * The `add-failed` cause for a `status: "failed"` block whose failure came
+   * from `result.marketplaceFailures` (a marketplace add attempt, or an
+   * already-present marketplace `reconcileExistingMarketplace` could not
+   * classify) -- undefined otherwise, e.g. for a source-mismatch failure,
+   * whose per-plugin child rows already carry the mismatch reason.
+   */
+  cause?: string;
 }
 
 function setMarketplaceStatus(
@@ -315,12 +324,23 @@ function setMarketplaceStatus(
   scope: Scope,
   marketplaceName: string,
   status: ImportBlockStatus,
+  cause?: string,
 ): void {
   const key = `${scope}:${marketplaceName}`;
   const existing = byMp.get(key);
   if (existing === undefined) {
-    byMp.set(key, { key, name: marketplaceName, scope, status });
+    byMp.set(key, {
+      key,
+      name: marketplaceName,
+      scope,
+      status,
+      ...(cause !== undefined && { cause }),
+    });
     return;
+  }
+
+  if (cause !== undefined) {
+    existing.cause = cause;
   }
 
   existing.status = status;
@@ -410,7 +430,7 @@ function buildImportNotificationMarketplaces(
   }
 
   for (const o of result.marketplaceFailures) {
-    setMarketplaceStatus(byMp, o.scope, o.marketplace, "failed");
+    setMarketplaceStatus(byMp, o.scope, o.marketplace, "failed", o.cause);
   }
 
   // Source-mismatch supersedes any prior status (the import for that
@@ -503,9 +523,10 @@ function buildImportNotificationMarketplaces(
     pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
   }
 
-  // result.diagnostics (orphan + per-marketplace) have no notification
-  // representation. The in-memory record stays on the returned result;
-  // Pi runtime debug logs preserve diagnostic visibility.
+  // result.diagnostics (orphan + per-marketplace) have no representation IN
+  // THE CASCADE built here. The in-memory record stays on the returned
+  // result; `importClaudeSettings` surfaces it separately via the sanctioned
+  // `notifyDiagnostic` seam once this cascade has been notified.
 
   // orchestrator owns iteration order; notify does NOT sort.
   // Project-before-user tie-break per MSG-GR-3 via compareByNameThenScope.
@@ -544,9 +565,38 @@ function blockToMarketplaceMessage(
       return { name, scope, status: "added", plugins };
     case "updated":
       return { name, scope, status: "updated", plugins };
-    case "failed":
+    case "failed": {
       // D-03: a failed import marketplace block -> error.
-      return { name, scope, status: "failed", severity: "error", plugins };
+      if (block.cause === undefined) {
+        return { name, scope, status: "failed", severity: "error", plugins };
+      }
+
+      // MarketplaceNotificationMessage carries no `cause` field (mirrors
+      // marketplace/update.ts's `refreshOneMarketplace`); a marketplace
+      // add-failure block has no plugin child rows of its own (the
+      // dependent-plugin warnings are silenced -- the header alone blocks
+      // them), so the cause would otherwise never reach the user. Surface it
+      // via a synthetic failed child row -- the same "reasons: [] and cause:
+      // err" recipe this module's own `dispatchFailedOutcome` fallback uses
+      // for `unexpectedPluginFailures` -- so the depth-5 cause-chain trailer
+      // renders it.
+      const causeRow: PluginFailedMessage = {
+        status: "failed",
+        name,
+        reasons: [],
+        cause: new Error(block.cause),
+        severity: "error",
+        needsReload: false,
+      };
+      // defense-in-depth: typed readonly + runtime freeze (codebase convention)
+      return {
+        name,
+        scope,
+        status: "failed",
+        severity: "error",
+        plugins: Object.freeze([causeRow, ...plugins]),
+      };
+    }
   }
 }
 
@@ -561,10 +611,12 @@ type ScopedImportPlan = ReturnType<typeof buildClaudeImportPlan>["scopes"][numbe
 type ImportConfigPatch = Required<BatchedConfigPatch>;
 
 /**
- * WR-07: shared failure bookkeeping for a marketplace add
- * that did not record (typed failed outcome OR unexpected throw): block
- * dependent plugin installs and attribute the cause on both the marketplace
- * row and each dependent plugin's warning row.
+ * WR-07: shared failure bookkeeping for a marketplace that will not be
+ * usable this run -- either a fresh add that did not record (typed failed
+ * outcome OR unexpected throw, from `addOnePlannedMarketplace`) or an
+ * already-present marketplace whose stored source `reconcileExistingMarketplace`
+ * could not classify: block dependent plugin installs and attribute the
+ * cause on both the marketplace row and each dependent plugin's warning row.
  */
 function recordMarketplaceAddFailure(
   result: MutableImportResult,
@@ -590,9 +642,10 @@ type PlannedMarketplace = ScopedImportPlan["marketplacesToEnsure"][number];
 type PlannedPlugin = ScopedImportPlan["pluginsToInstall"][number];
 
 /**
- * Classify an ALREADY-PRESENT marketplace against the Claude-settings source.
- * Returns true when the marketplace is settled (skip or block) and the
- * ensure-loop should move on without calling `addMarketplace`.
+ * Classify an ALREADY-PRESENT marketplace against the Claude-settings source
+ * and record the settled outcome (skip or block) directly on `result` /
+ * `blockedMarketplaces`. The ensure-loop moves on to the next marketplace
+ * without calling `addMarketplace`.
  */
 function reconcileExistingMarketplace(
   result: MutableImportResult,
@@ -607,11 +660,12 @@ function reconcileExistingMarketplace(
       // hand-edited state.json). Block dependent plugins and emit a clear
       // diagnostic rather than a misleading source-mismatch message.
       //
-      // WR-06: the marketplace also takes a `(failed)` header. Diagnostics
-      // have no notification representation, so on their own this arm rendered
-      // `(no marketplaces)` with no severity argument -- info, the token for
-      // "the desired state was reached" -- while a marketplace and every plugin
-      // it declares were skipped over an actionable data problem. Routing
+      // WR-06: the marketplace also takes a `(failed)` header. A diagnostic
+      // alone carries no marketplace-blocking / severity signal, so on its own
+      // this arm rendered `(no marketplaces)` with no severity argument -- info,
+      // the token for "the desired state was reached" -- while a marketplace
+      // and every plugin it declares were skipped over an actionable data
+      // problem. Routing
       // through the shared add-failure bookkeeping reuses the existing
       // `marketplaceFailures -> setMarketplaceStatus("failed")` path with no new
       // vocabulary, and silences the dependent plugins' advisory rows the same
@@ -677,8 +731,12 @@ type PlannedPluginBucket = "install-failed" | "installed" | "unexpected-failure"
  * Record the outcome of installing ONE planned plugin and answer with the
  * result bucket it was recorded in.
  *
- * WR-02: an unexpected `installPlugin` throw routes to
- * `result.unexpectedPluginFailures` in `dispatchFailedOutcome`'s shape, so the
+ * WR-02: an unexpected `installPlugin` throw is pushed onto
+ * `result.unexpectedPluginFailures` directly in the `catch` block below --
+ * it deliberately DUPLICATES `dispatchFailedOutcome`'s `unexpected-failure`
+ * shape rather than calling it, because a throw out of `installPlugin`
+ * itself (unlike its typed `{status: "failed"}` outcome) has no
+ * `PluginShapeError` / `ConcurrentInstallError` to narrow on. Either way the
  * per-scope loop continues and the terminal `notify()` still fires.
  *
  * CR-01: the returned bucket is what the caller discards, not what it acts on --
@@ -760,9 +818,8 @@ async function installOnePlannedPlugin(
  * Standalone mode is wrong here: a classified precondition failure (duplicate
  * name, stale clone, invalid manifest, unsupported source, source missing)
  * does NOT throw there -- it fires its own standalone notify, which breaks
- * import's one-cascade-per-command discipline, and returns undefined. The
- * import then recorded the marketplace as (added), never blocked its
- * dependent plugins, and every install failed with a misleading reason.
+ * import's one-cascade-per-command discipline, and returns undefined instead
+ * of the typed outcome this function dispatches on.
  */
 async function addOnePlannedMarketplace(
   opts: ImportClaudeSettingsOptions,
@@ -985,7 +1042,7 @@ async function writeBatchedConfigForScope(
     pushDiagnostic(
       result,
       scope,
-      "settings-read-error",
+      "settings-write-error",
       `Failed to write ${scope} scope claude-plugins.json batched post-pass: ${errorMessage(err)}`,
     );
   }
@@ -1167,10 +1224,37 @@ function dispatchFailedOutcome(
 }
 
 /**
+ * Surfaces `result.diagnostics` (malformed/unreadable settings and config
+ * files, unmappable marketplace sources, post-install warnings, etc.) that
+ * have no representation in the marketplace/plugin cascade. Routes through
+ * the sanctioned `notifyDiagnostic` seam (S2 / PR #51) -- the same
+ * post-cascade notify exception `reconcile/apply.ts`'s
+ * `surfacePostCommitWarnings` uses -- so these facts reach the user instead
+ * of staying in-memory-only on the returned result.
+ */
+function surfaceImportDiagnostics(
+  ctx: ImportClaudeSettingsOptions["ctx"],
+  diagnostics: readonly ImportDiagnostic[],
+): void {
+  if (diagnostics.length === 0) {
+    return;
+  }
+
+  const lines = diagnostics.map((d) => d.message);
+  const header =
+    lines.length === 1
+      ? "1 import diagnostic surfaced."
+      : `${lines.length.toString()} import diagnostics surfaced.`;
+  notifyDiagnostic(ctx, header, lines);
+}
+
+/**
  * Imports enabled plugins and their marketplaces from Claude settings into
  * every selected scope: merges each scope's settings, plans the marketplaces
- * to ensure and plugins to install, runs that plan per scope, and emits one
- * notification cascade for the whole run.
+ * to ensure and plugins to install, runs that plan per scope, emits one
+ * notification cascade for the whole run, then surfaces any accumulated
+ * `result.diagnostics` via the sanctioned second-notify seam (see
+ * `surfaceImportDiagnostics`).
  */
 export async function importClaudeSettings(
   opts: ImportClaudeSettingsOptions,
@@ -1214,6 +1298,7 @@ export async function importClaudeSettings(
   // OUT-04 / D-04: import is a plural (bulk) operation -> emit the trailing
   // per-operation tally under the `Import` label.
   notifyWithContext(opts.ctx, opts.pi, IMPORT_CONTEXT, marketplaces, undefined, "plural");
+  surfaceImportDiagnostics(opts.ctx, result.diagnostics);
 
   return result;
 }

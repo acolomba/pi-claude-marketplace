@@ -265,11 +265,15 @@ async function rebuildPluginIndex(
   try {
     return await resolver.loadManifestForMarketplace(scope, marketplace);
   } catch (err) {
-    // TC-8: signal soft-fail to the cache; any non-state.json failure during
-    // manifest load becomes a poison-cache row. Bare Errors (e.g.
-    // state.json) propagate via TC-9 by NOT being wrapped here; the resolver
-    // contract is "loadManifestForMarketplace throws manifest-related errors
-    // only".
+    // TC-8: signal soft-fail to the cache; the resolver contract is
+    // "loadManifestForMarketplace throws manifest-related errors only", so
+    // any error reaching here is a manifest failure to poison-cache. Pass an
+    // already-classified ManifestSoftFailError through instead of
+    // re-wrapping it, so the cause chain stays one level deep.
+    if (err instanceof ManifestSoftFailError) {
+      throw err;
+    }
+
     throw new ManifestSoftFailError(err);
   }
 }

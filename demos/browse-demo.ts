@@ -25,6 +25,7 @@ import type {
   MarketplaceEntry,
   PickerResult,
 } from "../extensions/pi-claude-marketplace/edge/browser/plugin-browser.ts";
+import type { Theme } from "../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { PluginNotificationMessage } from "../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 // Mock theme (hand-rolled ANSI; the real Theme lives behind the package
@@ -40,11 +41,14 @@ const FG: Record<string, string> = {
   error: "\x1b[31m", // red
 };
 
+// Cast through `unknown` because the real `Theme` is a class with private
+// fields (fgColors/bgColors/mode) -- this hand-rolled mock only implements
+// the fg/bg/bold surface PluginBrowser actually calls.
 const theme = {
   fg: (color: string, text: string): string => `${FG[color] ?? ""}${text}${RESET}`,
   bg: (_color: string, text: string): string => text,
   bold: (text: string): string => `\x1b[1m${text}${RESET}`,
-};
+} as unknown as Theme;
 
 // Canned data.
 
@@ -79,7 +83,7 @@ const official: readonly PluginNotificationMessage[] = [
     version: "1.4.0",
   },
   { status: "available", name: "docs-helper", version: "0.3.1" },
-  { status: "unavailable", name: "windows-only-tool", reasons: ["requires Windows host"] },
+  { status: "unavailable", name: "windows-only-tool", reasons: ["unsupported source"] },
   { status: "disabled", name: "legacy-migrator", severity: "info", needsReload: false },
   { status: "upgradable", name: "test-runner", reasons: [], version: "2.0.0" },
 ];

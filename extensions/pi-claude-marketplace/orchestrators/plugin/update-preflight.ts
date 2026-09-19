@@ -8,6 +8,7 @@ import {
 import { parsePluginSource } from "../../domain/source.ts";
 import { shaVersion } from "../../domain/version.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
@@ -278,6 +279,18 @@ async function resolveUpdateCandidate(
       };
     }
 
+    if (error instanceof PluginShapeError && error.shape.kind === "no-longer-installable") {
+      return skippedCandidate(options, [errorMessage(error)], ["no longer installable"]);
+    }
+
+    // Anything else is genuinely unexpected -- not a classified git-transport
+    // failure and not the resolver's typed `no-longer-installable` shape.
+    // "no longer installable" stays the user-facing verdict (the candidate
+    // could not be resolved either way), but it is not necessarily the real
+    // cause, so log the actual error for diagnosis.
+    hookDebugLog(
+      `resolveUpdateCandidate: unclassified error for "${options.plugin}": ${errorMessage(error)}`,
+    );
     return skippedCandidate(options, [errorMessage(error)], ["no longer installable"]);
   }
 }
@@ -485,8 +498,11 @@ async function refreshDisabledPluginUpdate(
   if (wrote && preflight.resolvedSha !== undefined) {
     try {
       await options.cleanupClones(options.locations);
-    } catch {
+    } catch (err) {
       // Clone cleanup is hygienic and retries on a later lifecycle operation.
+      hookDebugLog(
+        `refreshDisabledPluginUpdate: clone cleanup failed for ${options.plugin}: ${errorMessage(err)}`,
+      );
     }
   }
 

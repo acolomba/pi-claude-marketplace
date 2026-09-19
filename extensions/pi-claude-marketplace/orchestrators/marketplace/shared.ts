@@ -2,15 +2,16 @@
 //
 // Cross-subcommand helpers (D-01 -- shared.ts cap ~300 LOC).
 //
-//   - GitOps interface + DEFAULT_GIT_OPS (D-12, D-13). Five primitives:
-//     clone + fetch + forceUpdateRef + checkout + resolveRef.
+//   - GitOps interface + DEFAULT_GIT_OPS (D-12, D-13). Seven primitives:
+//     clone + fetch + forceUpdateRef + checkout + resolveRef +
+//     currentBranch + resolveRemoteRef.
 //     NO `pull` -- D-14 follow-upstream-blindly semantics require the
 //     three-step force-overwrite path that `pull --ff-only` cannot
 //     express.
 //
 //   - cascadeUnstagePlugin (D-02, D-03): per-plugin hand-rolled
-//     try/catch envelope that composes the 4 bridge unstage*
-//     primitives in PU-1 order (skills → commands → agents → mcp).
+//     try/catch envelope that composes the 5 bridge unstage*
+//     primitives in PU-1 order (skills → commands → agents → hooks → mcp).
 //     Reused by plugin uninstall -- preserve the public signature.
 //
 //   - resolveScopeFromState (MR-1): cross-scope ambiguity funnel.
@@ -606,8 +607,7 @@ export async function loadVisibleMarketplaces(opts: {
 
 // ───────────────────────────────────────────────────────────────────────────
 // It lives here, beside `AgentsUnstageFailureError`, because that class is the
-// first thing it dispatches on. It was declared in remove.ts and reached
-// through a `__test_` re-export; a narrower kept apart from the error it
+// first thing it dispatches on. A narrower kept apart from the error it
 // narrows is how two cascade-failure mappings drift (FLOW-09).
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -615,8 +615,11 @@ export async function loadVisibleMarketplaces(opts: {
  * Narrow a per-plugin cascade Error.cause to a closed-set Reason for the
  * failed-plugin children block by dispatching on the typed cause
  * (`AgentsUnstageFailureError` or `NodeJS.ErrnoException.code`) rather than
- * substring-matching message text. Falls back to `"not in manifest"` as the
- * permissive default when no typed case matches.
+ * substring-matching message text. Falls back to `"not in manifest"` when no
+ * typed case matches -- the closed `ContentReason` vocabulary has no
+ * "unclassified" member, so an untyped error or an unrecognized errno code
+ * is mislabeled as this token; the raw `cause` still travels alongside it,
+ * so the real failure survives in the cause-chain trailer.
  */
 export function narrowCascadeFailure(cause: Error): ContentReason {
   if (cause instanceof AgentsUnstageFailureError) {

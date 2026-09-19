@@ -448,8 +448,17 @@ async function readHookSummaryEntries(
   // context -- but it is the one remaining site that would need the real cwd if
   // `skipIfMap` were ever dropped. The state-only reader below passes the
   // command's own `cwd`.
-  const parsed = { value: {}, dropped: [], ...parseHooksForInfo(raw, process.cwd()) };
+  const result = parseHooksForInfo(raw, process.cwd());
+  if (!result.ok) {
+    // The re-parse failure itself is already logged inside `parseHooksConfig`;
+    // this call-site log adds the plugin path context that generic message
+    // lacks, mirroring `readStateOnlyHookEntries`'s own diagnostic logging.
+    hookDebugLog(
+      `info: hooks re-parse failed for ${path.join(pluginRoot, hooksConfigPath)}: ${result.reason}`,
+    );
+  }
 
+  const parsed = { value: {}, dropped: [], ...result };
   const supported = projectHookSummaryEntries(parsed.value);
   const dropped = projectDroppedHookEntries(parsed.dropped);
   return [...supported, ...dropped];

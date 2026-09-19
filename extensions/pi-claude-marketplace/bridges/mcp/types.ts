@@ -8,11 +8,9 @@
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /**
- * Top-level shape of any `mcp.json` document we read from disk -- either
- * a scoped (`<scopeRoot>/mcp.json`) doc or one of the four pi-mcp-adapter
- * collision slots. Both wrapped (`{mcpServers: {...}}`) and unwrapped
- * (`{server-name: {...}}`) forms appear at this layer; per-slot shape
- * normalization happens in the consumers.
+ * Top-level shape of the scoped `mcp.json` document read from and
+ * written to `<scopeRoot>/mcp.json`. Other top-level fields are
+ * preserved verbatim; only `mcpServers` is read or mutated.
  */
 export interface RawMcpDoc {
   readonly mcpServers?: unknown;
@@ -76,8 +74,9 @@ export interface PreparedMcpNoop {
 /**
  * Staged branch. `_nextDoc` is the in-memory merged doc that
  * `commitPreparedMcp` will write atomically. The leading underscore
- * marks it as bridge-internal -- the barrel does NOT re-export this
- * field's shape; consumers use `result` instead.
+ * marks it as bridge-internal by convention only -- it is still
+ * reachable through the exported `PreparedMcpStaging` union; consumers
+ * should use `result` instead.
  */
 export interface PreparedMcpStaged {
   readonly kind: "staged";

@@ -525,7 +525,7 @@ export function composeReasons(
 /**
  * Compose a scope-bearing, reasons-bearing plugin row that carries NO
  * soft-dep marker. Folds the structurally-identical `renderPluginRow` arms
- * (`upgradable` / `skipped` / `failed` / `manual recovery` / `disabled`) that
+ * (`upgradable` / `partially-upgradable` / `skipped` / `failed` / `manual recovery`) that
  * differ only in their icon and their parenthesized status `label`. `label` is
  * the FULL parenthesized token (the caller passes `"(upgradable)"` etc.,
  * INCLUDING the parens, so the `"(manual recovery)"` literal keeps its space
@@ -883,15 +883,15 @@ function renderPendingRow(
  * staged counts, the inventory rows omit them.
  *
  * Per-variant `composeReasons` first argument, over the 19 plugin statuses:
- *  - 9 reasons-less variants (updated, uninstalled, available, remote, disabled,
+ *  - 7 reasons-less variants (uninstalled, available, remote,
  *  will install, will uninstall, will enable, will disable) pass `undefined` --
  *  or, on the arms that can carry no marker of any kind (remote and the four
  *  pending-tense rows), drop the call entirely;
- *  - 10 reasons-bearing variants (installed, reinstalled, unavailable,
- *  upgradable, failed, skipped, manual recovery, partially-installed,
- *  partially-upgradable, partially-available) pass `p.reasons`. `installed` and
- *  `reinstalled` are the two arms whose field is OPTIONAL, so they pass a
- *  possibly-undefined value.
+ *  - 12 reasons-bearing variants (installed, updated, reinstalled, disabled,
+ *  unavailable, upgradable, failed, skipped, manual recovery, partially-installed,
+ *  partially-upgradable, partially-available) pass `p.reasons`. `installed`,
+ *  `updated`, `reinstalled`, and `disabled` are the four arms whose field is
+ *  OPTIONAL, so they pass a possibly-undefined value.
  *
  * NOT rendered here (`notify` composes them as additional
  * indented lines AFTER the row):

@@ -2031,7 +2031,9 @@ test("RECON-03 standalone-default mode -- omitted notifications option remains b
     });
 
     // The same call without `notifications` -- must return void and fire one
-    // byte-identical notify, matching the standalone test at line 60.
+    // byte-identical notify, matching the "MA-5: github source clones,
+    // validates, renames, mutates state, emits V2 success message with NO
+    // reload-hint trailer (SNM-33 / D-22-01)" standalone test above.
     // act
     const outcome = await addMarketplace({
       ctx,

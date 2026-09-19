@@ -98,11 +98,13 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   InvalidMarketplaceManifestError,
   MarketplaceUpdateError,
   PluginShapeError,
   composeErrorWithCauseChain,
+  errorMessage,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -527,9 +529,9 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
       // cascade and emits NOTHING further -- no raw MarketplaceNotFoundError
       // escapes (which `refreshOneMarketplace`'s catch would misattribute as the
       // lying `{network unreachable}` default, the exact ATTR-10/NFR-5 class this
-      // change closes). Mirrors remove.ts:235-244's silent-return at the same
-      // withStateGuard boundary. withStateGuard still saves the unmodified state
-      // (a harmless re-write of the same content).
+      // change closes). Mirrors runRemoveLockBody's silent-return in remove.ts
+      // at the same withLockedStateTransaction boundary; that path also
+      // saves the unmodified state (a harmless re-write of the same content).
       return undefined;
     }
 
@@ -751,12 +753,13 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
         scope,
         name,
       );
-    } catch {
+    } catch (err) {
       // Intentional non-surfacing (PU-4 / AS-6): this cleanup runs AFTER the
       // durable atomic state save, so a leak here cannot corrupt state. A
       // cache-refresh failure is deliberately NOT surfaced -- emitting a second
       // notify after the primary would double severity routing. The cache `rm`
       // still runs above; only the user-facing warning is suppressed.
+      hookDebugLog(`post-update cache drop failed: ${errorMessage(err)}`);
     }
   }
 

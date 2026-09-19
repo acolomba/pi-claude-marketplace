@@ -338,63 +338,68 @@ test("propagates an existing reference read failure", async () => {
   );
 });
 
-test("classifies a malformed standalone document with a non-Error rejection", async () => {
+test("propagates a standalone document read failure with a non-Error rejection", async () => {
   // arrange
   const { resolveStrictMcp } =
     await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
 
-  // act
-  const dirty = await resolveStrictMcp(
-    { entry: {}, manifest: null, pluginRoot: "/plugins/alpha", resolution },
-    {
-      statKind: () => Promise.resolve("file"),
-      readFileText: () =>
-        new Promise<string>((_resolve, reject) => {
-          Reflect.apply(reject, undefined, ["read failure"]);
-        }),
-    },
-  );
-
-  // assert
-  assert.deepStrictEqual(
-    { dirty, resolution },
-    {
-      dirty: true,
-      resolution: {
-        notes: ["malformed mcpServers (.mcp.json): read failure"],
-        mcpServers: {},
-      },
-    },
+  // act & assert
+  await assert.rejects(
+    () =>
+      resolveStrictMcp(
+        { entry: {}, manifest: null, pluginRoot: "/plugins/alpha", resolution },
+        {
+          statKind: () => Promise.resolve("file"),
+          readFileText: () =>
+            new Promise<string>((_resolve, reject) => {
+              Reflect.apply(reject, undefined, ["read failure"]);
+            }),
+        },
+      ),
+    (error: unknown) => error === "read failure",
   );
 });
 
-test("classifies a malformed standalone document with an Error rejection", async () => {
+test("standalone document EACCES propagates (not wrapped as malformed mcpServers)", async () => {
   // arrange
   const { resolveStrictMcp } =
     await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
+  const readFailure = Object.assign(new Error("denied"), { code: "EACCES" });
+
+  // act & assert
+  await assert.rejects(
+    () =>
+      resolveStrictMcp(
+        { entry: {}, manifest: null, pluginRoot: "/plugins/alpha", resolution },
+        {
+          statKind: () => Promise.resolve("file"),
+          readFileText: () => Promise.reject(readFailure),
+        },
+      ),
+    (error: unknown) => error === readFailure,
+  );
+});
+
+test("classifies malformed JSON content in a standalone document", async () => {
+  // arrange
+  const { resolveStrictMcp } =
+    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
+  const pluginRoot = "/plugins/alpha";
+  const resolution = emptyResolution();
 
   // act
   const dirty = await resolveStrictMcp(
-    { entry: {}, manifest: null, pluginRoot: "/plugins/alpha", resolution },
-    {
-      statKind: () => Promise.resolve("file"),
-      readFileText: () => Promise.reject(new Error("read failure")),
-    },
+    { entry: {}, manifest: null, pluginRoot, resolution },
+    mcpFiles({ [path.join(pluginRoot, ".mcp.json")]: { contents: "{ not json" } }),
   );
 
   // assert
-  assert.deepStrictEqual(
-    { dirty, resolution },
-    {
-      dirty: true,
-      resolution: {
-        notes: ["malformed mcpServers (.mcp.json): read failure"],
-        mcpServers: {},
-      },
-    },
-  );
+  assert.strictEqual(dirty, true);
+  assert.strictEqual(resolution.notes.length, 1);
+  assert.ok(resolution.notes[0]?.startsWith("malformed mcpServers (.mcp.json):"));
+  assert.deepStrictEqual(resolution.mcpServers, {});
 });
 
 test("classifies a wrapped malformed map like an inline malformed map", async () => {

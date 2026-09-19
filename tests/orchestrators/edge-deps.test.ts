@@ -1,6 +1,7 @@
 // Owner suite for `orchestrators/edge-deps.ts::makeLocationsResolver`, the D-04
 // registration-glue helper that gives `edge/completions/` a scope-aware reader
-// without crossing BLOCK C (edge -> persistence / edge -> domain).
+// without crossing BLOCK C's edge -> persistence restriction (edge -> domain/
+// has been allowed directly since Phase 21 / D-21-02).
 //
 // The resolver declares no collaborator parameter, so its contract is the value
 // it reads back off a real tree. Every case therefore owns one temporary tree,

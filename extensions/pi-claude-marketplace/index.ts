@@ -31,7 +31,7 @@ import type {
  * Registers the extension's Pi hooks, tools, and slash command surface.
  */
 // DISP-01: async factory; Pi's loader awaits this Promise (loader.d.ts
-// `loadExtensionFromFactory(...): Promise<Extension>`), so the 7 pi.on
+// `loadExtensionFromFactory(...): Promise<Extension>`), so the 11 pi.on
 // registrations inside `registerHooksBridge` complete BEFORE the loader
 // proceeds to emit any session-lifecycle event. The `void` fire-and-forget
 // alternative would race against the first session_start because the loader
@@ -75,7 +75,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   //      project cache. Both are idempotent against the same cwd.
   //
   // The `await` is LOAD-BEARING: Pi's loader awaits the factory Promise, so
-  // the 7 pi.on calls + user-scope cache hydrate inside `registerHooksBridge`
+  // the 11 pi.on calls + user-scope cache hydrate inside `registerHooksBridge`
   // are guaranteed to complete BEFORE the first Pi event fires.
   await hooksHydration.registerHooksBridge(pi, { cwd: homedir() });
 
@@ -97,11 +97,13 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       // Failures are swallowed by the helper itself via the OBS-01 seam.
       try {
         await hooksHydration.hydrateProjectScopeForCwd(event.cwd);
-      } catch {
+      } catch (err) {
         // Defensive: hydrateProjectScopeForCwd already swallows loadState
         // failures internally via hookDebugLog. A bubbled throw here would
         // be a programmer error in the bridge; we still must not let it
-        // propagate past resources_discover (NFR-2).
+        // propagate past resources_discover (NFR-2). Record it on the debug
+        // seam so a programmer-error throw does not vanish without a trace.
+        hookDebugLog(`project-scope hydrate threw unexpectedly: ${errorMessage(err)}`, "hydrate");
       }
 
       // RECON-01..05: apply the load-time reconcile BEFORE
@@ -123,9 +125,12 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
           // throw (e.g. a literal string) renders its stringified form
           // instead of `reconcile aborted: undefined`.
           makeRawNotifyFn(ctx)(`reconcile aborted: ${errorMessage(err)}`, "error");
-        } catch {
+        } catch (notifyErr) {
           // Last-ditch: never let a notify failure propagate past
-          // resources_discover (NFR-2 boundary preservation).
+          // resources_discover (NFR-2 boundary preservation); record it on
+          // the debug seam so the reconcile-abort notify does not vanish
+          // without a trace.
+          hookDebugLog(`reconcile-abort notify failed: ${errorMessage(notifyErr)}`, "env");
         }
       }
 

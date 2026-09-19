@@ -24,6 +24,7 @@ import {
 } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CrossPluginConflictError,
   errorMessage,
@@ -927,9 +928,10 @@ export async function resolvePluginVersion(
     if (typeof pluginJsonVersion === "string" && pluginJsonVersion.length > 0) {
       return pluginJsonVersion;
     }
-  } catch {
+  } catch (err) {
     // Fall through -- plugin.json is absent, unparseable, or carries no usable
     // version; tier 2 / tier 3 cover it.
+    hookDebugLog(`resolvePluginVersion: plugin.json read/parse failed: ${errorMessage(err)}`);
   }
 
   // Tier 2: the marketplace entry version.

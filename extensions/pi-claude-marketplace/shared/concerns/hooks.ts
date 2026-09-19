@@ -2,10 +2,10 @@
  * shared/concerns/hooks.ts -- the hooks-summary concern (D-01). Owns the hook
  * summary types (`ClaudeHookEvent`, `HookSummaryToolEvent`, `HookSummaryEntry`) and the
  * pure `appendHooksBlock` block renderer. The info renderer (`appendResolvedComponentLines`, which stays in
- * `notify.ts`) imports and calls `appendHooksBlock`; `COMPONENT_KINDS` also
- * stays in `notify.ts` (only the `kind === "hooks"` arm dispatches here).
+ * `notification-grammar.ts`) imports and calls `appendHooksBlock`; `COMPONENT_KINDS` also
+ * stays in `notification-grammar.ts` (only the `kind === "hooks"` arm dispatches here).
  *
- * This module imports nothing from `notify.ts` -- it owns its types, the
+ * This module imports nothing from `notification-grammar.ts` -- it owns its types, the
  * strongest no-cycle position.
  */
 
@@ -49,7 +49,7 @@
 //
 // The payload boundary carries the raw `readonly HookSummaryEntry[]` shape
 // directly (see `PluginInfoComponentsResolved.components.hooks?` in
-// notify.ts). No `HookSummary` wrapper interface sits alongside it -- no
+// notification-types.ts). No `HookSummary` wrapper interface sits alongside it -- no
 // consumer needs a labelled handle, so the raw array is the only summary
 // shape.
 // ---------------------------------------------------------------------------

@@ -552,8 +552,11 @@ function diffPlugins(
  * Pure: no I/O, no network, no notify, no state mutation. Re-runs against
  * the same inputs produce deepEqual outputs.
  *
- * O(N + M) in the union of declared + recorded entries (no per-entry regex
- * compilation, no nested scans).
+ * O(N + M) in the union of declared + recorded entries for the direct-match
+ * fast path (no per-entry regex compilation). A declared marketplace with no
+ * name match against `recorded` falls through to `buildMarketplaceClaims`'s
+ * source-based matching, which scans the recorded marketplaces per such
+ * declaration (`recordedSourceCandidates`) -- O(D*R) in the worst case.
  */
 export function planReconcile(
   merged: MergedConfig,

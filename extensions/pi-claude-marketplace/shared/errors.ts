@@ -489,7 +489,7 @@ export class StateLockHeldError extends Error {
  *
  * Wraps the heterogeneous-undo phase-3a failures from update-swap.ts's
  * hand-rolled 3-phase sequence. `failures` carries one entry per bridge
- * (`skills` | `commands` | `agents` | `mcp`) whose `commit*` threw. The
+ * (`skills` | `commands` | `agents` | `hooks` | `mcp`) whose `commit*` threw. The
  * constructor's `message` argument typically embeds the
  * RECOVERY_PLUGIN_REINSTALL_PREFIX-composed recovery hint; the
  * `Error.cause` (passed via the options bag) carries the chained

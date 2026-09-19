@@ -44,8 +44,11 @@ async function readStandaloneMcp(
     return { ok: true, value: undefined };
   }
 
+  // Read failures (e.g. EACCES) retain their identity for the outer probe
+  // classifier -- only JSON.parse below is a real "malformed mcpServers".
+  const raw = await dependencies.readFileText(mcpPath);
+
   try {
-    const raw = await dependencies.readFileText(mcpPath);
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     return { ok: true, value: "mcpServers" in parsed ? parsed.mcpServers : parsed };
   } catch (error: unknown) {

@@ -7,8 +7,11 @@
 // persistence/state-io + persistence/locations +
 // domain/manifest + domain/resolver surfaces. This file lives in `orchestrators/` so that
 // `edge/register.ts` (which legally imports from `orchestrators/`) can
-// reach all four underlying modules without violating BLOCK C
-// (edge/ -> persistence/ and edge/ -> domain/ are forbidden).
+// reach all four underlying modules without violating BLOCK C's
+// edge/ -> persistence/ restriction (edge/ -> domain/ has been allowed
+// directly since Phase 21 / D-21-02; the domain/manifest read still routes
+// through here because it's paired with the persistence/ read in the same
+// resolver interface).
 //
 // Architectural seam:
 //   - shared/completion-cache.ts: pure paths + rebuild callbacks
@@ -35,6 +38,8 @@ import { loadMarketplaceManifest } from "../domain/manifest.ts";
 import { locationsFor } from "../persistence/locations.ts";
 import { loadState } from "../persistence/state-io.ts";
 import { ManifestSoftFailError } from "../shared/completion-cache.ts";
+import { hookDebugLog } from "../shared/debug-log.ts";
+import { errorMessage } from "../shared/errors.ts";
 
 import { probeManifestEntry, probeUpgradeCandidate } from "./plugin/git-source-probe.ts";
 import { classifyInstalledRecord } from "./plugin/plugin-state-classifier.ts";
@@ -255,7 +260,12 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
         // Any other failure (ENOENT on manifest, JSON parse, schema fail,
         // unexpected exception) becomes the TC-8 soft-fail signal. The
         // cache writes the poison row and returns [] to the completion
-        // consumer -- the slash-command surface never sees the throw.
+        // consumer -- the slash-command surface never sees the throw. Record
+        // the original failure on the debug seam first, so a bug unrelated to
+        // a missing/malformed manifest doesn't fold away without a trace.
+        hookDebugLog(
+          `loadManifestForMarketplace failed for "${marketplace}" in scope "${scope}": ${errorMessage(err)}`,
+        );
         throw new ManifestSoftFailError(err);
       }
     },

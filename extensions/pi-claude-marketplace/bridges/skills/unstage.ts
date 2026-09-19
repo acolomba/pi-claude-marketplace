@@ -23,10 +23,14 @@ export interface SkillsUnstageRemover {
  * validated, but state.json corruption could surface bad names) and routed
  * through `assertPathInside` to refuse traversal escapes.
  *
- * `removedNames` lists names whose target dir actually existed pre-call;
- * ENOENT names are silently skipped (idempotent unstage). The existence
- * check is `pathExists` (lstat-based, non-symlink-following) BEFORE rm so
- * the result faithfully reports work done rather than work attempted.
+ * `removedNames` lists names whose target dir existed pre-call (via the
+ * `pathExists` lstat-based, non-symlink-following check BEFORE rm) AND whose
+ * `remover.removeTree` call resolved without throwing. A post-call ENOENT
+ * (TOCTOU race) is treated the same as a pre-call miss and excluded from
+ * `removedNames` -- even if `removeTree` performed the removal itself before
+ * reporting ENOENT. `removedNames` therefore reflects `removeTree`'s own
+ * success signal, not a guaranteed record of every directory actually
+ * removed.
  */
 export function createUnstagePluginSkills(
   remover: SkillsUnstageRemover,

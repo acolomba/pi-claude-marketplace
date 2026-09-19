@@ -21,7 +21,7 @@
 //
 // HOOK-01: `hooks` is admitted alongside `skills` / `commands` / `agents` /
 // `mcpServers`. The supported component result is a closed set; the
-// path-validation loop iterates a PRIVATE subset (`SUPPORTED_COMPONENT_PATH_KINDS`)
+// path-validation loop iterates a PRIVATE subset (`COMPONENT_PATH_KINDS`)
 // because `hooks` carries no per-entry component-path semantics -- the
 // discovery path is the convention file `<pluginRoot>/hooks/hooks.json`,
 // parsed through `parseHooksConfig` (D-57-04: a parse failure is structural
@@ -231,8 +231,11 @@ async function readManifest(
     return { ok: true, manifest: null };
   }
 
+  // Read failures (e.g. EACCES) retain their identity for the outer probe
+  // classifier -- only JSON.parse below is a real "malformed plugin.json".
+  const raw = await readFileTextOf(ctx)(manifestPath);
+
   try {
-    const raw = await readFileTextOf(ctx)(manifestPath);
     const parsed: unknown = JSON.parse(raw);
 
     if (!PLUGIN_MANIFEST_VALIDATOR.Check(parsed)) {

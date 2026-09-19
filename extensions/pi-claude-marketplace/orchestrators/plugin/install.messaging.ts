@@ -70,7 +70,7 @@ type InstallStatus =
  * it is a message-row shape: `composeInstallFailureMessage` consumes it and
  * returns `InstallMsg`.
  *
- * Examples: `⊘ unknown@claude-plugins-official (failed) {not found}`;
+ * Examples: `⊘ unknown@claude-plugins-official (failed) {not in manifest}`;
  * `⊘ hookify [user] (unavailable) {unsupported hooks}`.
  */
 export interface EntityErrorRow {

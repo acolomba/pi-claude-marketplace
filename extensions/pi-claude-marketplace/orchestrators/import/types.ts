@@ -6,6 +6,7 @@ export type ImportDiagnosticCode =
   | "non-boolean-enabled-plugin"
   | "unmappable-marketplace-source"
   | "settings-read-error"
+  | "settings-write-error"
   | "malformed-json"
   | "invalid-claude-config-dir"
   | "unrecognized-stored-source"
