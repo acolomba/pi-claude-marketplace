@@ -610,9 +610,9 @@ export async function resolveGitPluginRootWithSubdir(
 }
 
 /**
- * D-07-01 / D-07-04 (07-marketplace-repo-tag-resolution): materialize a
- * marketplace-local release tag's tree into `plugin-clones/<key>/`, without
- * ever mutating the marketplace clone's own working tree, HEAD, or index.
+ * D-07-01 / D-07-04: materialize a marketplace-local release tag's tree into
+ * `plugin-clones/<key>/`, without ever mutating the marketplace clone's own
+ * working tree, HEAD, or index.
  *
  * Construction (D-07-04, developer-confirmed): copy ONLY the marketplace's
  * `.git` dir into an otherwise-empty staging dir, then check the tag out
@@ -637,7 +637,7 @@ export async function resolveGitPluginRootWithSubdir(
  *
  * Unlike `seedSameRepoPluginMirrors`' best-effort sweep, a materialization
  * failure here PROPAGATES to the install -- there is no "install the current
- * checkout instead" fallback in this arm; that is TAGS-02, plan 07-02's job.
+ * checkout instead" fallback in this arm; that is TAGS-02's job.
  */
 export async function materializeMarketplaceTagClone(args: {
   locations: ScopedLocations;

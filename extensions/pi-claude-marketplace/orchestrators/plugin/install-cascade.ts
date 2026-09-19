@@ -595,8 +595,8 @@ async function probeMemberPin(
   }
 
   if (tagSource.kind === "path") {
-    // TAGS-01/03 (07-marketplace-repo-tag-resolution plan 07-01): a
-    // satisfying tag pins the member exactly like a git-backed source does.
+    // TAGS-01/03: a satisfying tag pins the member exactly like a git-backed
+    // source does.
     const marketplaceTagProbe = options.marketplaceTagProbe ?? probeMarketplaceTags;
     const probed = await marketplaceTagProbe({
       pluginName: member.name,

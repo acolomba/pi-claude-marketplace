@@ -386,11 +386,10 @@ export async function listRemoteTags(opts: ListRemoteTagsOptions): Promise<Remot
 }
 
 /**
- * D-07-05 (07-marketplace-repo-tag-resolution): local, network-free
- * counterpart of `listRemoteTags` -- the tag names a local checkout already
- * carries on disk. Wraps isomorphic-git's `listTags({ fs, dir })`, which
- * returns bare tag names with no oid; a name alone is not the object a caller
- * reads back through `resolveTagOid`.
+ * D-07-05: local, network-free counterpart of `listRemoteTags` -- the tag
+ * names a local checkout already carries on disk. Wraps isomorphic-git's
+ * `listTags({ fs, dir })`, which returns bare tag names with no oid; a name
+ * alone is not the object a caller reads back through `resolveTagOid`.
  *
  * A `path`-source dependency has no remote repository of its own to query;
  * its release tags live on the marketplace clone that already sits on disk,
@@ -415,9 +414,9 @@ const MAX_TAG_PEEL_HOPS = 10;
 /**
  * D-07-05: resolve a LOCAL tag name to the commit it names, peeling an
  * annotated tag to the commit it points at. The local counterpart of
- * `listRemoteTags`' `peeled ?? oid` preference -- verified for the remote path
- * by Phase 3's live UAT -- because for an annotated tag the tag OBJECT's own
- * oid is never what a caller wants, only the commit it tags.
+ * `listRemoteTags`' `peeled ?? oid` preference (D-03-02.2 pins the remote
+ * path) -- for an annotated tag the tag OBJECT's own oid is never what a
+ * caller wants, only the commit it tags.
  *
  * Resolves `refs/tags/<name>` via `resolveRef`, then attempts `readTag` on the
  * result:

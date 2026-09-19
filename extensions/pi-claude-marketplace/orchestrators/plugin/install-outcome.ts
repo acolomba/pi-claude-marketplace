@@ -180,9 +180,9 @@ export interface InstallLedgerOptions {
   readonly cloneCacheSeam?: InstallCloneCacheSeam;
   readonly cloneProbe?: typeof probeInstallClone;
   /**
-   * D-07-06 (07-marketplace-repo-tag-resolution): materializes a `path`
-   * source at `sourcePinOverride`'s tag oid. Mirrors `cloneProbe` exactly --
-   * a real default (`materializeMarketplaceTagClone`), not test-only surface.
+   * D-07-06: materializes a `path` source at `sourcePinOverride`'s tag oid.
+   * Mirrors `cloneProbe` exactly -- a real default
+   * (`materializeMarketplaceTagClone`), not test-only surface.
    */
   readonly pathPinProbe?: typeof materializeMarketplaceTagClone;
   /**
@@ -487,11 +487,11 @@ async function preflightInstallResolve(
       resolvedSha = clone.resolvedSha;
       return clone.result;
     },
-    // D-07-06/07-07 (07-marketplace-repo-tag-resolution): a `path`-source
-    // member whose constraint selected a marketplace tag materializes that
-    // tag's tree the same way a git-backed member materializes its pinned
-    // commit. Added ONLY when a pin is present, so an unpinned `path` source
-    // stays byte-identical to today (neither field is set at all).
+    // D-07-06 / D-07-07: a `path`-source member whose constraint selected a
+    // marketplace tag materializes that tag's tree the same way a git-backed
+    // member materializes its pinned commit. Added ONLY when a pin is
+    // present, so an unpinned `path` source stays byte-identical to today
+    // (neither field is set at all).
     ...(opts.sourcePinOverride !== undefined && {
       pathPluginPin: opts.sourcePinOverride,
       resolvePathPluginRoot: async (pathSource: PathSource, pin: string) => {

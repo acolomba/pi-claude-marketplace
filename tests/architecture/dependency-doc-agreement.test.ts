@@ -20,7 +20,7 @@
 // `CascadeConstraintFailure` without a fixture here is a build failure rather
 // than a silently narrower sweep.
 //
-// DIVG-01 (07-03): the second half of this gate guards the same claim for
+// DIVG-01: the second half of this gate guards the same claim for
 // `docs/dependency-resolution.md`'s prose, not just its failure table. The
 // document told readers for one milestone that a path-source dependency could
 // satisfy no constraint but the wildcard, after TAGS-01/02 had already made

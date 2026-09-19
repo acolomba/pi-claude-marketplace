@@ -1,10 +1,9 @@
 // domain/release-tag.ts
 //
-// D-07-05 (07-marketplace-repo-tag-resolution): the release-tag selection
-// logic, extracted so ONE evaluator serves both the network-touching probe
-// (`orchestrators/plugin/dependency-tag-probe.ts`) and the local, network-free
-// probe (`orchestrators/plugin/marketplace-tag-probe.ts`). Moved out of the
-// former so the local probe never imports a network leaf to reach it.
+// D-07-05: the release-tag selection logic. ONE evaluator serves both the
+// network-touching probe (`orchestrators/plugin/dependency-tag-probe.ts`) and
+// the local, network-free probe (`orchestrators/plugin/marketplace-tag-probe.ts`),
+// so the local probe never has to import a network leaf to reach it.
 //
 // `ReleaseTagCandidate` is a structural `{ name, oid }` shape rather than
 // `platform/git.ts`'s `RemoteTag` type, so this module -- and the local probe

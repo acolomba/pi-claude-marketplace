@@ -1,11 +1,10 @@
 // tests/integration/path-source-tag-install.test.ts
 //
-// TAGS-01 / TAGS-03 (07-marketplace-repo-tag-resolution, plan 07-01): the
-// whole tracer slice, driven end to end against a REAL git repository with NO
-// injected seams -- every collaborator (`probeMarketplaceTags`,
-// `materializeMarketplaceTagClone`, the resolver's `resolvePathPluginRoot`
-// wiring) runs as production wires it, through the real `addMarketplace` and
-// `installPlugin` orchestrators. Mirrors
+// TAGS-01 / TAGS-03: the whole tracer slice, driven end to end against a
+// REAL git repository with NO injected seams -- every collaborator
+// (`probeMarketplaceTags`, `materializeMarketplaceTagClone`, the resolver's
+// `resolvePathPluginRoot` wiring) runs as production wires it, through the
+// real `addMarketplace` and `installPlugin` orchestrators. Mirrors
 // `tests/integration/marketplace-add-seed-mirrors.test.ts`'s fixture shape.
 //
 // The fixture marketplace declares a path-source plugin `formatter` and a
@@ -482,7 +481,7 @@ async function buildNonSatisfyingTagMarketplace(cwd: string): Promise<{
       version: "1.0.0",
       // TAGS-02: `^9.0.0` is satisfied by NEITHER the tag NOR the current
       // checkout -- the fallback installs the current copy regardless, and
-      // the constraint is left for Phase 6's load-time check.
+      // the constraint is left for the load-time check.
       dependencies: [{ name: "formatter", version: "^9.0.0" }],
     }),
   );

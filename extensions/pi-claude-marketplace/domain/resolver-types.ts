@@ -135,8 +135,8 @@ export interface ResolveContext {
     source: UrlSource | GitSubdirSource | GitHubSource,
   ) => Promise<GitPluginRootResult>;
   /**
-   * D-07-06 (07-marketplace-repo-tag-resolution): materializes a `path`
-   * source at a marketplace-tag pin, when one is set. Optional for
+   * D-07-06: materializes a `path` source at a marketplace-tag pin, when one
+   * is set. Optional for
    * back-compat -- `list` and `info` construct a `ResolveContext` with
    * neither this nor `pathPluginPin` and must keep resolving an unpinned
    * `path` source under `marketplaceRoot` unchanged.
