@@ -1,5 +1,8 @@
 # ai harnesses
+# third-party skills, restored from skills-lock.json by scripts/init.sh
 /.agents/skills/herdr/
+/.agents/skills/humanizer/
+/.agents/skills/simple-english/
 
 # pi
 /.pi/git/

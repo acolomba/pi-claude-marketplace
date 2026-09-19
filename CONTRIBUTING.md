@@ -41,9 +41,18 @@ npm run format         # Prettier autoformat
 pre-commit run --all-files
 ```
 
-## Vendored skills
+## Third-party skills
 
-Every skill lives under `.agents/skills/`, `.claude/skills/` holds symlinks to them, and Pi reads `.agents/skills/` directly. Some of them are vendored from other repositories: `skills-lock.json` names each vendored skill and its source, and `THIRD_PARTY_NOTICES.md` records its version and license. A skill absent from `skills-lock.json` is written in this repository and needs neither entry.
+Every skill lives under `.agents/skills/`, `.claude/skills/` holds symlinks to them, and Pi reads `.agents/skills/` directly. Skills written in this repository are tracked. Skills from other repositories are not: `skills-lock.json` names each one and its source, `.gitignore` excludes its directory, and `./scripts/init.sh` restores it from the lock.
+
+To add a skill:
+
+```bash
+npx skills@latest add <owner/repo> -y
+npx skills@latest remove <name> -a pi -y
+```
+
+The first command copies the skill to `.agents/skills/<name>/`, links it from `.claude/skills/<name>`, and records it in `skills-lock.json`. It also links it from `.pi/skills/`, which would register it twice in Pi, so the second command deletes that link. Then add `/.agents/skills/<name>/` to `.gitignore` and commit the link and the lock.
 
 To update a skill:
 
@@ -52,4 +61,4 @@ npx skills@latest update <name> -p -y
 npx skills@latest remove <name> -a pi -y
 ```
 
-The installer copies the skill directory only, and some upstream repositories keep the license at the repository root. The `update` command links every agent whose directory exists, so it creates a `.pi/skills/` symlink. The `remove -a pi` command deletes only that link. After an update, check that the `LICENSE` file is still in place, and record the new version and commit in `THIRD_PARTY_NOTICES.md`.
+Commit the refreshed `skills-lock.json`.
