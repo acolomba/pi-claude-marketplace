@@ -104,45 +104,51 @@ describe("selectHighestSatisfyingTag", () => {
     // assert
     assert.deepStrictEqual(selected, { kind: "no-matching-tag", range: "^1.0.0" });
   });
-});
 
-describe("WR-09: candidate-reading cases, through the one function a caller observes", () => {
-  // `readPinCandidate` (the per-candidate reader `selectHighestSatisfyingTag`
-  // calls internally) is unexported -- these cases are expressed through
-  // `selectHighestSatisfyingTag` with a one-element candidate list, which is
-  // what a caller actually gets back.
   test("a candidate whose name does not carry the plugin's own prefix is not a candidate", () => {
-    assert.deepStrictEqual(
-      selectHighestSatisfyingTag(
-        [{ name: "other--v1.0.0", oid: "x" }],
-        `formatter${RELEASE_TAG_SEPARATOR}`,
-        "*",
-      ),
-      { kind: "no-matching-tag", range: "*" },
+    // arrange
+    const candidates: readonly ReleaseTagCandidate[] = [{ name: "other--v1.0.0", oid: "x" }];
+
+    // act
+    const selected = selectHighestSatisfyingTag(
+      candidates,
+      `formatter${RELEASE_TAG_SEPARATOR}`,
+      "*",
     );
+
+    // assert
+    assert.deepStrictEqual(selected, { kind: "no-matching-tag", range: "*" });
   });
 
   test("a candidate whose version does not satisfy the range is not a candidate", () => {
-    assert.deepStrictEqual(
-      selectHighestSatisfyingTag(
-        [{ name: "formatter--v1.0.0", oid: "x" }],
-        `formatter${RELEASE_TAG_SEPARATOR}`,
-        "^2.0.0",
-      ),
-      { kind: "no-matching-tag", range: "^2.0.0" },
+    // arrange
+    const candidates: readonly ReleaseTagCandidate[] = [{ name: "formatter--v1.0.0", oid: "x" }];
+
+    // act
+    const selected = selectHighestSatisfyingTag(
+      candidates,
+      `formatter${RELEASE_TAG_SEPARATOR}`,
+      "^2.0.0",
     );
+
+    // assert
+    assert.deepStrictEqual(selected, { kind: "no-matching-tag", range: "^2.0.0" });
   });
 
   test("prefix matching is case-sensitive with no Unicode normalization", () => {
-    // A name differing only by case is not the same prefix -- the identical
-    // comparison the remote probe performs (String.prototype.startsWith).
-    assert.deepStrictEqual(
-      selectHighestSatisfyingTag(
-        [{ name: "Formatter--v1.0.0", oid: "x" }],
-        `formatter${RELEASE_TAG_SEPARATOR}`,
-        "*",
-      ),
-      { kind: "no-matching-tag", range: "*" },
+    // arrange: a name differing only by case is not the same prefix -- the
+    // identical comparison the remote probe performs
+    // (String.prototype.startsWith).
+    const candidates: readonly ReleaseTagCandidate[] = [{ name: "Formatter--v1.0.0", oid: "x" }];
+
+    // act
+    const selected = selectHighestSatisfyingTag(
+      candidates,
+      `formatter${RELEASE_TAG_SEPARATOR}`,
+      "*",
     );
+
+    // assert
+    assert.deepStrictEqual(selected, { kind: "no-matching-tag", range: "*" });
   });
 });
