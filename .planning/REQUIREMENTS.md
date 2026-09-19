@@ -210,7 +210,7 @@ marketplace may satisfy a dependency (D-03-08 covers only the not-added case).
 
 ### Divergence record (DIVG)
 
-- [ ] **DIVG-01**: `docs/dependency-resolution.md` states that upstream accepts
+- [x] **DIVG-01**: `docs/dependency-resolution.md` states that upstream accepts
   a `sha` field on a dependency element and that this extension refuses it
   (D-03-36), beside the kept divergences it already records.
 
@@ -289,7 +289,7 @@ this milestone.
 | PRUNE-06 | Phase 12 | Pending |
 | PRUNE-07 | Phase 12 | Pending |
 | FLAG-02 | Phase 12 | Pending |
-| DIVG-01 | Phase 7 | Pending |
+| DIVG-01 | Phase 7 | Complete |
 
 **Coverage:**
 
