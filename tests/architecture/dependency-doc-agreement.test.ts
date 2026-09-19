@@ -335,13 +335,17 @@ test("DIVG-01 the plugin-declares section names the sha divergence from upstream
   // arrange / act
   const section = await readDocSection("## What a plugin declares");
 
-  // assert: sanity floor, then the literal stem Task 1 commits to.
+  // assert: sanity floor, then the tokens that carry the actual divergence --
+  // upstream's behavior, this extension's refusal, and the reason it fails
+  // with -- not a prose stem that survives a rewrite deleting the claim.
   assert.ok(
     section.length > 200,
     `${DOC_REL}: parsed a ${section.length.toString()}-character "What a plugin declares" section`,
   );
-  assert.ok(
-    section.includes("Claude Code accepts a"),
-    `${DOC_REL}: the "What a plugin declares" section never states that upstream accepts a sha field`,
-  );
+  for (const claim of ["`sha`", "pins the dependency to that commit", "{invalid manifest}"]) {
+    assert.ok(
+      section.includes(claim),
+      `${DOC_REL}: the "What a plugin declares" section no longer states ${claim}`,
+    );
+  }
 });
