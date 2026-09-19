@@ -451,16 +451,17 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
       },
     },
 
-    // TAGS-02 / D-07-03: a PATH-source dependency whose marketplace clone
-    // carries no release tag satisfying the declared constraint. Rather than
-    // failing the whole install (the git-backed arm below), the cascade
-    // installs the marketplace's CURRENT copy instead and names it on the
-    // dependency's own row with a quiet `info`-level note -- the install
-    // succeeded, so the row is not a failure row and the token is not a
-    // failure-class reason. Severity stays whatever the companion probe
-    // computes; the fallback never raises or lowers it on its own.
+    // TAGS-02 / D-07-03 / WR-05: a PATH-source dependency whose marketplace
+    // clone carries no release tag satisfying the declared constraint.
+    // Rather than failing the whole install (the git-backed arm below), the
+    // cascade installs the marketplace's CURRENT copy instead and names it
+    // on the dependency's own row -- the install succeeded, so the row is
+    // not a failure row and the token is not a failure-class reason. The
+    // requesting plugin installed against a dependency at an unverified
+    // version, so the fallback raises the row (and the block) to warning.
     "dependency-cascade-fallback-current-copy": {
       pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
       message: {
         marketplaces: [
           {
@@ -473,7 +474,7 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 version: "2.1.0",
                 dependencies: [],
                 reasons: ["dependency current copy"],
-                severity: "info",
+                severity: "warning",
                 needsReload: true,
               },
               {
