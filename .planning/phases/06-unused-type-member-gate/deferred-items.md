@@ -35,14 +35,16 @@ Found during plan 06-10, Task 3, while restoring re-keyed notes in
 `06-LIVE-TRIAGE.md`. Measured by re-deriving every `test-only-observed` note
 from `check-unused-type-members.mjs --json` and comparing it to the stored text.
 
-| Row | Note says | Report says |
-| --- | --- | --- |
-| `bridges/hooks/routing-state.ts:138:3` | `tests/architecture/hooks-lifecycle.test.ts:457:44` | `:453:44` |
-| `bridges/hooks/routing-state.ts:139:3` | same | `:453:44` |
-| `bridges/hooks/routing-state.ts:140:3` | same | `:453:44` |
-| `orchestrators/types.ts:221:3` | `tests/orchestrators/plugin/update-flow.test.ts:8879:66` | `:8877:66` |
-| `orchestrators/types.ts:222:3` | same | `:8877:66` |
-| `orchestrators/types.ts:223:3` | same | `:8877:66` |
+Each entry reads: row, then the note's cited witness, then what the fresh
+report says. (Converted from a table at the milestone close so the
+acknowledge writer can match each entry; every cell is preserved verbatim.)
+
+- Row `bridges/hooks/routing-state.ts:138:3`; note says `tests/architecture/hooks-lifecycle.test.ts:457:44`; report says `:453:44`
+- Row `bridges/hooks/routing-state.ts:139:3`; note says same; report says `:453:44`
+- Row `bridges/hooks/routing-state.ts:140:3`; note says same; report says `:453:44`
+- Row `orchestrators/types.ts:221:3`; note says `tests/orchestrators/plugin/update-flow.test.ts:8879:66`; report says `:8877:66`
+- Row `orchestrators/types.ts:222:3`; note says same; report says `:8877:66`
+- Row `orchestrators/types.ts:223:3`; note says same; report says `:8877:66`
 
 Witness counts and syntax kinds still match; only the line numbers drifted. The
 two offsets line up with earlier repairs in this phase that shifted those test
@@ -57,3 +59,4 @@ edited.
 Closing it wants either a re-derivation pass over every `test-only-observed`
 note, or a `--check` rule that compares a note's cited coordinate against the
 fresh report so the drift cannot stay silent next time.
+  status: acknowledged

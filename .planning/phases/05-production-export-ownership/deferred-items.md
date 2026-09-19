@@ -5,7 +5,7 @@ the owner file so a later bounded plan can pick it up; none is a gate failure.
 
 - Comments in non-owned persistence files still name `CONFIG_VALIDATOR.Check` /
   `STATE_VALIDATOR.Check`
-  status: open
+  status: acknowledged
   **What:** plan 05-12 changed `loadConfig`, `saveConfig`, `loadState` and
   `saveState` to take validity and the diagnostic from the compiled validator's
   first `Errors` entry, so neither module calls `Check` any more. Six comments

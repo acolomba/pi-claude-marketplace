@@ -10,7 +10,7 @@ requires:
   - pi-subagents >= 0.62.0 for excludeTools (earlier versions store-and-ignore the key)
 provides:
   - Omitted source `tools:` converts to no allowlist, so pi-subagents grants its defaults
-  - `disallowedTools` maps to `excludeTools` when no allowlist is emitted
+  - "`disallowedTools` maps to `excludeTools` when no allowlist is emitted"
   - Targeted guidance warnings for the dropped `allowed-tools` and `mcpServers` fields
 affects:
   - extensions/pi-claude-marketplace/bridges/agents/convert.ts
@@ -19,8 +19,7 @@ affects:
 tech-stack:
   added: []
   patterns:
-    - Discriminated `omitted` flag on ToolMappingResult so the emitter distinguishes
-      "no allowlist" from "empty allowlist"
+    - Discriminated `omitted` flag on ToolMappingResult so the emitter distinguishes "no allowlist" from "empty allowlist"
     - Optional non-empty-tuple frontmatter fields keep the AG-11 invariant in the type
 key-files:
   created: []
