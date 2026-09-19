@@ -311,7 +311,7 @@ Plans:
 3. `uninstall <plugin>` removes a plugin other installed plugins in the scope still declare; the row names the dependents, and each dependent is reported unsatisfied at the next load. The reload-path refusal goes with it. `--prune` semantics are unchanged. (LOAD-03)
 4. PRUNE-05's refusal (`assertNoDependents`, D-05-14..16), its `dependents remain` row and the `docs/dependency-resolution.md` §138 "documents this for `disable`; this extension applies it to `uninstall`" sentences are retired, with a decision record superseding D-05-14; BACKLOG `PRUNE-GUARD-MR-01` is re-triaged, since a `marketplace remove` that leaves dependents dangling is now reported by the check rather than needing a guard.
 
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 
 Plans:
 **Wave 1**
@@ -324,7 +324,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 06-03-PLAN.md — LOAD-03: uninstall proceeds and names the dependents; the refusal and its vocabulary are retired (carries a blocking decision checkpoint)
+- [x] 06-03-PLAN.md — LOAD-03: uninstall proceeds and names the dependents; the refusal and its vocabulary are retired (carries a blocking decision checkpoint)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -502,7 +502,7 @@ plugin names — so plan these phases with the UI gate skipped.
 | 3. Dependency resolution | v1.20 | 7/7 | Complete    | 2026-09-15 |
 | 4. Install provenance | v1.20 | 6/6 | Complete    | 2026-09-16 |
 | 5. Prune on uninstall | v1.20 | 3/3 | Complete    | 2026-09-16 |
-| 6. Load-time dependency check and allowed uninstall | v1.20 | 2/4 | In Progress|  |
+| 6. Load-time dependency check and allowed uninstall | v1.20 | 3/4 | In Progress|  |
 | 7. Marketplace-repository tag resolution for path-source dependencies | v1.20 | 0/0 | Not started | — |
 | 8. Enablement parity for dependencies | v1.20 | 0/0 | Not started | — |
 | 9. Reload installs missing declared dependencies | v1.20 | 0/0 | Not started | — |
