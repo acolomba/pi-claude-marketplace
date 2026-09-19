@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v1.20
 milestone_name: transitive-dependencies
-current_phase: 07
-current_phase_name: Marketplace-repository tag resolution for path-source dependencies
+current_phase: 08
+current_phase_name: Enablement parity for dependencies
 status: planning
-stopped_at: Phase 07 context gathered
-last_updated: "2026-09-19T15:00:12.013Z"
+stopped_at: Phase 07 complete, ready to plan Phase 08
+last_updated: "2026-09-19T23:47:26.290Z"
 last_activity: 2026-09-19
-last_activity_desc: Phase 06 complete, transitioned to Phase 07
-state_head: 83dbf7da8d143727c92f35a31029a42839690e8a
+last_activity_desc: Phase 07 complete, transitioned to Phase 08
+state_head: f2a96f94542472f33627a7116880b507c3869f3e
 progress:
   total_phases: 12
-  completed_phases: 6
-  total_plans: 26
-  completed_plans: 26
-  percent: 50
+  completed_phases: 7
+  total_plans: 29
+  completed_plans: 29
+  percent: 58
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-09-17 after Phase 5 prune-on-uninstall
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 06 — Load-time dependency check and allowed uninstall
+**Current focus:** Phase 07 — Marketplace-repository tag resolution for path-source dependencies
 shipped dependency feature with the Claude Code dependency docs.
 Installing a plugin that declares dependencies should install what it needs.
 44 requirements across 12 phases (25 shipped in Phases 1-5 as PR #198, 19
@@ -36,7 +36,7 @@ under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 07 — Marketplace-repository tag resolution for path-source dependencies
+Phase: 08 — Enablement parity for dependencies
 Plan: Not started
 Status: Ready to plan
 
@@ -335,7 +335,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-19 — Phase 06 complete, transitioned to Phase 07
+Last activity: 2026-09-19 — Phase 07 complete, transitioned to Phase 08
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 5 of 5 phases complete (100%).
@@ -362,7 +362,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 
 **Velocity:**
 
-- Total plans completed: 177
+- Total plans completed: 180
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -382,6 +382,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | 04 | 6 | - | - |
 | 5 | 3 | - | - |
 | 06 | 4 | - | - |
+| 07 | 3 | - | - |
 
 **Recent Trend:** 35 Phase 113 plans completed with all direct owner, review, validation, verification, security, and clean-repository gates green.
 **Per-Plan Metrics:**
@@ -925,7 +926,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 07 context gathered
+**Stopped at:** Phase 07 complete, ready to plan Phase 08
 
 **Resume file:** .planning/phases/07-marketplace-repo-tag-resolution/07-CONTEXT.md
 `HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live

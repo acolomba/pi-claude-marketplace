@@ -38,7 +38,7 @@ on the check Phase 6 builds, so shipping any of them first would leave a
 constraint silently unchecked for a phase.
 
 - [x] **Phase 6: Load-time dependency check and allowed uninstall** — reconcile checks every installed plugin's declarations against the scope's records; a dependent whose dependency is missing, disabled or out of range is disabled with the upstream remedy, the disable is a recorded consequence reconcile respects until the dependency is satisfied, and `uninstall` stops refusing a still-needed plugin: it proceeds, names the dependents, and leaves them to the check. Retires PRUNE-05 / D-05-14..16 and the reload-path refusal. (LOAD-01, LOAD-02, LOAD-03) (completed 2026-09-19)
-- [ ] **Phase 7: Marketplace-repository tag resolution for path-source dependencies** — a constrained dependency whose marketplace entry is a relative path resolves against the marketplace repository's `{name}--v{version}` tags, read from the local clone offline; no satisfying tag installs the current copy and defers to Phase 6's check. Also records the kept `sha` divergence. (TAGS-01, TAGS-02, TAGS-03, DIVG-01)
+- [x] **Phase 7: Marketplace-repository tag resolution for path-source dependencies** — a constrained dependency whose marketplace entry is a relative path resolves against the marketplace repository's `{name}--v{version}` tags, read from the local clone offline; no satisfying tag installs the current copy and defers to Phase 6's check. Also records the kept `sha` divergence. (TAGS-01, TAGS-02, TAGS-03, DIVG-01) (completed 2026-09-19)
 - [ ] **Phase 8: Enablement parity for dependencies** — `enable` cascades to declared dependencies and lists them, `disable` is refused while an enabled dependent needs the plugin and gives the chained command, and a cascade enables a disabled already-installed dependency through its record instead of skipping it. Closes BACKLOG ENBL-DEP-01. (EDEP-01, EDEP-02, EDEP-03)
 - [ ] **Phase 9: Reload installs missing declared dependencies** — a reload installs any declared dependency an installed plugin lacks, through the cascade with provenance `dependency`; a dependency that cannot be installed is reported on its own row and the dependent falls to Phase 6's check. (MISS-01, MISS-02)
 - [ ] **Phase 10: Constraint-aware update** — `update` and `autoupdate` move a constrained plugin only to the highest version every installed dependent's range accepts, and skip-and-report when none does, naming the constraining plugin. (UPDT-01, UPDT-02)
@@ -351,9 +351,9 @@ Plans:
 
 Plans:
 
-- [ ] 07-01-PLAN.md — tracer: a constrained path-source dependency installs from the marketplace tag that satisfies it (TAGS-01, TAGS-03)
-- [ ] 07-02-PLAN.md — no satisfying tag installs the current copy and the row says so (TAGS-02)
-- [ ] 07-03-PLAN.md — `docs/dependency-resolution.md` records the new resolution and the `sha` divergence (DIVG-01)
+- [x] 07-01-PLAN.md — tracer: a constrained path-source dependency installs from the marketplace tag that satisfies it (TAGS-01, TAGS-03)
+- [x] 07-02-PLAN.md — no satisfying tag installs the current copy and the row says so (TAGS-02)
+- [x] 07-03-PLAN.md — `docs/dependency-resolution.md` records the new resolution and the `sha` divergence (DIVG-01)
 
 **Notes.** `orchestrators/plugin/dependency-tag-probe.ts::probeDependencyTags` today lists the *dependency's own source repository* tags over the network; a path source has no such repository, which is why every non-wildcard constraint fails. The marketplace clone is local, so tag listing goes through `platform/git.ts` against the clone (isomorphic-git `listTags`), not the advertised-refs path — and `no-orchestrator-network.test.ts` must keep passing for the gated install owners. Materializing "the plugin at that tag" from a clone whose checkout is at a different commit is the open mechanics question for discuss: a second worktree-like checkout under the plugin's clone root, or reading the tree at the tag oid into the staging directory. Containment (NFR-10) applies either way.
 
@@ -505,7 +505,7 @@ plugin names — so plan these phases with the UI gate skipped.
 | 4. Install provenance | v1.20 | 6/6 | Complete    | 2026-09-16 |
 | 5. Prune on uninstall | v1.20 | 3/3 | Complete    | 2026-09-16 |
 | 6. Load-time dependency check and allowed uninstall | v1.20 | 4/4 | Complete    | 2026-09-19 |
-| 7. Marketplace-repository tag resolution for path-source dependencies | v1.20 | 0/0 | Not started | — |
+| 7. Marketplace-repository tag resolution for path-source dependencies | v1.20 | 3/3 | Complete    | 2026-09-19 |
 | 8. Enablement parity for dependencies | v1.20 | 0/0 | Not started | — |
 | 9. Reload installs missing declared dependencies | v1.20 | 0/0 | Not started | — |
 | 10. Constraint-aware update | v1.20 | 0/0 | Not started | — |
