@@ -71,7 +71,6 @@ import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
@@ -232,6 +231,20 @@ export interface ResolvedCascadeMember extends ClosureMember {
      */
     readonly version: string;
   };
+  /**
+   * TAGS-02: a path-source member whose marketplace clone carried no tag
+   * satisfying its constraint (or whose local listing could not be read at
+   * all, D-07-07) resolved anyway, installing the marketplace's current copy
+   * in place of a pin.
+   *
+   * This is an optional marker rather than a member of `CascadeConstraintFailure`
+   * on purpose: `MemberConstraintResolution` is a strict two-arm union and
+   * D-03-07 makes any failure arm fail the whole cascade all-or-nothing, which
+   * is the exact opposite of what TAGS-02 requires. Reusing the failure shape
+   * here would fail the requesting plugin's install for a dependency that
+   * installed fine.
+   */
+  readonly fellBackToCurrentCopy?: true;
 }
 
 /** Every member's constraint resolved, or the first failure one produced. */
@@ -300,6 +313,16 @@ export interface CascadeMemberOutcome {
    */
   readonly pluginRoot: string;
   readonly hooksConfigPath: string | undefined;
+  /**
+   * TAGS-02: whether this member installed the marketplace's current copy
+   * because no tag satisfied its constraint, rather than a pin.
+   *
+   * REQUIRED, not optional: an optional member of a closed row shape compiles
+   * clean at every construction site that omits it, which is precisely how a
+   * new fact goes silently unreported. Making it required turns every
+   * construction site into a compile error the author must answer.
+   */
+  readonly fellBackToCurrentCopy: boolean;
 }
 
 /**
@@ -557,12 +580,8 @@ async function probeMemberPin(
   }
 
   if (tagSource.kind === "path") {
-    // TAGS-01/03 tracer slice (07-marketplace-repo-tag-resolution plan 07-01):
-    // a satisfying tag pins the member exactly like a git-backed source does.
-    // TAGS-02's fallback -- installing the marketplace's current copy instead
-    // of failing when no tag satisfies -- is plan 07-02's job; until then,
-    // `no-matching-tag` and `tag-listing-failed` here produce the SAME
-    // failure shapes the git-backed branch below already does.
+    // TAGS-01/03 (07-marketplace-repo-tag-resolution plan 07-01): a
+    // satisfying tag pins the member exactly like a git-backed source does.
     const marketplaceTagProbe = options.marketplaceTagProbe ?? probeMarketplaceTags;
     const probed = await marketplaceTagProbe({
       pluginName: member.name,
@@ -570,20 +589,18 @@ async function probeMemberPin(
       range,
     });
 
-    // A local read failure is never a transport failure; this reuses the SAME
-    // closed-set classifier rather than inventing a second one, and its
-    // `undefined` fallthrough is a valid member of the type it feeds.
-    return toMemberConstraintOutcome(
-      member,
-      range,
-      probed.kind === "tag-listing-failed"
-        ? {
-            kind: "tag-listing-failed",
-            cause: probed.cause,
-            classification: classifyGitTransportFailure(probed.cause),
-          }
-        : probed,
-    );
+    // TAGS-02 / D-07-07: no tag satisfies the constraint, or the local
+    // listing could not even be read (an unreadable listing and an empty one
+    // are the same user-visible fact -- there is no tag here that satisfies
+    // you) -- either way the member resolves anyway, installing the
+    // marketplace's current copy in place of a pin. One fallback arm covers
+    // both, and the install succeeds either way, so no transport
+    // classification is owed on a success row.
+    if (probed.kind === "no-matching-tag" || probed.kind === "tag-listing-failed") {
+      return { kind: "resolved", member: { ...member, fellBackToCurrentCopy: true } };
+    }
+
+    return toMemberConstraintOutcome(member, range, probed);
   }
 
   const ledger = options.ledgerOptionsFor(member);
@@ -765,6 +782,7 @@ function buildMemberPhase(
         declaresMcp: result.summary.stagedMcpServerNames.length > 0,
         pluginRoot: result.summary.resolved.pluginRoot,
         hooksConfigPath: result.summary.resolved.hooksConfigPath,
+        fellBackToCurrentCopy: member.fellBackToCurrentCopy ?? false,
       });
       if (member.key === options.rootKey) {
         run.root = result.summary;

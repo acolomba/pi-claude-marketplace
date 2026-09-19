@@ -361,3 +361,151 @@ test("TAGS-01: two cascade members resolving against the SAME marketplace clone 
   assert.deepStrictEqual(await readFile(path.join(marketplaceRoot, ".git", "index")), before);
   assert.deepStrictEqual(await readFile(path.join(marketplaceRoot, ".git", "HEAD")), beforeHead);
 });
+
+/**
+ * Builds a real git repository marketplace declaring `formatter` (tagged
+ * `formatter--v1.0.0`) and `app`, which constrains `formatter` to `^9.0.0` --
+ * a range the marketplace's only tag does not satisfy. Otherwise identical to
+ * `buildTaggedMarketplace`, including the second commit that advances the
+ * checkout PAST the tag, so the CURRENT checkout stays byte-distinguishable
+ * from it.
+ */
+async function buildNonSatisfyingTagMarketplace(cwd: string): Promise<{
+  readonly marketplaceRoot: string;
+}> {
+  const marketplaceRoot = path.join(cwd, "acme-no-match-market-src");
+  const formatterDir = path.join(marketplaceRoot, "plugins", "formatter");
+  const appDir = path.join(marketplaceRoot, "plugins", "app");
+  await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(formatterDir, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(appDir, ".claude-plugin"), { recursive: true });
+
+  await writeFile(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "acme",
+      plugins: [
+        { name: "formatter", source: "./plugins/formatter" },
+        { name: "app", source: "./plugins/app" },
+      ],
+    }),
+  );
+  await writeFile(
+    path.join(formatterDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "formatter", version: "1.0.0" }),
+  );
+  await writeFile(path.join(formatterDir, "MARKER.txt"), "tagged-content\n");
+  await writeFile(
+    path.join(appDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({
+      name: "app",
+      version: "1.0.0",
+      // TAGS-02: `^9.0.0` is satisfied by NEITHER the tag NOR the current
+      // checkout -- the fallback installs the current copy regardless, and
+      // the constraint is left for Phase 6's load-time check.
+      dependencies: [{ name: "formatter", version: "^9.0.0" }],
+    }),
+  );
+
+  await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
+  await git.add({ fs, dir: marketplaceRoot, filepath: ".claude-plugin/marketplace.json" });
+  await git.add({
+    fs,
+    dir: marketplaceRoot,
+    filepath: "plugins/formatter/.claude-plugin/plugin.json",
+  });
+  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/formatter/MARKER.txt" });
+  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/app/.claude-plugin/plugin.json" });
+  await git.commit({ fs, dir: marketplaceRoot, message: "release 1.0.0", author: AUTHOR });
+  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
+  await git.tag({ fs, dir: marketplaceRoot, ref: "formatter--v1.0.0", object: tagOid });
+
+  // Advance the checkout PAST the tag: a materialization that read the TAG
+  // instead of the current checkout would be caught by every assertion below.
+  await writeFile(
+    path.join(formatterDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "formatter", version: "2.0.0" }),
+  );
+  await writeFile(path.join(formatterDir, "MARKER.txt"), "current-checkout-content\n");
+  await git.add({
+    fs,
+    dir: marketplaceRoot,
+    filepath: "plugins/formatter/.claude-plugin/plugin.json",
+  });
+  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/formatter/MARKER.txt" });
+  await git.commit({ fs, dir: marketplaceRoot, message: "release 2.0.0", author: AUTHOR });
+
+  return { marketplaceRoot };
+}
+
+test("TAGS-02: a constraint no marketplace tag satisfies still installs both plugins, from the CURRENT checkout", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "path-source-tag-fallback-");
+  const { marketplaceRoot } = await buildNonSatisfyingTagMarketplace(environment.cwd);
+  const before = await marketplaceGitSnapshot(marketplaceRoot);
+  const locations = locationsFor("project", environment.cwd);
+  const addCtx = makeCtx(environment.cwd);
+  const installCtx = makeCtx(environment.cwd);
+  const completionCache = createCompletionCache();
+  const installPlugin = createNodeInstallPlugin(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache,
+  );
+
+  // act: no seam of any kind injected -- the real local probe reports
+  // `no-matching-tag`, and TAGS-02's fallback carries the install through.
+  await addMarketplace({
+    ctx: addCtx.ctx,
+    pi: addCtx.pi,
+    scope: "project",
+    cwd: environment.cwd,
+    completionCache,
+    rawSource: marketplaceRoot,
+  });
+  await installPlugin({
+    ctx: installCtx.ctx,
+    pi: installCtx.pi,
+    scope: "project",
+    cwd: environment.cwd,
+    marketplace: "acme",
+    plugin: "app",
+  });
+
+  // assert: both the dependency and the requesting plugin installed.
+  const state = await loadState(locations.extensionRoot);
+  const formatterRecord = state.marketplaces.acme?.plugins.formatter;
+  const appRecord = state.marketplaces.acme?.plugins.app;
+  assert.ok(
+    formatterRecord !== undefined,
+    `formatter did not install: ${JSON.stringify(installCtx.notifications)}`,
+  );
+  assert.ok(
+    appRecord !== undefined,
+    `app did not install: ${JSON.stringify(installCtx.notifications)}`,
+  );
+
+  // The installed plugin root holds the CURRENT checkout's content, not the
+  // tag's -- there was no tag to satisfy the constraint, so the fallback
+  // installs the marketplace as it stands.
+  const installedPluginJson: unknown = JSON.parse(
+    await readFile(
+      path.join(formatterRecord.resolvedSource, ".claude-plugin", "plugin.json"),
+      "utf8",
+    ),
+  );
+  assert.deepStrictEqual(installedPluginJson, { name: "formatter", version: "2.0.0" });
+  assert.strictEqual(
+    await readFile(path.join(formatterRecord.resolvedSource, "MARKER.txt"), "utf8"),
+    "current-checkout-content\n",
+  );
+
+  // The install record carries the CURRENT checkout's own version, not a tag
+  // pin -- there was no pin.
+  assert.strictEqual(formatterRecord.version, "2.0.0");
+
+  // The marketplace clone's own git state is byte-identical to the pre-install
+  // snapshot -- the fallback resolves through the SAME `marketplaceRoot + raw`
+  // branch an unconstrained install already uses, with no repository mutation.
+  const after = await marketplaceGitSnapshot(marketplaceRoot);
+  assert.deepStrictEqual(after, before);
+});

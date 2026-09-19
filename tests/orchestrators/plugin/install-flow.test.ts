@@ -3113,13 +3113,14 @@ test("RESV-01 / RESV-06: a dependency no marketplace declares fails the install 
   });
 });
 
-test("RESV-03: a dependency whose constraint no release tag satisfies fails the install whole", async () => {
+test("TAGS-02: a dependency whose constraint no release tag satisfies installs the marketplace's current copy instead of failing", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv03-constraint-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-tags02-constraint-"));
     try {
       // arrange: the dependency is declared, seeded and resolvable -- only its
-      // VERSION constraint is unsatisfiable. Its entry is a path source, so it
-      // carries no release tags at all and the constraint can select none.
+      // VERSION constraint is unsatisfiable. Its entry is a path source, so
+      // TAGS-02's fallback applies: the marketplace's current copy installs in
+      // place of a pin, and the whole install succeeds.
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -3129,6 +3130,52 @@ test("RESV-03: a dependency whose constraint no release tag satisfies fails the 
         skills: [{ sourceName: "tool" }],
         declareDependencies: true,
         dependencyVersion: "^2.0.0",
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+
+      // assert: the requesting plugin's own install succeeded, orchestrated
+      // mode emits no notification, and the dependency's record carries its
+      // OWN source version rather than a tag pin -- there was no tag.
+      assert.equal(outcome.status, "installed");
+      assert.deepStrictEqual(notifications, []);
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.version, "0.0.1");
+      assert.equal(after.marketplaces["mp"]?.plugins["some-other-plugin"]?.version, "0.0.1");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RESV-03 regression: an unreadable version constraint still fails the install whole -- TAGS-02 does not touch this arm", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv03-invalid-"));
+    try {
+      // arrange: TAGS-02's fallback is strictly the path-source NO-MATCHING-TAG
+      // and TAG-LISTING-FAILED arms. `range-invalid` is decided in
+      // `resolveOneMember`, before any tag source is even resolved, so it stays
+      // a whole-install failure whatever kind of source the dependency names.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        dependencyVersion: "not-a-version-range",
         siblingPlugins: [{ name: "some-other-plugin" }],
       });
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
@@ -3150,7 +3197,7 @@ test("RESV-03: a dependency whose constraint no release tag satisfies fails the 
       // ledger phase, so state.json and the scope root are byte-identical.
       assertRetryFailure(
         outcome,
-        'Dependency "some-other-plugin@mp" has no release tag satisfying ">=2.0.0 <3.0.0-0".',
+        'Dependency "some-other-plugin@mp" declares an unparseable version constraint "not-a-version-range" (input 1 of 1 is not a valid version range).',
       );
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
@@ -11110,12 +11157,13 @@ test("RESV-06: a dependency its marketplace does not declare is what the block n
   });
 });
 
-test("RESV-03 / RESV-06: an unsatisfiable constraint names the dependency and the range", async () => {
+test("TAGS-02: an unsatisfiable path-source constraint still renders one row per member", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-resv06-constraint-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-tags02-cascade-row-"));
     try {
       // arrange: the dependency resolves; only its VERSION constraint cannot be
-      // satisfied, and a path source carries no release tags to satisfy it with.
+      // satisfied, and its path source's marketplace clone carries no tag that
+      // satisfies it. TAGS-02: the install succeeds anyway.
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -11134,14 +11182,12 @@ test("RESV-03 / RESV-06: an unsatisfiable constraint names the dependency and th
       // assert
       assert.deepStrictEqual(notifications, [
         {
-          severity: "error",
           message: [
-            "Some plugin operations have failed.",
-            "",
             "● mp [project]",
-            "  ⊘ hello (failed) {dependency failed}",
-            "  ⊘ some-other-plugin@mp (failed) {no matching version}",
-            '    cause: Dependency "some-other-plugin@mp" has no release tag satisfying ">=2.0.0 <3.0.0-0".',
+            "  ● hello v0.0.1 (installed)",
+            "  ● some-other-plugin@mp v0.0.1 (installed)",
+            "",
+            "/reload to pick up changes",
           ].join("\n"),
         },
       ]);

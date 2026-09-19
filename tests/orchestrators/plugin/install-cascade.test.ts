@@ -429,6 +429,7 @@ test("a materialized member's outcome carries what its own ledger summary report
       declaresMcp: false,
       pluginRoot: path.join(environment.cwd, "bar-root"),
       hooksConfigPath: "hooks/hooks.json",
+      fellBackToCurrentCopy: false,
     },
     {
       key: `foo@${MARKETPLACE}`,
@@ -440,6 +441,7 @@ test("a materialized member's outcome carries what its own ledger summary report
       declaresMcp: true,
       pluginRoot: path.join(environment.cwd, "unmaterialized"),
       hooksConfigPath: undefined,
+      fellBackToCurrentCopy: false,
     },
   ]);
   assert.strictEqual(
@@ -1135,6 +1137,143 @@ test("TAGS-01 a constrained path-source member pins the highest satisfying marke
   );
 });
 
+test("TAGS-02 / D-07-03 a path-source member with no satisfying tag resolves anyway, with no pin", async (t) => {
+  // arrange: the marketplace's only tag is `bar--v1.0.0`, which does not
+  // satisfy `^9.0.0`.
+  const environment = await createHermeticEnvironment(t, "install-cascade-path-fallback-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
+  await tagMarketplaceRoot(state, "bar--v1.0.0");
+  const bar = closureMember("bar", ["^9.0.0"]);
+  const foo = closureMember("foo");
+
+  // act
+  const resolution = await resolveMemberConstraints({
+    state,
+    closure: [bar, foo],
+    alreadyInstalled: [],
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, []),
+    tagMemo: new Map(),
+  });
+
+  // assert: ok, both members, the fallback member carries no pin.
+  assert.deepStrictEqual(resolution, {
+    ok: true,
+    members: [{ ...bar, fellBackToCurrentCopy: true }, foo],
+  });
+});
+
+test("TAGS-02 / D-07-07 a path-source member whose local listing THROWS resolves anyway, identically", async (t) => {
+  // arrange: the SAME shape as the no-matching-tag case, but the probe's own
+  // listing failed rather than coming back empty of a satisfying candidate.
+  // D-07-07: one fallback arm covers both -- an unreadable listing and an
+  // empty one are the same user-visible fact.
+  const environment = await createHermeticEnvironment(t, "install-cascade-path-throw-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
+  const bar = closureMember("bar", ["^1.0.0"]);
+  const foo = closureMember("foo");
+  const cause = new Error("cannot read refs/tags");
+
+  // act
+  const resolution = await resolveMemberConstraints({
+    state,
+    closure: [bar, foo],
+    alreadyInstalled: [],
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, []),
+    tagMemo: new Map(),
+    marketplaceTagProbe: () => Promise.resolve({ kind: "tag-listing-failed", cause }),
+  });
+
+  // assert: identical to the no-matching-tag case -- no pin, no failure, no
+  // transport classification riding a success row.
+  assert.deepStrictEqual(resolution, {
+    ok: true,
+    members: [{ ...bar, fellBackToCurrentCopy: true }, foo],
+  });
+});
+
+test("TAGS-02 / D-07-07 a path-source member whose marketplace root is not a git repository resolves anyway", async (t) => {
+  // arrange: a real, UNMOCKED probe against a marketplace root with no `.git`
+  // at all -- `listTags` throws, `probeMarketplaceTags` catches it into
+  // `tag-listing-failed`, and the SAME fallback arm applies with no injected
+  // seam of any kind.
+  const environment = await createHermeticEnvironment(t, "install-cascade-path-no-repo-");
+  const marketplaceRoot = path.join(environment.cwd, "not-a-repo");
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.join(marketplaceRoot, "plugins", "bar", ".claude-plugin"), {
+    recursive: true,
+  });
+  await writeFile(
+    path.join(marketplaceRoot, "plugins", "bar", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "bar", version: "0.0.1" }),
+  );
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({ name: MARKETPLACE, plugins: [{ name: "bar", source: "./plugins/bar" }] }),
+  );
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 2,
+    marketplaces: {
+      [MARKETPLACE]: {
+        name: MARKETPLACE,
+        scope: "project",
+        source: pathSource(`./${MARKETPLACE}`),
+        addedFromCwd: environment.cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins: {},
+      },
+    },
+  });
+  const state = await loadState(locations.extensionRoot);
+  const bar = closureMember("bar", ["^1.0.0"]);
+
+  // act
+  const resolution = await resolveMemberConstraints({
+    state,
+    closure: [bar],
+    alreadyInstalled: [],
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, []),
+    tagMemo: new Map(),
+  });
+
+  // assert
+  assert.deepStrictEqual(resolution, {
+    ok: true,
+    members: [{ ...bar, fellBackToCurrentCopy: true }],
+  });
+});
+
+test("TAGS-02 a path-source member WITH a satisfying tag is unaffected: no fallback, pin present", async (t) => {
+  // arrange: 07-01's behaviour must not move.
+  const environment = await createHermeticEnvironment(t, "install-cascade-path-pinned-still-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
+  const oid = await tagMarketplaceRoot(state, "bar--v1.0.0");
+  const bar = closureMember("bar", ["^1.0.0"]);
+  const foo = closureMember("foo");
+
+  // act
+  const resolution = await resolveMemberConstraints({
+    state,
+    closure: [bar, foo],
+    alreadyInstalled: [],
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, []),
+    tagMemo: new Map(),
+  });
+
+  // assert
+  assert.deepStrictEqual(resolution, {
+    ok: true,
+    members: [{ ...bar, pin: { oid, version: "1.0.0" } }, foo],
+  });
+});
+
 test("RESV-03 a path-source dependency declared with no version makes no local tag listing", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-cascade-path-wildcard-");
@@ -1169,6 +1308,47 @@ test("RESV-03 a path-source dependency declared with no version makes no local t
     [],
     "an unconstrained path-source member makes no local tag listing",
   );
+  assert.deepStrictEqual(
+    cascade.kind === "installed" &&
+      cascade.members.find((member) => member.key === `bar@${MARKETPLACE}`)?.fellBackToCurrentCopy,
+    false,
+    "an unconstrained member never falls back -- there was no constraint to fail",
+  );
+});
+
+test("TAGS-02 a cascade run's member outcomes carry fellBackToCurrentCopy per member", async (t) => {
+  // arrange: `bar` falls back (no satisfying tag); `foo`, the requesting
+  // plugin, does not.
+  const environment = await createHermeticEnvironment(t, "install-cascade-outcome-flag-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
+  await tagMarketplaceRoot(state, "bar--v1.0.0");
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^9.0.0" }],
+      [`bar@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, []),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(
+    cascade.kind === "installed" &&
+      cascade.members.map((member) => [member.key, member.fellBackToCurrentCopy]),
+    [
+      [`bar@${MARKETPLACE}`, true],
+      [`foo@${MARKETPLACE}`, false],
+    ],
+  );
 });
 
 test("RESV-03 a constrained dependency whose marketplace entry is npm-sourced reports no matching tag", async (t) => {
@@ -1200,8 +1380,11 @@ test("RESV-03 a constrained dependency whose marketplace entry is npm-sourced re
   });
 });
 
-test("RESV-03 a path-source member's local tag-listing failure classifies through the SAME closed-set classifier", async (t) => {
-  // arrange
+test("TAGS-02 a path-source member's local tag-listing failure resolves anyway, not a cascade failure", async (t) => {
+  // arrange: TAGS-02 supersedes the interim 07-01 behaviour -- a local
+  // read failure is never a transport failure, and it is no longer a cascade
+  // failure of any kind either. It takes the SAME fallback arm the
+  // no-matching-tag case does (D-07-07).
   const environment = await createHermeticEnvironment(t, "install-cascade-path-listing-failed-");
   const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
   const locations = locationsFor("project", environment.cwd);
@@ -1219,22 +1402,17 @@ test("RESV-03 a path-source member's local tag-listing failure classifies throug
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
     installedKeys: new Set(),
     knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, []),
     marketplaceTagProbe: () => Promise.resolve({ kind: "tag-listing-failed", cause }),
   });
 
-  // assert: a plain read error is not a transport failure, so the SAME
-  // classifier the git-backed branch uses answers `undefined` here too --
-  // reusing it rather than inventing a second classifier.
-  assert.deepStrictEqual(cascade, {
-    kind: "constraint-failed",
-    failure: {
-      kind: "tag-listing-failed",
-      key: `bar@${MARKETPLACE}`,
-      range: ">=1.0.0 <2.0.0-0",
-      cause,
-      classification: undefined,
-    },
-  });
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(
+    cascade.kind === "installed" &&
+      cascade.members.find((member) => member.key === `bar@${MARKETPLACE}`)?.fellBackToCurrentCopy,
+    true,
+  );
 });
 
 test("RESV-03 one listing serves two members whose sources share a repository", async (t) => {
@@ -1355,6 +1533,11 @@ test("RESV-03 a listing failure surfaces as its own arm carrying the classified 
   });
 });
 
+// TAGS-02: a path source's own no-matching-tag arm no longer fails the
+// cascade (it falls back to the marketplace's current copy instead), so it is
+// no longer a member of this loop -- see the dedicated TAGS-02 test below.
+// This loop's two remaining cases are both the "absent" tag-source arm, which
+// TAGS-02 does not touch.
 for (const { label, pluginNames, gitSourced, knownMarketplaces, dependencyMarketplace } of [
   {
     label: "a source the snapshot records no marketplace for",
@@ -1366,16 +1549,6 @@ for (const { label, pluginNames, gitSourced, knownMarketplaces, dependencyMarket
   {
     label: "a plugin its own marketplace manifest does not declare",
     pluginNames: ["foo"],
-    gitSourced: [],
-    knownMarketplaces: [MARKETPLACE],
-    dependencyMarketplace: MARKETPLACE,
-  },
-  {
-    // TAGS-01: a path source now DOES have release tags of its own (the
-    // marketplace clone's), so this case's marketplace fixture carries none
-    // rather than never being queried at all.
-    label: "a path source whose marketplace clone carries no matching release tag",
-    pluginNames: ["bar", "foo"],
     gitSourced: [],
     knownMarketplaces: [MARKETPLACE],
     dependencyMarketplace: MARKETPLACE,
@@ -1419,6 +1592,46 @@ for (const { label, pluginNames, gitSourced, knownMarketplaces, dependencyMarket
     );
   });
 }
+
+test("TAGS-02 a path source whose marketplace clone carries no matching release tag installs anyway", async (t) => {
+  // arrange: TAGS-01's precedent test (this loop's former third case) --
+  // `bar` is path-sourced and its own marketplace clone carries no tag at
+  // all, so TAGS-02's fallback applies rather than D-03-09's no-fallthrough
+  // rule, which stays reserved for the git-backed and absent-source arms.
+  const environment = await createHermeticEnvironment(t, "install-cascade-path-own-no-tag-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
+  const locations = locationsFor("project", environment.cwd);
+  const seen: DependencyTagProbeOptions[] = [];
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^1.0.0" }],
+      [`bar@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, []),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, seen),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(
+    cascade.kind === "installed" &&
+      cascade.members.find((member) => member.key === `bar@${MARKETPLACE}`)?.fellBackToCurrentCopy,
+    true,
+  );
+  assert.deepStrictEqual(
+    seen,
+    [],
+    "the network tag probe is never reached: a path source routes through the local marketplace-clone probe instead",
+  );
+});
 
 test("RESV-05 a skipped dependency reports whether the record it rests on is disabled", async (t) => {
   // arrange: `bar` predates the run and its record is DISABLED, so it keeps its
