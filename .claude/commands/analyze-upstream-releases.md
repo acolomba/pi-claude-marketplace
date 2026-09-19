@@ -122,7 +122,7 @@ Produce, in the conversation:
 3. Detail sections for every BREAKING-RISK, ENABLES, and UNBLOCKS-BACKLOG finding.
 4. Recommended next actions, split into: do now / file to backlog / fold into the next milestone.
 
-**Write no files.** Per `CLAUDE.md`, repo edits route through a GSD entry point — so name the one to use rather than editing directly:
+**Write no files.** Per `AGENTS.md`, repo edits route through a GSD entry point — so name the one to use rather than editing directly:
 
 - `/gsd-capture` — a new backlog item or seed
 - `/gsd-quick` — a doc correction (e.g. a stale row in `docs/hooks-compatibility.md`)
