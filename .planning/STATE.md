@@ -5,16 +5,16 @@ milestone_name: transitive-dependencies
 current_phase: 06
 current_phase_name: Load-time dependency check and allowed uninstall
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-09-19T00:25:28.762Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-09-19T01:39:09.348Z"
 last_activity: 2026-09-18
 last_activity_desc: Phase 06 execution started
-state_head: 8a420691a6e7e2e8a166bea8951f3bab5f89023e
+state_head: ca3649c8c07b31254bc01d5893d436dd8635b1eb
 progress:
   total_phases: 12
   completed_phases: 5
   total_plans: 26
-  completed_plans: 23
+  completed_plans: 24
   percent: 42
 ---
 
@@ -37,7 +37,7 @@ under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 06 (Load-time dependency check and allowed uninstall) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 
 **Phases 6-12 were added on 2026-09-18** from
@@ -511,6 +511,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 05 P02 | 54min | 3 tasks | 24 files |
 | Phase 05 P03 | 19 min | 3 tasks | 4 files |
 | Phase 06 P01 | 100 min | 3 tasks | 32 files |
+| Phase 06 P02 | 165min | 3 tasks | 24 files |
 
 ## Accumulated Context
 
@@ -765,6 +766,11 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: D-06-10: planReconcile's verdict parameter is optional, so pending and every convergence proof keep their three-argument call; the default means nothing is held down
 - [Phase 06]: D-06-11: the dependency-disabled outcome carries the rendered remedy and the row's brace, not the structured verdict fields, on the plugin-uninstall-failed cause precedent
 - [Phase 06]: D-06-12: a verdict failure is reported as a (failed) {unreadable} row naming the declarer, suppressed when the pass already reported that plugin
+- [Phase 06]: D-06-13: the out-of-range entry carries the canonical folded range, not the declared text
+- [Phase 06]: D-06-14: a disjoint or cap-tripping range fold is out-of-range, never no-constraint
+- [Phase 06]: D-06-15: the out-of-range row carries its own token, chosen by unsatisfied kind
+- [Phase 06]: D-06-16: the stored dependencyDisabled marker has exactly two readers, both asking what the check already did
+- [Phase 06]: D-06-17: the load-time check's lift propagates through a chain in one pass, mirroring the hold
 
 ### Pending Todos
 
@@ -856,7 +862,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-01-PLAN.md
+**Stopped at:** Completed 06-02-PLAN.md
 
 **Resume file:** None
 `HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
@@ -868,7 +874,7 @@ carried-notes block under `<specifics>`.
 
 **Read beside it:** `.planning/phases/04-install-provenance/04-CONTEXT.md`
 
-Last session: 2026-09-19T00:25:17.084Z
+Last session: 2026-09-19T01:37:19.607Z
 resumed a paused Phase 4 discussion, answered its two open questions (the
 config-write reversal lands entirely in Phase 4 in a fixed order; reconcile
 keeps sweeping genuine orphans with one exemption), wrote `04-CONTEXT.md` and
