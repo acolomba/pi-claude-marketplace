@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -1718,9 +1718,59 @@ void test("materializeMarketplaceTagClone: an unreadable marketplace gitdir clea
       pathSource: pathSource("./plugins/foo"),
       tagOid,
     }),
-    (err: unknown) => err instanceof Error && err.message.includes("ENOENT"),
+    { code: "ENOENT" },
   );
   assert.deepEqual(await stagingEntries(locations), []);
+});
+
+void test("materializeMarketplaceTagClone: a checkout failure that also fails to clean up staging carries the leak annotation (MA-9)", async () => {
+  // arrange
+  const locations = await freshLocations();
+  const marketplaceRoot = await buildMarketplaceCheckout({
+    originUrl: GITHUB_REPO_URL,
+    plugins: [],
+  });
+  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
+  await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+  const checkoutError = new Error("checkout failed");
+  let stagingParent = "";
+  const gitOps: GitOps = {
+    ...DEFAULT_GIT_OPS,
+    checkout: async (options) => {
+      stagingParent = path.dirname(options.dir);
+      // Deny write on the staging dir's parent so cleanupStaging's own `rm`
+      // fails too, forcing appendLeakToError's leak branch instead of its
+      // pass-through branch.
+      await chmod(stagingParent, 0o500);
+      throw checkoutError;
+    },
+  };
+
+  // act
+  let materializeError: unknown;
+  try {
+    await materializeMarketplaceTagClone({
+      locations,
+      marketplaceRoot,
+      marketplaceSource: GITHUB_REPO_URL,
+      marketplaceName: "marketplace",
+      pathSource: pathSource("./plugins/foo"),
+      tagOid,
+      gitOps,
+    });
+  } catch (error) {
+    materializeError = error;
+  } finally {
+    await chmod(stagingParent, 0o700);
+  }
+
+  // assert
+  assert.ok(materializeError instanceof Error);
+  assert.match(
+    materializeError.message,
+    /^checkout failed \(additionally: failed to clean up marketplace tag clone staging at .*: EACCES/,
+  );
+  assert.strictEqual(materializeError.cause, checkoutError);
 });
 
 void test("materializeMarketplaceTagClone: no directory at the path source's relative path resolves the missing-subdir arm (D-07-08)", async () => {
