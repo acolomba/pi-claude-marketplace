@@ -32,6 +32,8 @@
 /.claude/package.json
 /.claude/scripts/*
 /.claude/skills/herdr
+/.claude/skills/humanizer
+/.claude/skills/simple-english
 /.claude/skills/spike-findings-*/
 
 # codex

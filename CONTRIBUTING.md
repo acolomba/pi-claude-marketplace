@@ -43,7 +43,7 @@ pre-commit run --all-files
 
 ## Third-party skills
 
-Every skill lives under `.agents/skills/`, `.claude/skills/` holds symlinks to them, and Pi reads `.agents/skills/` directly. Skills written in this repository are tracked. Skills from other repositories are not: `skills-lock.json` names each one and its source, `.gitignore` excludes its directory, and `./scripts/init.sh` restores it from the lock.
+Every skill lives under `.agents/skills/`, `.claude/skills/` holds symlinks to them, and Pi reads `.agents/skills/` directly. Skills written in this repository are tracked, symlink included. Skills from other repositories are not: `skills-lock.json` names each one and its source, `.gitignore` excludes its directory and its `.claude/skills/` symlink, and `./scripts/init.sh` restores both from the lock.
 
 To add a skill:
 
@@ -52,7 +52,7 @@ npx skills@latest add <owner/repo> -y
 npx skills@latest remove <name> -a pi -y
 ```
 
-The first command copies the skill to `.agents/skills/<name>/`, links it from `.claude/skills/<name>`, and records it in `skills-lock.json`. It also links it from `.pi/skills/`, which would register it twice in Pi, so the second command deletes that link. Then add `/.agents/skills/<name>/` to `.gitignore` and commit the link and the lock.
+The first command copies the skill to `.agents/skills/<name>/`, links it from `.claude/skills/<name>`, and records it in `skills-lock.json`. It also links it from `.pi/skills/`, which would register it twice in Pi, so the second command deletes that link. Then add `/.agents/skills/<name>/` and `/.claude/skills/<name>` to `.gitignore`, the way it's done for `herdr`, and commit the lock.
 
 To update a skill:
 

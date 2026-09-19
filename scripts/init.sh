@@ -33,6 +33,13 @@ if [[ $lock_clean == 1 ]]; then
     git checkout -- skills-lock.json
 fi
 
+# experimental_install only wires agents that read .agents/skills/ directly.
+# Claude Code reads .claude/skills/ instead, so link each locked skill there too.
+mkdir -p .claude/skills
+while IFS= read -r name; do
+    ln -sfn "../../.agents/skills/$name" ".claude/skills/$name"
+done < <(node -e "console.log(Object.keys(require('./skills-lock.json').skills).join('\n'))")
+
 # gsd
 npx --yes @opengsd/gsd-core@latest --install --local --claude --codex --force-statusline
 
