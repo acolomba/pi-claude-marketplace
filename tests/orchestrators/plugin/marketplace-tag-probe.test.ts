@@ -164,13 +164,14 @@ describe("probeMarketplaceTags", () => {
     assert.strictEqual(fake.listTagsCalls.length, 1);
   });
 
-  test("a failed listing drops its memo entry so a later attempt re-lists instead of replaying the error", async () => {
+  test("a failed listing is never memoized, so a later attempt re-lists instead of replaying the error", async () => {
     const err = new Error("transient");
     const failing = createFakeSeam({ listTagsThrows: err });
     const tagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
 
     const first = await probeMarketplaceTags(options({ seam: failing.seam, tagMemo }));
     assert.deepStrictEqual(first, { kind: "tag-listing-failed", cause: err });
+    assert.strictEqual(tagMemo.has(MARKETPLACE_ROOT), false);
 
     const recovered = createFakeSeam({ tagsByName: { "formatter--v1.0.0": "oid-1" } });
     const second = await probeMarketplaceTags(
@@ -183,6 +184,54 @@ describe("probeMarketplaceTags", () => {
       oid: "oid-1",
       version: "1.0.0",
     });
+    assert.strictEqual(recovered.listTagsCalls.length, 1);
+  });
+
+  test("a failure that overlaps a concurrent success does not evict the successful entry", async () => {
+    // The exact race CR-03 named: two probes for the SAME marketplaceRoot
+    // both miss the memo before either finishes; the successful one runs to
+    // completion and SETS the memo FIRST, and only then does the failing one
+    // (which missed the memo before the set happened) reach its own catch.
+    // A `memo.delete` in that catch would remove the entry the success just
+    // wrote.
+    const tagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
+    let releaseFailure: () => void = () => {
+      throw new Error("releaseFailure called before assignment");
+    };
+    const failureGate = new Promise<void>((resolve) => {
+      releaseFailure = resolve;
+    });
+    const failing: MarketplaceTagListingSeam = {
+      listTags: async () => {
+        await failureGate;
+        throw new Error("transient");
+      },
+      resolveTagOid: () => Promise.resolve(""),
+    };
+    const succeeding = createFakeSeam({ tagsByName: { "formatter--v1.0.0": "oid-1" } });
+
+    // Start the failing probe first so it takes the memo-miss branch and then
+    // blocks on `failureGate` -- the successful probe's whole miss/list/set
+    // run completes while the failing one is still in flight.
+    const failPromise = probeMarketplaceTags(options({ seam: failing, tagMemo }));
+    const successResult = await probeMarketplaceTags(
+      options({ seam: succeeding.seam, tagMemo, range: "^1.0.0" }),
+    );
+    assert.strictEqual(successResult.kind, "pinned");
+
+    releaseFailure();
+    const failResult = await failPromise;
+    assert.strictEqual(failResult.kind, "tag-listing-failed");
+
+    // A third probe must hit the memo the successful call wrote -- proving
+    // the later-resolving failure did not evict it.
+    const spy = createFakeSeam();
+    await probeMarketplaceTags(options({ seam: spy.seam, tagMemo }));
+    assert.strictEqual(
+      spy.listTagsCalls.length,
+      0,
+      "the successful entry must survive a concurrent, later-failing probe",
+    );
   });
 
   test("with no seam supplied, falls through to the real listTags/resolveTagOid pair against a real local repository", async (t) => {

@@ -80,9 +80,9 @@ type TagListingOutcome =
  * one cascade list the same clone once.
  *
  * A throw from either the listing or a peel becomes the `tag-listing-failed`
- * arm; nothing escapes. The memo entry is dropped on failure so a later
- * attempt in the same cascade re-lists instead of replaying a transient
- * error -- mirroring `dependency-tag-probe.ts::listCandidateTags`.
+ * arm; nothing escapes. The memo is only ever written on success (never on a
+ * failed attempt), so a later attempt in the same cascade always re-lists
+ * after a failure -- there is no successful entry to evict.
  */
 async function listMarketplaceCandidateTags(
   seam: MarketplaceTagListingSeam,
@@ -107,7 +107,6 @@ async function listMarketplaceCandidateTags(
     memo?.set(marketplaceRoot, candidates);
     return { kind: "listed", tags: candidates };
   } catch (err) {
-    memo?.delete(marketplaceRoot);
     return {
       kind: "tag-listing-failed",
       cause: err instanceof Error ? err : new Error(String(err)),
