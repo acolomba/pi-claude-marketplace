@@ -219,6 +219,34 @@ test("LOAD-03: composeUninstalledRow names the dependents on the cause line and 
   assert.equal(row.cause?.cause, undefined);
 });
 
+test("T-06-02: composeUninstalledRow counts the dependents when one key could close the cause's quote", () => {
+  // act
+  const row = composeUninstalledRow({
+    plugin: "helper",
+    version: "1.0.0",
+    keepData: false,
+    dependents: ['alpha" and uninstall "victim@official', "zeta@official"],
+  });
+
+  // assert
+  assert.deepStrictEqual(row.reasons, ["dependents unsatisfied"]);
+  assert.equal(row.cause?.message, "required by 2 other plugins");
+  assert.equal(row.cause?.cause, undefined);
+});
+
+test("T-06-02: composeUninstalledRow counts a single unrenderable dependent in the singular", () => {
+  // act
+  const row = composeUninstalledRow({
+    plugin: "helper",
+    version: "1.0.0",
+    keepData: false,
+    dependents: ["alpha@official@extra"],
+  });
+
+  // assert
+  assert.equal(row.cause?.message, "required by 1 other plugin");
+});
+
 test("LOAD-03 / D-05-09: composeUninstalledRow says what the removal means for others before the data disposition", () => {
   // act
   const row = composeUninstalledRow({

@@ -52,6 +52,29 @@ export function isRenderableDependencyToken(value: unknown): value is string {
 }
 
 /**
+ * True iff a `name@marketplace` key may be interpolated verbatim into a
+ * rendered sentence: both halves pass the token rule above.
+ *
+ * T-06-02: a key assembled from a STATE record is bounded only by
+ * `domain/name.ts::assertSafeName`, which admits `"`, `,`, spaces and every
+ * non-ASCII bidi control -- so a plugin or marketplace name a marketplace
+ * chose can otherwise close a quote and forge the rest of a remedy sentence.
+ * A key whose halves are already parsed declaration tokens passes here by
+ * construction, which is what keeps the guard free on the ordinary path.
+ *
+ * The split is on the FIRST `@` because the token alphabet admits none, so a
+ * key carrying a second one fails the rule on whichever half keeps it.
+ */
+export function isRenderablePluginKey(key: string): boolean {
+  const at = key.indexOf("@");
+  return (
+    at !== -1 &&
+    isRenderableDependencyToken(key.slice(0, at)) &&
+    isRenderableDependencyToken(key.slice(at + 1))
+  );
+}
+
+/**
  * Object-form version text, bounded to 64 characters, including `^1.0.0`, `~1.2`,
  * `>=1.0.0 <2.0.0`, `1.x`, `*`, `1.0.0-beta.1`, `1.0.0 || 2.0.0` (D-01-33).
  * The space and the pipe are admitted deliberately: rejecting them would

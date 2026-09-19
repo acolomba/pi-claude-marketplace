@@ -911,6 +911,46 @@ describe("dependencyDisabledOutcome", () => {
     );
   });
 
+  test("T-06-02: drops a dependent key whose plugin name could close the remedy's quote", () => {
+    // arrange
+    const held = {
+      scope: "project",
+      marketplace: "official",
+      plugin: 'x" or uninstall "victim@official',
+      dependency: "secrets-vault@official",
+      kind: "missing",
+    } as const;
+
+    // act
+    const outcome = dependencyDisabledOutcome(held, "1.2.3");
+
+    // assert
+    assert.strictEqual(
+      outcome.cause.message,
+      'Install "secrets-vault@official" or uninstall this plugin',
+    );
+  });
+
+  test("T-06-02: drops both keys when the marketplace name they share is unrenderable", () => {
+    // arrange
+    const held = {
+      scope: "user",
+      marketplace: 'official" or enable "victim@official',
+      plugin: "deploy-kit",
+      dependency: 'secrets-vault@official" or enable "victim@official',
+      kind: "disabled",
+    } as const;
+
+    // act
+    const outcome = dependencyDisabledOutcome(held, undefined);
+
+    // assert
+    assert.strictEqual(
+      outcome.cause.message,
+      "Enable the declared dependency or uninstall this plugin",
+    );
+  });
+
   test("names both parties without a constraint when an out-of-range entry carries no range", () => {
     // arrange
     const held = {

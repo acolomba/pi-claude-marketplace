@@ -1,3 +1,4 @@
+import { isRenderablePluginKey } from "../../domain/dependencies.ts";
 import {
   pluginRow,
   renderUninstalledRow,
@@ -153,16 +154,35 @@ function uninstalledRowReasons(
 }
 
 /**
+ * The dependents as the cause line names them: the keys themselves when every
+ * one of them is renderable, and their count when any is not.
+ *
+ * T-06-02: the keys are the holder keys `findDependents` derived from STATE
+ * records, so their halves are bounded only by `domain/name.ts::assertSafeName`
+ * -- which admits `"`, `,`, spaces and bidi controls. Interpolated unchecked,
+ * one hostile name could forge the rest of the sentence, and the cause-chain
+ * renderer neither redacts nor escapes what it prints. The count form drops no
+ * information the operator cannot recover: the next load gives each dependent
+ * its own row.
+ */
+function renderDependents(dependents: readonly string[]): string {
+  if (dependents.every(isRenderablePluginKey)) {
+    return dependents.join(", ");
+  }
+
+  return dependents.length === 1 ? "1 other plugin" : `${dependents.length} other plugins`;
+}
+
+/**
  * The named plugin's success row. It stays an `info` row with its reload stamp
  * whatever the brace says: the uninstall was carried out in full, which is the
  * info arm of the severity model. The consequence for the dependents is not
  * this row's subject -- it is reported at the next load, at warning, by the
  * load-time check, which gives each dependent its own row and the full remedy.
  *
- * T-06-01 / T-06-02: the cause line is built from `name@marketplace` keys
- * whose names already passed `domain/dependencies.ts`'s token pattern, and no
- * nested cause is chained behind it, so no absolute path and no control
- * character can reach the rendered sentence.
+ * T-06-01: the cause line names the dependents through `renderDependents` and
+ * chains no nested cause behind it, so no absolute path and no unchecked name
+ * reaches the rendered sentence.
  */
 export function composeUninstalledRow(args: {
   readonly plugin: string;
@@ -178,7 +198,7 @@ export function composeUninstalledRow(args: {
     name: args.plugin,
     ...(args.version !== undefined && { version: args.version }),
     ...(reasons !== undefined && { reasons }),
-    ...(hasDependents && { cause: new Error(`required by ${args.dependents.join(", ")}`) }),
+    ...(hasDependents && { cause: new Error(`required by ${renderDependents(args.dependents)}`) }),
     // D-03/D-06: realized uninstall transition -> info, reloads Pi resources.
     severity: "info",
     needsReload: true,

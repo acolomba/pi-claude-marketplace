@@ -25,6 +25,7 @@
 
 import path from "node:path";
 
+import { isRenderablePluginKey } from "../../domain/dependencies.ts";
 import { renderConstraintRange } from "../../domain/dependency-range.ts";
 import {
   DependencyCascadeError,
@@ -314,22 +315,39 @@ export interface PluginDependencyDisabledOutcome extends PluginOutcomeBase {
    * refusal: the row renders a sentence the orchestrator composed, and the
    * renderer composes none.
    *
-   * T-06-01: the message is built from `name@marketplace` keys whose names
-   * passed the declaration token pattern, and it chains NO nested cause, so the
-   * renderer's chain walk -- which does not redact on its own -- has no raw
-   * message behind it to print.
+   * T-06-01: every key the message interpolates is cleared by `remedyParty`
+   * first, and it chains NO nested cause, so the renderer's chain walk -- which
+   * does not redact on its own -- has no raw message behind it to print.
    */
   readonly cause: Error;
+}
+
+/**
+ * One party of a remedy sentence: the key in quotes when it is renderable, and
+ * the caller's key-less noun phrase when it is not.
+ *
+ * T-06-02: both keys reach the sentence from a STATE record, so neither is
+ * token-validated by arrival alone. The dependent is
+ * `${plugin}@${marketplace}` of the recorded declarer. The dependency is the
+ * declared name -- token-validated -- joined to a marketplace that is the
+ * declaration's own only when the declaration named one; a declaration that
+ * named none inherits the DECLARING RECORD's marketplace name
+ * (`dependency-index.ts::readRecordDeclarations`), which is bounded only by
+ * `assertSafeName`. `assertSafeName` admits `"`, `,`, spaces and bidi
+ * controls, so an unchecked key could close a quote and forge the rest of the
+ * line, which the cause-chain renderer neither redacts nor escapes.
+ */
+function remedyParty(key: string, keyless: string): string {
+  return isRenderablePluginKey(key) ? `"${key}"` : keyless;
 }
 
 /**
  * The remedy sentence for one unsatisfied declaration, in the three shapes
  * LOAD-01 pins, transcribed from the upstream wording rather than paraphrased.
  *
- * T-06-02: the two interpolated keys are built from names that passed
- * `domain/dependencies.ts`'s token pattern, which admits no control, bidi,
- * ANSI, whitespace or quote character -- so a hostile plugin name cannot forge
- * a row here. T-06-05: a declared range is bounded by `renderConstraintRange`,
+ * Each party is quoted only after `remedyParty` clears it. The row's own
+ * subject already names the held-down plugin, so the key-less form stays
+ * actionable. T-06-05: a declared range is bounded by `renderConstraintRange`,
  * never sliced by hand.
  */
 function dependencyRemedy(held: {
@@ -339,19 +357,20 @@ function dependencyRemedy(held: {
   readonly kind: UnsatisfiedKind;
   readonly range?: string;
 }): string {
-  const dependent = `${held.plugin}@${held.marketplace}`;
+  const dependency = remedyParty(held.dependency, "the declared dependency");
+  const dependent = remedyParty(`${held.plugin}@${held.marketplace}`, "this plugin");
   switch (held.kind) {
     case "missing":
-      return `Install "${held.dependency}" or uninstall "${dependent}"`;
+      return `Install ${dependency} or uninstall ${dependent}`;
     case "disabled":
-      return `Enable "${held.dependency}" or uninstall "${dependent}"`;
+      return `Enable ${dependency} or uninstall ${dependent}`;
     case "out-of-range":
       // The verdict carries a range on this kind. One that arrives without it
       // still names the remedy's two parties, rather than rendering an empty
       // constraint the operator cannot act on.
       return held.range === undefined
-        ? `Update "${held.dependency}" or uninstall "${dependent}"`
-        : `Update "${held.dependency}" to satisfy ${renderConstraintRange(held.range)}, or uninstall "${dependent}"`;
+        ? `Update ${dependency} or uninstall ${dependent}`
+        : `Update ${dependency} to satisfy ${renderConstraintRange(held.range)}, or uninstall ${dependent}`;
   }
 }
 

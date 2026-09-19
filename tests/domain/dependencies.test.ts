@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   isRenderableDependencyToken,
+  isRenderablePluginKey,
   parseDeclaredDependencies,
   type DeclaredDependency,
 } from "../../extensions/pi-claude-marketplace/domain/dependencies.ts";
@@ -36,6 +37,32 @@ describe("isRenderableDependencyToken", () => {
 
       // act
       const renderable = isRenderableDependencyToken(name);
+
+      // assert
+      assert.equal(renderable, expected);
+    });
+  }
+});
+
+describe("isRenderablePluginKey", () => {
+  for (const { label, key, expected } of [
+    { label: "a key whose halves are both tokens", key: "helper@utils-mp", expected: true },
+    { label: "a key carrying no address separator", key: "helper", expected: false },
+    { label: "a key with an empty name half", key: "@utils-mp", expected: false },
+    { label: "a key with an empty marketplace half", key: "helper@", expected: false },
+    { label: "a key with a second address separator", key: "helper@utils@mp", expected: false },
+    { label: "a key whose name quotes and comments", key: 'x" or y@mp', expected: false },
+    {
+      label: "a key whose marketplace reverses the line",
+      // Built rather than written: a repository hook forbids a literal bidi
+      // control character in tracked source.
+      key: `helper@mp${String.fromCodePoint(0x202e)}`,
+      expected: false,
+    },
+  ]) {
+    test(`${label} is ${expected ? "" : "not "}a renderable plugin key`, () => {
+      // act
+      const renderable = isRenderablePluginKey(key);
 
       // assert
       assert.equal(renderable, expected);
