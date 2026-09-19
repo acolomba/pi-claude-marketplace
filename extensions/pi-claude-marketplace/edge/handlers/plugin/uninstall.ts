@@ -1,7 +1,7 @@
 // edge/handlers/plugin/uninstall.ts
 //
 // Thin-shim handler factory for
-// `/claude:plugin uninstall <plugin>@<marketplace> [--scope user|project]`.
+// `/claude:plugin uninstall <plugin>@<marketplace> [--scope user|project] [--local]`.
 // Identical shim shape as install.ts; delegates to `uninstallPlugin`.
 
 import { createUninstallOperation } from "../../../orchestrators/plugin/operations.ts";

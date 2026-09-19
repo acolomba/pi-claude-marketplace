@@ -92,7 +92,8 @@ const agentsReplacementInternals = new WeakMap<
  *   6. Safety-check previous targets (AG-5 foreign-content SOFT-FAIL)
  *   7. Write staged files into <extensionRoot>/agents-staging/<uuid>/
  *   8. Build new index entries
- *   9. Aggregate warnings + index corruptions
+ *   9. Assemble the result (warnings are aggregated, unlabeled, between
+ *      steps 4 and 5)
  */
 export async function prepareStagePluginAgents(
   ops: RemovalOps,
@@ -211,12 +212,13 @@ export async function prepareStagePluginAgents(
   // Step 7: write staged files into <extensionRoot>/agents-staging/<uuid>/.
   const stagingDir = path.join(locations.agentsStagingDir, randomUUID());
   await mkdir(stagingDir, { recursive: true });
-  await assertPathInside(locations.agentsStagingDir, stagingDir, "agents staging dir");
 
   const stagedFilePaths: { from: string; to: string }[] = [];
   const newEntries: AgentsIndexEntry[] = [];
 
   try {
+    await assertPathInside(locations.agentsStagingDir, stagingDir, "agents staging dir");
+
     for (const c of converted) {
       const stagedFile = path.join(stagingDir, c.generatedName + ".md");
       await assertPathInside(stagingDir, stagedFile, "staged agent file");
@@ -366,7 +368,7 @@ export async function commitPreparedAgents(
   // Step 2: mkdir <scopeRoot>/agents/ + sequential rename staged -> target.
   // TR-01: Sequential so we can track completed renames and reverse them on
   // a partial failure -- mirrors the rollback shape in
-  // `rollbackReplacementCommon` (shared/fs-utils.ts:135-177): spread-before-
+  // `rollbackReplacementCommon` (shared/fs-utils.ts:270-312): spread-before-
   // reverse to avoid in-place mutation, per-pair try/catch into a leaks[]
   // string array, and the rollback loop NEVER throws.
   const completedRenames: { from: string; to: string }[] = [];
@@ -483,7 +485,7 @@ export async function replacePreparedAgents(
     }
 
     // TR-06: 3-arm policy at the rename loop. ownedNames is the basename
-    // membership set derived from state.json (via _previousEntries). When
+    // membership set derived from agents-index.json (via _previousEntries). When
     // a pre-existing target shares an owned basename, it is treated as an
     // orphan from a prior partial install and pre-removed via the
     // kind-strict helper. Foreign content (basename NOT in ownedNames)

@@ -201,8 +201,15 @@ function main() {
   const { excused, outstanding } = applyExceptions(analyzed.findings, exceptions);
   // `members` and `counts` are left exactly as the analyzer measured them, so a
   // recorded decision never moves the population. Only `findings`, which is what
-  // the exit status answers for, is narrowed.
-  const report = { ...analyzed, findings: outstanding, exceptions: excused };
+  // the exit status answers for, is narrowed. `status` is recomputed against
+  // `outstanding` too, since `analyzed.status` was derived from the pre-exception
+  // findings and would otherwise go stale once exceptions clear them.
+  const report = {
+    ...analyzed,
+    status: outstanding.length === 0 ? "clean" : "findings",
+    findings: outstanding,
+    exceptions: excused,
+  };
 
   if (options.json) {
     process.stdout.write(`${JSON.stringify(report, undefined, 2)}\n`);

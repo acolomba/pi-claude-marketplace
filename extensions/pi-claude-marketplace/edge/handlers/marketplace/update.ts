@@ -1,7 +1,7 @@
 // edge/handlers/marketplace/update.ts
 //
 // Thin-shim handler factory for
-// `/claude:plugin marketplace update [<name>] [--scope user|project]`.
+// `/claude:plugin marketplace update [<name>] [--scope user|project] [--local]`.
 //
 // Two forms via optional positional:
 //   - bare    -> updateAllMarketplaces

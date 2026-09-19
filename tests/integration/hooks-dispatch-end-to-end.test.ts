@@ -10,9 +10,11 @@
 //   3. Survive the sequential per-scope rebuild loop without wiping
 //   4. Invoke the executor on the captured handler when session_start fires
 //
-// Regression gate for the cross-scope wipe (commit 2dbbcbd) and for any
-// future change that would make the boot loop fail to populate the
-// routing table for a user-scope plugin when the project scope is empty.
+// Regression gate for the cross-scope wipe and for any future change that
+// would make the boot loop fail to populate the routing table for a
+// user-scope plugin when the project scope is empty. The boot loop lives in
+// rebuildRoutingTablesWith() / collectAllCachedPlugins() in
+// bridges/hooks/event-router.ts.
 //
 // Test shape: real on-disk state.json + hooks.json, real cache + rebuild,
 // composite-handler dispatch routed through the `executor` injected into

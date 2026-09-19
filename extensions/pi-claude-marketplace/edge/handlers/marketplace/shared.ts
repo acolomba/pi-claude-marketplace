@@ -25,10 +25,11 @@ import type { Scope } from "../../../shared/types.ts";
  * OPTIONAL slot (`removeMarketplace`'s `cascade?`) stays assignable, because
  * parameter contravariance asks only that this shape satisfy the delegate's.
  *
- * RECON-03: orchestrators may return a typed outcome in orchestrated mode. The
- * edge handler omits `notifications`, so the standalone-mode void return is
- * exercised; `Promise<unknown>` keeps the return unconstrained for any future
- * orchestrators added to this shim.
+ * RECON-03: orchestrators may return a typed outcome in orchestrated mode.
+ * `GetMarketplaceInfoOptions` (today's only instantiation) has no
+ * `notifications` field yet, so only the standalone-mode void return is
+ * exercised; `Promise<unknown>` keeps the return unconstrained for a future
+ * orchestrator added to this shim that does add one.
  */
 export type SingleNameMarketplaceRun = (opts: GetMarketplaceInfoOptions) => Promise<unknown>;
 

@@ -2,28 +2,28 @@
   "schemaVersion": 1,
   "contracts": [
     {
-      "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:526:51",
+      "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:528:51",
       "owner": "replacement",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within AgentsReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:526:22"
+      "filter": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:528:22"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:575:45",
+      "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:577:45",
       "owner": "requireAgentsReplacementInternals.replacement",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within AgentsReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:575:16"
+      "filter": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:577:16"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:587:46",
+      "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:589:46",
       "owner": "rollbackAgentsReplacementInternal.prepared",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within PreparedAgentsStaging by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:587:13"
+      "filter": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:589:13"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:75:32",
@@ -782,40 +782,40 @@
       "clause": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts:52:5"
     },
     {
-      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:99:9",
+      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:98:9",
       "owner": "marketplaces",
       "key": "name",
       "category": "external-output",
       "purpose": "Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:113:29",
-      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:116:7"
+      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:112:29",
+      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:115:7"
     },
     {
-      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:100:9",
+      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:99:9",
       "owner": "marketplaces",
       "key": "scope",
       "category": "external-output",
       "purpose": "Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:113:48",
-      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:116:7"
+      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:112:48",
+      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:115:7"
     },
     {
-      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:101:9",
+      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:100:9",
       "owner": "marketplaces",
       "key": "pluginCount",
       "category": "external-output",
       "purpose": "Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:113:55",
-      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:116:7"
+      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:112:55",
+      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:115:7"
     },
     {
-      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:102:9",
+      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:101:9",
       "owner": "marketplaces",
       "key": "source",
       "category": "external-output",
       "purpose": "Built into the marketplace-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:113:68",
-      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:116:7"
+      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:112:68",
+      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:115:7"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts:55:3",
@@ -861,22 +861,22 @@
       "checked": "extensions/pi-claude-marketplace/index.ts:90:5"
     },
     {
-      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:139:3",
+      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:138:3",
       "owner": "PluginRow",
       "key": "marketplace",
       "category": "external-output",
       "purpose": "Built into the plugin-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:386:9",
-      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:473:7"
+      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:385:9",
+      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:472:7"
     },
     {
-      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:140:3",
+      "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:139:3",
       "owner": "PluginRow",
       "key": "scope",
       "category": "external-output",
       "purpose": "Built into the plugin-list tool payload and returned to the installed tool declaration, which is what the calling agent reads; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:387:9",
-      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:473:7"
+      "origin": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:386:9",
+      "boundary": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:472:7"
     }
   ]
 }

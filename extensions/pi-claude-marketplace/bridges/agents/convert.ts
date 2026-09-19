@@ -13,6 +13,8 @@
 // their exact converted output.
 
 import { generatedSkillName } from "../../domain/name.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import { escapeRegExp } from "../../shared/regexp.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
@@ -178,7 +180,10 @@ function detectSkillTokens(
     let generated: string | null;
     try {
       generated = generatedSkillName(pluginName, candidate);
-    } catch {
+    } catch (err) {
+      hookDebugLog(
+        `generatedSkillName rejected body-scan candidate "${candidate}" for token "${token}": ${errorMessage(err)}`,
+      );
       generated = null;
     }
 
@@ -437,19 +442,24 @@ function mapSkills(
     // separators, and control characters. A warn-drop must never become a
     // throw -- catch the validator instead of enumerating its conditions,
     // so every unsafe token (qualified remainder or bare) falls through to
-    // the unknown-reference drop below.
+    // the malformed-reference drop below.
     let generated: string | null;
+    let malformed = false;
     try {
       generated = generatedSkillName(pluginName, effective);
-    } catch {
+    } catch (err) {
+      hookDebugLog(`generatedSkillName rejected skill token "${token}": ${errorMessage(err)}`);
       generated = null;
+      malformed = true;
     }
 
+    // The warning names the FULL original token (qualifier included) so
+    // the user can find it verbatim in the source frontmatter.
     if (generated !== null && known.has(generated)) {
       emit.push(generated);
+    } else if (malformed) {
+      warnings.push(`malformed skill reference "${token}" -- dropped`);
     } else {
-      // The warning names the FULL original token (qualifier included) so
-      // the user can find it verbatim in the source frontmatter.
       warnings.push(`unknown skill reference "${token}" -- dropped`);
     }
   }

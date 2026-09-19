@@ -279,7 +279,7 @@ export async function forceUpdateRef(opts: ForceUpdateRefOptions): Promise<void>
  * mistakenly using the HEAD SHA as a ref name (which produced a
  * meaningless `refs/<40-hex>` write).
  *
- * Source: node_modules/isomorphic-git/index.d.ts:1266 currentBranch
+ * Source: node_modules/isomorphic-git/index.d.ts:1283-1289 currentBranch
  * returns Promise<string | void>; we normalize void -> undefined.
  */
 export async function currentBranch(opts: CurrentBranchOptions): Promise<string | undefined> {

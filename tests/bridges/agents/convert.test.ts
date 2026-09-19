@@ -794,9 +794,9 @@ Review files.
   test("warn-drops malformed skill metadata and ignores malformed body tokens", () => {
     // arrange
     const expectedWarnings = [
-      'unknown skill reference "spec-tree:" -- dropped',
-      'unknown skill reference "spec-tree:sub/skill" -- dropped',
-      'unknown skill reference "spec-tree:a\tb" -- dropped',
+      'malformed skill reference "spec-tree:" -- dropped',
+      'malformed skill reference "spec-tree:sub/skill" -- dropped',
+      'malformed skill reference "spec-tree:a\tb" -- dropped',
     ];
 
     // act

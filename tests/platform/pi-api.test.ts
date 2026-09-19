@@ -25,7 +25,8 @@ interface ToolDeclaration {
 type Same<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
 
 /**
- * The peer's root `exports` map publishes only `.`, and its `dist/index.d.ts`
+ * The peer's root `exports` map publishes four entries -- `.`, `./rpc-entry`,
+ * `./client`, `./experimental/plugin` -- and its `dist/index.d.ts`
  * re-export list omits `ResourcesDiscoverEvent` and `ResourcesDiscoverResult`.
  * That omission is why `platform/pi-api.ts` mirrors both by hand, and it is why
  * the two pins below reach the installed declarations by a route rather than by

@@ -32,10 +32,10 @@ import type { GitCredentials } from "./git.ts";
  * Structurally identical to `domain/github-auth.ts::DeviceFlowResult`.
  * Declared LOCALLY in the platform tier so this module honors the
  * platform → domain import prohibition (`platform/README.md`: platform/
- * may import from shared/ and sibling platform/ files only). The
- * orchestrators pass `initiateDeviceFlow` directly as `onAuthRequired` and
- * TypeScript's structural typing accepts the assignment with no adapter --
- * no shared type declaration is needed across tiers.
+ * may import from shared/ only). `orchestrators/auth-host.ts` wraps
+ * `initiateDeviceFlow` in a memoizing closure and passes that closure as
+ * `onAuthRequired`; TypeScript's structural typing accepts the assignment
+ * with no adapter -- no shared type declaration is needed across tiers.
  */
 export type AuthAttemptResult =
   | { ok: true; cred: GitCredentials; authAttempted: true }

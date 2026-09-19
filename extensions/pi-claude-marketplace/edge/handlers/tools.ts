@@ -11,12 +11,11 @@
 //      (PL-1 union semantics). Returns rendered text + structured
 //      `details.plugins`.
 //
-// BLOCK C: this file imports only from orchestrators/, presentation/, shared/
-// (plus the edge sibling `args-schema.ts` -- not used here -- and the typebox
-// runtime). The structured loaders `loadVisibleMarketplaces` and
-// `loadPluginListPayload` were added to their respective orchestrators in
-// this plan precisely to keep the tool execute bodies on the right side of
-// the import boundary.
+// BLOCK C: this file imports only from domain/ (source.ts), orchestrators/,
+// shared/, and platform/ (types), plus the typebox runtime. The structured
+// loaders `loadVisibleMarketplaces` and `loadPluginListPayload` were added
+// to their respective orchestrators in this plan precisely to keep the tool
+// execute bodies on the right side of the import boundary.
 //
 // BLOCK A: tools do NOT call ctx.ui.notify. LLM tools return
 // `AgentToolResult` -- the agent surfaces results via its own UI channel,

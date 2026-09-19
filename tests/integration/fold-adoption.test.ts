@@ -324,7 +324,7 @@ test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is 
     // The adoption invariant: NO state mutation was required; the
     // renderer surfaces both blocks based on the current state.
     //
-    // Catalog reference: lines 174-184 ("single marketplace, mixed plugin
+    // Catalog reference: lines 192-213 ("single marketplace, mixed plugin
     // statuses") -- (available) rows OMIT the [<scope>] bracket per
     // MSG-PL-6 carve-out.
     assert.match(afterOutput, /● official-project \[project\]/);

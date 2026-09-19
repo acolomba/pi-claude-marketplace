@@ -8,10 +8,10 @@
 // `/claude:plugin disable <plugin>@<marketplace> [--scope user|project] [--local]`.
 //
 // Mirrors the `makeAutoupdateHandler` shape: a single factory parameterized by
-// `enable: boolean` returns the per-subcommand handler. Parses
-// `<plugin>@<marketplace>` + `--scope` via `parseRequiredPluginMarketplaceRef`,
-// then scans the residual argv for `--local`. Rejects unknown long flags via
-// `notifyUsageError`.
+// `enable: boolean` returns the per-subcommand handler. Scans the argv for
+// `--local` first, then parses the residue for `<plugin>@<marketplace>` +
+// `--scope` via `parseRequiredPluginMarketplaceRef`. Rejects unknown long
+// flags via `notifyUsageError`.
 
 import { createEnableOperation } from "../../../orchestrators/plugin/operations.ts";
 import { errorMessage } from "../../../shared/errors.ts";

@@ -3,12 +3,14 @@
  * `git credential fill/approve/reject` via node:child_process.spawn.
  *
  * REJECTED: `pi.exec` from @earendil-works/pi-coding-agent -- verified at
- * node_modules/@earendil-works/pi-coding-agent/dist/core/exec.js:12 to use
+ * node_modules/@earendil-works/pi-coding-agent/dist/core/exec.js:15 to use
  * `stdio: ["ignore", ...]`. git credential REQUIRES stdin.
  *
- * D-21: this is the ONLY file in
+ * D-21: this is one of three files in
  * extensions/pi-claude-marketplace/ permitted to import node:child_process
- * (whitelist asserted in tests/architecture/no-shell-out.test.ts).
+ * (whitelist asserted in tests/architecture/no-shell-out.test.ts; the other
+ * two are bridges/hooks/dispatch-exec.ts and
+ * bridges/hooks/async-rewake/registry.ts).
  *
  * Failure-mode contract: when git is absent from PATH, the
  * subprocess spawn emits ENOENT. `credentialFill` catches and returns null;
@@ -34,6 +36,9 @@
  */
 
 import { spawn } from "node:child_process";
+
+import { hookDebugLog } from "../shared/debug-log.ts";
+import { errorMessage } from "../shared/errors.ts";
 
 import type { GitCredentials } from "./git.ts";
 
@@ -285,7 +290,11 @@ async function credentialApprove(
   const input = buildAttributeBlock(host, cred);
   try {
     await runGitCredential("approve", input);
-  } catch {
+  } catch (err) {
+    hookDebugLog(
+      `credentialApprove: git credential approve threw for ${host}: ${errorMessage(err)}`,
+      "auth",
+    );
     return;
   }
 }
@@ -306,7 +315,11 @@ async function credentialReject(
   const input = buildAttributeBlock(host, cred);
   try {
     await runGitCredential("reject", input);
-  } catch {
+  } catch (err) {
+    hookDebugLog(
+      `credentialReject: git credential reject threw for ${host}: ${errorMessage(err)}`,
+      "auth",
+    );
     return;
   }
 }
