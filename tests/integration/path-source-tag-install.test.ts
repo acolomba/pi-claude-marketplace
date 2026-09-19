@@ -583,16 +583,22 @@ test("TAGS-02: a constraint no marketplace tag satisfies still installs both plu
   // pin -- there was no pin.
   assert.strictEqual(formatterRecord.version, "2.0.0");
 
-  // The row names the fallback as a quiet info note.
+  // WR-05: the row names the fallback and raises to warning -- the
+  // requesting plugin installed against a dependency at an unverified
+  // version.
   assert.deepStrictEqual(installCtx.notifications, [
     {
-      message: [
-        "● acme [project]",
-        "  ● app v1.0.0 (installed)",
-        "  ● formatter@acme v2.0.0 (installed) {dependency current copy}",
-        "",
-        "/reload to pick up changes",
-      ].join("\n"),
+      message:
+        "A plugin operation needs attention.\n" +
+        "\n" +
+        [
+          "● acme [project]",
+          "  ● app v1.0.0 (installed)",
+          "  ● formatter@acme v2.0.0 (installed) {dependency current copy}",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      severity: "warning",
     },
   ]);
 

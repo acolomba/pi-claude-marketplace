@@ -212,15 +212,20 @@ export function composeCascadeMemberRows(args: {
       name: member.key,
       dependencies: stagedDependencies(member),
       version: member.version,
-      // TAGS-02 / D-07-03: the fallback names itself on the row but never
-      // touches severity -- that stays exactly what `companionSeverity`
-      // computes, so a member with an unloaded companion still reports the
-      // genuine SEV-01 degradation the fallback must not paper over.
+      // TAGS-02 / D-07-03 / WR-05: the requesting plugin installed against a
+      // dependency at an unverified version -- the same shape `skipSeverity`
+      // already raises to `warning` for a non-idempotent skip reason, so the
+      // fallback raises the same way rather than reporting at the same
+      // severity as a clean, fully-constrained install. `companionSeverity`'s
+      // range tops out at `warning` too, so this never UNDER-reports a
+      // member that also carries an unloaded-companion degradation.
       ...(member.fellBackToCurrentCopy && { reasons: ["dependency current copy"] as const }),
-      severity: companionSeverity(
-        { declaresAgents: member.declaresAgents, declaresMcp: member.declaresMcp },
-        args.probe,
-      ),
+      severity: member.fellBackToCurrentCopy
+        ? "warning"
+        : companionSeverity(
+            { declaresAgents: member.declaresAgents, declaresMcp: member.declaresMcp },
+            args.probe,
+          ),
       needsReload: true,
     });
   }

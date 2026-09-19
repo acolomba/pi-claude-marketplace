@@ -298,7 +298,7 @@ describe("composeCascadeMemberRows", () => {
     });
   });
 
-  test("TAGS-02 / D-07-03 a member that fell back to the marketplace's current copy names it as a quiet note", () => {
+  test("WR-05: a member that fell back to the marketplace's current copy names itself and raises to warning", () => {
     // arrange
     const rows = composeCascadeMemberRows({
       scope: "user",
@@ -317,7 +317,11 @@ describe("composeCascadeMemberRows", () => {
     // would fail the assertion.
     assert.ok(installedRow?.status === "installed");
     assert.deepStrictEqual(installedRow.reasons, ["dependency current copy"]);
-    assert.strictEqual(installedRow.severity, "info");
+    // WR-05: the requesting plugin installed against a dependency at an
+    // unverified version -- the same non-idempotent shape `skipSeverity`
+    // raises to `warning` for a skip, so this raises the same way rather
+    // than reading as a clean, fully-constrained install.
+    assert.strictEqual(installedRow.severity, "warning");
     // the requesting plugin's own row is untouched.
     assert.deepStrictEqual(rootRow, ROOT_ROW);
   });
