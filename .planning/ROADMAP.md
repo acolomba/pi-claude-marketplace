@@ -145,7 +145,10 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 1. The complete quality, unit, integration, and applicable e2e gates pass, with aggregate unit production coverage at 100%.
 2. Every authorized item has verified implementation or a current disposition agreed here; archives and completed work are preserved.
 
-**Plans:** To be planned after discussion and live investigation.
+**Plans:** 2 plans
+
+- [ ] 08-01-PLAN.md — Run every gate fresh at the phase HEAD as separate processes and record 08-MEASUREMENT.md (sections 1 to 7)
+- [ ] 08-02-PLAN.md — Close FLOW-05, SWTEST-01, the Phase 6 todo and the STATE.md row additively, write the item reconciliation (section 8), and advance REQUIREMENTS, ROADMAP and STATE by hand
 
 ## Progress
 
@@ -158,4 +161,4 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 | 5. Production Export Ownership | 28/28 | Complete | 2026-09-15 |
 | 6. Unused Type Member Gate | 17/17 | Complete | 2026-09-17 |
 | 7. Reliable Coverage Metrics | 8/8 | Complete    | 2026-09-18 |
-| 8. Final Verification and Reconciliation | 0/TBD | Not started | - |
+| 8. Final Verification and Reconciliation | 0/2 | Not started | - |
