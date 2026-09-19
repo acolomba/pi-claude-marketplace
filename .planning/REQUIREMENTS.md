@@ -84,9 +84,13 @@ New scope. Consumes PROV.
 - [x] **PRUNE-05**: `uninstall` refuses to remove a plugin that another
   installed plugin in the same scope still declares, and names the dependents.
   (Folded into Phase 5 by the operator on 2026-09-16; D-05-14..16.
-  **Superseded by LOAD-03 on 2026-09-18:** the refusal is retired for upstream
-  parity; the dependents are named on the row and reported unsatisfied at the
-  next load instead.)
+  **Superseded by LOAD-03 in Phase 6 on 2026-09-18:** the refusal is retired
+  for upstream parity; the dependents are named on the row and reported
+  unsatisfied at the next load instead. D-05-14 and D-05-15 are superseded in
+  full. Of D-05-16 only the dependents arm is: its refuse-and-retry loop on the
+  reconcile path survives, because the fail-closed unreadable-declarer refusal
+  D-05-07 still reaches it. The supersession record is
+  `.planning/phases/06-load-time-dependency-check-and-allowed-uninstall/06-04-SUMMARY.md`.)
 - [ ] **PRUNE-06**: A standalone `prune` removes the dependency-installed
   plugins that no installed plugin in the scope declares, without uninstalling
   anything else, and says which ones it removed.
@@ -121,16 +125,16 @@ Parity with the upstream load-time check (`dependency-unsatisfied`,
 declarations after install; a dependency can be uninstalled or disabled
 underneath its dependent and the dependent keeps loading.
 
-- [ ] **LOAD-01**: At load, an installed plugin whose declared dependency is
+- [x] **LOAD-01**: At load, an installed plugin whose declared dependency is
   missing, disabled, or outside the declared range is disabled and reported
   with a remedy that names the dependency and the dependent (`Install "X" or
   uninstall "Y"`, `Enable "X" or uninstall "Y"`, `Update "X" to satisfy R, or
   uninstall "Y"`).
-- [ ] **LOAD-02**: The load-time disable is a consequence the config does not
+- [x] **LOAD-02**: The load-time disable is a consequence the config does not
   express: reconcile keeps the dependent disabled while the dependency stays
   unsatisfied, does not oscillate, and lifts the disable once the dependency is
   installed, enabled and in range.
-- [ ] **LOAD-03**: `uninstall <plugin>` proceeds while other installed plugins
+- [x] **LOAD-03**: `uninstall <plugin>` proceeds while other installed plugins
   in the scope still declare it; the row names the dependents, and each becomes
   unsatisfied at the next load. Supersedes PRUNE-05 and the reload-path
   refusal.
@@ -267,9 +271,9 @@ this milestone.
 | DATA-02 | Phase 2 | Complete |
 | DATA-03 | Phase 2 | Complete |
 | FLAG-01 | Phase 5 | Complete |
-| LOAD-01 | Phase 6 | Pending |
-| LOAD-02 | Phase 6 | Pending |
-| LOAD-03 | Phase 6 | Pending |
+| LOAD-01 | Phase 6 | Complete |
+| LOAD-02 | Phase 6 | Complete |
+| LOAD-03 | Phase 6 | Complete |
 | TAGS-01 | Phase 7 | Pending |
 | TAGS-02 | Phase 7 | Pending |
 | TAGS-03 | Phase 7 | Pending |

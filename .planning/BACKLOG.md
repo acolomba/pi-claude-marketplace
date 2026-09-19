@@ -3015,8 +3015,25 @@ remove` unstages every plugin under the marketplace through
 `cascadeUnstagePlugin` directly and never reaches `uninstallPlugin`, so it
 carries no dependents guard: a plugin in ANOTHER marketplace that depends on
 one of the removed plugins is left dangling. PRUNE-05 names `uninstall`, so
-this is a recorded decision, not an omission -- and the bypass is currently
-the documented exit for the two-stale-records scenario (D-05-07), which any
-guard here must keep open. Scope when picked up: read the scope's
-declaration index before the removal and refuse (or report) on the same
-`dependents remain` row, with a cause line naming the dependents.
+this is a recorded decision, not an omission -- and the bypass is the
+documented exit for the two-stale-records scenario (D-05-07), which any change
+here must keep open. That scenario is less pressing than it was, because the
+deadlock it worked around (two plugins each refusing the other's uninstall)
+was itself removed with the refusal.
+
+**Re-triaged in Phase 6 on 2026-09-18 (LOAD-03 / D-06-07), still OPEN.** The
+gap is real and unchanged: `marketplace remove` still strands dependents in
+other marketplaces without consulting the declaration index. What changed is
+the outcome, not the gap. The dependents are now REPORTED at the next load --
+the load-time check disables each of them with its own remedy row -- instead
+of being prevented by a refusal. The original scope is no longer reachable:
+the `dependents remain` row and the refusal it belonged to are retired.
+
+Scope when picked up, restated: this is now a reporting question, not a guard
+question. Should `marketplace remove` name the dependents it is about to
+strand on its own row, given that the next reload reports them anyway with a
+full remedy? The trade is one emission that tells the user immediately against
+one that states the same fact twice across two commands -- the same trade
+LOAD-03 already settled for the reconcile-driven uninstall, which deliberately
+carries no dependents brace for exactly this reason. Refusing the removal is
+NOT on the table: it would re-introduce the deadlock this phase removed.
