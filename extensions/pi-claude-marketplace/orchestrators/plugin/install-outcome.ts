@@ -985,6 +985,20 @@ async function runInstallLedgerBody(
         // The disable branch sets it to false; the enable branch re-runs
         // statePhase (via runInstallLedger), which resets it to true here.
         enabled: true,
+        // LOAD-02: `dependencyDisabled` is DELIBERATELY not named here, and the
+        // omission is load-bearing. This literal REBUILDS the record rather
+        // than spreading it, so a field it does not name is dropped -- and that
+        // drop IS the clear of the load-time check's marker. The enable branch
+        // reaches this phase, so a dependent whose dependency became satisfied
+        // comes back live with no marker left claiming the check still holds it
+        // down. Do not "fix" this literal by carrying the field through from
+        // `existing`: a stale marker would make the planner read a live record
+        // as one it is still responsible for. The reverse asymmetry is
+        // deliberate too -- `clonePluginRecord` and `toDisabledRecord`
+        // (`persistence/state-io.ts`) both PRESERVE the marker, because a
+        // snapshot restored after a failed operation and a record a user then
+        // disables are not re-materializations, and losing it there would let
+        // a held-down record read as a disable the user asked for.
         // D-04-01 / ENBL-02: a KEPT record's provenance rides through the
         // enable branch, which hand-builds its options with
         // `allowExistingRecord` and never names the field -- falling back

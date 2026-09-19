@@ -140,6 +140,14 @@ function recordReinstalledOutcome(
     resources,
     ...(input.hookEntries !== undefined && { hookEntries: [...input.hookEntries] }),
     enabled: true,
+    // LOAD-02: `dependencyDisabled` is DELIBERATELY not named here, exactly as
+    // it is not named at the install ledger's state phase. This literal rebuilds
+    // the record from `oldRecord` field by field, so the field's absence is what
+    // clears the load-time check's marker on a plugin that is live again. Do not
+    // carry it forward from `oldRecord`: a stale marker on a re-materialized
+    // record would read as a hold the check still owns. The rollback path is the
+    // deliberate opposite -- it restores a `clonePluginRecord` snapshot, which
+    // PRESERVES the marker, because a restore puts the record back as it was.
     // D-04-01: a reinstall replaces the artifacts, not the reason the plugin
     // is here -- the old record's provenance carries forward with installedAt.
     // D-04-07 names `install` alone as the verb that promotes a dependency the

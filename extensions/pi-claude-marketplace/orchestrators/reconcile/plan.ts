@@ -64,7 +64,7 @@ import type {
   ReconcilePlan,
 } from "./types.ts";
 import type { MergedConfig } from "../../persistence/config-merge.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -614,6 +614,30 @@ function claimedPluginKeys(
 }
 
 /**
+ * LOAD-02: whether the check has ALREADY put this record in the state it would
+ * otherwise plan.
+ *
+ * A record that is disabled AND carries the check's own marker is the terminal
+ * state of a consequence-disable this check performed. Planning that disable
+ * again would put the scope in the plan on every reload and make the apply step
+ * re-drive a no-op through the enablement seam, which is the user-visible half
+ * of the oscillation LOAD-02 forbids: a reload over an unchanged tree must be
+ * silent.
+ *
+ * This is the ONLY place the stored marker is read. It answers "did the check
+ * already do this", never "should the check keep doing this" -- the second
+ * question belongs to the live verdict alone, and answering it from the marker
+ * is what would make the lift impossible.
+ *
+ * A record disabled WITHOUT the marker is not in this state: it is the user's
+ * own disable, or a disable from before the marker existed, and it stays in the
+ * bucket so the apply step reaches its ordinary already-disabled no-op.
+ */
+function isAlreadyDependencyDisabled(record: PluginInstallRecord): boolean {
+  return record.dependencyDisabled === true && isRecordedButDisabled(record);
+}
+
+/**
  * LOAD-01: turns the precomputed verdict into the held-down bucket.
  *
  * One entry per held-down declarer, carrying the FIRST unsatisfied declaration
@@ -649,7 +673,7 @@ function buildDependencyDisableBucket(
       parsed === undefined
         ? undefined
         : state.marketplaces[parsed.marketplace]?.plugins[parsed.plugin];
-    if (parsed === undefined || record === undefined) {
+    if (parsed === undefined || record === undefined || isAlreadyDependencyDisabled(record)) {
       continue;
     }
 
