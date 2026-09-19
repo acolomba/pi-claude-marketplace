@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import * as fs from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+
+import * as git from "isomorphic-git";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
@@ -38,6 +41,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts";
 import type {
   CascadeConstraintFailure,
+  CascadeMarketplaceTagProbe,
   CascadeTagProbe,
   InstallCascadeLedgerSeam,
   InstallCascadeOptions,
@@ -49,6 +53,10 @@ import type {
   InstallLedgerSummary,
   InstallLedgerTransaction,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
+import type {
+  MarketplaceTagProbeOptions,
+  MarketplaceTagProbeResult,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { RemoteTag } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -140,6 +148,27 @@ async function seedMarketplace(
     }),
   );
 
+  // TAGS-01: a path-source member's constraint resolves against its
+  // marketplace clone's own local tags, so the fixture marketplace is a real
+  // (initially tag-less) git repository, matching what a marketplace root
+  // actually is in production.
+  await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
+  await git.add({ fs, dir: marketplaceRoot, filepath: ".claude-plugin/marketplace.json" });
+  for (const name of pluginNames) {
+    await git.add({
+      fs,
+      dir: marketplaceRoot,
+      filepath: `plugins/${name}/.claude-plugin/plugin.json`,
+    });
+  }
+
+  await git.commit({
+    fs,
+    dir: marketplaceRoot,
+    message: "seed marketplace",
+    author: { name: "test", email: "test@example.com" },
+  });
+
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
   await saveState(locations.extensionRoot, {
@@ -174,6 +203,23 @@ async function seedMarketplace(
   });
 
   return loadState(locations.extensionRoot);
+}
+
+/** Overwrites one plugin's `source` field on a `seedMarketplace` fixture's manifest.json. */
+async function overwriteManifestPluginSource(
+  cwd: string,
+  name: string,
+  source: unknown,
+): Promise<void> {
+  const manifestPath = path.join(cwd, MARKETPLACE, ".claude-plugin", "marketplace.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    name: string;
+    plugins: { name: string; source: unknown }[];
+  };
+  manifest.plugins = manifest.plugins.map((entry) =>
+    entry.name === name ? { ...entry, source } : entry,
+  );
+  await writeFile(manifestPath, JSON.stringify(manifest));
 }
 
 /**
@@ -1026,6 +1072,171 @@ test("RESV-03 a satisfiable range pins the member and the pin reaches its ledger
   );
 });
 
+/** Creates lightweight tags at the fixture marketplace's own current HEAD. */
+async function tagMarketplaceRoot(state: ExtensionState, ...tagNames: string[]): Promise<string> {
+  const marketplaceRoot = state.marketplaces[MARKETPLACE]?.marketplaceRoot;
+  assert.ok(marketplaceRoot !== undefined, "the fixture records the marketplace it seeds");
+  const oid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
+  for (const tagName of tagNames) {
+    await git.tag({ fs, dir: marketplaceRoot, ref: tagName, object: oid });
+  }
+
+  return oid;
+}
+
+/** A local marketplace-tag probe that records every query it was handed and answers the same way. */
+function marketplaceTagProbeAnswering(
+  answer: MarketplaceTagProbeResult,
+  seen: MarketplaceTagProbeOptions[],
+): CascadeMarketplaceTagProbe {
+  return (options) => {
+    seen.push(options);
+    return Promise.resolve(answer);
+  };
+}
+
+test("TAGS-01 a constrained path-source member pins the highest satisfying marketplace tag", async (t) => {
+  // arrange: the REAL local probe, wired through the whole cascade with no
+  // injected stand-in -- this is the tracer slice end to end.
+  const environment = await createHermeticEnvironment(t, "install-cascade-path-pin-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
+  const oid = await tagMarketplaceRoot(state, "bar--v1.0.0", "bar--v2.1.0", "bar--v3.0.0");
+  const locations = locationsFor("project", environment.cwd);
+  const materialized: InstallLedgerOptions[] = [];
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^2.0.0" }],
+      [`bar@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, materialized),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(
+    materialized.map((options) => [
+      options.plugin,
+      options.sourcePinOverride,
+      options.pinVersionOverride,
+    ]),
+    [
+      ["bar", oid, "2.1.0"],
+      ["foo", undefined, undefined],
+    ],
+    "the path-source member installs at the highest satisfying marketplace tag and records its own semver",
+  );
+});
+
+test("RESV-03 a path-source dependency declared with no version makes no local tag listing", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-cascade-path-wildcard-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
+  await tagMarketplaceRoot(state, "bar--v1.0.0");
+  const locations = locationsFor("project", environment.cwd);
+  const seen: MarketplaceTagProbeOptions[] = [];
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar" }],
+      [`bar@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, []),
+    marketplaceTagProbe: marketplaceTagProbeAnswering(
+      { kind: "no-matching-tag", range: "unreachable" },
+      seen,
+    ),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(
+    seen,
+    [],
+    "an unconstrained path-source member makes no local tag listing",
+  );
+});
+
+test("RESV-03 a constrained dependency whose marketplace entry is npm-sourced reports no matching tag", async (t) => {
+  // arrange: neither git-backed nor path -- the fallthrough absent arm of
+  // resolveMemberTagSource.
+  const environment = await createHermeticEnvironment(t, "install-cascade-npm-source-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
+  await overwriteManifestPluginSource(environment.cwd, "bar", { source: "npm", package: "bar" });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^1.0.0" }],
+      [`bar@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.deepStrictEqual(cascade, {
+    kind: "constraint-failed",
+    failure: { kind: "no-matching-tag", key: `bar@${MARKETPLACE}`, range: ">=1.0.0 <2.0.0-0" },
+  });
+});
+
+test("RESV-03 a path-source member's local tag-listing failure classifies through the SAME closed-set classifier", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-cascade-path-listing-failed-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
+  const locations = locationsFor("project", environment.cwd);
+  const cause = new Error("cannot read tags");
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^1.0.0" }],
+      [`bar@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    marketplaceTagProbe: () => Promise.resolve({ kind: "tag-listing-failed", cause }),
+  });
+
+  // assert: a plain read error is not a transport failure, so the SAME
+  // classifier the git-backed branch uses answers `undefined` here too --
+  // reusing it rather than inventing a second classifier.
+  assert.deepStrictEqual(cascade, {
+    kind: "constraint-failed",
+    failure: {
+      kind: "tag-listing-failed",
+      key: `bar@${MARKETPLACE}`,
+      range: ">=1.0.0 <2.0.0-0",
+      cause,
+      classification: undefined,
+    },
+  });
+});
+
 test("RESV-03 one listing serves two members whose sources share a repository", async (t) => {
   // arrange: the REAL probe behind a counting listing seam, so the memo the
   // cascade threads is the thing under test rather than a stand-in for it.
@@ -1160,7 +1371,10 @@ for (const { label, pluginNames, gitSourced, knownMarketplaces, dependencyMarket
     dependencyMarketplace: MARKETPLACE,
   },
   {
-    label: "a source that is not git-backed and so carries no release tags",
+    // TAGS-01: a path source now DOES have release tags of its own (the
+    // marketplace clone's), so this case's marketplace fixture carries none
+    // rather than never being queried at all.
+    label: "a path source whose marketplace clone carries no matching release tag",
     pluginNames: ["bar", "foo"],
     gitSourced: [],
     knownMarketplaces: [MARKETPLACE],
@@ -1198,7 +1412,11 @@ for (const { label, pluginNames, gitSourced, knownMarketplaces, dependencyMarket
       kind: "constraint-failed",
       failure: { kind: "no-matching-tag", key: dependencyKey, range: ">=1.0.0 <2.0.0-0" },
     });
-    assert.deepStrictEqual(seen, [], "there is no repository to query");
+    assert.deepStrictEqual(
+      seen,
+      [],
+      "the network tag probe is never reached: the source is absent, or (TAGS-01) a path source routes through the local marketplace-clone probe instead",
+    );
   });
 }
 

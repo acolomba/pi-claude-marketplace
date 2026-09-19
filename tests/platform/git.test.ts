@@ -16,8 +16,10 @@ import {
   listBranches,
   listRemotes,
   listRemoteTags,
+  listTags,
   resolveRef,
   resolveRemoteRef,
+  resolveTagOid,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 
 import { createCredentialOpsFake } from "./credential-ops-fake.ts";
@@ -1223,6 +1225,146 @@ describe("listRemoteTags", () => {
         },
       },
     ]);
+  });
+});
+
+describe("listTags", () => {
+  test("lists tag names against a real local repository with no network call", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await git.tag({ fs, dir: repository.dir, ref: "v1.0.0", object: repository.initialOid });
+    const secondOid = await repository.commit(
+      [{ filepath: "second.txt", contents: "second\n" }],
+      "second",
+    );
+    await git.tag({ fs, dir: repository.dir, ref: "v2.0.0", object: secondOid });
+
+    // act
+    const tags = await listTags({ dir: repository.dir });
+
+    // assert
+    assert.deepStrictEqual([...tags].sort(), ["v1.0.0", "v2.0.0"]);
+  });
+
+  test("a repository with no tags yields an empty list", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+
+    // act
+    const tags = await listTags({ dir: repository.dir });
+
+    // assert
+    assert.deepStrictEqual(tags, []);
+  });
+});
+
+describe("resolveTagOid", () => {
+  test("a lightweight tag resolves to the commit it points at", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await git.tag({ fs, dir: repository.dir, ref: "v1.0.0", object: repository.initialOid });
+
+    // act
+    const oid = await resolveTagOid({ dir: repository.dir, name: "v1.0.0" });
+
+    // assert
+    assert.strictEqual(oid, repository.initialOid);
+  });
+
+  test("an annotated tag resolves to the commit it points at, not the tag object's own oid", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await git.annotatedTag({
+      fs,
+      dir: repository.dir,
+      ref: "v2.0.0",
+      message: "release 2.0.0",
+      object: repository.initialOid,
+      tagger: {
+        name: "Git contract",
+        email: "git-contract@example.invalid",
+        timestamp: 1_700_000_100,
+        timezoneOffset: 0,
+      },
+    });
+    const tagObjectOid = await git.resolveRef({ fs, dir: repository.dir, ref: "refs/tags/v2.0.0" });
+    assert.notStrictEqual(tagObjectOid, repository.initialOid);
+
+    // act
+    const oid = await resolveTagOid({ dir: repository.dir, name: "v2.0.0" });
+
+    // assert
+    assert.strictEqual(oid, repository.initialOid);
+  });
+
+  test("a tag pointing at neither a commit nor another tag returns its own oid so the caller can drop it", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const blobOid = await git.writeBlob({
+      fs,
+      dir: repository.dir,
+      blob: new Uint8Array(Buffer.from("hello")),
+    });
+    await git.annotatedTag({
+      fs,
+      dir: repository.dir,
+      ref: "blob-tag",
+      message: "blob-tag",
+      object: blobOid,
+      tagger: {
+        name: "Git contract",
+        email: "git-contract@example.invalid",
+        timestamp: 1_700_000_200,
+        timezoneOffset: 0,
+      },
+    });
+    const tagObjectOid = await git.resolveRef({
+      fs,
+      dir: repository.dir,
+      ref: "refs/tags/blob-tag",
+    });
+
+    // act
+    const oid = await resolveTagOid({ dir: repository.dir, name: "blob-tag" });
+
+    // assert
+    assert.strictEqual(oid, tagObjectOid);
+  });
+
+  test("a tag-of-tag chain longer than the peel bound stops instead of looping forever", async (t) => {
+    // arrange: MAX_TAG_PEEL_HOPS + 1 nested annotated tags, each pointing at
+    // the previous tag's own object oid; only the innermost points at a
+    // commit. Fully resolving needs one more hop than the bound allows.
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    let pointsAt = repository.initialOid;
+    let outermostName = "";
+    for (let hop = 0; hop < 11; hop += 1) {
+      const name = `chain-${hop.toString()}`;
+      // Sequential by necessity: each tag must point at the previous one's
+      // resolved oid.
+      await git.annotatedTag({
+        fs,
+        dir: repository.dir,
+        ref: name,
+        message: name,
+        object: pointsAt,
+        tagger: {
+          name: "Git contract",
+          email: "git-contract@example.invalid",
+          timestamp: 1_700_000_300 + hop,
+          timezoneOffset: 0,
+        },
+      });
+      pointsAt = await git.resolveRef({ fs, dir: repository.dir, ref: `refs/tags/${name}` });
+      outermostName = name;
+    }
+
+    // act
+    const oid = await resolveTagOid({ dir: repository.dir, name: outermostName });
+
+    // assert: the bound stopped the peel before it fully unwound to the
+    // commit -- proof the loop terminated rather than looping forever.
+    assert.notStrictEqual(oid, repository.initialOid);
   });
 });
 

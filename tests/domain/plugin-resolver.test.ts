@@ -17,6 +17,7 @@ import {
   resolveStrict,
 } from "../../extensions/pi-claude-marketplace/domain/plugin-resolver.ts";
 import { PluginShapeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { resolveGitSubdirRoot } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 import type {
@@ -2406,6 +2407,109 @@ test("PURL-01: path source is unchanged -- marketplaceRoot escape check still fi
   assert.strictEqual(resolvedPlugin.state, "unavailable");
   assert.ok(
     resolvedPlugin.notes.some((n) => n.includes("escapes marketplace root")),
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+});
+
+/**
+ * Build a ResolveContext whose `resolvePathPluginRoot` returns a fixed result
+ * for a pinned path source. Mirrors `gitCtx` above, for the path branch.
+ */
+function pathPinCtx(
+  result: GitPluginRootResult,
+  files: Record<string, "dir" | "file" | { contents: string }> = { [CLONE_ROOT]: "dir" },
+  pin = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+): ResolveContext {
+  return {
+    ...resolveContext(marketplaceRoot, files),
+    resolvePathPluginRoot(): Promise<GitPluginRootResult> {
+      return Promise.resolve(result);
+    },
+    pathPluginPin: pin,
+  };
+}
+
+test("D-07-06: a pinned path source + materialized callback -> installable carrying the callback's pluginRoot", async () => {
+  // arrange
+  const context = pathPinCtx({
+    kind: "materialized",
+    pluginRoot: CLONE_ROOT,
+    resolvedSha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./plugins/formatter" }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "installable",
+    `notes if not installable: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+  if (resolvedPlugin.state === "installable") {
+    assert.strictEqual(resolvedPlugin.pluginRoot, CLONE_ROOT);
+  }
+});
+
+test("D-07-07: a pinned path source whose raw walks out of the materialized clone root resolves unavailable with the escape note, even though the same raw would have been contained under the live marketplace root", async () => {
+  // arrange: `deepMarketplaceRoot` is nested deep enough that "../nested/sibling"
+  // resolves back INSIDE it (an unpinned resolution would succeed); the
+  // materialized clone root is shallower, so the identical raw walks outside
+  // it. Containment is a property of the (root, relative-path) pair, and the
+  // root changes for a pinned install -- the callback runs its OWN
+  // clone-root-anchored check here, not a marketplaceRoot-based one.
+  const deepMarketplaceRoot = "/abs/marketplace/nested";
+  const cloneRoot = "/abs/plugin-clones/deadbeef00-cafef00dba";
+  const pin = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+  const rawWithinDeepRoot = "../nested/sibling";
+  // Sanity check on the claim above: resolved against the DEEP marketplace
+  // root the raw stays contained (this is what an unpinned resolution would
+  // use), while resolved against the shallower clone root it does not.
+  assert.strictEqual(
+    path.resolve(deepMarketplaceRoot, rawWithinDeepRoot),
+    path.join(deepMarketplaceRoot, "sibling"),
+  );
+  assert.ok(!path.resolve(cloneRoot, rawWithinDeepRoot).startsWith(`${cloneRoot}${path.sep}`));
+
+  const context: ResolveContext = {
+    ...resolveContext(deepMarketplaceRoot, {
+      [path.resolve(deepMarketplaceRoot, rawWithinDeepRoot)]: "dir",
+    }),
+    resolvePathPluginRoot: async (source): Promise<GitPluginRootResult> => {
+      const r = await resolveGitSubdirRoot(cloneRoot, source.raw);
+      return r.kind === "materialized" ? { ...r, resolvedSha: pin } : r;
+    },
+    pathPluginPin: pin,
+  };
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: rawWithinDeepRoot }), context);
+
+  // assert
+  assert.strictEqual(resolvedPlugin.state, "unavailable");
+  assert.ok(
+    resolvedPlugin.notes.some((n) => n.includes("escapes")),
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+});
+
+test("D-07-06: a pinned path source + not-cached callback -> unavailable (never carries pluginRoot)", async () => {
+  // arrange
+  const context = pathPinCtx({ kind: "not-cached" });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./plugins/formatter" }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(resolvedPlugin.state, "unavailable");
+  assert.ok(
+    resolvedPlugin.notes.includes("not installed"),
     `notes: ${resolvedPlugin.notes.join(" / ")}`,
   );
 });

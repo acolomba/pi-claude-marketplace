@@ -47,6 +47,7 @@ import type {
   GitBackedSource,
   GitHubSource,
   GitSubdirSource,
+  PathSource,
   UrlSource,
 } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -606,4 +607,79 @@ export async function resolveGitPluginRootWithSubdir(
   }
 
   return { kind: "materialized", pluginRoot: cloneRoot, resolvedSha };
+}
+
+/**
+ * D-07-01 / D-07-04 (07-marketplace-repo-tag-resolution): materialize a
+ * marketplace-local release tag's tree into `plugin-clones/<key>/`, without
+ * ever mutating the marketplace clone's own working tree, HEAD, or index.
+ *
+ * Construction (D-07-04, developer-confirmed): copy-then-checkout, the SAME
+ * construction `seedOnePluginMirror` already uses for the structurally
+ * identical problem. The tag is checked out inside a COPY's own gitdir, never
+ * against a `gitdir` naming the marketplace clone -- verified against the
+ * installed isomorphic-git source that a checkout writes `${gitdir}/index`
+ * regardless of `noUpdateHead`, which would silently desync the marketplace
+ * clone's own index. Copying `.git` along with the tree means every index
+ * read and write lands on the copy; the marketplace clone is never opened by
+ * any git API at all.
+ *
+ * Keying: `pluginCloneKey(marketplaceUrl, tagOid)`, the SAME key shape a
+ * pinned git-source clone uses, so `clone-gc.ts::deriveLiveCloneKeys` needs no
+ * new logic to protect this directory. `marketplaceUrl` is derived through
+ * the EXISTING `deriveMarketplaceUrl` (reused, not reinvented); a marketplace
+ * checkout with no discoverable origin remote (RESEARCH assumption A2) still
+ * needs a derivable key, so the URL half falls back to the marketplace's own
+ * recorded name.
+ *
+ * Unlike `seedSameRepoPluginMirrors`' best-effort sweep, a materialization
+ * failure here PROPAGATES to the install -- there is no "install the current
+ * checkout instead" fallback in this arm; that is TAGS-02, plan 07-02's job.
+ */
+export async function materializeMarketplaceTagClone(args: {
+  locations: ScopedLocations;
+  marketplaceRoot: string;
+  marketplaceSource: unknown;
+  marketplaceName: string;
+  pathSource: PathSource;
+  tagOid: string;
+  gitOps?: GitOps;
+}): Promise<GitPluginRootResult> {
+  const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
+  // D-08-12: this verb owns a staging lifecycle, so it is the composition root
+  // that constructs the removal operations its cleanup and promotion paths run
+  // through.
+  const removalOps = createRemovalOps();
+
+  const marketplaceUrl =
+    (await deriveMarketplaceUrl(args.marketplaceSource, args.marketplaceRoot)) ??
+    `marketplace-name:${args.marketplaceName}`;
+  const key = pluginCloneKey(marketplaceUrl, args.tagOid);
+  const dest = await args.locations.pluginCloneDir(key);
+
+  // A present key dir is a byte-equivalent warm cache (same key => same tag
+  // content): no re-copy, no re-checkout.
+  if (!(await pathExists(dest))) {
+    const staging = await args.locations.sourcesStagingDir(randomUUID());
+    await mkdir(path.dirname(staging), { recursive: true });
+    // Copy the working tree AND `.git` -- the checkout below runs against
+    // this copy's own gitdir, never the marketplace clone's.
+    await cp(args.marketplaceRoot, staging, { recursive: true });
+
+    try {
+      await gitOps.checkout({ dir: staging, ref: args.tagOid });
+    } catch (err) {
+      const leak = await cleanupStaging(removalOps, staging, "marketplace tag clone staging");
+      throw appendLeakToError(err, leak);
+    }
+
+    await promoteStagingToClone(removalOps, staging, dest, "marketplace tag clone staging");
+  }
+
+  const rootResult = await resolveGitSubdirRoot(dest, args.pathSource.raw);
+  if (rootResult.kind !== "materialized") {
+    return rootResult;
+  }
+
+  return { kind: "materialized", pluginRoot: rootResult.pluginRoot, resolvedSha: args.tagOid };
 }

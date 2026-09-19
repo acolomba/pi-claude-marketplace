@@ -366,9 +366,19 @@ function resolveDefaultEnabled(
 /**
  * PURL-01 / PURL-03: derive the pluginRoot for an already-supported source kind.
  *
- * - `path`: resolve under `marketplaceRoot` and run the NFR-10 escape check
- *   VERBATIM (regression-critical -- a `../escape` path source resolves
- *   `unavailable` with the marketplace-root escape note).
+ * - `path`, pinned (`ctx.resolvePathPluginRoot` AND `ctx.pathPluginPin` both
+ *   present, D-07-06): delegate to the callback and switch on its
+ *   discriminated result exactly like the git branch below -- `materialized`
+ *   carries the pin-anchored pluginRoot (containment is enforced INSIDE the
+ *   callback against ITS OWN clone root, not `marketplaceRoot`, because the
+ *   root changes for a pinned install); `escapes` / `missing-subdir` carry
+ *   their structural detail; `not-cached` reports the plugin is not
+ *   installed.
+ * - `path`, unpinned (either field absent): resolve under `marketplaceRoot`
+ *   and run the NFR-10 escape check VERBATIM (regression-critical -- a
+ *   `../escape` path source resolves `unavailable` with the
+ *   marketplace-root escape note; also the back-compat path for `list` /
+ *   `info`, which construct a `ResolveContext` with neither field).
  * - `url` / `git-subdir` / `github`: delegate to `ctx.resolveGitPluginRoot`.
  *   Absent callback => `unavailable` (path-only back-compat). Otherwise switch
  *   on the discriminated result: `materialized` carries the clone-anchored
@@ -388,6 +398,25 @@ async function deriveSourcePluginRoot(
   { kind: "ok"; pluginRoot: string } | { kind: "unavailable"; result: ResolvedPluginUnavailable }
 > {
   if (parsedSource.kind === "path") {
+    if (ctx.resolvePathPluginRoot !== undefined && ctx.pathPluginPin !== undefined) {
+      const r = await ctx.resolvePathPluginRoot(parsedSource, ctx.pathPluginPin);
+      switch (r.kind) {
+        case "materialized":
+          return { kind: "ok", pluginRoot: r.pluginRoot };
+        case "escapes":
+        case "missing-subdir":
+          return {
+            kind: "unavailable",
+            result: unavailable(entry.name, [...partial.notes, r.detail]),
+          };
+        case "not-cached":
+          return {
+            kind: "unavailable",
+            result: unavailable(entry.name, [...partial.notes, `not installed`]),
+          };
+      }
+    }
+
     const pluginRoot = path.resolve(ctx.marketplaceRoot, parsedSource.raw);
     const escapeReason = await sourceEscapeReason(ctx, pluginRoot, parsedSource.raw);
     if (escapeReason !== undefined) {

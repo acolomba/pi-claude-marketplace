@@ -30,10 +30,8 @@
 // The failure arm carries the classified transport cause and the rendered
 // range only.
 
-import { gt, valid } from "semver";
-
 import { canonicalCloneUrl } from "../../domain/clone-key.ts";
-import { recordedVersionSatisfies, renderConstraintRange } from "../../domain/dependency-range.ts";
+import { RELEASE_TAG_SEPARATOR, selectHighestSatisfyingTag } from "../../domain/release-tag.ts";
 import { ensureGitSuffix } from "../../domain/source.ts";
 import { listRemoteTags } from "../../platform/git.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
@@ -43,18 +41,6 @@ import type { GitBackedSource } from "../../domain/source.ts";
 import type { RemoteTag } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-
-/**
- * The separator the plugin-release tooling places between a plugin's name and
- * its version in a release tag: `formatter--v1.2.0` is release `1.2.0` of
- * `formatter`.
- *
- * A convention of that tooling, NOT a git standard. A source repository that
- * does not follow it advertises no tag this probe considers and reports no
- * matching tag, which is the expected answer for most third-party sources
- * today rather than a defect in the repository or here.
- */
-const RELEASE_TAG_SEPARATOR = "--v";
 
 /** The tag-listing operation this probe reaches the network through. */
 export interface DependencyTagListingSeam {
@@ -109,9 +95,6 @@ const REAL_DEPENDENCY_TAG_LISTING_SEAM: DependencyTagListingSeam = Object.freeze
   listRemoteTags,
 });
 
-/** The pinned arm alone, so candidate selection can carry one around. */
-type PinnedTag = Extract<DependencyTagProbeResult, { kind: "pinned" }>;
-
 /** A listing that succeeded, or the failure arm it produced instead. */
 type TagListingOutcome =
   | { readonly kind: "listed"; readonly tags: readonly RemoteTag[] }
@@ -152,54 +135,6 @@ async function listCandidateTags(request: TagListingRequest): Promise<TagListing
       classification: classifyGitTransportFailure(err),
     };
   }
-}
-
-/**
- * Reads one advertised tag as a pin for this dependency, or as nothing.
- *
- * The prefix test is what keeps the probe from resolving an arbitrary unpinned
- * ref: a tag that does not carry THIS dependency's own release prefix is never
- * a candidate, however satisfying a version its name may otherwise contain. A
- * remainder that is not a version is skipped rather than failing the probe,
- * because an unrelated naming scheme in the same repository is not an error.
- */
-function readPinCandidate(tag: RemoteTag, prefix: string, range: string): PinnedTag | undefined {
-  if (!tag.name.startsWith(prefix)) {
-    return undefined;
-  }
-
-  const version = valid(tag.name.slice(prefix.length));
-  if (version === null || !recordedVersionSatisfies(version, range)) {
-    return undefined;
-  }
-
-  return { kind: "pinned", tag: tag.name, oid: tag.oid, version };
-}
-
-/**
- * Picks the highest-versioned satisfying tag, or reports that none satisfies.
- *
- * The satisfaction test is `domain/dependency-range.ts`'s, not a second
- * evaluator: one module owns what it means for a version to satisfy a range,
- * whether that version was recorded for an installed plugin or read off a tag.
- */
-function selectHighestSatisfyingTag(
-  tags: readonly RemoteTag[],
-  prefix: string,
-  range: string,
-): DependencyTagProbeResult {
-  let highest: PinnedTag | undefined;
-  for (const tag of tags) {
-    const candidate = readPinCandidate(tag, prefix, range);
-    if (
-      candidate !== undefined &&
-      (highest === undefined || gt(candidate.version, highest.version))
-    ) {
-      highest = candidate;
-    }
-  }
-
-  return highest ?? { kind: "no-matching-tag", range: renderConstraintRange(range) };
 }
 
 /**

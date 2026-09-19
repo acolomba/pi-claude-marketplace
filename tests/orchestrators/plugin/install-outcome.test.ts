@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
 import { mkdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+
+import * as git from "isomorphic-git";
 
 import { canonicalCloneUrl } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -1161,4 +1164,156 @@ test("the callback reaches the real clone probe through the ledger's own cache, 
   // A path source needs no credential, so the device flow is threaded but
   // never consulted.
   assert.deepStrictEqual(deviceFlow.calls.requestCode, []);
+});
+
+test("TAGS-01/03 (D-07-06/07): a pinned path-source install records the tag's own semver and its commit oid", async (t) => {
+  // arrange: the entry names a default path source (no gitSource), the shape
+  // a marketplace-relative dependency declares. The cascade would set both
+  // overrides together from ONE member.pin -- this drives the ledger the same
+  // way, directly.
+  const environment = await createHermeticEnvironment(t, "install-outcome-path-pin-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  const marketplaceRoot = seeded.state.marketplaces.marketplace?.marketplaceRoot;
+  assert.ok(marketplaceRoot !== undefined, "the fixture records the marketplace it seeds");
+  const probed: unknown[] = [];
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    sourcePinOverride: RESOLVED_SHA,
+    pinVersionOverride: "2.1.0",
+    pathPinProbe: (options) => {
+      probed.push(options);
+      return Promise.resolve({
+        kind: "materialized",
+        pluginRoot: seeded.pluginRoot,
+        resolvedSha: RESOLVED_SHA,
+      });
+    },
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.resolved.pluginRoot, seeded.pluginRoot);
+  // RESV-05: the tag's own semver, never a git-source sha-<12hex> form.
+  assert.equal(ledgerOutcome.summary.version, "2.1.0");
+  const record = seeded.state.marketplaces.marketplace?.plugins.empty;
+  assert.equal(record?.version, "2.1.0");
+  assert.equal(record?.resolvedSha, RESOLVED_SHA);
+  assert.deepStrictEqual(probed, [
+    {
+      locations,
+      marketplaceRoot,
+      marketplaceSource: pathSource("./marketplace"),
+      marketplaceName: "marketplace",
+      pathSource: { kind: "path", raw: "./plugins/empty", logical: "./plugins/empty" },
+      tagOid: RESOLVED_SHA,
+    },
+  ]);
+});
+
+test("an unpinned path-source install threads neither pathPluginPin nor resolvePathPluginRoot", async (t) => {
+  // arrange: no `sourcePinOverride`, so the unpinned path is byte-identical to
+  // today -- the ordinary marketplaceRoot-anchored resolution runs, and a
+  // `pathPinProbe` that would otherwise reveal itself must never be reached.
+  const environment = await createHermeticEnvironment(t, "install-outcome-path-unpinned-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    pathPinProbe: () =>
+      Promise.reject(new Error("an unpinned path install must never probe a tag")),
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.resolved.pluginRoot, seeded.pluginRoot);
+});
+
+test("D-07-06: with no pathPinProbe override, a pinned path-source install falls through to the real materializeMarketplaceTagClone", async (t) => {
+  // arrange: a real git repository standing in for the marketplace clone, so
+  // the DEFAULT `opts.pathPinProbe ?? materializeMarketplaceTagClone` right
+  // side is what runs, not a test double.
+  const environment = await createHermeticEnvironment(t, "install-outcome-path-pin-real-");
+  const seeded = await seedPlugin(environment.cwd);
+  const marketplaceRoot = seeded.state.marketplaces.marketplace?.marketplaceRoot;
+  assert.ok(marketplaceRoot !== undefined, "the fixture records the marketplace it seeds");
+  await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
+  await git.add({ fs, dir: marketplaceRoot, filepath: "." });
+  await git.commit({
+    fs,
+    dir: marketplaceRoot,
+    message: "release 1.0.0",
+    author: { name: "test", email: "test@example.com" },
+  });
+  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
+  await git.tag({ fs, dir: marketplaceRoot, ref: "empty--v1.0.0", object: tagOid });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    sourcePinOverride: tagOid,
+    pinVersionOverride: "1.0.0",
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.version, "1.0.0");
+  const record = seeded.state.marketplaces.marketplace?.plugins.empty;
+  assert.equal(record?.resolvedSha, tagOid);
+  assert.ok(
+    record?.resolvedSource.includes(`${path.sep}plugin-clones${path.sep}`),
+    `resolvedSource does not sit inside plugin-clones/: ${record?.resolvedSource}`,
+  );
+});
+
+test("D-07-06: a pinned path-source install whose callback does not materialize fails the install gate, never stamping resolvedSha", async (t) => {
+  // arrange: the `resolvePathPluginRoot` callback's non-materialized arms
+  // (escapes / missing-subdir / not-cached) must reach the SAME install gate
+  // a git source's callback already does -- resolveStrict reports
+  // unavailable, and requireInstallable refuses it before any state write.
+  const environment = await createHermeticEnvironment(t, "install-outcome-path-pin-missing-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const blocked = runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    sourcePinOverride: RESOLVED_SHA,
+    pinVersionOverride: "2.1.0",
+    pathPinProbe: () =>
+      Promise.resolve({ kind: "missing-subdir", detail: "tag tree has no ./plugins/empty" }),
+  });
+
+  // assert
+  await assert.rejects(blocked, (error: unknown) => {
+    assert.ok(error instanceof PluginShapeError);
+    assert.equal(error.shape.kind, "not-installable");
+    return true;
+  });
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
 });

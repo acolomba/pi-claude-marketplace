@@ -136,6 +136,18 @@ export interface RemoteTag {
   oid: string;
 }
 
+export interface ListTagsOptions {
+  /** Working-tree directory of a local repository. */
+  dir: string;
+}
+
+export interface ResolveTagOidOptions {
+  /** Working-tree directory of a local repository. */
+  dir: string;
+  /** Tag name, with no `refs/tags/` prefix. */
+  name: string;
+}
+
 export interface ForceUpdateRefOptions {
   dir: string;
   ref: string;
@@ -360,6 +372,82 @@ export async function listRemoteTags(opts: ListRemoteTagsOptions): Promise<Remot
   }
 
   return tags;
+}
+
+/**
+ * D-07-05 (07-marketplace-repo-tag-resolution): local, network-free
+ * counterpart of `listRemoteTags` -- the tag names a local checkout already
+ * carries on disk. Wraps isomorphic-git's `listTags({ fs, dir })`, which
+ * returns bare tag names with no oid; a name alone is not the object a caller
+ * reads back through `resolveTagOid`.
+ *
+ * A `path`-source dependency has no remote repository of its own to query;
+ * its release tags live on the marketplace clone that already sits on disk,
+ * so this reads THAT clone's own `refs/tags/` namespace with no network call
+ * (TAGS-01).
+ *
+ * Source: node_modules/isomorphic-git/index.d.ts -- listTags({ fs, dir,
+ * gitdir }) => Promise<Array<string>>.
+ */
+export async function listTags(opts: ListTagsOptions): Promise<string[]> {
+  return git.listTags({ fs, dir: opts.dir });
+}
+
+/**
+ * Bounds a tag-of-tag peel chain in `resolveTagOid` so a cyclic or
+ * pathological annotated-tag graph cannot loop forever. No real release
+ * tooling produces a chain this long; the bound exists only to make a
+ * corrupt history fail fast rather than hang.
+ */
+const MAX_TAG_PEEL_HOPS = 10;
+
+/**
+ * D-07-05: resolve a LOCAL tag name to the commit it names, peeling an
+ * annotated tag to the commit it points at. The local counterpart of
+ * `listRemoteTags`' `peeled ?? oid` preference -- verified for the remote path
+ * by Phase 3's live UAT -- because for an annotated tag the tag OBJECT's own
+ * oid is never what a caller wants, only the commit it tags.
+ *
+ * Resolves `refs/tags/<name>` via `resolveRef`, then attempts `readTag` on the
+ * result:
+ *   - a throw means the oid already names a non-tag object (a LIGHTWEIGHT tag
+ *     resolves directly to its target), and is returned as-is;
+ *   - `tag.type === "commit"` returns `tag.object`, the commit the tag names;
+ *   - `tag.type === "tag"` is a tag pointing at another tag; the peel repeats
+ *     on that tag's own object, bounded by `MAX_TAG_PEEL_HOPS` so a
+ *     tag-of-tag chain cannot loop;
+ *   - any other tagged type (`blob` / `tree`) is not a commit at all; the
+ *     current oid is returned and the caller is responsible for dropping a
+ *     candidate that does not resolve to a commit.
+ *
+ * Source: node_modules/isomorphic-git/index.d.ts -- resolveRef({ fs, dir, ref
+ * }) => Promise<string>; readTag({ fs, dir, gitdir, oid }) => Promise<{ oid,
+ * tag: TagObject, payload }>, where TagObject.type is "blob" | "tree" |
+ * "commit" | "tag" and TagObject.object is the oid of the tagged object.
+ */
+export async function resolveTagOid(opts: ResolveTagOidOptions): Promise<string> {
+  let oid = await git.resolveRef({ fs, dir: opts.dir, ref: `refs/tags/${opts.name}` });
+
+  for (let hop = 0; hop < MAX_TAG_PEEL_HOPS; hop++) {
+    let read: Awaited<ReturnType<typeof git.readTag>>;
+    try {
+      read = await git.readTag({ fs, dir: opts.dir, oid });
+    } catch {
+      return oid;
+    }
+
+    if (read.tag.type === "commit") {
+      return read.tag.object;
+    }
+
+    if (read.tag.type !== "tag") {
+      return oid;
+    }
+
+    oid = read.tag.object;
+  }
+
+  return oid;
 }
 
 /**

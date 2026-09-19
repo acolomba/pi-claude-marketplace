@@ -71,12 +71,14 @@ import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
 import { probeDependencyTags } from "./dependency-tag-probe.ts";
 import { runInstallLedger } from "./install-outcome.ts";
+import { probeMarketplaceTags } from "./marketplace-tag-probe.ts";
 import { applyPartialCascadeFold } from "./shared.ts";
 
 import type {
@@ -95,7 +97,7 @@ import type {
   DependencyClosureResult,
 } from "../../domain/dependency-closure.ts";
 import type { DependencyRangeIntersection } from "../../domain/dependency-range.ts";
-import type { GitBackedSource } from "../../domain/source.ts";
+import type { GitBackedSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
@@ -130,6 +132,13 @@ const DEFAULT_INSTALL_CASCADE_TRANSACTION: InstallLedgerTransaction = Object.fre
  * with one of the tokens it looks for.
  */
 export type CascadeTagProbe = typeof probeDependencyTags;
+
+/**
+ * The LOCAL, network-free tag-resolving operation for a path-source member's
+ * constraint -- lists the marketplace clone's own tags rather than a remote's
+ * advertised refs (TAGS-01, D-07-05).
+ */
+export type CascadeMarketplaceTagProbe = typeof probeMarketplaceTags;
 
 /** The per-URL tag listing memo one cascade run threads through every query. */
 export type CascadeTagMemo = NonNullable<DependencyTagProbeOptions["tagMemo"]>;
@@ -249,6 +258,11 @@ export interface MemberConstraintOptions {
   readonly tagProbe: CascadeTagProbe;
   readonly tagMemo: CascadeTagMemo;
   /**
+   * The local, network-free tag probe a path-source member's constraint
+   * routes through. Defaults to `probeMarketplaceTags`.
+   */
+  readonly marketplaceTagProbe?: CascadeMarketplaceTagProbe;
+  /**
    * How a member's marketplace name resolves to the record its source is read
    * from. Defaults to the snapshot's own map, which is the whole answer only
    * when every reachable marketplace is already recorded in the target scope.
@@ -341,6 +355,11 @@ export interface InstallCascadeOptions {
   /** Tag resolution for a constrained member; defaults to the real probe. */
   readonly tagProbe?: CascadeTagProbe;
   /**
+   * Local tag resolution for a constrained path-source member; defaults to
+   * `probeMarketplaceTags`.
+   */
+  readonly marketplaceTagProbe?: CascadeMarketplaceTagProbe;
+  /**
    * How a member's marketplace name resolves to the record its source is read
    * from. The caller passes the SAME resolution its `lookup` uses, so the walk
    * and the pin probe cannot disagree about which source backs a member.
@@ -416,40 +435,53 @@ function toIntersectionFailure(
 }
 
 /**
- * The git-backed source a member's release tags would live on.
+ * Where a member's release tags would live: the git-backed source's own
+ * repository, or -- for a `path` source -- its marketplace clone's local
+ * tags (TAGS-01). The SOURCE comes from the member's own marketplace entry,
+ * never from the declaration that named it -- a dependency declaration
+ * carries a version, and a version may select among a source's tags but may
+ * never change which source is read.
  *
- * The SOURCE comes from the member's own marketplace entry, never from the
- * declaration that named it -- a dependency declaration carries a version, and
- * a version may select among a source's tags but may never change which source
- * is read.
- *
- * A member with no git-backed source has no release tags at all. It reports the
- * same no-match its constrained siblings report rather than a second shape of
- * failure, which is D-03-09's rule applied one step earlier: one no-match
- * answer, no branch on how the source parsed, and no path to a repository head.
+ * A member whose source carries no tags at all (`npm` / `unknown`, or an
+ * absent marketplace record / manifest entry) is the `absent` arm. It reports
+ * the same no-match its constrained siblings report rather than a second
+ * shape of failure, which is D-03-09's rule applied one step earlier: one
+ * no-match answer, no branch on how the source parsed, and no path to a
+ * repository head.
  */
+type MemberTagSource =
+  | { readonly kind: "git"; readonly source: GitBackedSource }
+  | { readonly kind: "path"; readonly source: PathSource; readonly marketplaceRoot: string }
+  | { readonly kind: "absent" };
+
 async function resolveMemberTagSource(
   options: MemberConstraintOptions,
   member: ClosureMember,
-): Promise<GitBackedSource | undefined> {
+): Promise<MemberTagSource> {
   const lookup =
     options.marketplaceRecordFor ??
     ((marketplace: string) => Promise.resolve(options.state.marketplaces[marketplace]));
   const record = await lookup(member.marketplace);
   if (record === undefined) {
-    return undefined;
+    return { kind: "absent" };
   }
 
   const manifest = await loadMarketplaceManifest(record.manifestPath);
   const declared = lookupDeclaredPlugin(manifest, member.name);
   if (declared.kind === "absent") {
-    return undefined;
+    return { kind: "absent" };
   }
 
   const parsed = parsePluginSource(declared.entry.source);
-  return parsed.kind === "url" || parsed.kind === "git-subdir" || parsed.kind === "github"
-    ? parsed
-    : undefined;
+  if (parsed.kind === "url" || parsed.kind === "git-subdir" || parsed.kind === "github") {
+    return { kind: "git", source: parsed };
+  }
+
+  if (parsed.kind === "path") {
+    return { kind: "path", source: parsed, marketplaceRoot: record.marketplaceRoot };
+  }
+
+  return { kind: "absent" };
 }
 
 /** One member resolved to a pin, or the failure its constraint produced. */
@@ -465,32 +497,26 @@ type MemberConstraintOutcome =
  * against one host bundle and one per-host memo. No credential value is read
  * or placed on any returned arm (AUTH-09).
  */
-async function probeMemberPin(
-  options: MemberConstraintOptions,
+/**
+ * Map a tag probe's answer -- local or network, they converge on this ONE
+ * shape -- onto the member's constraint outcome. Shared by both branches of
+ * `probeMemberPin` below so the three-way decode (pinned / no-matching-tag /
+ * tag-listing-failed) is not written twice; the pin itself is written through
+ * the SAME literal shape the git-backed arm always has, which is what makes
+ * D-07-02 require no downstream change.
+ */
+function toMemberConstraintOutcome(
   member: ClosureMember,
   range: string,
-): Promise<MemberConstraintOutcome> {
-  const source = await resolveMemberTagSource(options, member);
-  if (source === undefined) {
-    return {
-      kind: "failed",
-      failure: { kind: "no-matching-tag", key: member.key, range: renderConstraintRange(range) },
-    };
-  }
-
-  const ledger = options.ledgerOptionsFor(member);
-  const probed = await options.tagProbe({
-    pluginName: member.name,
-    source,
-    range,
-    tagMemo: options.tagMemo,
-    auth: {
-      ctx: ledger.ctx,
-      credentialOps: ledger.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
-      ...(ledger.deviceFlowHttp !== undefined && { deviceFlowHttp: ledger.deviceFlowHttp }),
-      ...(ledger.authMemo !== undefined && { authMemo: ledger.authMemo }),
-    },
-  });
+  probed:
+    | { readonly kind: "pinned"; readonly oid: string; readonly version: string }
+    | { readonly kind: "no-matching-tag"; readonly range: string }
+    | {
+        readonly kind: "tag-listing-failed";
+        readonly cause: Error;
+        readonly classification: DependencyTagListingFailureReason;
+      },
+): MemberConstraintOutcome {
   if (probed.kind === "pinned") {
     return {
       kind: "resolved",
@@ -515,6 +541,65 @@ async function probeMemberPin(
       classification: probed.classification,
     },
   };
+}
+
+async function probeMemberPin(
+  options: MemberConstraintOptions,
+  member: ClosureMember,
+  range: string,
+): Promise<MemberConstraintOutcome> {
+  const tagSource = await resolveMemberTagSource(options, member);
+  if (tagSource.kind === "absent") {
+    return {
+      kind: "failed",
+      failure: { kind: "no-matching-tag", key: member.key, range: renderConstraintRange(range) },
+    };
+  }
+
+  if (tagSource.kind === "path") {
+    // TAGS-01/03 tracer slice (07-marketplace-repo-tag-resolution plan 07-01):
+    // a satisfying tag pins the member exactly like a git-backed source does.
+    // TAGS-02's fallback -- installing the marketplace's current copy instead
+    // of failing when no tag satisfies -- is plan 07-02's job; until then,
+    // `no-matching-tag` and `tag-listing-failed` here produce the SAME
+    // failure shapes the git-backed branch below already does.
+    const marketplaceTagProbe = options.marketplaceTagProbe ?? probeMarketplaceTags;
+    const probed = await marketplaceTagProbe({
+      pluginName: member.name,
+      marketplaceRoot: tagSource.marketplaceRoot,
+      range,
+    });
+
+    // A local read failure is never a transport failure; this reuses the SAME
+    // closed-set classifier rather than inventing a second one, and its
+    // `undefined` fallthrough is a valid member of the type it feeds.
+    return toMemberConstraintOutcome(
+      member,
+      range,
+      probed.kind === "tag-listing-failed"
+        ? {
+            kind: "tag-listing-failed",
+            cause: probed.cause,
+            classification: classifyGitTransportFailure(probed.cause),
+          }
+        : probed,
+    );
+  }
+
+  const ledger = options.ledgerOptionsFor(member);
+  const probed = await options.tagProbe({
+    pluginName: member.name,
+    source: tagSource.source,
+    range,
+    tagMemo: options.tagMemo,
+    auth: {
+      ctx: ledger.ctx,
+      credentialOps: ledger.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
+      ...(ledger.deviceFlowHttp !== undefined && { deviceFlowHttp: ledger.deviceFlowHttp }),
+      ...(ledger.authMemo !== undefined && { authMemo: ledger.authMemo }),
+    },
+  });
+  return toMemberConstraintOutcome(member, range, probed);
 }
 
 /**
@@ -783,6 +868,9 @@ export async function runInstallCascade(
     ledgerOptionsFor: options.ledgerOptionsFor,
     tagProbe: options.tagProbe ?? probeDependencyTags,
     tagMemo: new Map<string, readonly RemoteTag[]>(),
+    ...(options.marketplaceTagProbe !== undefined && {
+      marketplaceTagProbe: options.marketplaceTagProbe,
+    }),
     ...(options.marketplaceRecordFor !== undefined && {
       marketplaceRecordFor: options.marketplaceRecordFor,
     }),

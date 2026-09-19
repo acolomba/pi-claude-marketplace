@@ -100,7 +100,7 @@ import {
   requireInstallable,
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
-import { parsePluginSource } from "../../domain/source.ts";
+import { parsePluginSource, type PathSource } from "../../domain/source.ts";
 import { shaVersion } from "../../domain/version.ts";
 import { ConcurrentInstallError, PluginShapeError } from "../../shared/errors.ts";
 import { type RemovalOps } from "../../shared/fs-utils.ts";
@@ -119,6 +119,7 @@ import {
   type DeviceFlowHttp,
 } from "../auth-host.ts";
 
+import { materializeMarketplaceTagClone } from "./clone-cache.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
 import { probeInstallClone, type InstallCloneCacheSeam } from "./install-clone-probe.ts";
 import {
@@ -178,6 +179,12 @@ export interface InstallLedgerOptions {
   readonly allowExistingRecord?: boolean;
   readonly cloneCacheSeam?: InstallCloneCacheSeam;
   readonly cloneProbe?: typeof probeInstallClone;
+  /**
+   * D-07-06 (07-marketplace-repo-tag-resolution): materializes a `path`
+   * source at `sourcePinOverride`'s tag oid. Mirrors `cloneProbe` exactly --
+   * a real default (`materializeMarketplaceTagClone`), not test-only surface.
+   */
+  readonly pathPinProbe?: typeof materializeMarketplaceTagClone;
   /**
    * D-08-12: removal operations the three bridge phases perform their staging
    * cleanup through. Required with no default, and deliberately NOT constructed
@@ -480,6 +487,29 @@ async function preflightInstallResolve(
       resolvedSha = clone.resolvedSha;
       return clone.result;
     },
+    // D-07-06/07-07 (07-marketplace-repo-tag-resolution): a `path`-source
+    // member whose constraint selected a marketplace tag materializes that
+    // tag's tree the same way a git-backed member materializes its pinned
+    // commit. Added ONLY when a pin is present, so an unpinned `path` source
+    // stays byte-identical to today (neither field is set at all).
+    ...(opts.sourcePinOverride !== undefined && {
+      pathPluginPin: opts.sourcePinOverride,
+      resolvePathPluginRoot: async (pathSource: PathSource, pin: string) => {
+        const result = await (opts.pathPinProbe ?? materializeMarketplaceTagClone)({
+          locations,
+          marketplaceRoot: sourceMp.marketplaceRoot,
+          marketplaceSource: sourceMp.source,
+          marketplaceName: sourceMp.name,
+          pathSource,
+          tagOid: pin,
+        });
+        if (result.kind === "materialized") {
+          resolvedSha = result.resolvedSha;
+        }
+
+        return result;
+      },
+    }),
   });
   // D-65-03 / FORCE-01/03/05: `--partial` widens the gate to admit the
   // partially-available arm; the default gate still blocks it. Both gates
