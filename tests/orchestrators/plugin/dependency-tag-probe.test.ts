@@ -411,7 +411,7 @@ test("serves a memoized listing without reaching the production seam", async () 
   });
 });
 
-test("evicts a failed listing so the retry queries the repository again", async () => {
+test("a failed listing is never memoized, so a later attempt re-queries instead of replaying the error", async () => {
   // arrange
   const queried: string[] = [];
   const transportFailure = new Error("ref advertisement refused");
@@ -436,7 +436,7 @@ test("evicts a failed listing so the retry queries the repository again", async 
     cause: transportFailure,
     classification: undefined,
   });
+  assert.strictEqual(tagMemo.has(PLUGIN_REPO_URL), false);
   assert.deepStrictEqual(second, first);
   assert.deepStrictEqual(queried, [PLUGIN_REPO_URL, PLUGIN_REPO_URL]);
-  assert.deepStrictEqual([...tagMemo], []);
 });

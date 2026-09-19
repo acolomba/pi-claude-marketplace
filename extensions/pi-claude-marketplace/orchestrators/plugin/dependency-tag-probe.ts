@@ -110,9 +110,10 @@ interface TagListingRequest {
 /**
  * Reads the repository's tags, serving a memoized listing where one is held.
  *
- * A throw becomes the failure arm rather than escaping, and the memo entry is
- * dropped on failure so a later attempt in the same cascade re-queries instead
- * of replaying a transient error.
+ * A throw becomes the failure arm rather than escaping. The memo is only ever
+ * written on success (never on a failed attempt), so a later attempt in the
+ * same cascade always re-queries after a failure -- there is no successful
+ * entry to evict.
  */
 async function listCandidateTags(request: TagListingRequest): Promise<TagListingOutcome> {
   const memoized = request.memo?.get(request.url);
@@ -128,7 +129,6 @@ async function listCandidateTags(request: TagListingRequest): Promise<TagListing
     request.memo?.set(request.url, tags);
     return { kind: "listed", tags };
   } catch (err) {
-    request.memo?.delete(request.url);
     return {
       kind: "tag-listing-failed",
       cause: err instanceof Error ? err : new Error(String(err)),
