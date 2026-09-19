@@ -387,6 +387,17 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
   record says so and retains an undeclared marketplace that holds one, and a
   cascade-installed dependency survives `/reload` — v1.20 Phase 4 (D-04-02,
   D-04-04, D-04-05), verified 2026-09-16.
+- ✓ A constrained path-source dependency — the common case — resolves against
+  the marketplace repository's own local `{name}--v{version}` tags with zero
+  network access; when a tag satisfies, the plugin materializes from that tag
+  (files and recorded version both), not the current checkout; when none
+  does, the marketplace's current copy installs with a quiet info-level note
+  and the constraint is deferred to Phase 6's load-time check instead of
+  failing the install; `docs/dependency-resolution.md` records that upstream
+  accepts a `sha` field this extension refuses — v1.20 Phase 7 (TAGS-01,
+  TAGS-02, TAGS-03, DIVG-01), verified 2026-09-19. Code review found and
+  fixed 3 critical + 15 warning findings across three fix iterations
+  (0 critical/0 warning remain); see D-07-04 and D-07-03 in Key Decisions.
 
 <!-- Shipped and confirmed valuable via this GSD project. -->
 
@@ -716,6 +727,8 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-04-02 / D-04-04 (v1.20 Phase 4, 2026-09-15):** the desired-state config names only plugins the user asked for; a cascade-installed dependency is protected by its `provenance: "dependency"` record, not by a config declaration. Phase 3's cascade config write was retired in a fixed order — field, reconcile exemption, then the write. | Reconcile would otherwise sweep every dependency on the next `resources_discover`; `--prune` needs the asked-for / pulled-in distinction the write destroyed. The order is a correctness contract: 04-05 proved the exemption load-bearing by reverting it and watching the reload-survival case go red. | -- Locked |
 | **D-04-07 + review rulings (v1.20 Phase 4, 2026-09-16): a plugin asked for by name is enabled.** `install <dep>` on a dependency record promotes it and, if the record was disabled, re-materializes and enables it, stamping `{ enabled: true }` in whichever config file declares the key; `import` naming the record promotes it; a version pin refuses promotion, `--partial` is the consent gate for a partially-installed record, `--map-model` has no bearing. The planner (not the config) retains a CMP-3-adopted dependency marketplace. | Keeps D-04-02's config purity while closing the review's reproduced criticals (an undeclared adopted marketplace torn down on reload; a promoted-but-still-disabled record re-disabled by the reload its own row asked for). The cascade half of the same rule — enabling a disabled dependency during a cascade — reverses RESV-05 and is backlogged (ENBL-DEP-01), not shipped. | -- Locked |
 | **D-05-01/02/07/14 + review fix (v1.20 Phase 5, 2026-09-16):** `--prune` is a whole-scope fixpoint sweep run once after the primary is removed, inside the one locked transaction, over `provenance: "dependency"` records only; `uninstall X` refuses while any installed record in the scope declares X (disabled declarers hold; an unreadable declarer fails closed and renders `{unreadable}`); reconcile never prunes. The CR-01 fix re-checks each pruned member with `isHeldBy` against the keys that actually left, so a failed member keeps the dependencies only it declared. | A removal that leaves a declared dependency unsatisfied is the state the guard exists to forbid; running the sweep on the same declaration index the guard reads keeps the two rules consistent, and the single-save contract keeps a partial sweep from ghosting a record. D-05-07 (fail closed) is rated reversible; the two-stale-records mutual block was reviewed by the operator and accepted with `marketplace remove` as the exit. | -- Locked |
+| **D-07-04 (v1.20 Phase 7, 2026-09-19): a tag-pinned path-source plugin materializes by copying the marketplace's `.git` into a fresh staging dir, then checking the tag out there — not by pointing isomorphic-git's `checkout` at a shared `dir`/`gitdir` pair against the marketplace clone's own `.git`.** Code review verified against the installed isomorphic-git source that the shared-gitdir construction (D-07-01's literal wording) writes `${gitdir}/index` regardless of `noUpdateHead`, silently desyncing the marketplace clone's own index. | The marketplace clone must never be mutated by materializing a dependency's pin. Copy-then-checkout is the same construction `clone-cache.ts::seedOnePluginMirror` already uses for the identical problem, so it invents no second mechanism, at the cost of one full `.git` copy per distinct pinned tag oid. | -- Locked |
+| **D-07-03 (v1.20 Phase 7, 2026-09-19): the TAGS-02 fallback row (no tag satisfies → marketplace's current copy installs) stays a quiet `info`-level note, not a warning — a deliberate divergence from upstream, which surfaces the analogous fallback as a warning.** A mid-review-cycle fix accidentally reversed this to `warning` (matching upstream); the regression was caught and reverted the same cycle. | The install itself always succeeds here; Phase 6's load-time check is what actually flags and disables a dependent if the fallback version is genuinely out of range, so nothing is wrong yet at install time. | -- Locked |
 
 ## Evolution
 
@@ -821,4 +834,4 @@ _Earlier updates (pre-v1.3-close): see git history. Phase 1 (2026-05-09), Phase 
 
 ---
 
-_Last updated: 2026-09-16 after v1.20 Phase 4 (install provenance)_
+_Last updated: 2026-09-19 after v1.20 Phase 7 (marketplace-repo tag resolution)_
