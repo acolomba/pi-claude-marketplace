@@ -3056,3 +3056,32 @@ the cost of the declaration walk on a read-only command. If it does, the
 preview also needs a row for the disable it would then foresee, which is a
 closed-set question, not just a wiring one. Doing nothing is defensible if the
 preview is read as "what the config says", but it is not what the row claims.
+
+## STALE-DECLARER-01: one unreadable declarer aborts the whole scope's dependency check
+
+Surfaced by the Phase 6 code review (`06-REVIEW.md` WR-03, 2026-09-19) and
+re-declined on the same reasoning across both fix iterations. In
+`orchestrators/plugin/dependency-index.ts::readRecordDeclarations`, a record
+whose plugin `lookupDeclaredPlugin` can no longer resolve in its marketplace
+manifest -- for example, a plugin dropped from `marketplace.json` after it was
+installed -- is treated as `kind: "absent"`, an unreadable declarer.
+`buildScopeDeclarationDetail` returns on the FIRST record that hits this, so
+one stale record turns off the LOAD-01 load-time check for every other plugin
+in the scope and renders `⊘ <plugin> (failed) {unreadable}` at error severity
+on every reload, for a condition that has nothing to do with that plugin.
+
+Left unfixed because the remedy is not scoped to LOAD-01:
+`readRecordDeclarations` is the same function `buildScopeDeclarationIndex`
+calls for `uninstall`'s dependents guard (Phase 5, D-05-07's fail-closed
+posture). Loosening the abort-on-first-unreadable behavior here would silently
+change what counts as a "declarer" for that guard too, letting an uninstall
+proceed past a dependent it should have blocked. Two existing tests pin the
+current behavior as intentional for that reason.
+
+Scope when picked up: decide whether the fail-closed unit should stay the
+whole scope, or narrow to per-record (skip the one unreadable declarer and
+keep checking the rest, only surfacing `{unreadable}` for that plugin's own
+row). Any change must be evaluated against both call sites --
+`buildScopeDeclarationDetail` (LOAD-01) and `buildScopeDeclarationIndex`
+(uninstall's dependents guard) -- and the two tests that currently encode
+D-05-07 as intentional will need to move with it, not just be deleted.
