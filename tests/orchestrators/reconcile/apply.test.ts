@@ -84,6 +84,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { StateLockHeldError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
@@ -3886,6 +3887,78 @@ describe("applyReconcile", () => {
     assert.equal(record?.dependencyDisabled, true);
     assert.equal(await pathExists(path.join(project.skillsTargetDir, "deploy-kit-tool")), false);
     assert.equal(await readFile(project.configJsonPath, "utf8"), declaration);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("CR-01: a throwing marker stamp keeps the dependency-disable row on the cascade", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "dependency-stamp-throws");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+              skills: ["deploy-kit-tool"],
+            }),
+          },
+        }),
+      },
+    });
+    await writeUnder(
+      path.join(project.skillsTargetDir, "deploy-kit-tool", "SKILL.md"),
+      "---\nname: deploy-kit-tool\n---\n\nbody\n",
+    );
+    const stampDependencyDisabled = (): Promise<void> => {
+      throw new StateLockHeldError("project", ".state-lock");
+    };
+
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, stampDependencyDisabled });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
+          "\n" +
+          "⊘ state.json [project] (failed) {lock held}\n" +
+          "  ⊘ state.json (failed) {lock held}\n" +
+          "    cause: Another pi-claude-marketplace operation is in progress for project scope (.state-lock). Retry after it completes.\n" +
+          "\n" +
+          "Reconcile: 2 failures, 1 warning",
+        severity: "error",
+      },
+    ]);
+    const record = await recordFor(project, "mp", "deploy-kit");
+    assert.equal(record?.enabled, false);
+    assert.equal(Object.hasOwn(record ?? {}, "dependencyDisabled"), false);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });

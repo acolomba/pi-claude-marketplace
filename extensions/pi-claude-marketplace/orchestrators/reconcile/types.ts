@@ -280,6 +280,15 @@ export function emptyReconcilePlan(scope: Scope): ReconcilePlan {
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
+ * The LOAD-01 marker write, as the dependency-disable step calls it: the
+ * records it just flipped, in the scope it flipped them in.
+ */
+export type DependencyDisableStamp = (
+  scope: Scope,
+  transitioned: readonly PlannedDependencyDisable[],
+) => Promise<void>;
+
+/**
  * RECON-01..05 options bundle. When `scope` is omitted, applyReconcile fans
  * out across BOTH scopes project-first (mirrors
  * `pending.ts::pendingReconcile`'s scope fan-out).
@@ -314,6 +323,20 @@ export interface ApplyReconcileOptions {
    * one pass from two.
    */
   readonly uninstallPlugin?: UninstallPluginOperation;
+  /**
+   * D-12-style injection seam for the LOAD-01 marker write. Production callers
+   * (index.ts) omit it and `apply.ts::stampDependencyDisabled` applies.
+   *
+   * The seam exists because the step's EMISSION POINT is a contract a test
+   * cannot otherwise reach: each disable row is pushed as its disable commits,
+   * BEFORE the stamp the `runScopeIsolated` wrapper can turn into a single
+   * `state.json` row. Moving the pushes back below the stamp loses every row of
+   * a disable that already happened, and no other observable separates the two
+   * orderings -- the stamp and the `setPluginEnabled` write that precedes it
+   * take the same lock and write the same file, so an external `chmod` or lock
+   * hold fails the disable instead of the stamp.
+   */
+  readonly stampDependencyDisabled?: DependencyDisableStamp;
 }
 
 /**

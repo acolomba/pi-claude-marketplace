@@ -817,6 +817,12 @@ async function stampDependencyDisabled(
  * nothing, so a row lost here is lost permanently. Emitting inside the loop
  * also matches every sibling apply step; no other producer appends to
  * `outcomes` between here and the stamp, so the ordering is unchanged.
+ *
+ * `opts.stampDependencyDisabled` is the seam that pins this. It exists because
+ * the ordering has no other observable: a test that fails the stamp through the
+ * filesystem fails the disable first. A case injects a throwing stamp and
+ * asserts the disable rows still reach the cascade beside the `state.json` row
+ * the wrapper builds from the throw.
  */
 async function applyDependencyDisables(
   opts: ApplyReconcileOptions,
@@ -852,7 +858,10 @@ async function applyDependencyDisables(
   }
 
   if (transitioned.length > 0) {
-    await stampDependencyDisabled(opts, plan.scope, transitioned);
+    const stamp = opts.stampDependencyDisabled;
+    await (stamp === undefined
+      ? stampDependencyDisabled(opts, plan.scope, transitioned)
+      : stamp(plan.scope, transitioned));
   }
 }
 

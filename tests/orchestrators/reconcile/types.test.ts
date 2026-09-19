@@ -12,6 +12,7 @@ import {
   emptyReconcilePlan,
   plannedSourceMismatchSubject,
   type ApplyReconcileOptions,
+  type DependencyDisableStamp,
   type PlannedDependencyDisable,
   type PlannedMarketplaceAdd,
   type PlannedMarketplaceRemove,
@@ -52,6 +53,7 @@ const uninstallPlugin = mock<UninstallPluginOperation>({
   exactParams: true,
   name: "uninstall operation type evidence",
 });
+const dependencyDisableStamp: DependencyDisableStamp = () => Promise.resolve();
 
 const plannedMarketplaceAdd = {
   scope: "project",
@@ -158,6 +160,14 @@ void ({
   completionCache,
   hooksRouting,
   uninstallPlugin,
+} satisfies ApplyReconcileOptions);
+void ({
+  ctx: extensionContext,
+  pi: extensionApi,
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
+  stampDependencyDisabled: dependencyDisableStamp,
 } satisfies ApplyReconcileOptions);
 
 const extensionState = {
