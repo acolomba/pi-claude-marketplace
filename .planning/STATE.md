@@ -125,6 +125,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
+| 260919-c5m | Standardize on AGENTS.md instead of CLAUDE.md as the canonical project-instructions file | 2026-09-19 | 8f87272a | Complete | [260919-c5m-standardize-on-agents-md-instead-of-clau](./quick/260919-c5m-standardize-on-agents-md-instead-of-clau/) |
 
 ## Session Continuity
 

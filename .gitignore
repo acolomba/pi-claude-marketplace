@@ -19,6 +19,7 @@
 /.claude/gsd-core/*
 /.claude/gsd-file-manifest.json
 /.claude/gsd-install-state.json
+/.claude/gsd-local-patches/*
 /.claude/gsd-migration-journal/*
 /.claude/hooks/gsd-*
 /.claude/hooks/lib/
@@ -37,6 +38,7 @@
 /.codex/gsd-core/*
 /.codex/gsd-file-manifest.json
 /.codex/gsd-install-state.json
+/.codex/gsd-local-patches/*
 /.codex/gsd-migration-journal/*
 # hooks.json is not ideal
 /.codex/hooks.json
