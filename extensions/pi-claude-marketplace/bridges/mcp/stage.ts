@@ -41,9 +41,9 @@ import type {
   StagedMcpRecord,
 } from "./types.ts";
 
-type McpReplacementInternals = Readonly<{
-  oldText: string | undefined;
-}>;
+interface McpReplacementInternals {
+  readonly oldText: string | undefined;
+}
 
 const mcpReplacementInternals = new WeakMap<
   Extract<McpReplacement, { kind: "replaced" }>,

@@ -157,6 +157,12 @@ function scopedPlan(input: ScopedClaudeImportPlanInput): ScopedClaudeImportPlan 
   };
 }
 
+/**
+ * Builds the per-scope import plan for every input scope's Claude settings:
+ * the marketplaces to ensure, the plugins to install under them, the plugins
+ * skipped for an unmappable marketplace source, and the diagnostics raised
+ * along the way.
+ */
 export function buildClaudeImportPlan(
   inputs: readonly ScopedClaudeImportPlanInput[],
 ): ClaudeImportPlan {

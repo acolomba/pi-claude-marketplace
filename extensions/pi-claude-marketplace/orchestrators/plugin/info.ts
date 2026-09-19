@@ -408,7 +408,7 @@ function projectDroppedHookEntries(dropped: readonly DroppedHook[]): readonly Ho
  */
 function parseHooksForInfo(raw: string, cwd: string): HookConfigParseResult<null> {
   const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
-  const noopCompileIf: () => null = JSON.parse.bind(JSON, "null");
+  const noopCompileIf = JSON.parse.bind(JSON, "null") as () => null;
   return parseHooksConfig(raw, ifCtx, noopCompileIf, { skipIfMap: true });
 }
 

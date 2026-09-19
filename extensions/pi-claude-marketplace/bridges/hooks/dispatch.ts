@@ -120,6 +120,8 @@ function matcherFiresOnToolEvent(matcher: ParsedMatcher, toolName: string): bool
     case "regex":
     case "unmapped":
       return false;
+    default:
+      return assertNever(matcher, `unreachable ParsedMatcher arm: ${JSON.stringify(matcher)}`);
   }
 }
 
@@ -169,7 +171,7 @@ interface ReducedBucket {
 
 async function reduceBucket(
   runtime: HooksRuntime,
-  bucket: ReadonlyArray<RoutingEntry>,
+  bucket: readonly RoutingEntry[],
   event: unknown,
   ctx: ExtensionContext,
   pi: ExtensionAPI | undefined,
@@ -259,7 +261,7 @@ export interface BucketOutcome {
  */
 export async function collectBucketOutcomes(
   runtime: HooksRuntime,
-  bucket: ReadonlyArray<RoutingEntry>,
+  bucket: readonly RoutingEntry[],
   event: unknown,
   ctx: ExtensionContext,
   pi: ExtensionAPI | undefined,
@@ -438,6 +440,12 @@ function adaptForEvent(
       adaptObservationResultForEvent(runtime, reduced.result, claudeEvent, provenance);
       return undefined;
     }
+
+    default:
+      return assertNever(
+        claudeEvent,
+        `unreachable CompositeDispatchEvent arm: ${JSON.stringify(claudeEvent)}`,
+      );
   }
 }
 
@@ -506,5 +514,11 @@ function entryFires(
     case "PostCompact":
     case "UserPromptSubmit":
       return true;
+
+    default:
+      return assertNever(
+        claudeEvent,
+        `unreachable CompositeDispatchEvent arm: ${JSON.stringify(claudeEvent)}`,
+      );
   }
 }

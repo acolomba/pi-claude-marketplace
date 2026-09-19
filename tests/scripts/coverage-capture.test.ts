@@ -283,12 +283,12 @@ function lcovCounts(lcovText: string): Map<string, LcovCounts> {
     for (const line of record.split("\n")) {
       const separator = line.indexOf(":");
       const key = line.slice(0, separator);
-      const value = line.slice(separator + 1);
+      const fieldValue = line.slice(separator + 1);
 
       if (key === "SF") {
-        sourcePath = value;
+        sourcePath = fieldValue;
       } else if (["BRF", "BRH", "FNF", "FNH", "LF", "LH"].includes(key)) {
-        fields.set(key, Number(value));
+        fields.set(key, Number(fieldValue));
       }
     }
 

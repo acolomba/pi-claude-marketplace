@@ -20,7 +20,7 @@
 //     pluginId under two different marketplaces in the same scope occupies
 //     two distinct entries.
 //
-//   - `routingTable`: `Map<BucketAEvent, ReadonlyArray<RoutingEntry>>` whose
+//   - `routingTable`: `Map<BucketAEvent, readonly RoutingEntry[]>` whose
 //     keyset stays pinned to `BUCKET_A_EVENTS` -- every bucket is pre-
 //     populated to `[]` after each rebuild rather than appearing and
 //     disappearing with the cache. Cross-plugin entries are sorted by

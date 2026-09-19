@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { test } from "node:test";
+import test from "node:test";
 
 import {
   commitPreparedMcp,
@@ -15,7 +15,7 @@ async function pathExists(filePath: string): Promise<boolean> {
   try {
     await stat(filePath);
     return true;
-  } catch (error) {
+  } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return false;
     }

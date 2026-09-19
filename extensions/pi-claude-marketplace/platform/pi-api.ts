@@ -61,6 +61,8 @@ export type {
   ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
 
+import type { AgentEndEvent } from "@earendil-works/pi-coding-agent";
+
 /**
  * Structural `text` content block -- mirrors `pi-ai`'s `TextContent`
  * shape (peer-dep does not re-export it). The bridge's
@@ -103,8 +105,6 @@ export interface ResourcesDiscoverResult {
   promptPaths?: string[];
   themePaths?: string[];
 }
-
-import type { AgentEndEvent } from "@earendil-works/pi-coding-agent";
 
 /**
  * The Pi agent-message union and its assistant-message narrowing, surfaced

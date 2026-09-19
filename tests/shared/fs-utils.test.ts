@@ -96,8 +96,7 @@ describe("cleanupStaging", () => {
   test("removes an existing directory tree", async (t) => {
     // arrange
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), "fs-cleanup-tree-"));
-    const remove = fs.rm.bind(fs);
-    t.after(() => remove(directory, { recursive: true, force: true }));
+    t.after(() => fs.rm(directory, { recursive: true, force: true }));
     await fs.mkdir(path.join(directory, "nested"));
     await fs.writeFile(path.join(directory, "nested", "content.txt"), "content");
 
@@ -747,8 +746,7 @@ describe("isPlainMarkdownFile", () => {
   test("rethrows an unexpected markdown lstat error", async (t) => {
     // arrange
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), "fs-markdown-error-"));
-    const remove = fs.rm.bind(fs);
-    t.after(() => remove(directory, { recursive: true, force: true }));
+    t.after(() => fs.rm(directory, { recursive: true, force: true }));
     await fs.writeFile(path.join(directory, "entry.md"), "content");
     const entries = await fs.readdir(directory, { withFileTypes: true });
     const entry = entries[0];

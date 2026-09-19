@@ -8,13 +8,13 @@ test("extractEnabledPluginRefs accepts one separator and preserves the verbatim 
   const raw = "frontend-design@claude-plugins-official";
 
   // act
-  const result = extractEnabledPluginRefs("user", {
+  const extracted = extractEnabledPluginRefs("user", {
     enabledPlugins: { [raw]: true },
     extraKnownMarketplaces: {},
   });
 
   // assert
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(extracted, {
     diagnostics: [],
     refs: [
       {
@@ -31,13 +31,13 @@ test("extractEnabledPluginRefs trims the ref parts without changing the raw inpu
   const raw = "  frontend-design  @  claude-plugins-official  ";
 
   // act
-  const result = extractEnabledPluginRefs("user", {
+  const extracted = extractEnabledPluginRefs("user", {
     enabledPlugins: { [raw]: true },
     extraKnownMarketplaces: {},
   });
 
   // assert
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(extracted, {
     diagnostics: [],
     refs: [
       {
@@ -54,13 +54,13 @@ test("extractEnabledPluginRefs rejects an empty input with the separator diagnos
   const raw = "";
 
   // act
-  const result = extractEnabledPluginRefs("user", {
+  const extracted = extractEnabledPluginRefs("user", {
     enabledPlugins: { [raw]: true },
     extraKnownMarketplaces: {},
   });
 
   // assert
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(extracted, {
     refs: [],
     diagnostics: [
       {
@@ -79,13 +79,13 @@ test("extractEnabledPluginRefs rejects a ref with no separator", () => {
   const raw = "frontend-design";
 
   // act
-  const result = extractEnabledPluginRefs("user", {
+  const extracted = extractEnabledPluginRefs("user", {
     enabledPlugins: { [raw]: true },
     extraKnownMarketplaces: {},
   });
 
   // assert
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(extracted, {
     refs: [],
     diagnostics: [
       {
@@ -104,13 +104,13 @@ test("extractEnabledPluginRefs rejects a ref with multiple separators", () => {
   const raw = "frontend-design@marketplace@extra";
 
   // act
-  const result = extractEnabledPluginRefs("user", {
+  const extracted = extractEnabledPluginRefs("user", {
     enabledPlugins: { [raw]: true },
     extraKnownMarketplaces: {},
   });
 
   // assert
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(extracted, {
     refs: [],
     diagnostics: [
       {
@@ -129,13 +129,13 @@ test("extractEnabledPluginRefs rejects an empty plugin side", () => {
   const raw = "@claude-plugins-official";
 
   // act
-  const result = extractEnabledPluginRefs("user", {
+  const extracted = extractEnabledPluginRefs("user", {
     enabledPlugins: { [raw]: true },
     extraKnownMarketplaces: {},
   });
 
   // assert
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(extracted, {
     refs: [],
     diagnostics: [
       {
@@ -154,13 +154,13 @@ test("extractEnabledPluginRefs rejects a whitespace-only plugin side", () => {
   const raw = "   @claude-plugins-official";
 
   // act
-  const result = extractEnabledPluginRefs("user", {
+  const extracted = extractEnabledPluginRefs("user", {
     enabledPlugins: { [raw]: true },
     extraKnownMarketplaces: {},
   });
 
   // assert
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(extracted, {
     refs: [],
     diagnostics: [
       {
@@ -179,13 +179,13 @@ test("extractEnabledPluginRefs rejects an empty marketplace side", () => {
   const raw = "frontend-design@";
 
   // act
-  const result = extractEnabledPluginRefs("user", {
+  const extracted = extractEnabledPluginRefs("user", {
     enabledPlugins: { [raw]: true },
     extraKnownMarketplaces: {},
   });
 
   // assert
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(extracted, {
     refs: [],
     diagnostics: [
       {
@@ -204,13 +204,13 @@ test("extractEnabledPluginRefs rejects a whitespace-only marketplace side", () =
   const raw = "frontend-design@   ";
 
   // act
-  const result = extractEnabledPluginRefs("user", {
+  const extracted = extractEnabledPluginRefs("user", {
     enabledPlugins: { [raw]: true },
     extraKnownMarketplaces: {},
   });
 
   // assert
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(extracted, {
     refs: [],
     diagnostics: [
       {
@@ -236,10 +236,10 @@ test("extractEnabledPluginRefs selects exact true values and skips exact false v
   };
 
   // act
-  const result = extractEnabledPluginRefs("user", settings);
+  const extracted = extractEnabledPluginRefs("user", settings);
 
   // assert
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(extracted, {
     diagnostics: [],
     refs: [
       {
@@ -270,10 +270,10 @@ test("extractEnabledPluginRefs reports nonboolean project values in exact input 
   };
 
   // act
-  const result = extractEnabledPluginRefs("project", settings);
+  const extracted = extractEnabledPluginRefs("project", settings);
 
   // assert
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(extracted, {
     diagnostics: [
       {
         code: "non-boolean-enabled-plugin",
@@ -335,10 +335,10 @@ test("extractEnabledPluginRefs preserves enabled-ref and diagnostic order across
   };
 
   // act
-  const result = extractEnabledPluginRefs("user", settings);
+  const extracted = extractEnabledPluginRefs("user", settings);
 
   // assert
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(extracted, {
     diagnostics: [
       {
         code: "malformed-plugin-ref",

@@ -11,7 +11,7 @@ export interface HookHandlerEntry {
   asyncRewake?: unknown;
   rewakeMessage?: unknown;
   rewakeSummary?: unknown;
-  [key: string]: unknown;
+  [fieldName: string]: unknown;
 }
 
 const HOOK_HANDLER_SCHEMA = Type.Unsafe<HookHandlerEntry>({

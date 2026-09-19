@@ -1797,10 +1797,18 @@ test("PR-6 requireInstallable on not-installable throws with 'is not installable
     () => {
       requireInstallable(resolvedPlugin);
     },
-    (error: unknown) =>
-      error instanceof Error &&
-      error.message.includes('Plugin "p1" is not installable') &&
-      error.message.includes("source dir does not exist"),
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError, "must throw PluginShapeError");
+      assert.strictEqual(error.plugin, "p1");
+      assert.strictEqual(error.shape.kind, "not-installable");
+      if (error.shape.kind === "not-installable") {
+        assert.deepStrictEqual(error.shape.reasons, [
+          `source dir does not exist: ${pathUnderMarketplace("./missing")}`,
+        ]);
+      }
+
+      return true;
+    },
   );
 });
 
@@ -1816,8 +1824,11 @@ test("PR-6 requireInstallable(resolvedPlugin, 'update') throws with 'is no longe
     () => {
       requireInstallable(resolvedPlugin, "update");
     },
-    (error: unknown) =>
-      error instanceof Error && error.message.includes("is no longer installable"),
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError, "must throw PluginShapeError");
+      assert.strictEqual(error.shape.kind, "no-longer-installable");
+      return true;
+    },
   );
 });
 
@@ -1935,10 +1946,18 @@ test("RSTATE-04 requirePartialInstallable throws on unavailable with 'is not ins
     () => {
       requirePartialInstallable(resolvedPlugin);
     },
-    (error: unknown) =>
-      error instanceof Error &&
-      error.message.includes('Plugin "p1" is not installable') &&
-      error.message.includes("source dir does not exist"),
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError, "must throw PluginShapeError");
+      assert.strictEqual(error.plugin, "p1");
+      assert.strictEqual(error.shape.kind, "not-installable");
+      if (error.shape.kind === "not-installable") {
+        assert.deepStrictEqual(error.shape.reasons, [
+          `source dir does not exist: ${pathUnderMarketplace("./missing")}`,
+        ]);
+      }
+
+      return true;
+    },
   );
 });
 
@@ -1954,8 +1973,11 @@ test("RSTATE-04 requirePartialInstallable(resolvedPlugin, 'update') throws with 
     () => {
       requirePartialInstallable(resolvedPlugin, "update");
     },
-    (error: unknown) =>
-      error instanceof Error && error.message.includes("is no longer installable"),
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError, "must throw PluginShapeError");
+      assert.strictEqual(error.shape.kind, "no-longer-installable");
+      return true;
+    },
   );
 });
 
@@ -3045,8 +3067,12 @@ test("RSTATE-04 strict: requirePartialInstallable throws on unavailable", async 
     () => {
       requirePartialInstallable(resolvedPlugin);
     },
-    (error: unknown) =>
-      error instanceof Error && error.message.includes('Plugin "p1" is not installable'),
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError, "must throw PluginShapeError");
+      assert.strictEqual(error.plugin, "p1");
+      assert.strictEqual(error.shape.kind, "not-installable");
+      return true;
+    },
   );
 });
 

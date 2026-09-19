@@ -22,10 +22,10 @@ test("buildClaudeImportPlan builds a complete mixed user plan with ordered diagn
   ];
 
   // act
-  const result = buildClaudeImportPlan(inputs);
+  const plan = buildClaudeImportPlan(inputs);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(plan, {
     scopes: [
       {
         scope: "user",
@@ -132,10 +132,10 @@ test("buildClaudeImportPlan keeps every plugin while ensuring a shared marketpla
   ];
 
   // act
-  const result = buildClaudeImportPlan(inputs);
+  const plan = buildClaudeImportPlan(inputs);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(plan, {
     scopes: [
       {
         scope: "project",
@@ -192,10 +192,10 @@ test("buildClaudeImportPlan preserves user and project scope input order", () =>
   ];
 
   // act
-  const result = buildClaudeImportPlan(inputs);
+  const plan = buildClaudeImportPlan(inputs);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(plan, {
     scopes: [
       {
         scope: "user",
@@ -251,10 +251,10 @@ test("buildClaudeImportPlan returns a complete empty plan for no selected scopes
   const inputs: [] = [];
 
   // act
-  const result = buildClaudeImportPlan(inputs);
+  const plan = buildClaudeImportPlan(inputs);
 
   // assert
-  assert.deepStrictEqual(result, { scopes: [], diagnostics: [] });
+  assert.deepStrictEqual(plan, { scopes: [], diagnostics: [] });
 });
 
 test("buildClaudeImportPlan diagnoses malformed nested marketplace payloads", () => {
@@ -268,7 +268,7 @@ test("buildClaudeImportPlan diagnoses malformed nested marketplace payloads", ()
   };
 
   // act
-  const result = buildClaudeImportPlan([
+  const plan = buildClaudeImportPlan([
     {
       scope: "user",
       settings: {
@@ -285,7 +285,7 @@ test("buildClaudeImportPlan diagnoses malformed nested marketplace payloads", ()
   ]);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(plan, {
     scopes: [
       {
         scope: "user",
@@ -419,7 +419,7 @@ test("buildClaudeImportPlan diagnoses nonobject and unsupported flat entries", (
   };
 
   // act
-  const result = buildClaudeImportPlan([
+  const plan = buildClaudeImportPlan([
     {
       scope: "project",
       settings: {
@@ -438,7 +438,7 @@ test("buildClaudeImportPlan diagnoses nonobject and unsupported flat entries", (
   ]);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(plan, {
     scopes: [
       {
         scope: "project",
@@ -613,7 +613,7 @@ test("buildClaudeImportPlan maps flat directory and GitHub entries in ref order"
   };
 
   // act
-  const result = buildClaudeImportPlan([
+  const plan = buildClaudeImportPlan([
     {
       scope: "project",
       settings: {
@@ -624,7 +624,7 @@ test("buildClaudeImportPlan maps flat directory and GitHub entries in ref order"
   ]);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(plan, {
     scopes: [
       {
         scope: "project",
@@ -670,7 +670,7 @@ test("buildClaudeImportPlan maps every nested source shape and optional ref", ()
   };
 
   // act
-  const result = buildClaudeImportPlan([
+  const plan = buildClaudeImportPlan([
     {
       scope: "user",
       settings: {
@@ -687,7 +687,7 @@ test("buildClaudeImportPlan maps every nested source shape and optional ref", ()
   ]);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(plan, {
     scopes: [
       {
         scope: "user",
@@ -745,7 +745,7 @@ test("buildClaudeImportPlan maps the official source and skips its duplicate", (
   // arrange
 
   // act
-  const result = buildClaudeImportPlan([
+  const plan = buildClaudeImportPlan([
     {
       scope: "user",
       settings: {
@@ -759,7 +759,7 @@ test("buildClaudeImportPlan maps the official source and skips its duplicate", (
   ]);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(plan, {
     scopes: [
       {
         scope: "user",

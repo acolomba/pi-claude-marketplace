@@ -168,7 +168,7 @@ function walkSchemaForStrictAdditionalProperties(schema: unknown, path: string[]
 
 test("HOOK-03: the live hook validator schema carries NO `additionalProperties: false` at any nesting level", () => {
   const offenders = walkSchemaForStrictAdditionalProperties(HOOKS_VALIDATOR.Type(), []);
-  assert.deepEqual(
+  assert.deepStrictEqual(
     offenders,
     [],
     `HOOK-03 lenient stance violated -- strict gates found at: ${offenders.join(", ")}`,

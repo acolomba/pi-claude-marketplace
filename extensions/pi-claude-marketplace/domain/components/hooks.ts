@@ -238,7 +238,7 @@ export function parseHooksConfig<P>(
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch (err) {
+  } catch (err: unknown) {
     const reason = `hooks.json is not valid JSON: ${errorMessage(err)}`;
     hookDebugLog(reason);
     return { ok: false, reason };

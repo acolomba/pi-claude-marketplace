@@ -163,7 +163,7 @@ test("OUT-08: Reason is the closed 44-entry reason set", () => {
   // container-is-here miss (41 -> 43).
   // WDET-04 / D-106-04: +1 for the dedicated final `workflows` member
   // (43 -> 44).
-  assert.equal(Object.keys(REASON_ENROLLMENT).length, 44);
+  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 44);
 });
 
 test("SNM-02: StatusToken is the closed 24-entry token set", () => {
@@ -173,7 +173,7 @@ test("SNM-02: StatusToken is the closed 24-entry token set", () => {
   // USTAT-02 / D-64-01: +1 for the de-collapsed not-installed `partially-available`
   // render token (22 -> 23).
   // RSTA-01 / D-80-06: +1 for the not-installed git-source `remote` token (23 -> 24).
-  assert.equal(Object.keys(STATUS_TOKEN_ENROLLMENT).length, 24);
+  assert.strictEqual(Object.keys(STATUS_TOKEN_ENROLLMENT).length, 24);
 });
 
 test("SNM-02: PluginStatus is the closed 19-entry plugin-status set", () => {
@@ -184,11 +184,11 @@ test("SNM-02: PluginStatus is the closed 19-entry plugin-status set", () => {
   // RSTA-01 / D-80-06: +1 for `remote` (18 -> 19) -- likewise required in
   // `PluginStatus` because the info surface renders `(remote)` via
   // `Extract<PluginStatus, "remote">`.
-  assert.equal(Object.keys(PLUGIN_STATUS_ENROLLMENT).length, 19);
+  assert.strictEqual(Object.keys(PLUGIN_STATUS_ENROLLMENT).length, 19);
 });
 
 test("SNM-02: MarketplaceStatus is the closed 7-entry marketplace-status set", () => {
-  assert.equal(Object.keys(MARKETPLACE_STATUS_ENROLLMENT).length, 7);
+  assert.strictEqual(Object.keys(MARKETPLACE_STATUS_ENROLLMENT).length, 7);
 });
 
 /**

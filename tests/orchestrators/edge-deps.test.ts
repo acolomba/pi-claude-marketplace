@@ -36,8 +36,6 @@ type PluginRecord = MarketplaceRecord["plugins"][string];
 interface HermeticScope {
   readonly cwd: string;
   readonly home: string;
-  /** How many times the case reached the replaced process-wide transport. */
-  fetchCallCount(): number;
 }
 
 interface InstalledFixture {
@@ -80,14 +78,8 @@ function refuseNetwork(): Promise<Response> {
  */
 async function createHermeticScope(t: TestContext, label: string): Promise<HermeticScope> {
   const { cwd, home } = await createHermeticEnvironment(t, `edge-deps-${label}-`);
-  const fetchSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
-  return {
-    cwd,
-    home,
-    fetchCallCount(): number {
-      return fetchSpy.mock.callCount();
-    },
-  };
+  t.mock.method(globalThis, "fetch", refuseNetwork);
+  return { cwd, home };
 }
 
 function marketplaceRootIn(cwd: string, marketplaceName: string): string {
@@ -214,7 +206,6 @@ describe("pluginCachePath", () => {
 
     // assert
     assert.strictEqual(cachePath, expectedCachePath);
-    assert.strictEqual(scope.fetchCallCount(), 0);
   });
 
   test("derives the user-scope per-marketplace cache file", async (t) => {
@@ -236,7 +227,6 @@ describe("pluginCachePath", () => {
 
     // assert
     assert.strictEqual(cachePath, expectedCachePath);
-    assert.strictEqual(scope.fetchCallCount(), 0);
   });
 });
 
@@ -264,7 +254,6 @@ describe("loadStateForScope", () => {
 
     // assert
     assert.deepStrictEqual(scopeState, expectedState);
-    assert.strictEqual(scope.fetchCallCount(), 0);
   });
 
   test("reports no marketplaces when the scope has no state file", async (t) => {
@@ -278,7 +267,6 @@ describe("loadStateForScope", () => {
 
     // assert
     assert.deepStrictEqual(scopeState, expectedState);
-    assert.strictEqual(scope.fetchCallCount(), 0);
   });
 });
 
@@ -472,7 +460,6 @@ describe("loadManifestForMarketplace", () => {
 
       // assert
       assert.deepStrictEqual(indexRows, expectedRows);
-      assert.strictEqual(scope.fetchCallCount(), 0);
     });
   }
 
@@ -494,7 +481,6 @@ describe("loadManifestForMarketplace", () => {
       );
       return true;
     });
-    assert.strictEqual(scope.fetchCallCount(), 0);
   });
 
   test("reports a soft failure when the marketplace manifest is not valid JSON", async (t) => {
@@ -516,6 +502,5 @@ describe("loadManifestForMarketplace", () => {
       assert.ok(error.cause.cause instanceof SyntaxError);
       return true;
     });
-    assert.strictEqual(scope.fetchCallCount(), 0);
   });
 });

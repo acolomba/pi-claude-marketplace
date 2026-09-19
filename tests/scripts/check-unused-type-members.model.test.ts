@@ -226,11 +226,11 @@ export function pull(source: Source): string {
   );
 
   // act & assert
-  for (const key of ["plain", "renamed", "withDefault", "nested"]) {
-    assert.deepStrictEqual(shapesFor(inspection, "Source", key), [
-      "value-read/binding-destructuring/production",
-    ]);
-  }
+  const destructured = ["value-read/binding-destructuring/production"];
+  assert.deepStrictEqual(shapesFor(inspection, "Source", "plain"), destructured);
+  assert.deepStrictEqual(shapesFor(inspection, "Source", "renamed"), destructured);
+  assert.deepStrictEqual(shapesFor(inspection, "Source", "withDefault"), destructured);
+  assert.deepStrictEqual(shapesFor(inspection, "Source", "nested"), destructured);
 
   assert.deepStrictEqual(witnessesFor(inspection, "Source.nested", "inner"), [
     {

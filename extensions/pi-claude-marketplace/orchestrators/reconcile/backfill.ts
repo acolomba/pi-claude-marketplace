@@ -121,8 +121,8 @@ async function applyBackfillForScope(
  * into a structured `invalid-block` row (subject `state.json`, closed-set
  * reason) so a transient failure NEVER aborts the single cascade for both
  * scopes. The gate stays open and the scan self-heals on the next load --
- * retry-safe (NFR-3); NFR-1 atomicity is unaffected (the failed write simply
- * did not commit).
+ * retry-safe (NFR-3); NFR-1 atomicity is unaffected (the failed write did not
+ * commit).
  */
 export async function applyBackfillForScopeIsolated(
   opts: ApplyReconcileOptions,

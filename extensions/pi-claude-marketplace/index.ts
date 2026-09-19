@@ -27,6 +27,9 @@ import type {
   ResourcesDiscoverResult,
 } from "./platform/pi-api.ts";
 
+/**
+ * Registers the extension's Pi hooks, tools, and slash command surface.
+ */
 // DISP-01: async factory; Pi's loader awaits this Promise (loader.d.ts
 // `loadExtensionFromFactory(...): Promise<Extension>`), so the 7 pi.on
 // registrations inside `registerHooksBridge` complete BEFORE the loader

@@ -219,7 +219,7 @@ test("keeps the update-decline and list partially-upgradable reason braces byte-
   });
 
   // assert
-  assert.equal(
+  assert.strictEqual(
     declineBrace,
     listBrace,
     "the update-decline reason brace must be byte-identical to the list partially-upgradable brace",

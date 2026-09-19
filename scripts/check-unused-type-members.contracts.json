@@ -642,22 +642,22 @@
       "filter": "extensions/pi-claude-marketplace/platform/pi-api.ts:122:32"
     },
     {
-      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:96:3",
+      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:98:3",
       "owner": "ResourcesDiscoverEvent",
       "key": "type",
       "category": "external-input",
       "purpose": "The installed resources_discover event declaration requires this discriminant, and the registered handler is checked against that declaration, so the local mirror has to spell it.",
       "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:405:5",
-      "necessity": "extensions/pi-claude-marketplace/index.ts:87:5"
+      "necessity": "extensions/pi-claude-marketplace/index.ts:90:5"
     },
     {
-      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:98:3",
+      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:100:3",
       "owner": "ResourcesDiscoverEvent",
       "key": "reason",
       "category": "external-input",
       "purpose": "The installed resources_discover event declaration requires this slot, and the registered handler is checked against that declaration, so the local mirror has to spell it.",
       "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:407:5",
-      "necessity": "extensions/pi-claude-marketplace/index.ts:87:5"
+      "necessity": "extensions/pi-claude-marketplace/index.ts:90:5"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:210:43",
@@ -724,22 +724,22 @@
       "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:64:46"
     },
     {
-      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:102:3",
+      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:104:3",
       "owner": "ResourcesDiscoverResult",
       "key": "skillPaths",
       "category": "external-output",
       "purpose": "The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/index.ts:161:11",
-      "boundary": "extensions/pi-claude-marketplace/index.ts:160:9"
+      "origin": "extensions/pi-claude-marketplace/index.ts:164:11",
+      "boundary": "extensions/pi-claude-marketplace/index.ts:163:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:103:3",
+      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:105:3",
       "owner": "ResourcesDiscoverResult",
       "key": "promptPaths",
       "category": "external-output",
       "purpose": "The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/index.ts:162:11",
-      "boundary": "extensions/pi-claude-marketplace/index.ts:160:9"
+      "origin": "extensions/pi-claude-marketplace/index.ts:165:11",
+      "boundary": "extensions/pi-claude-marketplace/index.ts:163:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:195:3",
@@ -766,12 +766,12 @@
       "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:327:6"
     },
     {
-      "id": "extensions/pi-claude-marketplace/edge/args-schema.ts:60:70",
+      "id": "extensions/pi-claude-marketplace/edge/args-schema.ts:44:70",
       "owner": "ParsedCommandArgs",
       "key": "required",
       "category": "conditional-clause",
       "purpose": "Decides which parsed positional keys may be undefined, by testing the spec entry the mapped key came from.",
-      "clause": "extensions/pi-claude-marketplace/edge/args-schema.ts:60:54"
+      "clause": "extensions/pi-claude-marketplace/edge/args-schema.ts:44:54"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts:52:21",
@@ -852,13 +852,13 @@
       "counterpart": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:22:45"
     },
     {
-      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:104:3",
+      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:106:3",
       "owner": "ResourcesDiscoverResult",
       "key": "themePaths",
       "category": "external-mirror",
       "purpose": "Keeps the local resources_discover result a faithful statement of the installed declaration the peer overload checks the handler against; upstream declares the slot optional, so widening it fails the build while nothing reads it here.",
       "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:413:5",
-      "checked": "extensions/pi-claude-marketplace/index.ts:87:5"
+      "checked": "extensions/pi-claude-marketplace/index.ts:90:5"
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:139:3",

@@ -59,7 +59,7 @@ async function loadMarketplaceManifestUncached(manifestPath: string): Promise<Ma
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch (err) {
+  } catch (err: unknown) {
     throw new InvalidMarketplaceManifestError(
       `marketplace.json is not valid JSON: ${String(err)}`,
       {

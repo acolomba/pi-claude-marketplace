@@ -1,4 +1,5 @@
 /** The real analyzer instrument shared by the production census and its controls. */
+
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs";

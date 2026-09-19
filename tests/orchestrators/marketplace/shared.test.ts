@@ -654,9 +654,7 @@ test("cascadeUnstagePlugin normalizes a non-Error JavaScript boundary failure", 
   const record = pluginRecord();
   Object.defineProperty(record.resources, "skills", {
     get(): never {
-      // JavaScript collaborators can reject with unknown values even though
-      // repository-owned bridges promise Error instances.
-      // eslint-disable-next-line @typescript-eslint/only-throw-error
+      // eslint-disable-next-line @typescript-eslint/only-throw-error -- JavaScript collaborators can reject with unknown values even though repository-owned bridges promise Error instances.
       throw "bridge rejected";
     },
   });
@@ -850,10 +848,10 @@ for (const { title, state, name, enable, expected } of [
     const expectedResult = expected;
 
     // act
-    const result = classifyAutoupdateFlip(state, name, enable);
+    const flipResult = classifyAutoupdateFlip(state, name, enable);
 
     // assert
-    assert.deepStrictEqual(result, expectedResult);
+    assert.deepStrictEqual(flipResult, expectedResult);
   });
 }
 
@@ -873,10 +871,10 @@ test("classifyAutoupdateFlip partitions every marketplace in stored order", () =
   };
 
   // act
-  const result = classifyAutoupdateFlip(state, undefined, true);
+  const flipResult = classifyAutoupdateFlip(state, undefined, true);
 
   // assert
-  assert.deepStrictEqual(result, expected);
+  assert.deepStrictEqual(flipResult, expected);
 });
 
 test("classifyAutoupdateFlip throws the complete missing-marketplace error", () => {

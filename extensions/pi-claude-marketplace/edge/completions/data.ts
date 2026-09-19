@@ -113,6 +113,7 @@ const FETCH_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
   "unavailable",
 ]);
 
+/** The modes `getPluginRefCompletions` accepts, one per plugin-targeting verb it serves. */
 export type PluginRefCompletionMode =
   "install" | "uninstall" | "update" | "fetch" | "reinstall" | "info" | "enable" | "disable";
 
@@ -215,6 +216,7 @@ export function extractPositionals(
   return positionals;
 }
 
+/** Reads the `--scope` flag's value out of a token list, if present and valid. */
 export function extractScope(tokens: readonly string[]): Scope | undefined {
   for (let i = 0; i < tokens.length; i++) {
     if (tokens[i] !== "--scope") {

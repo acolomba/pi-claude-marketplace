@@ -179,7 +179,7 @@ describe("rollbackSkillsReplacement", () => {
 });
 
 describe("unstagePluginSkills", () => {
-  test("removes only recorded trees and retries missing names through the Node remover", async (t) => {
+  test("removes only recorded skill trees and tolerates a missing name through the Node remover", async (t) => {
     // arrange
     const root = await mkdtemp(path.join(tmpdir(), "skills-bridge-remove-"));
     t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));

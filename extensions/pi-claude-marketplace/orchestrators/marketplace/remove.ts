@@ -713,7 +713,7 @@ export async function removeMarketplace(
   // invalid config. The catch arm BELOW maps it to the structured failed row.
   // Using a throw (rather than a captured boolean) keeps no-unnecessary-
   // condition lint clean and structurally guarantees tx.save() is NOT called.
-  const CFG_INVALID = new Error("cfg-invalid-sentinel");
+  const cfgInvalidSentinel = new Error("cfg-invalid-sentinel");
 
   try {
     await withLockedStateTransaction(locations, async (tx) => {
@@ -726,14 +726,14 @@ export async function removeMarketplace(
         cascade,
         successfullyUnstaged,
         failedPlugins,
-        cfgInvalidSentinel: CFG_INVALID,
+        cfgInvalidSentinel,
       });
       if (sk !== undefined) {
         sourceKindAtRecord = sk;
       }
     });
   } catch (err) {
-    if (err !== CFG_INVALID) {
+    if (err !== cfgInvalidSentinel) {
       throw err;
     }
 

@@ -70,7 +70,7 @@ test("SCN-F025: BUCKET_A_EVENTS is the closed 10-entry admitted-event set", () =
   const admittedEvents = BUCKET_A_EVENTS;
 
   // assert
-  assert.equal(admittedEvents.length, expectedEventCount);
+  assert.strictEqual(admittedEvents.length, expectedEventCount);
 });
 
 test("SCN-F025: TOOL_EVENTS is the closed 3-entry tool-matcher subset", () => {
@@ -85,7 +85,7 @@ test("SCN-F025: TOOL_EVENTS is the closed 3-entry tool-matcher subset", () => {
   const toolEvents = TOOL_EVENTS;
 
   // assert
-  assert.equal(toolEvents.length, expectedToolEventCount);
+  assert.strictEqual(toolEvents.length, expectedToolEventCount);
 });
 
 test("SCN-F025: every TOOL_EVENTS member is an admitted bucket-A event", () => {
@@ -113,7 +113,7 @@ test("SCN-F025: Dependency is the closed 2-member set softDepMarkers branches on
     [],
     "SCN-F025: a Dependency member outside the enrolled pair is a compile failure at UNENROLLED_DEPENDENCIES, not a value this array could ever hold.",
   );
-  assert.equal(
+  assert.strictEqual(
     parameterCount,
     expectedDeclaresFlagCount + probeParameterCount,
     "SCN-F025: softDepMarkers changed arity, so the Dependency set moved without its marker branch, its catalog row, or this classification being revisited.",

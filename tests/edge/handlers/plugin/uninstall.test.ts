@@ -119,7 +119,9 @@ const USER_OVERRIDE_REJECTED = {
 };
 
 /** Construct one isolated registered-handler routing owner per test case. */
-function makeHandlerUnderTest(pi: Parameters<typeof makeUninstallHandler>[0]) {
+function makeHandlerUnderTest(
+  pi: Parameters<typeof makeUninstallHandler>[0],
+): ReturnType<typeof makeUninstallHandler> {
   return makeUninstallHandler(
     pi,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),

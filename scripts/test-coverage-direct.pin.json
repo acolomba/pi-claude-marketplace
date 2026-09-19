@@ -17,6 +17,33 @@
         "422-425 (branch at 421): re-validation of a manifest entry that the identical compiled schema already accepted in the same pass. MARKETPLACE_SCHEMA.plugins is Type.Array(PLUGIN_ENTRY_SCHEMA) and PLUGIN_ENTRY_VALIDATOR is Compile(PLUGIN_ENTRY_SCHEMA), so an entry reaching the re-check was already validated by that exact schema, in this process, from this parse. ARCHITECTURE.md records the re-check as deliberate defense-in-depth.",
         "824-825 (branch at 823): the hooks re-parse guard, over bytes on which the resolver already ran both of parseHooksConfig's {ok:false} arms at install-entry under D-57-04. The only difference between the two calls is skipIfMap, and D-61-02 records that every compileIfPredicate failure collapses to MATCH_ALL_IF, so no if-field issue can produce a refusal. The guard fires only on a mutation between the resolve and the phase."
       ]
+    },
+    {
+      "sourcePath": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts",
+      "reading": "branches 68/71, lines 515/524",
+      "findingIds": ["BABYSIT-01"],
+      "reasons": [
+        "123-124: matcherFiresOnToolEvent's new `default: return assertNever(matcher, ...)` arm (google-style exhaustive-switch requirement, NFR-7). ParsedMatcher's variants are all listed in the preceding cases, so this arm is unreachable by any value the type system admits.",
+        "445-448: adaptForEvent's new `default: return assertNever(claudeEvent, ...)` arm over CompositeDispatchEvent's kind union, same NFR-7 exhaustiveness pattern; unreachable for the same reason.",
+        "519-522: entryFires' new `default: return assertNever(claudeEvent, ...)` arm over the same CompositeDispatchEvent union; unreachable for the same reason."
+      ]
+    },
+    {
+      "sourcePath": "extensions/pi-claude-marketplace/domain/mcp-resolution.ts",
+      "reading": "branches 45/46",
+      "findingIds": ["BABYSIT-01"],
+      "reasons": [
+        "106: readReferencedMcp's catch replaced an unjustified `(error as SyntaxError).message` cast with `error instanceof Error ? error.message : String(error)` (google-style: runtime check preferred over an unchecked assertion). The `: String(error)` arm is unreachable in practice -- `JSON.parse` only ever throws a genuine `SyntaxError` (an `Error` subclass) on malformed input -- but the guard is kept for defense-in-depth rather than re-introducing the unchecked cast."
+      ]
+    },
+    {
+      "sourcePath": "extensions/pi-claude-marketplace/domain/plugin-resolver.ts",
+      "reading": "branches 108/110, lines 632/637",
+      "findingIds": ["BABYSIT-01"],
+      "reasons": [
+        "201-204: classifySourceSupport's new `default: return assertNever(parsedSource, ...)` arm over ParsedSource.kind (google-style exhaustive-switch requirement, NFR-7); unreachable because every kind is already listed in the preceding cases.",
+        "357: deriveSourcePluginRoot's new `default: return assertNever(r, ...)` arm over GitPluginRootResult.kind, same NFR-7 pattern; unreachable for the same reason."
+      ]
     }
   ]
 }

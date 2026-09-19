@@ -142,7 +142,7 @@ interface LedgerOwner {
 }
 
 interface LedgerDisposition {
-  id: string;
+  readonly id: string;
   readonly path: string;
   readonly owner: string;
   readonly key: string;
@@ -222,12 +222,12 @@ function parseAudit(stdout: string): AuditResult {
   return JSON.parse(stdout) as AuditResult;
 }
 
-function categoriesOf(result: AuditResult): string[] {
-  return [...new Set(result.problems.map((problem) => problem.category))].sort();
+function categoriesOf(audit: AuditResult): string[] {
+  return [...new Set(audit.problems.map((problem) => problem.category))].sort();
 }
 
-function problemsOfCategory(result: AuditResult, category: string): AuditProblem[] {
-  return result.problems.filter((problem) => problem.category === category);
+function problemsOfCategory(audit: AuditResult, category: string): AuditProblem[] {
+  return audit.problems.filter((problem) => problem.category === category);
 }
 
 /**
@@ -296,10 +296,10 @@ test("the inventory records every candidate and states it is not a clean verdict
 
   // assert
   assert.strictEqual(run.status, 0);
-  const result = parseAudit(run.stdout);
-  assert.strictEqual(result.command, "inventory");
-  assert.strictEqual(result.status, "recorded");
-  assert.deepStrictEqual(result.counts, {
+  const audit = parseAudit(run.stdout);
+  assert.strictEqual(audit.command, "inventory");
+  assert.strictEqual(audit.status, "recorded");
+  assert.deepStrictEqual(audit.counts, {
     productionFiles: 1,
     candidates: 3,
     runtimeObserved: 1,
@@ -374,11 +374,11 @@ test("the check refuses an unread member the inventory happily recorded", async 
 
   // assert
   assert.strictEqual(run.status, 1);
-  const result = parseAudit(run.stdout);
-  assert.strictEqual(result.status, "problems");
-  assert.deepStrictEqual(categoriesOf(result), ["unread"]);
+  const audit = parseAudit(run.stdout);
+  assert.strictEqual(audit.status, "problems");
+  assert.deepStrictEqual(categoriesOf(audit), ["unread"]);
   assert.deepStrictEqual(
-    problemsOfCategory(result, "unread").map((problem) => problem.id),
+    problemsOfCategory(audit, "unread").map((problem) => problem.id),
     [neverReadId],
   );
 });
@@ -399,10 +399,10 @@ test("the check refuses a member the analysis could not settle", async (t) => {
 
   // assert
   assert.strictEqual(run.status, 1);
-  const result = parseAudit(run.stdout);
-  assert.deepStrictEqual(categoriesOf(result), ["unsupported"]);
+  const audit = parseAudit(run.stdout);
+  assert.deepStrictEqual(categoriesOf(audit), ["unsupported"]);
   assert.deepStrictEqual(
-    problemsOfCategory(result, "unsupported").map((problem) => problem.id),
+    problemsOfCategory(audit, "unsupported").map((problem) => problem.id),
     [foldedMaybeId],
   );
 });
@@ -421,10 +421,10 @@ test("the check refuses a ledger that dropped a row it must account for", async 
 
   // assert
   assert.strictEqual(run.status, 1);
-  const result = parseAudit(run.stdout);
-  assert.deepStrictEqual(categoriesOf(result), ["missing"]);
+  const audit = parseAudit(run.stdout);
+  assert.deepStrictEqual(categoriesOf(audit), ["missing"]);
   assert.deepStrictEqual(
-    problemsOfCategory(result, "missing").map((problem) => problem.id),
+    problemsOfCategory(audit, "missing").map((problem) => problem.id),
     [probeOnlyId],
   );
 });
@@ -449,10 +449,10 @@ test("the check refuses a ledger that names one declaration twice", async (t) =>
 
   // assert
   assert.strictEqual(run.status, 1);
-  const result = parseAudit(run.stdout);
-  assert.deepStrictEqual(categoriesOf(result), ["duplicate"]);
+  const audit = parseAudit(run.stdout);
+  assert.deepStrictEqual(categoriesOf(audit), ["duplicate"]);
   assert.deepStrictEqual(
-    problemsOfCategory(result, "duplicate").map((problem) => problem.id),
+    problemsOfCategory(audit, "duplicate").map((problem) => problem.id),
     [probeOnlyId],
   );
 });
@@ -469,8 +469,8 @@ test("the check refuses evidence recorded against source that has since moved", 
 
   // assert
   assert.strictEqual(run.status, 1);
-  const result = parseAudit(run.stdout);
-  assert.deepStrictEqual(categoriesOf(result), ["stale-source"]);
+  const audit = parseAudit(run.stdout);
+  assert.deepStrictEqual(categoriesOf(audit), ["stale-source"]);
 });
 
 test("the check refuses a ledger row the current report no longer holds", async (t) => {
@@ -493,10 +493,10 @@ test("the check refuses a ledger row the current report no longer holds", async 
 
   // assert
   assert.strictEqual(run.status, 1);
-  const result = parseAudit(run.stdout);
-  assert.deepStrictEqual(categoriesOf(result), ["stale-record"]);
+  const audit = parseAudit(run.stdout);
+  assert.deepStrictEqual(categoriesOf(audit), ["stale-record"]);
   assert.deepStrictEqual(
-    problemsOfCategory(result, "stale-record").map((problem) => problem.id),
+    problemsOfCategory(audit, "stale-record").map((problem) => problem.id),
     [`${typesPath}:99:3`],
   );
 });
@@ -516,10 +516,10 @@ test("the check refuses a candidate that appeared after the inventory was taken"
 
   // assert
   assert.strictEqual(run.status, 1);
-  const result = parseAudit(run.stdout);
-  assert.deepStrictEqual(categoriesOf(result), ["missing", "stale-source"]);
+  const audit = parseAudit(run.stdout);
+  assert.deepStrictEqual(categoriesOf(audit), ["missing", "stale-source"]);
   assert.deepStrictEqual(
-    problemsOfCategory(result, "missing").map((problem) => problem.id),
+    problemsOfCategory(audit, "missing").map((problem) => problem.id),
     [grownLaterId],
   );
 });
@@ -534,10 +534,10 @@ test("the check refuses a disposition nobody has explained yet", async (t) => {
 
   // assert
   assert.strictEqual(run.status, 1);
-  const result = parseAudit(run.stdout);
-  assert.deepStrictEqual(categoriesOf(result), ["incomplete"]);
+  const audit = parseAudit(run.stdout);
+  assert.deepStrictEqual(categoriesOf(audit), ["incomplete"]);
   assert.deepStrictEqual(
-    problemsOfCategory(result, "incomplete").map((problem) => problem.id),
+    problemsOfCategory(audit, "incomplete").map((problem) => problem.id),
     [probeOnlyId],
   );
 });
@@ -610,12 +610,12 @@ test("the check accepts the fully explained counterpart", async (t) => {
 
   // assert
   assert.strictEqual(run.status, 0);
-  const result = parseAudit(run.stdout);
-  assert.strictEqual(result.status, "satisfied");
-  assert.deepStrictEqual(result.problems, []);
-  assert.strictEqual(result.dispositionRows, 1);
-  assert.strictEqual(result.counts.unread, 0);
-  assert.strictEqual(result.counts.unsupportedAnalysis, 0);
+  const audit = parseAudit(run.stdout);
+  assert.strictEqual(audit.status, "satisfied");
+  assert.deepStrictEqual(audit.problems, []);
+  assert.strictEqual(audit.dispositionRows, 1);
+  assert.strictEqual(audit.counts.unread, 0);
+  assert.strictEqual(audit.counts.unsupportedAnalysis, 0);
 });
 
 /**
@@ -804,10 +804,12 @@ test("the check refuses an owner table that leaves candidates unaccounted for", 
   assert.deepStrictEqual(categoriesOf(parseAudit(run.stdout)), ["incomplete"]);
 });
 
-const layerMember = (name: string): string => `export interface ${name} {
+function layerMember(name: string): string {
+  return `export interface ${name} {
   readonly held: string;
 }
 `;
+}
 
 test("each architectural layer is its own conceptual owner", async (t) => {
   // arrange

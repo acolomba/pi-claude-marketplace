@@ -341,7 +341,7 @@ test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pr
     // SessionStart entry actually existing. With only a user-scope plugin
     // installed, an unsolicited mkdir here would create `<cwd>/.pi/...` in
     // the user's project on every session start -- the WR-05 violation.
-    assert.deepEqual(
+    assert.deepStrictEqual(
       await readdir(projectCwd),
       [],
       "pristine project cwd must stay empty across session_start (WR-05)",

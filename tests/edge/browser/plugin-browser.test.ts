@@ -30,7 +30,7 @@ const DOWN = "\x1b[B";
  * `unknown` because the real `Theme` interface has many more members the
  * browser never touches.
  */
-function mockTheme(): Theme {
+function identityTheme(): Theme {
   return {
     fg: (_color: string, text: string) => text,
     bg: (_color: string, text: string) => text,
@@ -38,11 +38,10 @@ function mockTheme(): Theme {
   } as unknown as Theme;
 }
 
-function mockTui(): { requestRender(): void } {
-  const calls: number[] = [];
+function noopTui(): { requestRender(): void } {
   return {
     requestRender(): void {
-      calls.push(calls.length);
+      // No case in this suite asserts a render-request count.
     },
   };
 }
@@ -89,8 +88,8 @@ function makeBrowser(
   onCancel: () => void,
 ): PluginBrowser {
   return new PluginBrowser({
-    tui: mockTui(),
-    theme: mockTheme(),
+    tui: noopTui(),
+    theme: identityTheme(),
     marketplaces,
     pluginLoader: (mp): Promise<readonly PluginNotificationMessage[]> => {
       if (mp.name === "official") {
@@ -120,8 +119,8 @@ const official: MarketplaceEntry = {
 /** A browser over one marketplace whose loader hands back exactly `rows`. */
 function browserOverRows(rows: readonly PluginNotificationMessage[]): PluginBrowser {
   return new PluginBrowser({
-    tui: mockTui(),
-    theme: mockTheme(),
+    tui: noopTui(),
+    theme: identityTheme(),
     marketplaces: [official],
     pluginLoader: () => Promise.resolve(rows),
     onSelect: () => undefined,
@@ -304,7 +303,7 @@ for (const { row, line, actions } of STATUS_CASES) {
     await flush();
 
     // assert
-    assert.equal(pluginLine(browser, row.name), expectedLine);
+    assert.strictEqual(pluginLine(browser, row.name), expectedLine);
   });
 
   test(`PluginBrowser :: offers ${actions.join(" / ")} for the ${row.status} row`, async () => {
@@ -318,7 +317,7 @@ for (const { row, line, actions } of STATUS_CASES) {
     browser.handleInput(ENTER);
 
     // assert
-    assert.deepEqual(actionLabels(browser, row.name), expectedActions);
+    assert.deepStrictEqual(actionLabels(browser, row.name), expectedActions);
   });
 }
 
@@ -338,7 +337,7 @@ test("PluginBrowser :: refuses a row whose status no action rule names", async (
     },
     (error: unknown) => {
       assert.ok(error instanceof Error);
-      assert.equal(error.message, expectedMessage);
+      assert.strictEqual(error.message, expectedMessage);
       return true;
     },
   );
@@ -347,8 +346,8 @@ test("PluginBrowser :: refuses a row whose status no action rule names", async (
 test("PluginBrowser :: reports an empty marketplace list rather than an empty frame", () => {
   // arrange
   const browser = new PluginBrowser({
-    tui: mockTui(),
-    theme: mockTheme(),
+    tui: noopTui(),
+    theme: identityTheme(),
     marketplaces: [],
     pluginLoader: () => Promise.resolve([]),
     onSelect: () => undefined,
@@ -372,8 +371,8 @@ test("PluginBrowser :: shows a scroll position once the marketplaces outrun one 
     source: "github:acme/plugins",
   }));
   const browser = new PluginBrowser({
-    tui: mockTui(),
-    theme: mockTheme(),
+    tui: noopTui(),
+    theme: identityTheme(),
     marketplaces: crowd,
     pluginLoader: () => Promise.resolve([]),
     onSelect: () => undefined,
@@ -448,14 +447,14 @@ test("PluginBrowser :: marketplaces -> plugins -> actions -> esc back to plugins
 
   // esc: marketplaces -> cancel
   browser.handleInput(ESC);
-  assert.equal(cancelled, true);
+  assert.strictEqual(cancelled, true);
 });
 
 test("PluginBrowser :: available plugin offers Install -> Scope screen -> Project local (Recommended) commits project scope with local:true", async () => {
-  let result: PickerResult | null = null;
+  let picked: PickerResult | null = null;
   const browser = makeBrowser(
     (r) => {
-      result = r;
+      picked = r;
     },
     () => undefined,
   );
@@ -483,7 +482,7 @@ test("PluginBrowser :: available plugin offers Install -> Scope screen -> Projec
 
   // commit first item: Project local (Recommended)
   browser.handleInput(ENTER);
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(picked, {
     action: "install",
     plugin: "avail-plug",
     marketplace: "official",
@@ -493,10 +492,10 @@ test("PluginBrowser :: available plugin offers Install -> Scope screen -> Projec
 });
 
 test("PluginBrowser :: available plugin offers Install -> Scope screen -> Project commits project scope without local", async () => {
-  let result: PickerResult | null = null;
+  let picked: PickerResult | null = null;
   const browser = makeBrowser(
     (r) => {
-      result = r;
+      picked = r;
     },
     () => undefined,
   );
@@ -517,7 +516,7 @@ test("PluginBrowser :: available plugin offers Install -> Scope screen -> Projec
   // down to second item: Project
   browser.handleInput(DOWN);
   browser.handleInput(ENTER);
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(picked, {
     action: "install",
     plugin: "avail-plug",
     marketplace: "official",
@@ -526,10 +525,10 @@ test("PluginBrowser :: available plugin offers Install -> Scope screen -> Projec
 });
 
 test("PluginBrowser :: available plugin offers Install -> Scope screen -> User (global) commits user scope", async () => {
-  let result: PickerResult | null = null;
+  let picked: PickerResult | null = null;
   const browser = makeBrowser(
     (r) => {
-      result = r;
+      picked = r;
     },
     () => undefined,
   );
@@ -549,7 +548,7 @@ test("PluginBrowser :: available plugin offers Install -> Scope screen -> User (
   browser.handleInput(DOWN);
   browser.handleInput(DOWN);
   browser.handleInput(ENTER);
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(picked, {
     action: "install",
     plugin: "avail-plug",
     marketplace: "official",
@@ -579,10 +578,10 @@ test("PluginBrowser :: scope screen esc returns to actions screen", async () => 
 });
 
 test("PluginBrowser :: disabled plugin offers Enable; committing fires onSelect with action enable", async () => {
-  let result: PickerResult | null = null;
+  let picked: PickerResult | null = null;
   const browser = makeBrowser(
     (r) => {
-      result = r;
+      picked = r;
     },
     () => undefined,
   );
@@ -602,7 +601,7 @@ test("PluginBrowser :: disabled plugin offers Enable; committing fires onSelect 
   assert.ok(!out.includes("Uninstall"), out);
 
   browser.handleInput(ENTER);
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(picked, {
     action: "enable",
     plugin: "disabled-plug",
     marketplace: "official",
@@ -633,8 +632,8 @@ test("PluginBrowser :: empty marketplace renders the (no plugins) placeholder", 
 
 test("PluginBrowser :: pluginLoader rejection renders the failure hint", async () => {
   const browser = new PluginBrowser({
-    tui: mockTui(),
-    theme: mockTheme(),
+    tui: noopTui(),
+    theme: identityTheme(),
     marketplaces,
     pluginLoader: (): Promise<readonly PluginNotificationMessage[]> =>
       Promise.reject(new Error("boom")),
@@ -666,8 +665,8 @@ test("PluginBrowser :: same-name marketplaces across scopes open their respectiv
   ];
 
   const browser = new PluginBrowser({
-    tui: mockTui(),
-    theme: mockTheme(),
+    tui: noopTui(),
+    theme: identityTheme(),
     marketplaces: sameNameMarketplaces,
     pluginLoader: (mp): Promise<readonly PluginNotificationMessage[]> => {
       return Promise.resolve([
@@ -698,8 +697,8 @@ test("PluginBrowser :: stale load race is cancelled when user navigates back to 
   });
 
   const browser = new PluginBrowser({
-    tui: mockTui(),
-    theme: mockTheme(),
+    tui: noopTui(),
+    theme: identityTheme(),
     marketplaces,
     pluginLoader: () => slowLoadPromise,
     onSelect: () => undefined,
@@ -738,8 +737,8 @@ test("PluginBrowser :: stale load failure is cancelled when user navigates back 
   });
 
   const browser = new PluginBrowser({
-    tui: mockTui(),
-    theme: mockTheme(),
+    tui: noopTui(),
+    theme: identityTheme(),
     marketplaces,
     pluginLoader: () => slowLoadPromise,
     onSelect: () => undefined,
@@ -767,10 +766,10 @@ test("PluginBrowser :: stale load failure is cancelled when user navigates back 
 });
 
 test("PluginBrowser :: non-install action preserves row-level scope on cross-scope installed row", async () => {
-  let result: PickerResult | null = null;
+  let picked: PickerResult | null = null;
   const browser = new PluginBrowser({
-    tui: mockTui(),
-    theme: mockTheme(),
+    tui: noopTui(),
+    theme: identityTheme(),
     marketplaces, // official is user scope
     pluginLoader: (): Promise<readonly PluginNotificationMessage[]> => {
       return Promise.resolve([
@@ -786,7 +785,7 @@ test("PluginBrowser :: non-install action preserves row-level scope on cross-sco
       ]);
     },
     onSelect: (r) => {
-      result = r;
+      picked = r;
     },
     onCancel: () => undefined,
   });
@@ -799,7 +798,7 @@ test("PluginBrowser :: non-install action preserves row-level scope on cross-sco
   // First action is uninstall
   browser.handleInput(ENTER);
 
-  assert.deepEqual(result, {
+  assert.deepStrictEqual(picked, {
     action: "uninstall",
     plugin: "cross-scope-plug",
     marketplace: "official",

@@ -37,7 +37,7 @@
 // `unlinkPidTable` ALL trap their own exceptions, debug-log them at
 // the OBS-01 seam (`hookDebugLog`), and return / resolve without
 // escape. The orphan-reap pass treats every failure as fail-clean
-// (NFR-3): missing data simply means no orphans to reap.
+// (NFR-3): missing data means no orphans to reap.
 
 import { readFile, unlink } from "node:fs/promises";
 import path from "node:path";

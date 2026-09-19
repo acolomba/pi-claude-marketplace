@@ -401,7 +401,7 @@ export function isScopeBearingListRow(
 }
 
 /**
- * Read `p.scope` defensively from the PluginNotificationMessage union.
+ * Read `row.scope` defensively from the PluginNotificationMessage union.
  * The `available` / `unavailable` variants OMIT the `scope` field by
  * construction (SNM-11); the other list-surface variants carry an OPTIONAL
  * `scope` that is present only when the plugin's install scope differs
@@ -414,14 +414,14 @@ export function isScopeBearingListRow(
  * narrows the variants appropriately.
  */
 export function pluginScopeOrFallback(
-  p: PluginNotificationMessage,
+  row: PluginNotificationMessage,
   marketplaceScope: Scope,
 ): Scope {
-  return isScopeBearingListRow(p) ? (p.scope ?? marketplaceScope) : marketplaceScope;
+  return isScopeBearingListRow(row) ? (row.scope ?? marketplaceScope) : marketplaceScope;
 }
 
 /**
- * Read `p.version` off a plugin notification row. D-15-04: every list-surface
+ * Read `row.version` off a plugin notification row. D-15-04: every list-surface
  * variant carries the same optional `version?` slot, so every arm returns the
  * same field and the switch computes nothing.
  *
@@ -431,8 +431,8 @@ export function pluginScopeOrFallback(
  * so a status added to the row union is a compile error here rather than a row
  * that silently loses its version.
  */
-export function pluginVersion(p: PluginNotificationMessage): string | undefined {
-  switch (p.status) {
+export function pluginVersion(row: PluginNotificationMessage): string | undefined {
+  switch (row.status) {
     case "installed":
     case "reinstalled":
     case "uninstalled":
@@ -446,9 +446,9 @@ export function pluginVersion(p: PluginNotificationMessage): string | undefined 
     case "partially-upgradable":
     case "failed":
     case "skipped":
-      return p.version;
+      return row.version;
     case "updated":
-      return p.to;
+      return row.to;
     case "manual recovery":
     case "will install":
     case "will uninstall":

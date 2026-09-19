@@ -691,7 +691,7 @@ async function addGitClonedInGuard(args: {
     const manifestPath = path.join(stagingDir, ".claude-plugin", "marketplace.json");
     const parsed = await loadMarketplaceManifest(manifestPath);
 
-    const derivedName = (parsed as { name: string }).name;
+    const derivedName = parsed.name;
 
     // 3. MA-8: duplicate name in this scope.
     if (derivedName in state.marketplaces) {
@@ -877,7 +877,7 @@ async function addPathInGuard(args: {
   // Read + validate manifest.
   const parsed = await loadMarketplaceManifest(manifestPath);
 
-  const derivedName = (parsed as { name: string }).name;
+  const derivedName = parsed.name;
 
   // MA-8: duplicate name in scope.
   if (derivedName in state.marketplaces) {

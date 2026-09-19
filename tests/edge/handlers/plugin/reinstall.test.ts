@@ -114,10 +114,6 @@ import {
   mergeMarketplaceIntoState,
 } from "../marketplace-seed.ts";
 
-import type {
-  ReinstallPluginsFn,
-  ReinstallPluginsOptions,
-} from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import type { ExtensionAPI } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
@@ -421,15 +417,11 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
     value: workspace.cwd,
     reads: 1,
   });
-  const calls: ReinstallPluginsOptions[] = [];
   const reinstallPlugins = createNodeReinstallPlugins(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
-  const reinstallPluginsSpy: ReinstallPluginsFn = async (opts) => {
-    calls.push(opts);
-    return reinstallPlugins(opts);
-  };
+  const reinstallPluginsSpy = t.mock.fn(reinstallPlugins);
 
   const reinstallHandler = makeReinstallHandlerWithOperation(pi, reinstallPluginsSpy);
 
@@ -447,14 +439,17 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
     userLocal: undefined,
   });
 
-  assert.deepStrictEqual(calls, [
-    {
-      ctx,
-      pi,
-      cwd: workspace.cwd,
-      target: { kind: "plugin", plugin: "alpha", marketplace: "mp" },
-    },
-  ]);
+  assert.deepStrictEqual(
+    reinstallPluginsSpy.mock.calls.map((call) => call.arguments[0]),
+    [
+      {
+        ctx,
+        pi,
+        cwd: workspace.cwd,
+        target: { kind: "plugin", plugin: "alpha", marketplace: "mp" },
+      },
+    ],
+  );
   assert.strictEqual(workspace.transportCalls(), 0);
   verifyBoundary();
 });

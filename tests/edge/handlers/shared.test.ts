@@ -287,7 +287,7 @@ for (const args of [
     assert.deepStrictEqual(scanned, {
       local: true,
       residualArgs: '"a  --local directory" --scope project',
-    });
+    } satisfies Scan);
     assert.deepStrictEqual(notifications, []);
     verifyBoundary();
   });
@@ -301,7 +301,10 @@ test("preserves quoted whitespace and punctuation without recognizing embedded f
   const scanned = extractLocalFlag("'a \"b\" --bogus 🦊' --local", ctx, ENABLE_USAGE);
 
   // assert
-  assert.deepStrictEqual(scanned, { local: true, residualArgs: "'a \"b\" --bogus 🦊'" });
+  assert.deepStrictEqual(scanned, {
+    local: true,
+    residualArgs: "'a \"b\" --bogus 🦊'",
+  } satisfies Scan);
   assert.deepStrictEqual(notifications, []);
   verifyBoundary();
 });
@@ -319,7 +322,7 @@ for (const { args, residualArgs } of [
     const scanned = extractLocalFlag(args, ctx, ENABLE_USAGE);
 
     // assert
-    assert.deepStrictEqual(scanned, { local: true, residualArgs });
+    assert.deepStrictEqual(scanned, { local: true, residualArgs } satisfies Scan);
     assert.deepStrictEqual(notifications, []);
     verifyBoundary();
   });

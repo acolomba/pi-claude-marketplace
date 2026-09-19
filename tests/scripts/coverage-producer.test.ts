@@ -310,7 +310,7 @@ function identitySourceMap(modulePath: string, code: string): IdentitySourceMap 
     names: [],
     mappings: encode(
       lines.map((line, lineIndex) =>
-        Array.from({ length: line.length + 1 }, (_, column) => [column, 0, lineIndex, column]),
+        Array.from({ length: line.length + 1 }, (_value, column) => [column, 0, lineIndex, column]),
       ),
     ),
   };
@@ -546,8 +546,8 @@ test("rejects the reconstructed upstream 1.0.6 producer: the nested logical call
       ],
     },
   );
-  const actual = await projectedOutput(conversion.outputPath, captured);
-  const omitted = omittedFrom(actual, expected);
+  const projected = await projectedOutput(conversion.outputPath, captured);
+  const omitted = omittedFrom(projected, expected);
   assert.deepStrictEqual(
     {
       functions: omitted.functions.map((fn) => fn.loc),
@@ -564,7 +564,7 @@ test("rejects the reconstructed upstream 1.0.6 producer: the nested logical call
     name: fn.name.replace(/^\(anonymous_\d+\)$/u, "(anonymous)"),
   });
   assert.deepStrictEqual(
-    { ...actual, functions: actual.functions.map(anonymous) },
+    { ...projected, functions: projected.functions.map(anonymous) },
     {
       functions: expected.functions
         .filter((fn) => !omittedKeys.has(spanKey(fn.loc)))
@@ -794,10 +794,9 @@ test("refuses to build from an upstream tarball whose integrity is not the pinne
       stderr: `{"kind":"upstream-integrity","actual":"sha512-${createHash("sha512").update("not the upstream tarball").digest("base64")}"}`,
     },
   );
-  assert.ok(
-    archiveBefore.equals(
-      await readFile(path.join(vendor, "ast-v8-to-istanbul-1.0.6-project.1.tgz")),
-    ),
+  assert.deepStrictEqual(
+    await readFile(path.join(vendor, "ast-v8-to-istanbul-1.0.6-project.1.tgz")),
+    archiveBefore,
   );
 });
 

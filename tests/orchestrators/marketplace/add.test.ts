@@ -420,7 +420,7 @@ test("MA-5: github HTTPS source with #ref clones the canonical repo URL at that 
 
     // assert
     assert.equal(state.cloneCalls.length, 1);
-    assert.deepEqual(
+    assert.deepStrictEqual(
       {
         url: state.cloneCalls[0]?.url,
         ref: state.cloneCalls[0]?.ref,
@@ -1566,8 +1566,8 @@ test("AUTH-01 add: credentialOps.fill HIT bypasses Device Flow and clones with t
 
     // Exercise the recorded auth bundle: fill HIT returns the stored credential.
     const cbs = buildAuthCallbacks(recordedAuth);
-    const result = await cbs.onAuth("https://github.com/owner/repo.git");
-    assert.deepEqual(result, { username: "x-access-token", password: "stored-token" });
+    const credentials = await cbs.onAuth("https://github.com/owner/repo.git");
+    assert.deepStrictEqual(credentials, { username: "x-access-token", password: "stored-token" });
 
     // fill consulted exactly once via the onAuth call above.
     assert.equal(credState.fillCalls.length, 1);
@@ -1634,10 +1634,10 @@ test("AUTH-01 add: credentialOps.fill MISS triggers Device Flow which produces a
     // Exercise the miss path: buildAuthCallbacks -> fill miss -> onAuthRequired
     // -> initiateDeviceFlow (with the injected http mock) -> success.
     const cbs = buildAuthCallbacks(recordedAuth);
-    const result = await cbs.onAuth("https://github.com/owner/repo.git");
-    assert.equal(
-      result.password,
-      "gho_test_token_AUTH01",
+    const credentials = await cbs.onAuth("https://github.com/owner/repo.git");
+    assert.deepStrictEqual(
+      credentials,
+      { username: "x-access-token", password: "gho_test_token_AUTH01" },
       "Device Flow must produce the mocked token",
     );
 
@@ -2151,7 +2151,7 @@ test("WR-09 / T-56-02-01: orchestrated-mode add SKIPS config write-back (neither
     });
 
     // assert
-    assert.deepEqual(outcome, { status: "added", name: "valid-marketplace" });
+    assert.deepStrictEqual(outcome, { status: "added", name: "valid-marketplace" });
     const { loadConfig } =
       await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
     assert.equal((await loadConfig(locations.configJsonPath)).status, "absent");
@@ -2380,7 +2380,7 @@ test("MURL-01: url source with a #ref clones at that ref with singleBranch and s
 
     // assert
     assert.equal(state.cloneCalls.length, 1);
-    assert.deepEqual(
+    assert.deepStrictEqual(
       {
         url: state.cloneCalls[0]?.url,
         ref: state.cloneCalls[0]?.ref,

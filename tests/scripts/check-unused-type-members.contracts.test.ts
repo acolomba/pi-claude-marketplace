@@ -1492,13 +1492,9 @@ test("an absence marker narrows the slot the rest of the intersection declares",
   );
 
   // act & assert
-  for (const key of ["cause", "toVersion", "mode"]) {
-    assert.strictEqual(
-      memberFor(report, "direct.outcome", key).status,
-      "explicit-contract",
-      `direct.outcome.${key}`,
-    );
-  }
+  assert.strictEqual(memberFor(report, "direct.outcome", "cause").status, "explicit-contract");
+  assert.strictEqual(memberFor(report, "direct.outcome", "toVersion").status, "explicit-contract");
+  assert.strictEqual(memberFor(report, "direct.outcome", "mode").status, "explicit-contract");
 
   assert.deepStrictEqual(memberFor(report, "direct.outcome", "cause").reasons, [
     "type-refinement: Keeps a cause off a row this outcome is never built with. " +

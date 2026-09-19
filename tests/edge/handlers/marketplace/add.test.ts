@@ -251,7 +251,10 @@ function createGitPort(sourceTree: string): ReturnType<typeof createGitOpsFake> 
   });
 }
 
-function createAddDeps(gitOps: GitOps) {
+function createAddDeps(gitOps: GitOps): {
+  completionCache: ReturnType<typeof createCompletionCache>;
+  gitOps: GitOps;
+} {
   return { completionCache: createCompletionCache(), gitOps };
 }
 

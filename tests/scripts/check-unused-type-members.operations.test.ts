@@ -1094,14 +1094,15 @@ export function remove(ok: boolean): Outcome {
 }
 `;
 
-const comparisonSpec = (expected: string): string =>
-  `import assert from "node:assert/strict";
+function comparisonSpec(expected: string): string {
+  return `import assert from "node:assert/strict";
 
 import { remove } from "../extensions/pi-claude-marketplace/cases.ts";
 
 const outcome = remove(true);
 assert.deepStrictEqual(outcome, ${expected});
 `;
+}
 
 test("a discriminant value in the expected literal settles which arm supplied a key", async (t) => {
   // arrange

@@ -381,7 +381,7 @@ function isExpectedDiscoveryError(error: unknown, caller: "git.clone" | "git.fet
   return true;
 }
 
-function expectedPublicRequests(): readonly RecordedHttpRequest[] {
+function expectedPublicRequests(): readonly [RecordedHttpRequest, RecordedHttpRequest] {
   return [
     {
       url: `${REMOTE_URL}/info/refs?service=git-upload-pack`,
@@ -752,7 +752,7 @@ describe("resolveRemoteRef", () => {
       {
         ...expectedPublicRequests()[1],
         headers: {
-          ...expectedPublicRequests()[1]!.headers,
+          ...expectedPublicRequests()[1].headers,
           Authorization: "Basic dXNlcjpzZWNyZXQ=",
         },
       },

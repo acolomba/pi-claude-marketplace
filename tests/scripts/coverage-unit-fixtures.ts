@@ -16,6 +16,7 @@ import {
 
 import type { ProjectedCoverage } from "./coverage-projection.ts";
 
+/** One production source of the population, with the coverage it must show after the run. */
 export interface PopulationSource {
   readonly path: string;
   readonly source: string;
@@ -145,8 +146,10 @@ function idleCoverage(): ProjectedCoverage {
   };
 }
 
-// The zero-execution model of a module V8 never saw: every construct present,
-// every counter zero, the implicit else as the absent location.
+/**
+ * The zero-execution model of a module V8 never saw: every construct present,
+ * every counter zero, the implicit else as the absent location.
+ */
 export function unimportedCoverage(): ProjectedCoverage {
   const source = unimportedSource;
   const ifStatement = spanOf(source, "if (flag) {", "return 1;\n  }");

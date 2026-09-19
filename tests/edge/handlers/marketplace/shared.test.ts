@@ -177,6 +177,23 @@ describe("makeSingleNameMarketplaceHandler", () => {
     verify(infoRun);
     verify(removeRun);
   });
+
+  test("rejects unknown flags before calling its delegate", async () => {
+    // arrange
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const run = mock<MarketplaceRun>({ exactParams: true, name: "marketplace run" });
+    const handler = makeSingleNameMarketplaceHandler(pi, INFO_USAGE, run);
+
+    // act
+    await handler("official --bogus", ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: `Unknown flag: "--bogus".\n\n${INFO_USAGE}`, severity: "error" },
+    ]);
+    verifyBoundary();
+    verify(run);
+  });
 });
 
 describe("openMarketplaceCommand", () => {
@@ -325,21 +342,4 @@ describe("openMarketplaceCommand", () => {
     ]);
     verifyBoundary();
   });
-});
-
-test("single-name handler rejects unknown flags before calling its delegate", async () => {
-  // arrange
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const run = mock<MarketplaceRun>({ exactParams: true, name: "marketplace run" });
-  const handler = makeSingleNameMarketplaceHandler(pi, INFO_USAGE, run);
-
-  // act
-  await handler("official --bogus", ctx);
-
-  // assert
-  assert.deepStrictEqual(notifications, [
-    { message: `Unknown flag: "--bogus".\n\n${INFO_USAGE}`, severity: "error" },
-  ]);
-  verifyBoundary();
-  verify(run);
 });

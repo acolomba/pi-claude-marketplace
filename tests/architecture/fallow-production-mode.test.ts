@@ -13,6 +13,7 @@
  * still discover the test tree from their own real reports, not from the config
  * text that requests it.
  */
+
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {

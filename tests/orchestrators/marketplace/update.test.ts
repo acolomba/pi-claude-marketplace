@@ -1563,7 +1563,10 @@ test("LIFE-06: cascade mapper carries a preflight `not in manifest` skip through
 
     // A skipped plugin is a fixed point for the cascade: nothing is written, so
     // a repeated `marketplace update` finds the same record.
-    assert.deepEqual(await readPluginRecord(locations.extensionRoot, "auto-skip", "hello"), before);
+    assert.deepStrictEqual(
+      await readPluginRecord(locations.extensionRoot, "auto-skip", "hello"),
+      before,
+    );
   });
 });
 
@@ -1635,7 +1638,10 @@ test("LIFE-06: autoupdate cascade through the REAL single-plugin update renders 
       assert.ok(first !== undefined);
       assert.match(first.message, /^ {2}⊘ hello \(skipped\) \{not in manifest\}$/m);
 
-      assert.deepEqual(await readPluginRecord(locations.extensionRoot, "e2e-mp", "hello"), before);
+      assert.deepStrictEqual(
+        await readPluginRecord(locations.extensionRoot, "e2e-mp", "hello"),
+        before,
+      );
     } finally {
       await rm(marketplaceRoot, { recursive: true, force: true });
     }
@@ -3118,8 +3124,8 @@ test("AUTH-02 update: credentialOps.fill HIT yields silent reuse -- NO Device Fl
     const fetchAuth = state.fetchCalls[0]?.auth;
     assert.ok(fetchAuth !== undefined);
     const cbs = buildAuthCallbacks(fetchAuth);
-    const result = await cbs.onAuth("https://github.com/owner/repo.git");
-    assert.deepEqual(result, { username: "x-access-token", password: "stored-token" });
+    const credentials = await cbs.onAuth("https://github.com/owner/repo.git");
+    assert.deepStrictEqual(credentials, { username: "x-access-token", password: "stored-token" });
     // fill was called once (from the closure exercised above).
     assert.equal(credState.fillCalls.length, 1);
   });

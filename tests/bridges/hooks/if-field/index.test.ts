@@ -226,7 +226,7 @@ test("compiles known command and path-tool prefixes in stable row order", () => 
   ];
 
   // act
-  const actual = rows.map(({ declaration, event }) => {
+  const compiledRows = rows.map(({ declaration, event }) => {
     const predicate = compileIfPredicate(declaration, event, compileContext);
     if (predicate.kind === "bash") {
       return {
@@ -265,7 +265,7 @@ test("compiles known command and path-tool prefixes in stable row order", () => 
   });
 
   // assert
-  assert.deepStrictEqual(actual, expected);
+  assert.deepStrictEqual(compiledRows, expected);
 });
 
 test("partitions empty, non-tool, unknown-prefix, and MCP boundary declarations", () => {
@@ -357,7 +357,7 @@ test("partitions empty, non-tool, unknown-prefix, and MCP boundary declarations"
   ];
 
   // act
-  const actual = rows.map(({ declaration, event, reason }) => ({
+  const compiledRows = rows.map(({ declaration, event, reason }) => ({
     declaration,
     event,
     reason,
@@ -365,16 +365,16 @@ test("partitions empty, non-tool, unknown-prefix, and MCP boundary declarations"
   }));
 
   // assert
-  assert.deepStrictEqual(actual, expected);
-  assert.strictEqual(actual[0]?.predicate, MATCH_ALL_IF);
-  assert.strictEqual(actual[1]?.predicate, MATCH_ALL_IF);
-  assert.strictEqual(actual[2]?.predicate, MATCH_ALL_IF);
-  assert.strictEqual(actual[3]?.predicate, MATCH_ALL_IF);
-  assert.strictEqual(actual[4]?.predicate, MATCH_ALL_IF);
-  assert.strictEqual(actual[7]?.predicate, MATCH_ALL_IF);
-  assert.strictEqual(actual[8]?.predicate, MATCH_ALL_IF);
-  assert.strictEqual(actual[9]?.predicate, MATCH_ALL_IF);
-  assert.strictEqual(actual[10]?.predicate, MATCH_ALL_IF);
+  assert.deepStrictEqual(compiledRows, expected);
+  assert.strictEqual(compiledRows[0]?.predicate, MATCH_ALL_IF);
+  assert.strictEqual(compiledRows[1]?.predicate, MATCH_ALL_IF);
+  assert.strictEqual(compiledRows[2]?.predicate, MATCH_ALL_IF);
+  assert.strictEqual(compiledRows[3]?.predicate, MATCH_ALL_IF);
+  assert.strictEqual(compiledRows[4]?.predicate, MATCH_ALL_IF);
+  assert.strictEqual(compiledRows[7]?.predicate, MATCH_ALL_IF);
+  assert.strictEqual(compiledRows[8]?.predicate, MATCH_ALL_IF);
+  assert.strictEqual(compiledRows[9]?.predicate, MATCH_ALL_IF);
+  assert.strictEqual(compiledRows[10]?.predicate, MATCH_ALL_IF);
 });
 
 test("compiles MCP literals and both server-prefix forms exactly", () => {
@@ -392,12 +392,12 @@ test("compiles MCP literals and both server-prefix forms exactly", () => {
   ];
 
   // act
-  const actual = declarations.map((declaration) =>
+  const compiledPredicates = declarations.map((declaration) =>
     compileIfPredicate(declaration, "PreToolUse", compileContext),
   );
 
   // assert
-  assert.deepStrictEqual(actual, expected);
+  assert.deepStrictEqual(compiledPredicates, expected);
 });
 
 test("falls open when Bash predicate compilation throws", (t) => {
@@ -536,13 +536,13 @@ test("evaluates Bash matches, misses, and missing commands independently", () =>
   ];
 
   // act
-  const actual = rows.map(({ name, event }) => ({
+  const outcomes = rows.map(({ name, event }) => ({
     name,
     fires: ifFires(predicate, event, extensionContext, "PreToolUse"),
   }));
 
   // assert
-  assert.deepStrictEqual(actual, expected);
+  assert.deepStrictEqual(outcomes, expected);
 });
 
 test("keeps command-bearing rules on their own shell tool", () => {
@@ -769,13 +769,13 @@ test("evaluates path membership, non-membership, absolute paths, and cwd fallbac
   ];
 
   // act
-  const actual = rows.map(({ name, predicate, event }) => ({
+  const outcomes = rows.map(({ name, predicate, event }) => ({
     name,
     fires: ifFires(predicate, event, extensionContext, "PreToolUse"),
   }));
 
   // assert
-  assert.deepStrictEqual(actual, expected);
+  assert.deepStrictEqual(outcomes, expected);
 });
 
 test("evaluates MCP literal equality, server membership, and wrong servers", () => {
@@ -802,13 +802,13 @@ test("evaluates MCP literal equality, server membership, and wrong servers", () 
   ];
 
   // act
-  const actual = rows.map(({ name, predicate, toolName }) => ({
+  const outcomes = rows.map(({ name, predicate, toolName }) => ({
     name,
     fires: ifFires(predicate, { toolName, input: {} }, extensionContext, "PreToolUse"),
   }));
 
   // assert
-  assert.deepStrictEqual(actual, expected);
+  assert.deepStrictEqual(outcomes, expected);
 });
 
 test("dispatches all six predicate arms in stable row order", () => {
@@ -872,14 +872,14 @@ test("dispatches all six predicate arms in stable row order", () => {
   ];
 
   // act
-  const actual = rows.map(({ name, predicate, event, eventName }) => ({
+  const outcomes = rows.map(({ name, predicate, event, eventName }) => ({
     name,
     predicateKind: predicate.kind,
     fires: ifFires(predicate, event, extensionContext, eventName),
   }));
 
   // assert
-  assert.deepStrictEqual(actual, expected);
+  assert.deepStrictEqual(outcomes, expected);
 });
 
 test("rejects a predicate outside the exhaustive dispatch vocabulary", () => {
@@ -891,6 +891,6 @@ test("rejects a predicate outside the exhaustive dispatch vocabulary", () => {
   assert.throws(
     () =>
       ifFires(invalidPredicate, { toolName: "read", input: {} }, extensionContext, "PreToolUse"),
-    { name: "Error", message: /unreachable HookExecResult arm/ },
+    { name: "Error", message: /unreachable IfPredicate arm/ },
   );
 });

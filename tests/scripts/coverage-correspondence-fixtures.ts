@@ -48,6 +48,10 @@ test("checks both callbacks twice", () => {
 });
 `;
 
+/**
+ * The two same-named callbacks whose hits and statement ratios coincide, so a
+ * validator cannot tell them apart by name, position or count alone.
+ */
 export function twinsFixture(): ProducerFixture {
   const source = twinsSource;
   const firstIf = spanOf(source, "if (doubled > 10) {", "return true;\n    }");

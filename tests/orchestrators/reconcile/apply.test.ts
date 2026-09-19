@@ -550,6 +550,7 @@ function withoutTempSuffix(message: string): string {
 }
 
 test("D-05-02: the source and owner-test census contains exactly the two approved behavioral-composition exceptions", async () => {
+  // act & assert
   assert.deepStrictEqual(await compositionExceptionCensus(), [
     {
       kind: "production",

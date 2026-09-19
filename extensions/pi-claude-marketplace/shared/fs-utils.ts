@@ -180,17 +180,17 @@ export async function pathExists(p: string): Promise<boolean> {
  */
 export async function removeOrphanIfPresent(target: string, mode: "file" | "tree"): Promise<void> {
   try {
-    const s = await fs.stat(target);
-    if (mode === "tree" && s.isDirectory()) {
+    const stat = await fs.stat(target);
+    if (mode === "tree" && stat.isDirectory()) {
       await fs.rm(target, { recursive: true, force: true });
-    } else if (mode === "file" && s.isFile()) {
+    } else if (mode === "file" && stat.isFile()) {
       await fs.rm(target);
     }
     // Mismatched kind: leave alone. Subsequent rename will surface
     // ENOTDIR/ENOTEMPTY -- preserves PUP-6 phase-3 failure trigger.
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw e;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw err;
     }
   }
 }

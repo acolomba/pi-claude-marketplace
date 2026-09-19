@@ -103,7 +103,7 @@ async function readReferencedMcp(
   } catch (error: unknown) {
     return {
       ok: false,
-      reason: `malformed mcp reference: invalid JSON in "${raw}": ${(error as SyntaxError).message}`,
+      reason: `malformed mcp reference: invalid JSON in "${raw}": ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }

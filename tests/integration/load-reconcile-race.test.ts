@@ -335,12 +335,12 @@ test("RECON-06 (two-process race): config declares one path-source mp-a + plugin
     // uncontended pass below must converge.
     if (existsSync(locationsFor("project", env.cwd).stateJsonPath)) {
       const raced = await readStateRaw(env.cwd);
-      assert.deepEqual(
+      assert.deepStrictEqual(
         Object.keys(raced.marketplaces).filter((name) => name !== "mp-a"),
         [],
         `race must write no marketplace record but mp-a; got ${JSON.stringify(raced.marketplaces)} for ${describeRace(outcome)}`,
       );
-      assert.deepEqual(
+      assert.deepStrictEqual(
         Object.keys(raced.marketplaces["mp-a"]?.plugins ?? {}).filter(
           (name) => name !== "plugin-a",
         ),
@@ -377,14 +377,14 @@ test("RECON-06 (two-process race): config declares one path-source mp-a + plugin
     const state = await readStateRaw(env.cwd);
 
     // Exactly one mp-a record (no interleaved double-write).
-    assert.deepEqual(
+    assert.deepStrictEqual(
       Object.keys(state.marketplaces),
       ["mp-a"],
       `expected exactly one mp-a record; got ${JSON.stringify(state.marketplaces)} after ${describeRace(outcome)}`,
     );
 
     // Exactly one plugin-a record (no double-install).
-    assert.deepEqual(
+    assert.deepStrictEqual(
       Object.keys(state.marketplaces["mp-a"]!.plugins),
       ["plugin-a"],
       `expected exactly one plugin-a record; got ${JSON.stringify(
@@ -457,7 +457,7 @@ test("Concurrent first-load race: two processes race against state with legacy a
 
     // Exactly one marketplace entry (no double-merge -- the second process
     // saw 'valid' and short-circuited per migrate-config.ts's trichotomy).
-    assert.deepEqual(
+    assert.deepStrictEqual(
       Object.keys(config.marketplaces ?? {}),
       ["mp-legacy"],
       `expected exactly one mp entry; got ${JSON.stringify(config.marketplaces ?? {})}`,
@@ -571,7 +571,7 @@ test("D-13 gate (single-process): state with legacy autoupdate + ENOENT claude-p
     // Config was written + carries autoupdate: false captured from state.
     assert.equal(existsSync(configPath), true, "claude-plugins.json must exist after run");
     const config = await readConfigRaw(env.cwd);
-    assert.deepEqual(Object.keys(config.marketplaces ?? {}), ["mp-d13"]);
+    assert.deepStrictEqual(Object.keys(config.marketplaces ?? {}), ["mp-d13"]);
     assert.equal(
       config.marketplaces!["mp-d13"]!.autoupdate,
       false,

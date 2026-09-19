@@ -84,7 +84,7 @@ export function hostFromCloneUrl(cloneUrl: string, kind: "github" | "url" | "git
 }
 
 /** The single no-provider cause line (D-79-03). No supported-hosts list. */
-export const NO_PROVIDER_CAUSE = (host: string): string =>
+export const NO_PROVIDER_CAUSE: (host: string) => string = (host) =>
   `no auth provider is registered for ${host}`;
 
 /**

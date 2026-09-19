@@ -19,7 +19,7 @@ describe("assertSafeName", () => {
       // act
       try {
         assertSafeName(safeName);
-      } catch (error) {
+      } catch (error: unknown) {
         actualError = error;
       }
 
@@ -106,7 +106,7 @@ describe("assertSafeName", () => {
       // act
       try {
         assertSafeName(safeName);
-      } catch (error) {
+      } catch (error: unknown) {
         actualError = error;
       }
 

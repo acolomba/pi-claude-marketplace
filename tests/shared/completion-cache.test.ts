@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
@@ -795,13 +795,19 @@ describe("cache invalidation", () => {
     const scope = "user";
     const cache = createCompletionCache();
     t.after(() => rm(directory, { recursive: true, force: true }));
+    // A directory cannot be unlinked; the platform-specific errno this raises
+    // (independent of the module under test) is the exact code expected to propagate.
+    const expectedCode = await unlink(directory).then(
+      () => undefined,
+      (error: unknown) => (error as NodeJS.ErrnoException).code,
+    );
 
     // act & assert
     await assert.rejects(
       () => cache.invalidateMarketplaceNames(directory, scope),
       (error: unknown) => {
         assert.ok(error instanceof Error);
-        assert.notStrictEqual((error as NodeJS.ErrnoException).code, "ENOENT");
+        assert.strictEqual((error as NodeJS.ErrnoException).code, expectedCode);
         return true;
       },
     );
@@ -836,13 +842,19 @@ describe("cache invalidation", () => {
       cache.invalidateMarketplaceCache(scope, marketplace);
       await rm(directory, { recursive: true, force: true });
     });
+    // A directory cannot be unlinked; the platform-specific errno this raises
+    // (independent of the module under test) is the exact code expected to propagate.
+    const expectedCode = await unlink(directory).then(
+      () => undefined,
+      (error: unknown) => (error as NodeJS.ErrnoException).code,
+    );
 
     // act & assert
     await assert.rejects(
       () => cache.dropMarketplaceCache(directory, scope, marketplace),
       (error: unknown) => {
         assert.ok(error instanceof Error);
-        assert.notStrictEqual((error as NodeJS.ErrnoException).code, "ENOENT");
+        assert.strictEqual((error as NodeJS.ErrnoException).code, expectedCode);
         return true;
       },
     );

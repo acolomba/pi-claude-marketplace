@@ -66,7 +66,7 @@ function validate(root: string, ...args: readonly string[]): ProcessRun {
   return run([validateCliPath, "--root", root, ...args]);
 }
 
-function verdict(validation: ProcessRun): { status: number; rows: FailureRow[] } {
+function verdict(validation: ProcessRun): { status: number; rows: readonly FailureRow[] } {
   return { status: validation.status, rows: refusalRows(validation.stderr) };
 }
 

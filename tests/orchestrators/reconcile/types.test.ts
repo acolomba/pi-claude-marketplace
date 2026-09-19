@@ -370,10 +370,10 @@ describe("plannedSourceMismatchSubject", () => {
     } satisfies PlannedSourceMismatch;
 
     // act
-    const subject = plannedSourceMismatchSubject(mismatch);
+    const blockName = plannedSourceMismatchSubject(mismatch);
 
     // assert
-    assert.strictEqual(subject, "official");
+    assert.strictEqual(blockName, "official");
   });
 
   test("selects the raw key for a malformed plugin key", () => {
@@ -385,10 +385,10 @@ describe("plannedSourceMismatchSubject", () => {
     } satisfies PlannedSourceMismatch;
 
     // act
-    const subject = plannedSourceMismatchSubject(mismatch);
+    const blockName = plannedSourceMismatchSubject(mismatch);
 
     // assert
-    assert.strictEqual(subject, "formatter");
+    assert.strictEqual(blockName, "formatter");
   });
 });
 

@@ -50,6 +50,12 @@ function nonBooleanDiagnostic(scope: Scope, ref: string): ImportDiagnostic {
   };
 }
 
+/**
+ * Extracts the `plugin@marketplace` refs Claude settings declared enabled
+ * (an exact `true` value). A `false` value is a silent skip; any other value,
+ * or a ref that does not parse as `plugin@marketplace`, is reported as a
+ * diagnostic instead of a ref.
+ */
 export function extractEnabledPluginRefs(
   scope: Scope,
   settings: MergedClaudeSettings,

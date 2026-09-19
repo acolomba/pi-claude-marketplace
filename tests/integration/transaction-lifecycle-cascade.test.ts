@@ -17,6 +17,10 @@ import {
 } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import {
+  loadState,
+  saveState,
+} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
@@ -98,8 +102,6 @@ async function seedHooksPlugin(opts: {
   const locations = locationsFor("project", opts.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
 
-  const { saveState, loadState } =
-    await import("../../extensions/pi-claude-marketplace/persistence/state-io.ts");
   const state = await loadState(locations.extensionRoot);
   await saveState(locations.extensionRoot, {
     schemaVersion: 1,
@@ -150,7 +152,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
       // `plugin-dev/skills/hook-development/SKILL.md`. The source-plugin
       // seed file under `<pluginRoot>/hooks/hooks.json` ships the wrapper;
       // `parseHooksConfig` unwraps `parsed.hooks` before the bridge stage-
-      // write path receives the inner record. On-disk `deepEqual`
+      // write path receives the inner record. On-disk `deepStrictEqual`
       // assertions against `hooksPath` compare to `v1Hooks.hooks` /
       // `v2Hooks.hooks` (the unwrapped inner record the bridge writes).
       const v1Hooks = {
@@ -181,7 +183,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
         // assert
         const summary = notifications.map((n) => n.message).join("\n");
         assert.ok(!summary.includes("(failed)"), `install: expected clean; got: ${summary}`);
-        assert.deepEqual(JSON.parse(await readFile(hooksPath, "utf8")), v1Hooks.hooks);
+        assert.deepStrictEqual(JSON.parse(await readFile(hooksPath, "utf8")), v1Hooks.hooks);
         // LIFE-02: install row + reload-hint trailer cascade.
         assert.ok(
           summary.includes("(installed)"),
@@ -227,7 +229,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
         // assert
         const summary = notifications.map((n) => n.message).join("\n");
         assert.ok(!summary.includes("(failed)"), `update: expected clean; got: ${summary}`);
-        assert.deepEqual(
+        assert.deepStrictEqual(
           JSON.parse(await readFile(hooksPath, "utf8")),
           v2Hooks.hooks,
           "update commit slot must rewrite hooks.json with v2 payload",
@@ -257,7 +259,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
         assert.equal(outcome.partition, "reinstalled");
         const summary = notifications.map((n) => n.message).join("\n");
         assert.ok(!summary.includes("(failed)"), `reinstall: expected clean; got: ${summary}`);
-        assert.deepEqual(
+        assert.deepStrictEqual(
           JSON.parse(await readFile(hooksPath, "utf8")),
           v2Hooks.hooks,
           "reinstall replace slot must rewrite hooks.json from the resolved manifest",

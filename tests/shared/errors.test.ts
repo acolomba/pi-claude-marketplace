@@ -885,6 +885,7 @@ describe("PluginUpdateConcurrencyError", () => {
 
 describe("CleanupContextError", () => {
   test("keeps the primary error as cause and freezes exact cleanup records", () => {
+    // arrange
     const primary = new Error("state save failed");
     const cleanupCause = new Error("permission denied");
     const failures = [
@@ -896,25 +897,30 @@ describe("CleanupContextError", () => {
       },
     ] satisfies CleanupFailure[];
 
+    // act
     const error = new CleanupContextError(primary, failures);
 
-    assert.equal(error.cause, primary);
-    assert.equal(error.primary, primary);
+    // assert
+    assert.strictEqual(error.cause, primary);
+    assert.strictEqual(error.primary, primary);
     assert.deepStrictEqual(error.cleanupFailures, failures);
-    assert.equal(Object.isFrozen(error.cleanupFailures), true);
-    assert.equal(Object.isFrozen(error.cleanupFailures[0]), true);
+    assert.strictEqual(Object.isFrozen(error.cleanupFailures), true);
+    assert.strictEqual(Object.isFrozen(error.cleanupFailures[0]), true);
     assert.match(causeChainTrailer(error), /abort commands uuid/);
     assert.ok(!causeChainTrailer(error).includes("/scope/commands-staging"));
   });
 
   test("returns the primary error unchanged when cleanup succeeds", () => {
+    // arrange
     const primary = new Error("state save failed");
 
-    assert.equal(errorWithCleanupFailures(primary, []), primary);
+    // act & assert
+    assert.strictEqual(errorWithCleanupFailures(primary, []), primary);
     assert.deepStrictEqual(cleanupFailuresFromError(primary), []);
   });
 
   test("merges cleanup records while preserving the original primary cause", () => {
+    // arrange
     const primary = new Error("state save failed");
     const first = errorWithCleanupFailures(primary, [
       {
@@ -924,6 +930,8 @@ describe("CleanupContextError", () => {
         cause: new Error("first cleanup failed"),
       },
     ]);
+
+    // act
     const second = errorWithCleanupFailures(first, [
       {
         phase: "rollback",
@@ -933,9 +941,10 @@ describe("CleanupContextError", () => {
       },
     ]);
 
+    // assert
     assert.ok(second instanceof CleanupContextError);
-    assert.equal(second.primary, primary);
-    assert.equal(second.cause, primary);
+    assert.strictEqual(second.primary, primary);
+    assert.strictEqual(second.cause, primary);
     assert.deepStrictEqual(
       second.cleanupFailures.map(({ phase, artifact, path }) => ({ phase, artifact, path })),
       [
@@ -949,7 +958,10 @@ describe("CleanupContextError", () => {
   });
 
   test("normalizes a non-Error primary without adding successful cleanup diagnostics", () => {
+    // arrange
     const cleanupCause = new Error("cleanup failed");
+
+    // act
     const error = errorWithCleanupFailures("operation failed", [
       {
         phase: "commit",
@@ -959,9 +971,10 @@ describe("CleanupContextError", () => {
       },
     ]);
 
+    // assert
     assert.ok(error instanceof CleanupContextError);
-    assert.equal(error.primary.message, "operation failed");
-    assert.equal(error.cleanupFailures[0]?.cause, cleanupCause);
+    assert.strictEqual(error.primary.message, "operation failed");
+    assert.strictEqual(error.cleanupFailures[0]?.cause, cleanupCause);
   });
 });
 

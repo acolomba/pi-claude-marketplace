@@ -173,8 +173,8 @@ export function notifyWithContext<
     cardinality,
   };
 
-  emitContextCascade(ctx, pi, message, (p, probe, mpScope) =>
-    dispatchRow(context, p, probe, mpScope),
+  emitContextCascade(ctx, pi, message, (row, probe, mpScope) =>
+    dispatchRow(context, row, probe, mpScope),
   );
 }
 
@@ -213,8 +213,8 @@ export function notifyUpdateWithContext<
     tally,
   };
 
-  emitContextCascade(ctx, pi, message, (p, probe, mpScope) =>
-    dispatchRow(context, p, probe, mpScope),
+  emitContextCascade(ctx, pi, message, (row, probe, mpScope) =>
+    dispatchRow(context, row, probe, mpScope),
   );
 }
 
@@ -249,8 +249,8 @@ export function notifyUpdateNoOpWithContext<
     cardinality,
   };
 
-  emitUpdateNoOpCascade(ctx, pi, message, (p, probe, mpScope) =>
-    dispatchRow(context, p, probe, mpScope),
+  emitUpdateNoOpCascade(ctx, pi, message, (row, probe, mpScope) =>
+    dispatchRow(context, row, probe, mpScope),
   );
 }
 
@@ -285,8 +285,8 @@ export function notifyReconcileAppliedWithContext<
     cardinality: "plural",
   };
 
-  emitReconcileAppliedContextCascade(ctx, pi, labeled, (p, probe, mpScope) =>
-    dispatchRow(context, p, probe, mpScope),
+  emitReconcileAppliedContextCascade(ctx, pi, labeled, (row, probe, mpScope) =>
+    dispatchRow(context, row, probe, mpScope),
   );
 }
 
@@ -324,11 +324,11 @@ type WritableRowSeverity = { -readonly [K in "severity"]?: PluginNotificationMes
  */
 function dispatchRow<Status extends string, Msg extends PluginNotificationMessage>(
   context: CommandContext<Status, Msg>,
-  p: PluginNotificationMessage,
+  row: PluginNotificationMessage,
   probe: SoftDepStatus,
   mpScope: Scope,
 ): string {
-  const arm = context.render[p.status as Status] as
+  const arm = context.render[row.status as Status] as
     RenderFn<Extract<Msg, { status: Status }>> | undefined;
   if (arm === undefined) {
     // WR-02 / SEV-02: the fallback is an internal-drift error condition, so it
@@ -338,15 +338,15 @@ function dispatchRow<Status extends string, Msg extends PluginNotificationMessag
     // floor the envelope at error. The field is declared `readonly`; this single
     // localized write is the seam that lets the fallback contribute its severity.
     try {
-      (p as WritableRowSeverity).severity = "error";
+      (row as WritableRowSeverity).severity = "error";
     } catch {
       // A frozen/sealed out-of-band row rejects the write in ESM strict mode. The
       // throw must not escape the single `ctx.ui.notify` seam, so degrade: keep
       // whatever severity was already stamped and still render the diagnostic.
     }
 
-    return `${"name" in p ? p.name : "?"} (failed) {internal: no render arm for "${p.status}"}`;
+    return `${"name" in row ? row.name : "?"} (failed) {internal: no render arm for "${row.status}"}`;
   }
 
-  return (arm as unknown as RenderFn<PluginNotificationMessage>)(p, probe, mpScope);
+  return (arm as unknown as RenderFn<PluginNotificationMessage>)(row, probe, mpScope);
 }

@@ -370,7 +370,7 @@ test("maps every UTF-16 column of every original line to itself, including the l
   const expectedSegments = sampleModule.original
     .split("\n")
     .map((line, lineIndex) =>
-      Array.from({ length: line.length + 1 }, (_, column) => [column, 0, lineIndex, column]),
+      Array.from({ length: line.length + 1 }, (_char, column) => [column, 0, lineIndex, column]),
     );
 
   // act
@@ -648,7 +648,7 @@ function endpointlessSourceMap(modulePath: string, code: string): IdentitySource
     names: [],
     mappings: encode(
       lines.map((line, lineIndex) =>
-        Array.from({ length: line.length }, (_, column) => [column, 0, lineIndex, column]),
+        Array.from({ length: line.length }, (_char, column) => [column, 0, lineIndex, column]),
       ),
     ),
   };

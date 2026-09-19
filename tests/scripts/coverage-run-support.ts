@@ -23,8 +23,10 @@ export const captureCliPath = fileURLToPath(
 export const producerCliPath = fileURLToPath(
   new URL("../../scripts/coverage-producer.mjs", import.meta.url),
 );
-// The installed Fallow launcher: a Node script that runs the platform binary
-// the lockfile resolved, so a control exercises the consumer the gate uses.
+/**
+ * The installed Fallow launcher: a Node script that runs the platform binary
+ * the lockfile resolved, so a control exercises the consumer the gate uses.
+ */
 export const fallowBinPath = fileURLToPath(
   new URL("../../node_modules/fallow/bin/fallow", import.meta.url),
 );
@@ -68,9 +70,11 @@ export interface V8CoverageFile {
   readonly result: readonly V8ScriptCoverage[];
 }
 
-// A position read back from JSON lacks the coordinates of an implicit else,
-// while the producer's in-memory form carries them as `undefined`; both are
-// the same absent position.
+/**
+ * A position read back from JSON lacks the coordinates of an implicit else,
+ * while the producer's in-memory form carries them as `undefined`; both are
+ * the same absent position.
+ */
 export interface IstanbulPosition {
   readonly line?: number | undefined;
   readonly column?: number | undefined;
@@ -112,8 +116,10 @@ export interface FailureRow {
   readonly [field: string]: unknown;
 }
 
-// The run a fixture capture produced: where its manifest and stores live, the
-// module the fixture names, and every raw V8 file holding that module's url.
+/**
+ * The run a fixture capture produced: where its manifest and stores live, the
+ * module the fixture names, and every raw V8 file holding that module's url.
+ */
 export interface CapturedRun {
   readonly root: string;
   readonly manifestPath: string;
@@ -124,6 +130,7 @@ export interface CapturedRun {
   readonly rawPaths: readonly string[];
 }
 
+/** Writes `files` under a fresh temporary directory, removed via `t.after()`, and returns its path. */
 export async function createRoot(
   t: TestContext,
   files: Readonly<Record<string, string>>,
@@ -143,6 +150,7 @@ export async function createRoot(
   return root;
 }
 
+/** The fixture root's files: package.json, the module and its tests. */
 export function fixtureFiles(fixture: ProducerFixture): Record<string, string> {
   return {
     "package.json": fixturePackageJson,
@@ -151,9 +159,11 @@ export function fixtureFiles(fixture: ProducerFixture): Record<string, string> {
   };
 }
 
-// Runs a script under this Node with the outer runner's worker markers shed
-// and no inherited coverage destination, so a nested run never reports into
-// the run that hosts this test.
+/**
+ * Runs a script under this Node with the outer runner's worker markers shed
+ * and no inherited coverage destination, so a nested run never reports into
+ * the run that hosts this test.
+ */
 export function run(args: readonly string[], cwd?: string): ProcessRun {
   const { NODE_TEST_CONTEXT: _context, NODE_TEST_WORKER_ID: _worker, ...env } = process.env;
   const completed = spawnSync(process.execPath, args, {
@@ -204,8 +214,10 @@ export async function captureFixture(root: string, fixture: ProducerFixture): Pr
   };
 }
 
-// Converts the captured module through the producer CLI from the run's own
-// records and returns the map it wrote.
+/**
+ * Converts the captured module through the producer CLI from the run's own
+ * records and returns the map it wrote.
+ */
 export async function convertFromRun(
   t: TestContext,
   captured: CapturedRun,
@@ -243,8 +255,10 @@ export async function originalText(captured: CapturedRun): Promise<string> {
   return readFile(path.join(captured.directory, "sources", captured.record.source), "utf8");
 }
 
-// One fixture captured and converted: the root, the run, the map the producer
-// wrote and its record for the fixture module, with the texts the run stored.
+/**
+ * One fixture captured and converted: the root, the run, the map the producer
+ * wrote and its record for the fixture module, with the texts the run stored.
+ */
 export interface CapturedConversion {
   readonly fixture: ProducerFixture;
   readonly root: string;
@@ -283,10 +297,12 @@ export async function writeMap(root: string, map: IstanbulCoverageMap): Promise<
   return mapPath;
 }
 
-// One production function as the installed Fallow reports it when given a
-// coverage map: the coverage it joined to the function, `null` when the
-// report carries none, and where that coverage came from (`istanbul` when a
-// record matched, `estimated` when none did).
+/**
+ * One production function as the installed Fallow reports it when given a
+ * coverage map: the coverage it joined to the function, `null` when the
+ * report carries none, and where that coverage came from (`istanbul` when a
+ * record matched, `estimated` when none did).
+ */
 export interface FallowFunction {
   readonly path: string;
   readonly name: string;
@@ -312,10 +328,12 @@ export interface FallowHealth {
   readonly functions: readonly FallowFunction[];
 }
 
-// Runs the installed Fallow health command over `root` with `mapPath` as its
-// coverage input, in report-only mode with a CRAP ceiling of 1 so that every
-// function is listed with the coverage Fallow attached to it. Only the
-// fixture's production functions are returned.
+/**
+ * Runs the installed Fallow health command over `root` with `mapPath` as its
+ * coverage input, in report-only mode with a CRAP ceiling of 1 so that every
+ * function is listed with the coverage Fallow attached to it. Only the
+ * fixture's production functions are returned.
+ */
 export function fallowHealth(root: string, mapPath: string): FallowHealth {
   const health = run([
     fallowBinPath,

@@ -103,7 +103,7 @@ interface RiskReport {
 
 interface Verdict {
   readonly status: number;
-  readonly rows: FailureRow[];
+  readonly rows: readonly FailureRow[];
 }
 
 // One row of the installed consumer's report as the cases read it back:

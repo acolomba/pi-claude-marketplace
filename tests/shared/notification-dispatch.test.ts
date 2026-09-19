@@ -24,7 +24,7 @@ import type {
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 interface NotificationContext {
-  ui: { notify: ReturnType<TestContext["mock"]["fn"]> };
+  readonly ui: { readonly notify: ReturnType<TestContext["mock"]["fn"]> };
 }
 
 function createContext(t: TestContext): NotificationContext {
@@ -32,12 +32,12 @@ function createContext(t: TestContext): NotificationContext {
 }
 
 interface ToolDefinition {
-  name?: string;
-  sourceInfo?: { source?: string };
+  readonly name?: string;
+  readonly sourceInfo?: { readonly source?: string };
 }
 
 interface NotificationApi {
-  getAllTools: () => ToolDefinition[];
+  readonly getAllTools: () => ToolDefinition[];
 }
 
 function piWithBothLoaded(): NotificationApi {

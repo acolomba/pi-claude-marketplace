@@ -525,6 +525,6 @@ export function ifFires(
       return extractToolName(event).startsWith(predicate.serverPrefix);
 
     default:
-      return assertNever(predicate, `unreachable HookExecResult arm: ${JSON.stringify(predicate)}`);
+      return assertNever(predicate, `unreachable IfPredicate arm: ${JSON.stringify(predicate)}`);
   }
 }

@@ -1431,7 +1431,7 @@ export function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatu
     ),
   ];
 
-  const pluginRow = joinTokens([
+  const pluginRowLine = joinTokens([
     pluginInfoStatusGlyph(plugin.status),
     plugin.name,
     renderScopeBracket(plugin.scope, message.marketplaceScope),
@@ -1439,7 +1439,7 @@ export function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatu
     `(${plugin.status})`,
     composeReasons(plugin.reasons, false, false, probe),
   ]);
-  lines.push(`  ${pluginRow}`);
+  lines.push(`  ${pluginRowLine}`);
 
   if (plugin.description !== undefined && plugin.description.length > 0) {
     lines.push(...wrapDescription(plugin.description, 4, DESCRIPTION_MAX_COLS));

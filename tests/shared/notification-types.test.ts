@@ -396,9 +396,14 @@ test("pluginVersion returns target version on updated row", () => {
   assert.equal(pluginVersion(row), "2.0.0");
 });
 
-test("pluginVersion handles each status arm", () => {
-  const cases: readonly PluginNotificationMessage[] = [
-    {
+const pluginVersionCases: readonly {
+  readonly title: string;
+  readonly row: PluginNotificationMessage;
+  readonly expectedVersion: string | undefined;
+}[] = [
+  {
+    title: "returns the version field for an installed row",
+    row: {
       status: "installed",
       name: "a",
       version: "1.0",
@@ -406,7 +411,11 @@ test("pluginVersion handles each status arm", () => {
       severity: "info",
       needsReload: false,
     },
-    {
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for a reinstalled row",
+    row: {
       status: "reinstalled",
       name: "a",
       version: "1.0",
@@ -414,14 +423,46 @@ test("pluginVersion handles each status arm", () => {
       severity: "info",
       needsReload: false,
     },
-    { status: "uninstalled", name: "a", version: "1.0", severity: "info", needsReload: false },
-    { status: "disabled", name: "a", version: "1.0", severity: "info", needsReload: false },
-    { status: "available", name: "a", version: "1.0" },
-    { status: "remote", name: "a", version: "1.0" },
-    { status: "unavailable", name: "a", version: "1.0", reasons: [] },
-    { status: "partially-available", name: "a", version: "1.0", reasons: [] },
-    { status: "upgradable", name: "a", version: "1.0", reasons: [] },
-    {
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for an uninstalled row",
+    row: { status: "uninstalled", name: "a", version: "1.0", severity: "info", needsReload: false },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for a disabled row",
+    row: { status: "disabled", name: "a", version: "1.0", severity: "info", needsReload: false },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for an available row",
+    row: { status: "available", name: "a", version: "1.0" },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for a remote row",
+    row: { status: "remote", name: "a", version: "1.0" },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for an unavailable row",
+    row: { status: "unavailable", name: "a", version: "1.0", reasons: [] },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for a partially-available row",
+    row: { status: "partially-available", name: "a", version: "1.0", reasons: [] },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for an upgradable row",
+    row: { status: "upgradable", name: "a", version: "1.0", reasons: [] },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for a partially-installed row",
+    row: {
       status: "partially-installed",
       name: "a",
       version: "1.0",
@@ -429,10 +470,26 @@ test("pluginVersion handles each status arm", () => {
       severity: "info",
       needsReload: false,
     },
-    { status: "partially-upgradable", name: "a", version: "1.0", reasons: [] },
-    { status: "failed", name: "a", version: "1.0", reasons: [], severity: "error" },
-    { status: "skipped", name: "a", version: "1.0", reasons: [] },
-    {
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for a partially-upgradable row",
+    row: { status: "partially-upgradable", name: "a", version: "1.0", reasons: [] },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for a failed row",
+    row: { status: "failed", name: "a", version: "1.0", reasons: [], severity: "error" },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for a skipped row",
+    row: { status: "skipped", name: "a", version: "1.0", reasons: [] },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the target version for an updated row",
+    row: {
       status: "updated",
       name: "a",
       from: "1.0",
@@ -441,28 +498,44 @@ test("pluginVersion handles each status arm", () => {
       severity: "info",
       needsReload: false,
     },
-    { status: "manual recovery", name: "a", severity: "warning", reasons: [] },
-    { status: "will install", name: "a" },
-    { status: "will uninstall", name: "a" },
-    { status: "will enable", name: "a" },
-    { status: "will disable", name: "a" },
-  ];
-  for (const c of cases) {
-    if (c.status === "updated") {
-      assert.equal(pluginVersion(c), "2.0");
-    } else if (
-      c.status === "manual recovery" ||
-      c.status === "will install" ||
-      c.status === "will uninstall" ||
-      c.status === "will enable" ||
-      c.status === "will disable"
-    ) {
-      assert.equal(pluginVersion(c), undefined);
-    } else {
-      assert.equal(pluginVersion(c), "1.0");
-    }
-  }
-});
+    expectedVersion: "2.0",
+  },
+  {
+    title: "returns undefined for a manual recovery row",
+    row: { status: "manual recovery", name: "a", severity: "warning", reasons: [] },
+    expectedVersion: undefined,
+  },
+  {
+    title: "returns undefined for a will-install row",
+    row: { status: "will install", name: "a" },
+    expectedVersion: undefined,
+  },
+  {
+    title: "returns undefined for a will-uninstall row",
+    row: { status: "will uninstall", name: "a" },
+    expectedVersion: undefined,
+  },
+  {
+    title: "returns undefined for a will-enable row",
+    row: { status: "will enable", name: "a" },
+    expectedVersion: undefined,
+  },
+  {
+    title: "returns undefined for a will-disable row",
+    row: { status: "will disable", name: "a" },
+    expectedVersion: undefined,
+  },
+];
+
+for (const { title, row, expectedVersion } of pluginVersionCases) {
+  test(title, () => {
+    // act
+    const version = pluginVersion(row);
+
+    // assert
+    assert.equal(version, expectedVersion);
+  });
+}
 
 test("pluginVersion returns undefined when version omitted on supported row", () => {
   const row = {

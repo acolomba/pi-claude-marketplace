@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
-import { test } from "node:test";
+import test from "node:test";
 import { isDeepStrictEqual } from "node:util";
 
 import { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -244,14 +244,10 @@ function destroyChildren(children: readonly ChildHarness[]): void {
 }
 
 function assertLaneParity(syncEnv: NodeJS.ProcessEnv, asyncEnv: NodeJS.ProcessEnv): void {
-  const syncKeys = Object.keys(syncEnv).sort();
-  const asyncKeysWithoutMarker = Object.keys(asyncEnv)
-    .filter((key) => key !== "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH")
-    .sort();
-  assert.deepStrictEqual(asyncKeysWithoutMarker, syncKeys);
-  for (const key of syncKeys) {
-    assert.strictEqual(asyncEnv[key], syncEnv[key]);
-  }
+  const asyncWithoutMarker = Object.fromEntries(
+    Object.entries(asyncEnv).filter(([key]) => key !== "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH"),
+  );
+  assert.deepStrictEqual(asyncWithoutMarker, syncEnv);
 }
 
 async function waitForPidTable(

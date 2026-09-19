@@ -176,21 +176,21 @@ export function causeChainTrailer(err: unknown): string {
   return `${PREFIX}${rendered.join(JOINER)}`;
 }
 
-function linkMessage(c: unknown): string {
-  if (c instanceof CleanupContextError) {
-    const details = c.cleanupFailures.map(renderCleanupFailure).join("; ");
-    return `${c.message} (cleanup: ${details})`;
+function linkMessage(link: unknown): string {
+  if (link instanceof CleanupContextError) {
+    const details = link.cleanupFailures.map(renderCleanupFailure).join("; ");
+    return `${link.message} (cleanup: ${details})`;
   }
 
-  if (c instanceof Error) {
-    return c.message;
+  if (link instanceof Error) {
+    return link.message;
   }
 
-  if (typeof c === "string") {
-    return c;
+  if (typeof link === "string") {
+    return link;
   }
 
-  return Object.prototype.toString.call(c);
+  return Object.prototype.toString.call(link);
 }
 
 function renderCleanupFailure(failure: CleanupFailure): string {

@@ -193,7 +193,7 @@ JSON
     assert.ok(beforeAgentStartReg, "bridge must register before_agent_start handler (drain point)");
 
     // Pre-flight: pending buffer empty after a fresh registerHooksBridge.
-    assert.deepEqual(
+    assert.deepStrictEqual(
       runtime.pendingSessionStartContextEntries(),
       [],
       "registerHooksBridge must clear the pending buffer so /reload cannot leak stale context",
@@ -210,7 +210,7 @@ JSON
     };
     await sessionStartReg.handler(sessionStartEvent, placeholderCtx);
 
-    assert.deepEqual(
+    assert.deepStrictEqual(
       runtime.pendingSessionStartContextEntries().map((entry) => entry.context),
       ["LEARN-MODE-MARK"],
       "wire-protocol.ts must parse the additionalContext envelope and adaptObservationResultForEvent must append into the buffer",
@@ -224,12 +224,12 @@ JSON
       placeholderCtx,
     );
 
-    assert.deepEqual(
+    assert.deepStrictEqual(
       beforeAgentResult,
       { systemPrompt: "BASE-SYSTEM-PROMPT\n\nLEARN-MODE-MARK" },
       "before_agent_start handler must surface the joined systemPrompt to Pi's chain",
     );
-    assert.deepEqual(
+    assert.deepStrictEqual(
       runtime.pendingSessionStartContextEntries(),
       [],
       "drain semantics: pending buffer cleared after the first before_agent_start",
@@ -311,7 +311,7 @@ JSON
     assert.ok(firstSessionStartReg);
     const firstReloadEvent: SessionStartEvent = { type: "session_start", reason: "startup" };
     await firstSessionStartReg.handler(firstReloadEvent, placeholderCtx);
-    assert.deepEqual(
+    assert.deepStrictEqual(
       runtime.pendingSessionStartContextEntries().map((entry) => entry.context),
       ["FIRST-LOAD-MARK"],
     );
@@ -324,7 +324,7 @@ JSON
     await hooksHydration.registerHooksBridge(secondLoad.pi, {
       cwd: extensionRoot,
     });
-    assert.deepEqual(
+    assert.deepStrictEqual(
       runtime.pendingSessionStartContextEntries(),
       [],
       "registerHooksBridge re-entry must clear the pending buffer (no stale-context leak across /reload)",

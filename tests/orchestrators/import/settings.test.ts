@@ -388,12 +388,12 @@ test("loads missing base and local files as complete empty settings", async (t) 
   const configRoot = await makeTempRoot(t, "import-settings-missing-");
 
   // act
-  const result = await loadMergedClaudeSettingsForScope("user", {
+  const loaded = await loadMergedClaudeSettingsForScope("user", {
     claudeConfigDir: configRoot,
   });
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(loaded, {
     paths: {
       basePath: path.join(configRoot, "settings.json"),
       localPath: path.join(configRoot, "settings.local.json"),
@@ -427,12 +427,12 @@ test("loads and shallow-merges complete base and local settings", async (t) => {
   });
 
   // act
-  const result = await loadMergedClaudeSettingsForScope("user", {
+  const loaded = await loadMergedClaudeSettingsForScope("user", {
     claudeConfigDir: configRoot,
   });
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(loaded, {
     paths: {
       basePath: path.join(configRoot, "settings.json"),
       localPath: path.join(configRoot, "settings.local.json"),
@@ -462,12 +462,12 @@ test("keeps valid base settings when the local file is absent", async (t) => {
   });
 
   // act
-  const result = await loadMergedClaudeSettingsForScope("user", {
+  const loaded = await loadMergedClaudeSettingsForScope("user", {
     claudeConfigDir: configRoot,
   });
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(loaded, {
     paths: {
       basePath: path.join(configRoot, "settings.json"),
       localPath: path.join(configRoot, "settings.local.json"),
@@ -487,12 +487,12 @@ test("loads nonobject JSON files as empty settings without diagnostics", async (
   await writeSettings(configRoot, "local", null);
 
   // act
-  const result = await loadMergedClaudeSettingsForScope("user", {
+  const loaded = await loadMergedClaudeSettingsForScope("user", {
     claudeConfigDir: configRoot,
   });
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(loaded, {
     paths: {
       basePath: path.join(configRoot, "settings.json"),
       localPath: path.join(configRoot, "settings.local.json"),
@@ -514,12 +514,12 @@ test("reports malformed base and local JSON in file order with exact wording", a
   await writeFile(localPath, "{local", "utf8");
 
   // act
-  const result = await loadMergedClaudeSettingsForScope("user", {
+  const loaded = await loadMergedClaudeSettingsForScope("user", {
     claudeConfigDir: configRoot,
   });
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(loaded, {
     paths: {
       basePath,
       localPath,
@@ -558,12 +558,12 @@ test("reports non-ENOENT base and local read failures in exact order", async (t)
   await writeFile(configRoot, "not a directory", "utf8");
 
   // act
-  const result = await loadMergedClaudeSettingsForScope("user", {
+  const loaded = await loadMergedClaudeSettingsForScope("user", {
     claudeConfigDir: configRoot,
   });
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(loaded, {
     paths: { basePath, localPath },
     settings: {
       enabledPlugins: {},
@@ -610,18 +610,18 @@ test("reports invalid environment, malformed base, and unreadable local diagnost
     return errno.message;
   });
   await writeFile(basePath, "{base", "utf8");
-  let result;
+  let loaded;
 
   // act
   try {
     process.env.CLAUDE_CONFIG_DIR = "relative/config";
-    result = await loadMergedClaudeSettingsForScope("user", {});
+    loaded = await loadMergedClaudeSettingsForScope("user", {});
   } finally {
     restoreEnvironmentProperty("CLAUDE_CONFIG_DIR", originalConfigDirectory);
   }
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(loaded, {
     paths: { basePath, localPath },
     settings: {
       enabledPlugins: {},
@@ -664,12 +664,12 @@ test("suppresses the invalid-environment warning when an explicit user root is s
   // arrange
   const configRoot = await makeTempRoot(t, "import-settings-explicit-suppression-");
   const originalConfigDirectory = captureEnvironmentProperty("CLAUDE_CONFIG_DIR");
-  let result;
+  let loaded;
 
   // act
   try {
     process.env.CLAUDE_CONFIG_DIR = "relative/config";
-    result = await loadMergedClaudeSettingsForScope("user", {
+    loaded = await loadMergedClaudeSettingsForScope("user", {
       claudeConfigDir: configRoot,
     });
   } finally {
@@ -677,7 +677,7 @@ test("suppresses the invalid-environment warning when an explicit user root is s
   }
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(loaded, {
     paths: {
       basePath: path.join(configRoot, "settings.json"),
       localPath: path.join(configRoot, "settings.local.json"),
@@ -705,18 +705,18 @@ test("does not report a user-environment warning while loading project settings"
     enabledPlugins: { "alpha@market": true },
     extraKnownMarketplaces: { alpha: { source: "project-alpha" } },
   });
-  let result;
+  let loaded;
 
   // act
   try {
     process.env.CLAUDE_CONFIG_DIR = "relative/config";
-    result = await loadMergedClaudeSettingsForScope("project", { cwd: projectRoot });
+    loaded = await loadMergedClaudeSettingsForScope("project", { cwd: projectRoot });
   } finally {
     restoreEnvironmentProperty("CLAUDE_CONFIG_DIR", originalConfigDirectory);
   }
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(loaded, {
     paths: {
       basePath: path.join(configRoot, "settings.json"),
       localPath: path.join(configRoot, "settings.local.json"),

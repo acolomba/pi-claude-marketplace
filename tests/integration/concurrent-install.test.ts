@@ -210,9 +210,9 @@ test("D-15 same-plugin race leaves one installed record and no orphan skills", a
     assertOneWinner(await runRace(env, "alpha", "alpha"));
 
     const state = await readState(env.cwd);
-    assert.deepEqual(Object.keys(state.marketplaces.mp!.plugins), ["alpha"]);
+    assert.deepStrictEqual(Object.keys(state.marketplaces.mp!.plugins), ["alpha"]);
     const installedSkills = state.marketplaces.mp!.plugins.alpha!.resources!.skills ?? [];
-    assert.deepEqual(await listSkillDirs(env.cwd), [...installedSkills].sort());
+    assert.deepStrictEqual(await listSkillDirs(env.cwd), [...installedSkills].sort());
   } finally {
     await env.cleanup();
   }
@@ -229,7 +229,7 @@ test("D-15 different-plugin same-scope race records exactly one plugin and no or
     assert.equal(pluginNames.length, 1);
     const installedSkills =
       state.marketplaces.mp!.plugins[pluginNames[0]!]!.resources!.skills ?? [];
-    assert.deepEqual(await listSkillDirs(env.cwd), [...installedSkills].sort());
+    assert.deepStrictEqual(await listSkillDirs(env.cwd), [...installedSkills].sort());
   } finally {
     await env.cleanup();
   }

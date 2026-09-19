@@ -119,7 +119,7 @@ test("catalog vs completion: per-verb complete-set equals emitted labels (scope 
     const emitted = items.map((i) => i.label).filter((l) => l !== "--scope");
     const catalogComplete = completionFlagEntries(verb).map((e) => e.name);
 
-    assert.deepEqual(
+    assert.deepStrictEqual(
       sorted(emitted),
       sorted(catalogComplete),
       `Flag drift for "${head}": completion labels ${JSON.stringify(sorted(emitted))} != catalog complete-set ${JSON.stringify(sorted(catalogComplete))}. Update edge/flag-catalog.ts in the same change.`,
@@ -200,7 +200,7 @@ test("catalog and alias completions cover the complete router inventory", () => 
   );
   assert.deepStrictEqual(
     EXPECTED_CATALOG_VERBS.map((verb) => isCatalogVerb(verb)),
-    Array.from({ length: 22 }, () => true),
+    Array.from({ length: EXPECTED_CATALOG_VERBS.length }, () => true),
   );
 });
 

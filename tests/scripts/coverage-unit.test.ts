@@ -100,7 +100,7 @@ function validate(root: string): ProcessRun {
   return run([validateCliPath, "--root", root]);
 }
 
-function verdict(completed: ProcessRun): { status: number; rows: FailureRow[] } {
+function verdict(completed: ProcessRun): { status: number; rows: readonly FailureRow[] } {
   return { status: completed.status, rows: refusalRows(completed.stderr) };
 }
 

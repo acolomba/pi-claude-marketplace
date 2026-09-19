@@ -30,7 +30,7 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { PluginShapeError } from "../shared/errors.ts";
+import { assertNever, PluginShapeError } from "../shared/errors.ts";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
 
 import { collectStrictComponentPaths, type ComponentPathResolution } from "./component-paths.ts";
@@ -71,7 +71,7 @@ async function defaultStatKind(p: string): Promise<StatKind> {
     }
 
     return null;
-  } catch (err) {
+  } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       return null;
     }
@@ -197,6 +197,11 @@ function classifySourceSupport(parsedSource: ParsedSource): SourceSupport {
         kind: "rejected",
         reason: `unsupported source kind: unknown (${parsedSource.reason})`,
       };
+    default:
+      return assertNever(
+        parsedSource,
+        `unreachable ParsedSource kind: ${JSON.stringify(parsedSource)}`,
+      );
   }
 }
 
@@ -208,7 +213,7 @@ async function sourceEscapeReason(
   try {
     await assertPathInside(ctx.marketplaceRoot, pluginRoot, `plugin source path "${rawSource}"`);
     return undefined;
-  } catch (err) {
+  } catch (err: unknown) {
     if (err instanceof PathContainmentError) {
       return `source path escapes marketplace root: ${rawSource}`;
     }
@@ -239,7 +244,7 @@ async function readManifest(
     }
 
     return { ok: true, manifest: parsed };
-  } catch (err) {
+  } catch (err: unknown) {
     return {
       ok: false,
       reason: `malformed plugin.json: ${err instanceof Error ? err.message : String(err)}`,
@@ -348,6 +353,8 @@ async function deriveSourcePluginRoot(
         kind: "unavailable",
         result: unavailable(entry.name, [...partial.notes, `not installed`]),
       };
+    default:
+      return assertNever(r, `unreachable GitPluginRootResult kind: ${JSON.stringify(r)}`);
   }
 }
 

@@ -100,6 +100,7 @@ import type {
   RemoveDataDirFn,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts";
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type {
   NotificationContext,
   ToolInventory,
@@ -683,91 +684,180 @@ for (const coexist of [false, true]) {
   });
 }
 
-for (const obstacle of ["foreign", "other owner", "save failure"] as const) {
-  test(`AGENT-01: reinstall preserves legacy bytes and state on ${obstacle}`, async (t) => {
-    await withHermeticHome(async () => {
-      // arrange
-      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-protection-"));
-      t.after(() => rm(cwd, { recursive: true, force: true }));
-      const { locations, sourcePath, oldTarget, newTarget, oldBytes, oldIndex } =
-        await seedLegacyReinstall(cwd, false);
-      if (obstacle !== "save failure") {
-        await writeFile(newTarget, "Other owner's bytes.\n");
-      }
-
-      if (obstacle === "other owner") {
-        const otherEntry = {
-          plugin: "world",
-          marketplace: "other",
-          sourceAgent: "reviewer",
-          generatedName: "pi-claude-marketplace-hello-hello-reviewer",
-          sourcePath,
-          targetPath: newTarget,
-          sourceHash: "b".repeat(64),
-          droppedFields: [],
-          droppedTools: [],
-          warnings: [],
-        };
-        await writeFile(
-          locations.agentsIndexPath,
-          JSON.stringify({ schemaVersion: 1, agents: [...oldIndex.agents, otherEntry] }),
-        );
-      }
-
-      const indexBefore = await readFile(locations.agentsIndexPath, "utf8");
-      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
-      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
-
-      // act
-      const outcome = await reinstallPlugin({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "hello",
-        render: "none",
-        ...(obstacle === "save failure"
-          ? {
-              stateTransaction: {
-                saveState: () => Promise.reject(new Error("save failure after migration")),
-              },
-            }
-          : {}),
-      });
-
-      // assert
-      assert.strictEqual(outcome.partition, "failed");
-      assert.deepStrictEqual(notifications, []);
-      assert.strictEqual(await readFile(oldTarget, "utf8"), oldBytes);
-      assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), indexBefore);
-      assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
-      if (obstacle === "save failure") {
-        assert.deepStrictEqual(outcome, {
-          partition: "failed",
-          name: "hello",
-          marketplace: "mp",
-          scope: "project",
-          notes: ["save failure after migration\n\ncause: save failure after migration"],
-        });
-        await assert.rejects(readFile(newTarget), { code: "ENOENT" });
-      } else {
-        const message =
-          obstacle === "foreign"
-            ? `Cannot replace agent target with non-previous content at ${newTarget}`
-            : 'Refusing to stage agents for mp/hello: "pi-claude-marketplace-hello-hello-reviewer" already owned by other/world.';
-        assert.deepStrictEqual(outcome, {
-          partition: "failed",
-          name: "hello",
-          marketplace: "mp",
-          scope: "project",
-          notes: [`${message}\n\ncause: ${message}`],
-        });
-        assert.strictEqual(await readFile(newTarget, "utf8"), "Other owner's bytes.\n");
-      }
-    });
-  });
+/**
+ * Assert the common contract every AGENT-01 protection case shares: the
+ * reinstall fails, emits no standalone notification, and leaves the legacy
+ * agent file, the agents index, and state.json byte-identical to their
+ * pre-attempt form.
+ */
+async function assertReinstallPreservedLegacyState(params: {
+  readonly outcome: Awaited<ReturnType<typeof reinstallPlugin>>;
+  readonly notifications: readonly NotifyRecord[];
+  readonly locations: ScopedLocations;
+  readonly oldTarget: string;
+  readonly oldBytes: string;
+  readonly indexBefore: string;
+  readonly stateBefore: string;
+}): Promise<void> {
+  const { outcome, notifications, locations, oldTarget, oldBytes, indexBefore, stateBefore } =
+    params;
+  assert.strictEqual(outcome.partition, "failed");
+  assert.deepStrictEqual(notifications, []);
+  assert.strictEqual(await readFile(oldTarget, "utf8"), oldBytes);
+  assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), indexBefore);
+  assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
 }
+
+test("AGENT-01: reinstall preserves legacy bytes and state when the new target holds foreign content", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-protection-"));
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    const { locations, oldTarget, newTarget, oldBytes } = await seedLegacyReinstall(cwd, false);
+    await writeFile(newTarget, "Other owner's bytes.\n");
+    const indexBefore = await readFile(locations.agentsIndexPath, "utf8");
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+    const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+
+    // act
+    const outcome = await reinstallPlugin({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "hello",
+      render: "none",
+    });
+
+    // assert
+    await assertReinstallPreservedLegacyState({
+      outcome,
+      notifications,
+      locations,
+      oldTarget,
+      oldBytes,
+      indexBefore,
+      stateBefore,
+    });
+    const message = `Cannot replace agent target with non-previous content at ${newTarget}`;
+    assert.deepStrictEqual(outcome, {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      notes: [`${message}\n\ncause: ${message}`],
+    });
+    assert.strictEqual(await readFile(newTarget, "utf8"), "Other owner's bytes.\n");
+  });
+});
+
+test("AGENT-01: reinstall preserves legacy bytes and state when another plugin owns the new target name", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-protection-"));
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    const { locations, sourcePath, oldTarget, newTarget, oldBytes, oldIndex } =
+      await seedLegacyReinstall(cwd, false);
+    await writeFile(newTarget, "Other owner's bytes.\n");
+    const otherEntry = {
+      plugin: "world",
+      marketplace: "other",
+      sourceAgent: "reviewer",
+      generatedName: "pi-claude-marketplace-hello-hello-reviewer",
+      sourcePath,
+      targetPath: newTarget,
+      sourceHash: "b".repeat(64),
+      droppedFields: [],
+      droppedTools: [],
+      warnings: [],
+    };
+    await writeFile(
+      locations.agentsIndexPath,
+      JSON.stringify({ schemaVersion: 1, agents: [...oldIndex.agents, otherEntry] }),
+    );
+    const indexBefore = await readFile(locations.agentsIndexPath, "utf8");
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+    const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+
+    // act
+    const outcome = await reinstallPlugin({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "hello",
+      render: "none",
+    });
+
+    // assert
+    await assertReinstallPreservedLegacyState({
+      outcome,
+      notifications,
+      locations,
+      oldTarget,
+      oldBytes,
+      indexBefore,
+      stateBefore,
+    });
+    const message =
+      'Refusing to stage agents for mp/hello: "pi-claude-marketplace-hello-hello-reviewer" already owned by other/world.';
+    assert.deepStrictEqual(outcome, {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      notes: [`${message}\n\ncause: ${message}`],
+    });
+    assert.strictEqual(await readFile(newTarget, "utf8"), "Other owner's bytes.\n");
+  });
+});
+
+test("AGENT-01: reinstall preserves legacy bytes and state when the post-migration save fails", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-protection-"));
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    const { locations, oldTarget, newTarget, oldBytes } = await seedLegacyReinstall(cwd, false);
+    const indexBefore = await readFile(locations.agentsIndexPath, "utf8");
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+    const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+
+    // act
+    const outcome = await reinstallPlugin({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "hello",
+      render: "none",
+      stateTransaction: {
+        saveState: () => Promise.reject(new Error("save failure after migration")),
+      },
+    });
+
+    // assert
+    await assertReinstallPreservedLegacyState({
+      outcome,
+      notifications,
+      locations,
+      oldTarget,
+      oldBytes,
+      indexBefore,
+      stateBefore,
+    });
+    assert.deepStrictEqual(outcome, {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      notes: ["save failure after migration\n\ncause: save failure after migration"],
+    });
+    await assert.rejects(readFile(newTarget), { code: "ENOENT" });
+  });
+});
 
 test("PDEF-01: reinstall preview detects an agent conflict from a later resolved directory", async () => {
   await withHermeticHome(async () => {

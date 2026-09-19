@@ -17,6 +17,7 @@ import { fixturePackageJson, prefixOf } from "./coverage-producer-fixtures.ts";
 
 import type { SourcePosition } from "./coverage-producer-fixtures.ts";
 
+/** One function's expected risk profile: its anchor, complexity, and statement coverage. */
 export interface ExpectedRisk {
   readonly name: string;
   readonly anchor: SourcePosition;
@@ -26,6 +27,7 @@ export interface ExpectedRisk {
   readonly entered?: boolean;
 }
 
+/** A fixture module paired with its tests and the risk profile each of its functions must report. */
 export interface RiskFixture {
   readonly name: string;
   readonly sourcePath: string;

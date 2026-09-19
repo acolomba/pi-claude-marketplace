@@ -208,7 +208,7 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
       `cross-scope wipe regression: expected BOTH user + project entries after applyReconcile; got ${String(postBucket.length)}`,
     );
     const pluginIds = postBucket.map((e) => `${e.scope}/${e.pluginId}`).sort();
-    assert.deepEqual(
+    assert.deepStrictEqual(
       pluginIds,
       ["project/project-plugin", "user/user-plugin"],
       "applyReconcile's per-scope rebuild must preserve entries from BOTH scopes",

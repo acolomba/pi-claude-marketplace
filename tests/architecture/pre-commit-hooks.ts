@@ -9,6 +9,7 @@
  * hooks in file order, so a gate can assert which hook runs first.
  */
 
+/** One `repo: local` hook block, as parsed from `.pre-commit-config.yaml`. */
 export interface PreCommitHook {
   readonly id: string;
   readonly entry: string;
@@ -16,6 +17,7 @@ export interface PreCommitHook {
   readonly files: string;
 }
 
+/** Parses the `repo: local` hook blocks out of a `.pre-commit-config.yaml` file's text, in file order. */
 export function readLocalHooks(configuration: string): Map<string, PreCommitHook> {
   const hooks = new Map<string, PreCommitHook>();
   let current: { id: string; fields: Map<string, string> } | undefined;

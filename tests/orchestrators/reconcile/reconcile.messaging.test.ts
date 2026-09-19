@@ -98,8 +98,8 @@ test("reconcile contexts expose their exact labels and declared render arms", ()
   const appliedRenderArms = Object.keys(RECONCILE_APPLIED_CONTEXT.render);
 
   // assert
-  assert.deepEqual(pendingRenderArms, expectedPendingStatuses);
-  assert.deepEqual(appliedRenderArms, expectedAppliedStatuses);
+  assert.deepStrictEqual(pendingRenderArms, expectedPendingStatuses);
+  assert.deepStrictEqual(appliedRenderArms, expectedAppliedStatuses);
   assert.equal(PENDING_CONTEXT.Messaging.label, "Reconcile pending");
   assert.equal(RECONCILE_APPLIED_CONTEXT.Messaging.label, "Reconcile");
 });
@@ -116,7 +116,7 @@ test("pending will-install omits optional tokens when they are absent", () => {
   );
 
   // assert
-  assert.deepEqual(message, { name: "alpha", status: "will install" });
+  assert.deepStrictEqual(message, { name: "alpha", status: "will install" });
   assert.equal(rendered, "● alpha (will install)");
 });
 
@@ -228,7 +228,7 @@ test("applied installed omits optional row tokens when they are absent", () => {
   );
 
   // assert
-  assert.deepEqual(message, {
+  assert.deepStrictEqual(message, {
     dependencies: [],
     name: "alpha",
     needsReload: true,

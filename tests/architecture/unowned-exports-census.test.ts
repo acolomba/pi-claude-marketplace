@@ -4,6 +4,7 @@
  * swaps require review. Real offender/benign controls calibrate the shared
  * instrument independently of whether the production census is empty.
  */
+
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";

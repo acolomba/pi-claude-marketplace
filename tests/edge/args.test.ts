@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseArgs, type ParsedArgs } from "../../extensions/pi-claude-marketplace/edge/args.ts";
+import {
+  parseArgs,
+  tokenizeArgs,
+  type ArgumentToken,
+  type ParsedArgs,
+} from "../../extensions/pi-claude-marketplace/edge/args.ts";
 
 test("parseArgs returns positionals in input order and omits scope when no pair is supplied", () => {
   // arrange
@@ -284,3 +289,18 @@ for (const rawArgs of ['--scope "" project', "--scope '' user"]) {
     });
   });
 }
+
+test("tokenizeArgs records each token's source span alongside its value", () => {
+  // arrange
+  const input = "install 'alpha beta'";
+  const expectedTokens = [
+    { value: "install", start: 0, end: 7 },
+    { value: "alpha beta", start: 8, end: 20 },
+  ] satisfies ArgumentToken[];
+
+  // act
+  const tokens = tokenizeArgs(input);
+
+  // assert
+  assert.deepStrictEqual(tokens, expectedTokens);
+});

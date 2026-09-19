@@ -61,8 +61,8 @@ export const STDOUT_CAP_BYTES = 1_048_576;
  * `truncated` on every non-empty write.
  */
 export class RingBuffer {
-  private readonly buf: Buffer;
   private readonly capacity: number;
+  private readonly buf: Buffer;
   private writeIndex = 0;
   private filled = 0;
   private truncated = false;

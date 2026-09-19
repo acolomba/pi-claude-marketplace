@@ -146,11 +146,14 @@ function hookOnlyCtx(pluginRoot: string): ResolveContext {
 }
 
 test("NFR-7 + HOOK-01: resolveStrict admits a hook-only plugin (installable: true with hooks supported)", async () => {
+  // arrange
   const entry: PluginEntry = { name: "hookplug", source: "./hookplug" };
   const ctx = hookOnlyCtx("/abs/marketplace/hookplug");
 
+  // act
   const r = await resolveStrict(entry, ctx);
 
+  // assert
   assert.deepStrictEqual(r, {
     state: "installable",
     installable: true,

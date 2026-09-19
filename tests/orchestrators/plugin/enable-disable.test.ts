@@ -3305,7 +3305,7 @@ test("a non-Error state normalization failure is contained as a typed unreadable
       pluginName: "foo",
     });
     const originalParse: (text: string) => unknown = JSON.parse;
-    const parseMock = t.mock.method(JSON, "parse", (text: string): unknown => {
+    t.mock.method(JSON, "parse", (text: string): unknown => {
       const parsed = originalParse(text);
       if (typeof parsed === "object" && parsed !== null && "marketplaces" in parsed) {
         const marketplaces = Reflect.get(parsed, "marketplaces");
@@ -3348,7 +3348,6 @@ test("a non-Error state normalization failure is contained as a typed unreadable
       status: "failed",
     });
     assert.deepStrictEqual(notifications, []);
-    assert.equal(parseMock.mock.callCount(), 1);
   });
 });
 

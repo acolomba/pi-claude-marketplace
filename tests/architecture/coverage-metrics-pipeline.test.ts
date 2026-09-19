@@ -138,10 +138,10 @@ function chainFindings(chain: string): string[] {
 }
 
 function specSummary(completed: ProcessRun): SpecSummary {
-  const count = (label: string): number => {
+  function count(label: string): number {
     const match = new RegExp(`^ℹ ${label} (\\d+)$`, "mu").exec(completed.stdout);
     return match === null ? -1 : Number(match[1]);
-  };
+  }
 
   return {
     status: completed.status,
@@ -606,13 +606,13 @@ function commandsIn(workflow: string): string[] {
 // An inline `run:` records its command and opens no block; `run: |` opens a
 // block at the step's indentation and records nothing yet.
 function runStep(inline: RegExpExecArray, commands: string[]): number | undefined {
-  const value = (inline[2] ?? "").trim();
+  const runValue = (inline[2] ?? "").trim();
 
-  if (value === "|") {
+  if (runValue === "|") {
     return (inline[1] ?? "").length;
   }
 
-  commands.push(value);
+  commands.push(runValue);
   return undefined;
 }
 

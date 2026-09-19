@@ -1166,6 +1166,12 @@ function dispatchFailedOutcome(
   });
 }
 
+/**
+ * Imports enabled plugins and their marketplaces from Claude settings into
+ * every selected scope: merges each scope's settings, plans the marketplaces
+ * to ensure and plugins to install, runs that plan per scope, and emits one
+ * notification cascade for the whole run.
+ */
 export async function importClaudeSettings(
   opts: ImportClaudeSettingsOptions,
 ): Promise<ClaudeImportExecutionResult> {

@@ -167,14 +167,14 @@ const BOTH_COMPANIONS_LOADED = { piSubagentsLoaded: true, piMcpAdapterLoaded: tr
 function declaredVocabulary(src: string, name: string): readonly string[] {
   const opening = `export type ${name} =`;
   const start = src.indexOf(opening);
-  assert.notEqual(
+  assert.notStrictEqual(
     start,
     -1,
     `COMPAT-01: ${NOTIFICATION_TYPES_REL} declares no ${name} vocabulary, so this clause inspected nothing.`,
   );
 
   const end = src.indexOf(";", start);
-  assert.notEqual(
+  assert.notStrictEqual(
     end,
     -1,
     `COMPAT-01: the ${name} declaration in ${NOTIFICATION_TYPES_REL} is unterminated, so its members could not be read.`,
@@ -331,11 +331,11 @@ test("COMPAT-01: the reason vocabulary holds exactly its inherited members, in o
   const expected = [...EXPECTED_REASONS];
 
   // act
-  const actual = await readVocabulary("Reason");
+  const declaredReasons = await readVocabulary("Reason");
 
   // assert
-  assert.deepEqual(
-    actual,
+  assert.deepStrictEqual(
+    declaredReasons,
     expected,
     "COMPAT-01: no reason token may be added, removed, or renamed. The order is catalog-stable: a new token appends at the tail and arrives with its catalog row, renderer arm, and fixture in the same change.",
   );
@@ -352,11 +352,11 @@ test("COMPAT-01: the status-token vocabulary holds exactly its inherited members
   const expected = [...EXPECTED_STATUS_TOKENS];
 
   // act
-  const actual = await readVocabulary("StatusToken");
+  const declaredStatusTokens = await readVocabulary("StatusToken");
 
   // assert
-  assert.deepEqual(
-    actual,
+  assert.deepStrictEqual(
+    declaredStatusTokens,
     expected,
     "COMPAT-01: no status token may be added, removed, or renamed. The four head-of-tuple state-change tokens drive the reload hint, so their positions are contractual.",
   );
@@ -369,11 +369,11 @@ test("COMPAT-01: the plugin-status vocabulary holds exactly its inherited member
   const expected = [...EXPECTED_PLUGIN_STATUSES];
 
   // act
-  const actual = await readVocabulary("PluginStatus");
+  const declaredPluginStatuses = await readVocabulary("PluginStatus");
 
   // assert
-  assert.deepEqual(
-    actual,
+  assert.deepStrictEqual(
+    declaredPluginStatuses,
     expected,
     "COMPAT-01: no plugin status may be added, removed, or renamed. Row composers derive their status field from this tuple via Extract<PluginStatus, ...>.",
   );
@@ -386,11 +386,11 @@ test("COMPAT-01: the marketplace-status vocabulary holds exactly its inherited m
   const expected = [...EXPECTED_MARKETPLACE_STATUSES];
 
   // act
-  const actual = await readVocabulary("MarketplaceStatus");
+  const declaredMarketplaceStatuses = await readVocabulary("MarketplaceStatus");
 
   // assert
-  assert.deepEqual(
-    actual,
+  assert.deepStrictEqual(
+    declaredMarketplaceStatuses,
     expected,
     "COMPAT-01: no marketplace status may be added, removed, or renamed.",
   );
@@ -411,7 +411,7 @@ test("COMPAT-01: every exported glyph constant holds its inherited code point", 
   };
 
   // act
-  const actual = {
+  const glyphs = {
     ICON_AVAILABLE,
     ICON_DISABLED,
     ICON_INSTALLED,
@@ -420,7 +420,11 @@ test("COMPAT-01: every exported glyph constant holds its inherited code point", 
   };
 
   // assert
-  assert.deepEqual(actual, expected, "COMPAT-01: every exported glyph keeps its named code point");
+  assert.deepStrictEqual(
+    glyphs,
+    expected,
+    "COMPAT-01: every exported glyph keeps its named code point",
+  );
 });
 
 /** The unresolved `info` message one status renders, with no optional field set. */
@@ -445,7 +449,7 @@ test("COMPAT-01: the two module-private glyphs reach the output on their own row
   ];
 
   // act
-  const actual = [
+  const rows = [
     renderRemoteRow(
       { status: "remote", name: "alpha", version: "1.0.0" },
       BOTH_COMPANIONS_LOADED,
@@ -460,8 +464,8 @@ test("COMPAT-01: the two module-private glyphs reach the output on their own row
   ];
 
   // assert
-  assert.deepEqual(
-    actual,
+  assert.deepStrictEqual(
+    rows,
     expected,
     "COMPAT-01: the remote and partially-available rows keep their named code points and their spacing.",
   );
@@ -479,13 +483,13 @@ test("COMPAT-01: the two module-private glyphs reach the info row through their 
   ];
 
   // act
-  const actual = (["remote", "partially-available"] as const).map(
+  const infoRows = (["remote", "partially-available"] as const).map(
     (status) => renderPluginInfo(infoMessageFor(status), BOTH_COMPANIONS_LOADED).split("\n")[1],
   );
 
   // assert
-  assert.deepEqual(
-    actual,
+  assert.deepStrictEqual(
+    infoRows,
     expected,
     "COMPAT-01: the info plugin row keeps the named code points of the two module-private glyphs.",
   );
@@ -515,7 +519,7 @@ test("COMPAT-01: the catalog names each glyph the way the code-point pins above 
     .map(([glyph, name]) => `${glyph} is not named "${name}" in the catalog's Glyphs section`);
 
   // assert
-  assert.deepEqual(
+  assert.deepStrictEqual(
     mismatches,
     [],
     "COMPAT-01: the catalog's glyph names must agree with the code-point pins. Renaming one is a documentation change that belongs in the same commit as the pin it describes.",
@@ -550,7 +554,7 @@ test("COMPAT-01: the notification grammar owner declares no eighth glyph", async
     COMPAT_NO_EXPANSION_TARGETS.length > 0,
     "D-07-03: an empty target group leaves this clause and the catalog clause reading nothing and reporting success over zero files.",
   );
-  assert.equal(
+  assert.strictEqual(
     declarations?.length,
     expectedCount,
     "COMPAT-01: the glyph vocabulary is closed at seven. A new glyph is a rendered-vocabulary expansion and needs its catalog row and renderer arm in the same change.",
@@ -577,8 +581,8 @@ test("COMPAT-01: the glyph-declaration pattern recognises every spelling a glyph
   const referenceMatches = GLYPH_DECLARATION.test(reference);
 
   // assert
-  assert.deepEqual(declarationMatches, [true, true, true, true, true]);
-  assert.equal(referenceMatches, false, "a glyph USE must not count as a declaration");
+  assert.deepStrictEqual(declarationMatches, [true, true, true, true, true]);
+  assert.strictEqual(referenceMatches, false, "a glyph USE must not count as a declaration");
 });
 
 test("COMPAT-01: the vocabulary reader sees a declared tuple's members and nothing else", () => {
@@ -600,11 +604,11 @@ test("COMPAT-01: the vocabulary reader sees a declared tuple's members and nothi
   const expected = ["first", "second"];
 
   // act
-  const actual = declaredVocabulary(planted, "Reason");
+  const parsedMembers = declaredVocabulary(planted, "Reason");
 
   // assert
-  assert.deepEqual(
-    actual,
+  assert.deepStrictEqual(
+    parsedMembers,
     expected,
     "COMPAT-01: the reader must anchor on the named vocabulary's own declaration.",
   );
@@ -657,7 +661,7 @@ test("COMPAT-01: the install outcome inherits exactly the signals installPlugin 
   const actualCount = Object.keys(populated).length;
 
   // assert
-  assert.equal(
+  assert.strictEqual(
     actualCount,
     expectedCount,
     "COMPAT-01 / WR-11: the install outcome carries exactly the three ledger signals installPlugin writes.",
@@ -685,11 +689,11 @@ test("COMPAT-01: the default state still declares the current schema version", (
   const expected = 2;
 
   // act
-  const actual = DEFAULT_STATE.schemaVersion;
+  const declaredSchemaVersion = DEFAULT_STATE.schemaVersion;
 
   // assert
-  assert.equal(
-    actual,
+  assert.strictEqual(
+    declaredSchemaVersion,
     expected,
     "COMPAT-01: a first-load state.json is written at the version this work inherited -- no bump.",
   );
@@ -719,7 +723,7 @@ test("COMPAT-01: the network clause is covered by the orchestrator-network gate"
   const missing = requiredTargets.filter((rel) => !src.includes(`"${rel}"`));
 
   // assert
-  assert.deepEqual(
+  assert.deepStrictEqual(
     missing,
     [],
     `COMPAT-01: the info surfaces must stay gated for zero gitOps surface by ${NETWORK_GATE_REL}. Removing a target there would silently drop this clause.`,

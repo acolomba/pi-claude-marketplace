@@ -64,12 +64,12 @@ import type {
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
 
-type AgentsReplacementInternals = Readonly<{
-  backupRoot: string;
-  oldIndexText: string | undefined;
-  backups: readonly { name: string; from: string; to: string }[];
-  renamed: readonly { to: string }[];
-}>;
+interface AgentsReplacementInternals {
+  readonly backupRoot: string;
+  readonly oldIndexText: string | undefined;
+  readonly backups: readonly { name: string; from: string; to: string }[];
+  readonly renamed: readonly { to: string }[];
+}
 
 const agentsReplacementInternals = new WeakMap<
   Extract<AgentsReplacement, { kind: "replaced" }>,

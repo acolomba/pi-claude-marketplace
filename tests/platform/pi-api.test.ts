@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  DynamicBorder as peerDynamicBorder,
   getAgentDir as peerGetAgentDir,
   parseFrontmatter as peerParseFrontmatter,
 } from "@earendil-works/pi-coding-agent";
 
 import {
+  DynamicBorder,
   getAgentDir,
   parseFrontmatter,
   softDepStatus,
@@ -242,6 +244,19 @@ describe("parseFrontmatter", () => {
         return true;
       },
     );
+  });
+});
+
+describe("DynamicBorder", () => {
+  test("re-exports the peer binding", () => {
+    // arrange
+    const expectedDynamicBorder = peerDynamicBorder;
+
+    // act
+    const boundaryDynamicBorder = DynamicBorder;
+
+    // assert
+    assert.strictEqual(boundaryDynamicBorder, expectedDynamicBorder);
   });
 });
 

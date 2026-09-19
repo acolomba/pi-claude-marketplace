@@ -28,6 +28,10 @@ test("picks and measures", () => {
 });
 `;
 
+/**
+ * Two arrows after a surrogate pair, with bodies ending at end-of-line, so a
+ * converter that miscounts code points or bytes shifts every later column.
+ */
 export function endpointsFixture(): ProducerFixture {
   const source = endpointsSource;
 
@@ -146,6 +150,10 @@ test("exercises one of each repeated spelling", () => {
 });
 `;
 
+/**
+ * Every repeated method and function spelling the producer numbers; only the
+ * declaration identifier at its exact span restores the source name.
+ */
 export function declarationsFixture(): ProducerFixture {
   const source = declarationsSource;
 
@@ -301,6 +309,10 @@ test("reads the meter", () => {
 });
 `;
 
+/**
+ * The same accessor pair under CRLF line endings, so a converter that
+ * mishandles `\r` reports every later coordinate wrong.
+ */
 export function crlfFixture(): ProducerFixture {
   const source = crlfSource;
 

@@ -31,8 +31,10 @@ export interface ExpectedStatement {
   readonly hits: number;
 }
 
-// An `if` without `else` carries one location with no coordinates at all;
-// that is the pinned producer's representation of the implicit branch.
+/**
+ * An `if` without `else` carries one location with no coordinates at all;
+ * that is the pinned producer's representation of the implicit branch.
+ */
 export interface AbsentLocation {
   readonly start: { readonly line: undefined; readonly column: undefined };
   readonly end: { readonly line: undefined; readonly column: undefined };
@@ -45,6 +47,7 @@ export interface ExpectedBranch {
   readonly hits: readonly number[];
 }
 
+/** A fixture module paired with its tests and the functions, statements and branches it must report. */
 export interface ProducerFixture {
   readonly name: string;
   readonly sourcePath: string;
@@ -134,9 +137,11 @@ test("reports no large value", () => {
 });
 `;
 
-// `anyLarge([1, 2])` runs the \`some\` callback twice, never reaches
-// \`return true\`, and short-circuits before \`values.length > 0\` and the
-// \`every\` callback, so those carry zero.
+/**
+ * `anyLarge([1, 2])` runs the `some` callback twice, never reaches
+ * `return true`, and short-circuits before `values.length > 0` and the
+ * `every` callback, so those carry zero.
+ */
 export function nestedLogicalFixture(): ProducerFixture {
   const source = nestedLogicalSource;
 
@@ -249,8 +254,10 @@ test("picks from the pair and skips on the counter", () => {
 });
 `;
 
-// The producer names a repeated method by appending `_N`; a real identifier
-// that already ends in `_2` keeps its own name.
+/**
+ * The producer names a repeated method by appending `_N`; a real identifier
+ * that already ends in `_2` keeps its own name.
+ */
 export function namesFixture(): ProducerFixture {
   const source = namesSource;
 
@@ -381,11 +388,13 @@ test("exercises every syntax form once", async () => {
 });
 `;
 
-// Two rows record documented V8 observation limits rather than execution
-// facts: \`return 1;\` after the throwing \`fail();\` never runs but shares
-// its block's counter, and the default argument \`1\` is never evaluated
-// because \`withDefault(5)\` supplies a value, yet V8 has no counter for the
-// initializer and the branch reports the function's count.
+/**
+ * Two rows record documented V8 observation limits rather than execution
+ * facts: `return 1;` after the throwing `fail();` never runs but shares
+ * its block's counter, and the default argument `1` is never evaluated
+ * because `withDefault(5)` supplies a value, yet V8 has no counter for the
+ * initializer and the branch reports the function's count.
+ */
 export function syntaxFixture(): ProducerFixture {
   const source = syntaxSource;
 
@@ -522,6 +531,7 @@ test("measures and decorates text", () => {
 });
 `;
 
+/** Multibyte text and CRLF line endings, so every span endpoint resolves as a UTF-16 column. */
 export function unicodeFixture(): ProducerFixture {
   const source = unicodeSource;
 
@@ -564,7 +574,7 @@ const tallySource = `export function tally(items: string[]): number {
 function tallyTest(calls: number): string {
   const assertions = Array.from(
     { length: calls },
-    (_, index) =>
+    (_value, index) =>
       `  assert.equal(tally(${JSON.stringify(Array.from({ length: index + 1 }, () => "x"))}), ${index + 1});`,
   );
 
@@ -584,6 +594,7 @@ export const tallyWorkerHits: Readonly<Record<string, number>> = {
   "tests/domain/tally-two.test.ts": 2,
 };
 
+/** One module two test files load, called once by one worker and twice by the other. */
 export function tallyFixture(): ProducerFixture {
   const source = tallySource;
 

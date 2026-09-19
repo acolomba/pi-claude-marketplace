@@ -27,16 +27,16 @@ const RESTRICTED_PATHS = "import-x/no-restricted-paths";
 
 /** One zone of the `import-x/no-restricted-paths` options, as ESLint resolves it. */
 interface RestrictedPathsZone {
-  target: string | string[];
-  from: string | string[];
-  message?: string;
-  except?: string[];
+  readonly target: string | string[];
+  readonly from: string | string[];
+  readonly message?: string;
+  readonly except?: string[];
 }
 
 /** The rule's state for one file: the severity that applies and the zones it carries. */
 interface RestrictedPathsState {
-  severity: number;
-  zones: RestrictedPathsZone[];
+  readonly severity: number;
+  readonly zones: RestrictedPathsZone[];
 }
 
 const [
@@ -364,6 +364,7 @@ async function orchestratorFiles(rel: string): Promise<string[]> {
 }
 
 test("D-11: no orchestrators/marketplace file imports a plugin LEDGER module", async () => {
+  // act
   const files = await orchestratorFiles(MARKETPLACE_ORCHESTRATORS_REL);
   assert.ok(files.length > 0, `walked ${MARKETPLACE_ORCHESTRATORS_REL} and found no .ts files`);
 
@@ -375,7 +376,8 @@ test("D-11: no orchestrators/marketplace file imports a plugin LEDGER module", a
     }
   }
 
-  assert.deepEqual(
+  // assert
+  assert.deepStrictEqual(
     offenders,
     [],
     `D-11 violation -- these marketplace files import a plugin ledger module:\n  ${offenders.join("\n  ")}\nImport the leaf row composer (plugin/update-row.ts), a shared type from orchestrators/types.ts, or the injected pluginUpdate seam instead.`,
@@ -383,6 +385,7 @@ test("D-11: no orchestrators/marketplace file imports a plugin LEDGER module", a
 });
 
 test("D-11: no orchestrators/plugin LEDGER imports a marketplace ledger module", async () => {
+  // act
   const offenders: string[] = [];
   for (const rel of PLUGIN_LEDGER_TARGETS) {
     // A renamed or deleted ledger must fail loudly rather than silently
@@ -396,7 +399,8 @@ test("D-11: no orchestrators/plugin LEDGER imports a marketplace ledger module",
     }
   }
 
-  assert.deepEqual(
+  // assert
+  assert.deepStrictEqual(
     offenders,
     [],
     `D-11 violation -- these plugin ledgers import a marketplace ledger module:\n  ${offenders.join("\n  ")}\nonly orchestrators/marketplace/shared.ts is reachable from a plugin ledger.`,
@@ -524,7 +528,7 @@ test(
     for (const representative of ZONE_REPRESENTATIVE_TARGETS) {
       const state = restrictedPathsState(configs.get(representative) ?? null);
       assert.ok(state !== null, `\`${RESTRICTED_PATHS}\` does not reach ${representative}`);
-      assert.deepEqual(
+      assert.deepStrictEqual(
         forbiddenMatrix(state.zones),
         expectedMatrix,
         `the matrix resolved for ${representative} does not match the D-11 allowed-imports matrix`,

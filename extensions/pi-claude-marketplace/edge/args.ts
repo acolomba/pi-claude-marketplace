@@ -18,11 +18,16 @@
 
 import type { Scope } from "../shared/types.ts";
 
+/** Result of `parseArgs`: positional tokens in input order, plus an extracted `--scope`. */
 export interface ParsedArgs {
   positional: string[];
   scope?: Scope;
 }
 
+/**
+ * Tokenize `args` and extract `--scope` (AP-1/AP-4); throws on an invalid or
+ * missing scope value (AP-2).
+ */
 export function parseArgs(args: string): ParsedArgs {
   const tokens = tokenizeArgs(args).map((token) => token.value);
   const positional: string[] = [];
@@ -59,6 +64,7 @@ export function parseArgs(args: string): ParsedArgs {
   return { positional };
 }
 
+/** One token recovered by `tokenizeArgs`, with its source span in the input string. */
 export interface ArgumentToken {
   readonly value: string;
   readonly start: number;
