@@ -229,6 +229,7 @@ describe("probeMarketplaceTags", () => {
     let releaseFailure: () => void = () => {
       throw new Error("releaseFailure called before assignment");
     };
+
     const failureGate = new Promise<void>((resolve) => {
       releaseFailure = resolve;
     });

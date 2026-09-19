@@ -12,7 +12,10 @@ import {
 import { preparePluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import { swapPluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { loadState, saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  loadState,
+  saveState,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 // The flow suite supplies the real bridge, filesystem, rollback, and
