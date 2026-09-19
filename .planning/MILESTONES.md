@@ -1,5 +1,96 @@
 # Milestones: pi-claude-marketplace
 
+## test-backlog -- Test Backlog (Shipped: 2026-09-18, no npm release - internal quality milestone)
+
+**Phases completed:** 8 phases (1-8), 65 plans, 127 tasks
+
+**Driver:** refine-unit-tests left ten authorized backlog and todo items behind:
+repairs the tests needed, gates the project did not have, and records that
+had gone stale. This milestone took all of them as one handoff, restarted the
+phase numbering at 1, and closed each with a measured control rather than a
+note. Every phase kept aggregate unit production coverage at exactly 100%.
+
+**Key accomplishments:**
+
+- The direct-coverage negative controls capture their child's stdout and stderr
+  separately on Node 26 and reject a launch error, a wrong signal or a missing
+  diagnostic instead of any nonzero exit. Three stale records (`E2EIMP-01`,
+  `TESTQ-01`, `FLOW-07`) and one superseded one (`COV-01`) were reconciled from
+  live evidence, not re-implemented.
+- Three Sonar assertion rules run as errors over `tests/`, with exactly nine
+  type-only owners exempt from `no-empty-test-file` and five explained
+  strict-mock controls; the other 1,083 recommended-rule flags across 354 files
+  carry measured dispositions instead of a wholesale preset.
+- Agent collisions are settled through real discovery and staging: exact source
+  names survive (`reviewer` and `acme-reviewer` stay distinct), update and
+  reinstall migrate previously generated names, and the unreachable converter
+  guard and its manufactured inputs are gone. All nineteen verbs reject unknown
+  flags and surplus positionals before any orchestrator work, `--local` has one
+  documented meaning on the three marketplace verbs, and the flag catalog and
+  its drift gate cover both command families.
+- Fallow runs in production dead-code mode. The 111-finding census drained to
+  zero across 28 plans with zero identities added at any step, through
+  conceptual ownership (`orchestrators/plugin/operations.ts`,
+  `platform/git-auth-callbacks.ts`, `shared/path-containment.ts`) rather than
+  helper modules, with exactly two one-line adjacent exceptions and a second
+  `--no-production` cycle run so `tests/` and `scripts/` stay gated.
+- **A gate for type members nothing reads,** a class typecheck, lint and fallow
+  all missed on a planted `EdgeDeps` member. It resolves members by checker
+  symbol, credits reads through directed value transfers, refuses unearned
+  contract exemptions, and plants the offender into the real declaration to
+  prove itself. The live population went 614 to 5; the five survivors are
+  recorded decisions by exact coordinate, with no count, threshold or glob
+  expressible. `lint:type-members` and its seven-control negative twin are in
+  `npm run check` and pre-commit.
+- Unit coverage converts to a validated Istanbul map from the same run that
+  writes the LCOV: a vendored, licensed one-line repair of `ast-v8-to-istanbul`
+  1.0.6 (the release omits a nested callback), exact UTF-16 coordinates with no
+  clamping, a bijective AST correspondence check, and a manifest that refuses
+  drift, partial workers and stale bundles. `coverage:risk` gates every
+  production function at CRAP 30 from that bundle: 1865 functions, maximum
+  20.00, none at or above 30. The 21 syntax-model deficits are explained one by
+  one and the native 100% never moved.
+- The close ran every gate fresh at HEAD as separate processes and recorded it:
+  sixteen `check` members exit 0 (1290 s), e2e 14/14, direct all-pairs 239 with
+  the two pinned shortfalls matched, 63825/63825 lines, 1890/1890 functions and
+  9234/9234 branches recounted from the LCOV, and nothing loosened by diff.
+
+**Closeout:** `override_closeout`. All eight phases read `status: passed` with
+full scores (5/5, 4/4, 18/18, 7/7, 10/10, 2/2, 8/8, 7/7) and the milestone
+audit found no blockers -- requirements 18/18, phases 8/8, integration 9/9
+paths, flows 2/2 -- with status `tech_debt` for recorded comment drift,
+info-level review findings, four `draft` validation files and a branch that
+has never met CI. The override is on the same two counts as last time: every
+phase reads `stale` in `init.manager` because its `covered_files` name
+`STATE.md`, `ROADMAP.md` and `REQUIREMENTS.md`, and two artifacts were
+acknowledged at close (the Phase 5 and Phase 6 deferred-item records). Known
+verification overrides: 2 newly acknowledged, 16 carried forward from a prior
+close (see STATE.md Deferred Items).
+
+**Fixed at this close:** the issue-179 quick task reported `unknown` for the
+same reason `260907-qqo` did at the last close: a frontmatter list item that
+begins with a backtick stops GSD's line parser, so a complete summary reads as
+having no status, and the acknowledge writer then replaces the whole
+frontmatter with its marker. The summary was restored from git, the scalar
+quoted, and the task now reads `complete` with no marker needed. The Phase 6
+deferred-item table was converted to bullets with every cell preserved so the
+writer could match it, as the last close prescribed.
+
+**Known gaps (accepted):** the Phase 5 comment drift (six comments still name a
+`Check` call the code no longer makes), nine info-level Phase 7 review findings,
+and the carried-forward `IN-03` risk from refine-unit-tests (NFR-10 containment
+on a prose-only injected contract). None is read by a gate.
+
+**Shipped unmerged:** the branch was never pushed; 316 commits sit ahead of
+`origin/main` with `origin/main` fully merged in. Every gate was measured
+locally; the first CI run is on the pull request.
+
+**Archive:** `.planning/milestones/test-backlog-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`,
+phase directories under `test-backlog-phases/` and the ten quick tasks done in
+this window under `test-backlog-quick/`.
+
+---
+
 ## refine-unit-tests -- Refine Unit Tests (Shipped: 2026-09-13, no npm release - internal quality milestone)
 
 **Phases completed:** 9 phases (1-9), 213 plans, 412 tasks
