@@ -265,6 +265,10 @@ Carried, not done here:
 - `docs/plugin-enablement.md` still claims the planner's only enablement inputs are the config value and the record's own flag, and that no persisted field was added on either side. Both are now false. Plan 06-04 owns that rewrite and already names them in its truths.
 - LOAD-01 stays Pending in `REQUIREMENTS.md`: plans 06-02 and 06-04 declare it too, so the shared-ID gate refuses to mark it.
 
+## Self-Check: PASSED
+
+Both created files exist on disk, and all seven commits this plan claims resolve in `git log`.
+
 ---
 *Phase: 06-load-time-dependency-check-and-allowed-uninstall*
 *Completed: 2026-09-18*
