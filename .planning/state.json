@@ -1,7 +1,7 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v1.20 \u2014 transitive-dependencies",
+  "milestone": "v1.20 — transitive-dependencies",
   "phases": [
     {
       "number": "1",
@@ -31,7 +31,7 @@
     {
       "number": "6",
       "name": "Load-time dependency check and allowed uninstall",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "7",
@@ -65,9 +65,9 @@
     }
   ],
   "next": {
-    "command": "/gsd:discuss-phase 6",
-    "label": "Discuss Phase 6",
-    "reason": "Phases 6-12 added 2026-09-18 for upstream dependency parity; Phase 6 is next"
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step (plan phase 07)",
+    "reason": "Phase 07 of 12 — needs a plan"
   },
-  "updated_at": "2026-09-18T21:15:50.000Z"
+  "updated_at": "2026-09-19T11:31:12.100Z"
 }
