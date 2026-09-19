@@ -14,11 +14,13 @@ import {
   runInstallCascade,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
+import { probeMarketplaceTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { listTags, resolveTagOid } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { runPhases } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
@@ -54,6 +56,7 @@ import type {
   InstallLedgerTransaction,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import type {
+  MarketplaceTagListingSeam,
   MarketplaceTagProbeOptions,
   MarketplaceTagProbeResult,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
@@ -1137,6 +1140,59 @@ test("TAGS-01 a constrained path-source member pins the highest satisfying marke
   );
 });
 
+test("WR-02: two path-source members constrained against the SAME marketplace clone list its tags once", async (t) => {
+  // arrange: `bar` and `baz` are both path-source members of the SAME
+  // marketplace clone, each satisfied by a tag on the marketplace's one
+  // commit -- the shape `CascadeMarketplaceTagMemo` exists to dedupe.
+  const environment = await createHermeticEnvironment(t, "install-cascade-path-memo-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo"]);
+  await tagMarketplaceRoot(state, "bar--v1.0.0", "baz--v1.0.0");
+  const locations = locationsFor("project", environment.cwd);
+
+  // A marketplaceTagProbe that delegates to the REAL probe but counts the
+  // underlying `listTags` calls -- the only observable proof that the memo
+  // `runInstallCascade` allocates (and threads via `options.tagMemo` below)
+  // is actually reaching the local probe's own memo parameter.
+  const listTagsCalls: { dir: string }[] = [];
+  const countingSeam: MarketplaceTagListingSeam = {
+    listTags: (opts) => {
+      listTagsCalls.push(opts);
+      return listTags(opts);
+    },
+    resolveTagOid,
+  };
+  const countingMarketplaceTagProbe = (options: MarketplaceTagProbeOptions) =>
+    probeMarketplaceTags({ ...options, seam: countingSeam });
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [
+        { name: "bar", version: "^1.0.0" },
+        { name: "baz", version: "^1.0.0" },
+      ],
+      [`bar@${MARKETPLACE}`]: [],
+      [`baz@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, []),
+    marketplaceTagProbe: countingMarketplaceTagProbe,
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.strictEqual(
+    listTagsCalls.length,
+    1,
+    "both members share ONE run's marketplaceTagMemo, so the clone's tags are listed once",
+  );
+});
+
 test("TAGS-02 / D-07-03 a path-source member with no satisfying tag resolves anyway, with no pin", async (t) => {
   // arrange: the marketplace's only tag is `bar--v1.0.0`, which does not
   // satisfy `^9.0.0`.
@@ -1154,6 +1210,7 @@ test("TAGS-02 / D-07-03 a path-source member with no satisfying tag resolves any
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
     tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, []),
     tagMemo: new Map(),
+    marketplaceTagMemo: new Map(),
   });
 
   // assert: ok, both members, the fallback member carries no pin.
@@ -1182,6 +1239,7 @@ test("TAGS-02 / D-07-07 a path-source member whose local listing THROWS resolves
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
     tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, []),
     tagMemo: new Map(),
+    marketplaceTagMemo: new Map(),
     marketplaceTagProbe: () => Promise.resolve({ kind: "tag-listing-failed", cause }),
   });
 
@@ -1240,6 +1298,7 @@ test("TAGS-02 / D-07-07 a path-source member whose marketplace root is not a git
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
     tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, []),
     tagMemo: new Map(),
+    marketplaceTagMemo: new Map(),
   });
 
   // assert
@@ -1265,6 +1324,7 @@ test("TAGS-02 a path-source member WITH a satisfying tag is unaffected: no fallb
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
     tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, []),
     tagMemo: new Map(),
+    marketplaceTagMemo: new Map(),
   });
 
   // assert
@@ -1830,6 +1890,7 @@ test("RESV-03 the constraint step answers every member, pinning only the constra
       seen,
     ),
     tagMemo: new Map(),
+    marketplaceTagMemo: new Map(),
   });
 
   // assert

@@ -90,12 +90,14 @@ import type {
   InstallLedgerSummary,
   InstallLedgerTransaction,
 } from "./install-outcome.ts";
+import type { MarketplaceTagProbeOptions } from "./marketplace-tag-probe.ts";
 import type {
   ClosureLookup,
   ClosureMember,
   DependencyClosureResult,
 } from "../../domain/dependency-closure.ts";
 import type { DependencyRangeIntersection } from "../../domain/dependency-range.ts";
+import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type { GitBackedSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -141,6 +143,13 @@ export type CascadeMarketplaceTagProbe = typeof probeMarketplaceTags;
 
 /** The per-URL tag listing memo one cascade run threads through every query. */
 export type CascadeTagMemo = NonNullable<DependencyTagProbeOptions["tagMemo"]>;
+
+/**
+ * The per-marketplace-root tag listing memo one cascade run threads through
+ * every path-source member's local probe, so several members constrained
+ * against the SAME marketplace clone list it once (WR-02).
+ */
+export type CascadeMarketplaceTagMemo = NonNullable<MarketplaceTagProbeOptions["tagMemo"]>;
 
 /**
  * Resolves the marketplace record a member's source is read from.
@@ -275,6 +284,12 @@ export interface MemberConstraintOptions {
    * routes through. Defaults to `probeMarketplaceTags`.
    */
   readonly marketplaceTagProbe?: CascadeMarketplaceTagProbe;
+  /**
+   * The per-marketplace-root listing memo threaded into every path-source
+   * member's local probe (WR-02), so a cascade constraining several members
+   * against the SAME marketplace clone lists it once.
+   */
+  readonly marketplaceTagMemo: CascadeMarketplaceTagMemo;
   /**
    * How a member's marketplace name resolves to the record its source is read
    * from. Defaults to the snapshot's own map, which is the whole answer only
@@ -587,6 +602,7 @@ async function probeMemberPin(
       pluginName: member.name,
       marketplaceRoot: tagSource.marketplaceRoot,
       range,
+      tagMemo: options.marketplaceTagMemo,
     });
 
     // TAGS-02 / D-07-07: no tag satisfies the constraint, or the local
@@ -886,6 +902,7 @@ export async function runInstallCascade(
     ledgerOptionsFor: options.ledgerOptionsFor,
     tagProbe: options.tagProbe ?? probeDependencyTags,
     tagMemo: new Map<string, readonly RemoteTag[]>(),
+    marketplaceTagMemo: new Map<string, readonly ReleaseTagCandidate[]>(),
     ...(options.marketplaceTagProbe !== undefined && {
       marketplaceTagProbe: options.marketplaceTagProbe,
     }),
