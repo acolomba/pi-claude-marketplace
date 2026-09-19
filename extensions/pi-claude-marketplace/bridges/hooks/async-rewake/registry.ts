@@ -138,7 +138,7 @@ export type AsyncRewakeEntry = HooksRuntimeChildEntry;
  * stranger pid, and a `/proc` read on a non-Linux host, are both unavailable
  * to a unit test. Production never passes them: `reapOrphans`, `isPidAlive`
  * and `readProcEnvironMarker` all default to `DEFAULT_ORPHAN_PROBES`, and
- * `event-router.ts`'s sole `reapOrphans(loc)` call takes that default.
+ * `event-router.ts`'s sole `reapOrphans(runtime, loc)` call takes that default.
  *
  * Exported because `reapOrphans` names it in its signature (a caller that
  * substitutes probes has to be able to name the shape it is passing).
@@ -584,10 +584,9 @@ async function prepareAsyncEnv(
  * traps and `hookDebugLog`s its own failures.
  *
  * The shared `_shared/` dir gets a defensive `mkdir({ recursive: true })`
- * indirectly through `atomicWriteJson`'s internal directory creation
- * (verified at shared/atomic-json.ts:25), so a cold-start where the
- * directory does not yet exist is handled without an explicit
- * `ensureSharedDataDir` call here.
+ * indirectly through `atomicWriteJson`'s own internal directory creation,
+ * so a cold-start where the directory does not yet exist is handled
+ * without an explicit `ensureSharedDataDir` call here.
  */
 async function persistPidTableForLoc(
   runtime: HooksRuntime,

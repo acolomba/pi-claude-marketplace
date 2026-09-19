@@ -8,6 +8,8 @@
 // `manual`, `threshold`, or `overflow`; the latter two are Claude automatic
 // compaction triggers.
 
+import { compactTrigger } from "./compact-trigger.ts";
+
 import type { SessionCompactEvent } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
 
@@ -17,10 +19,6 @@ export interface PostCompactStdin {
   readonly cwd: string;
   readonly hook_event_name: "PostCompact";
   readonly trigger: "auto" | "manual";
-}
-
-function compactTrigger(reason: SessionCompactEvent["reason"]): PostCompactStdin["trigger"] {
-  return reason === "manual" ? "manual" : "auto";
 }
 
 export function translatePostCompact(

@@ -147,17 +147,19 @@ export function settleHandlerFor(
         await runStopBucket(runtime, last, capturedGeneration, ctx, pi, executor);
         return;
       case "error":
-      case "length":
-        await runStopFailure(
-          last,
-          classifyStopFailure(last.errorMessage ?? "", last.stopReason),
-          runtime,
-          capturedGeneration,
-          ctx,
-          pi,
-          executor,
-        );
+      case "length": {
+        const stopErrorMessage = last.errorMessage ?? "";
+        const errorType = classifyStopFailure(stopErrorMessage, last.stopReason);
+        if (errorType === "unknown") {
+          hookDebugLog(
+            `settle: unrecognized StopFailure errorMessage: ${JSON.stringify(stopErrorMessage)}`,
+          );
+        }
+
+        await runStopFailure(last, errorType, runtime, capturedGeneration, ctx, pi, executor);
         return;
+      }
+
       // Defensive no-op group (STOP-01): none of these is a turn ending the
       // Stop bucket may observe. `deferred` means the provider request was
       // handed to a batch or asynchronous lane and the message carries a

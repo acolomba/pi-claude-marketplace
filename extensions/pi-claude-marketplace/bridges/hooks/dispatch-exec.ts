@@ -21,10 +21,10 @@
 //      otherwise -> `spawn(command, [], { ..., shell: entry.handlerDecl.shell
 //      ?? true })`. Note: `args: []` is exec-form -- the discriminator is
 //      "args defined" not "args non-empty".
-//   5. Arm the SIGTERM -> 5s -> SIGKILL ladder (EXEC-02). Attach
-//      `child.once("exit", ladder.cancel)` AND `child.once("error",
-//      ladder.cancel)` to close the TOCTOU window against the timer
-//      firing on a recycled pid.
+//   5. Arm the SIGTERM -> 5s -> SIGKILL ladder (EXEC-02). `ladder.cancel()`
+//      runs from the shared `settle()` closure, which both `child.once(
+//      "close", ...)` and `child.once("error", ...)` call, to close the
+//      TOCTOU window against the timer firing on a recycled pid.
 //   6. Stream stdout / stderr with manual caps (1 MB / 64 KB) -- maxBuffer
 //      does NOT apply to `spawn`, so on overflow the dispatcher kills the
 //      child and falls back to `{ kind: "noop" }`.

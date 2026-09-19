@@ -8,6 +8,8 @@
 // claude-hook-config-syntax.md § 3). Pi reports `manual`, `threshold`, or
 // `overflow`; the latter two are Claude automatic compaction triggers.
 
+import { compactTrigger } from "./compact-trigger.ts";
+
 import type { SessionBeforeCompactEvent } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
 
@@ -17,10 +19,6 @@ export interface PreCompactStdin {
   readonly cwd: string;
   readonly hook_event_name: "PreCompact";
   readonly trigger: "auto" | "manual";
-}
-
-function compactTrigger(reason: SessionBeforeCompactEvent["reason"]): PreCompactStdin["trigger"] {
-  return reason === "manual" ? "manual" : "auto";
 }
 
 export function translatePreCompact(
