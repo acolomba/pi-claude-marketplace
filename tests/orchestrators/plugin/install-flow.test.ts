@@ -69,6 +69,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { InstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
 import type { InstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts";
+import type { MarketplaceTagProbeOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   NotificationContext,
@@ -3062,6 +3063,59 @@ test("RESV-01 / D-19-01: an entry declaring a dependency renders no PR-5 trailer
         false,
         "D-19-01: PR-5 phrase must not appear on the V2 success surface",
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-03: installPlugin's marketplaceTagProbe seam reaches a path-source dependency's constraint", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-wr03-marketplace-tag-probe-"));
+    try {
+      // arrange: a path-source dependency constrained to `^1.0.0`, on a
+      // marketplace root that is deliberately NOT a git repository. Before
+      // this fix, `installPlugin` had no seam for this arm (unlike the
+      // network `tagProbe` sibling's), so the real local probe was always
+      // reached and its `ENOENT` on `.git` was the only outcome obtainable --
+      // no fixture-free unit test could answer this constraint at all.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        dependencyVersion: "^1.0.0",
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const seen: MarketplaceTagProbeOptions[] = [];
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        marketplaceTagProbe: (options) => {
+          seen.push(options);
+          return Promise.resolve({ kind: "no-matching-tag", range: options.range });
+        },
+      });
+
+      // assert: the fake was reached exactly once, with the constraint the
+      // cascade intersected, and the fallback it answered carried the install
+      // through -- proof the seam substitutes the real filesystem probe
+      // rather than merely being ignored.
+      assert.equal(outcome.status, "installed");
+      assert.equal(seen.length, 1);
+      assert.equal(seen[0]?.pluginName, "some-other-plugin");
+      assert.equal(seen[0]?.range, ">=1.0.0 <2.0.0-0");
+      const after = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["some-other-plugin"]?.version, "0.0.1");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

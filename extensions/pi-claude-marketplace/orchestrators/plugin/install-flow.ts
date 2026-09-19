@@ -56,6 +56,7 @@ import {
 
 import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
 import type {
+  CascadeMarketplaceTagProbe,
   CascadeMemberOutcome,
   CascadeSkippedMember,
   CascadeTagProbe,
@@ -214,6 +215,14 @@ export interface InstallPluginOptions {
    * so a constrained cascade resolves without one.
    */
   readonly tagProbe?: CascadeTagProbe;
+  /**
+   * WR-03: the local, network-free tag probe a path-source member's
+   * constraint routes through (mirrors `tagProbe` for the network arm).
+   * Undefined = the real local probe, which reads the marketplace clone's
+   * own tags off disk. Callers inject a collaborator so a constrained
+   * path-source cascade resolves without touching the real filesystem.
+   */
+  readonly marketplaceTagProbe?: CascadeMarketplaceTagProbe;
   /**
    * PROV-03 / D-79-05 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS at use.
    * The git-source clone probe passes it to `buildCloneAuth` so a provider
@@ -1482,6 +1491,9 @@ async function installPluginWithTransaction(
         capture,
         transaction,
         ...(opts.tagProbe !== undefined && { tagProbe: opts.tagProbe }),
+        ...(opts.marketplaceTagProbe !== undefined && {
+          marketplaceTagProbe: opts.marketplaceTagProbe,
+        }),
       });
       const installed = unwrapCascade(cascade, capture, rootKey, cascadeFailure);
       if (installed === undefined) {
