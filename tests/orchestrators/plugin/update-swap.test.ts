@@ -114,6 +114,7 @@ test("WR-01: a successful path-source swap drops a stale resolvedSha the fresh r
         cleanupClones: () => Promise.resolve(),
       });
       assert.ok(!("partition" in preflight));
+      let cleanupCalls = 0;
 
       // act
       const outcome = await swapPluginUpdate(
@@ -126,7 +127,10 @@ test("WR-01: a successful path-source swap drops a stale resolvedSha the fresh r
           hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
           completionCache: createCompletionCache(),
           cascade: true,
-          cleanupClones: () => Promise.resolve(),
+          cleanupClones: () => {
+            cleanupCalls += 1;
+            return Promise.resolve();
+          },
         },
         preflight,
       );
@@ -138,6 +142,10 @@ test("WR-01: a successful path-source swap drops a stale resolvedSha the fresh r
       assert.ok(afterRecord !== undefined);
       assert.strictEqual(afterRecord.resolvedSha, undefined);
       assert.strictEqual(Object.hasOwn(afterRecord, "resolvedSha"), false);
+      // WR-05: the sha moved TO nothing from a prior clone-pinning value, so
+      // the old clone is now orphaned -- the post-swap sweep must not skip
+      // this case the way "resolvedSha !== undefined" alone would have.
+      assert.strictEqual(cleanupCalls, 1);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

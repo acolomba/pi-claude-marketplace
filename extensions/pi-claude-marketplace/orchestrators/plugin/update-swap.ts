@@ -1100,10 +1100,11 @@ export async function swapPluginUpdate(
   // record maps to it; `garbageCollectPluginClones` derives live clone keys from
   // the persisted records and deletes the rest. Runs POST-commit (NFR-3
   // fail-clean: a crash between commit and delete just leaves an orphan the next
-  // idempotent pass removes). Gated on a git-source swap (`preflight.resolvedSha`
-  // set) so path / github-name updates add no cache sweep. Leaks are swallowed
-  // (D-19-01): hygienic cleanup never becomes the primary path.
-  if (preflight.resolvedSha !== undefined) {
+  // idempotent pass removes). Gated on the record's commit identity having
+  // MOVED -- including to nothing, which is when a path-source record's own
+  // clone stops being referenced at all and most needs the sweep. Leaks are
+  // swallowed (D-19-01): hygienic cleanup never becomes the primary path.
+  if (preflight.resolvedSha !== preflight.record.resolvedSha) {
     try {
       await args.cleanupClones(args.locations);
     } catch {

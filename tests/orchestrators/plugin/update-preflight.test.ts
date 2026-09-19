@@ -571,6 +571,28 @@ test("cleans obsolete clones after persisting a disabled git pin", async (t) => 
   assert.strictEqual(cleanupCalls, 1);
 });
 
+test("WR-05: sweeps clones when a disabled refresh clears the record's resolvedSha to nothing", async (t) => {
+  // arrange: the same shape WR-01 exercises -- a stale resolvedSha on a
+  // `path`-source record whose re-resolution produces no sha of its own. The
+  // old clone that sha protected is now orphaned, which is exactly the case
+  // the sweep must not skip.
+  const record = { ...pluginRecord("1.0.0", false), resolvedSha: "stale-sha-from-a-prior-tag-pin" };
+  const seed = await seedUpdate({ installed: record });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  let cleanupCalls = 0;
+
+  // act
+  await prepare(seed, {
+    cleanupClones: () => {
+      cleanupCalls += 1;
+      return Promise.resolve();
+    },
+  });
+
+  // assert
+  assert.strictEqual(cleanupCalls, 1);
+});
+
 test("passes authenticated clone context and refs through both clone arms", async (t) => {
   // arrange
   const sha = "4444444444444444444444444444444444444444";

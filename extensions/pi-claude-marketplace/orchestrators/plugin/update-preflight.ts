@@ -480,7 +480,9 @@ async function refreshDisabledPluginUpdate(
   const wrote = disabledRefreshWouldWrite(preflight)
     ? await refreshDisabledRecord(options, preflight)
     : false;
-  if (wrote && preflight.resolvedSha !== undefined) {
+  // The sweep runs whenever the record's commit identity MOVED -- including
+  // to nothing, which is when the old clone stops being referenced at all.
+  if (wrote && preflight.resolvedSha !== preflight.record.resolvedSha) {
     try {
       await options.cleanupClones(options.locations);
     } catch {
