@@ -399,10 +399,10 @@ function disabledPinProjection(
   ]);
 }
 
-function nextDisabledPin(
-  preflight: PreparedPluginUpdate,
-  shaFallback: string | undefined,
-): { readonly compatibility: PluginStateRecord["compatibility"]; readonly projection: string } {
+function nextDisabledPin(preflight: PreparedPluginUpdate): {
+  readonly compatibility: PluginStateRecord["compatibility"];
+  readonly projection: string;
+} {
   const compatibility = {
     installable: preflight.installable.state === "installable",
     notes: [...preflight.installable.notes],
@@ -411,17 +411,20 @@ function nextDisabledPin(
   };
   return {
     compatibility,
+    // No `?? shaFallback`: a re-resolution that produced no pin PROJECTS no
+    // pin, so a record still carrying one reads as changed and gets it
+    // cleared.
     projection: disabledPinProjection(
       preflight.toVersion,
       preflight.installable.pluginRoot,
-      preflight.resolvedSha ?? shaFallback,
+      preflight.resolvedSha,
       compatibility,
     ),
   };
 }
 
 function disabledRefreshWouldWrite(preflight: PreparedPluginUpdate): boolean {
-  const next = nextDisabledPin(preflight, preflight.record.resolvedSha);
+  const next = nextDisabledPin(preflight);
   const current = disabledPinProjection(
     preflight.record.version,
     preflight.record.resolvedSource,
@@ -441,7 +444,7 @@ async function refreshDisabledRecord(
       return false;
     }
 
-    const next = nextDisabledPin(preflight, record.resolvedSha);
+    const next = nextDisabledPin(preflight);
     const current = disabledPinProjection(
       record.version,
       record.resolvedSource,

@@ -352,6 +352,29 @@ test("WR-01: refreshing a disabled path-source pin drops a stale resolvedSha the
   assert.strictEqual(Object.hasOwn(refreshed, "resolvedSha"), false);
 });
 
+test("WR-02: clears a stale resolvedSha even when nothing else about the disabled pin changed", async (t) => {
+  // arrange: version, resolvedSource and compatibility all already match what
+  // this refresh would produce -- the stale sha is the ONLY thing that
+  // differs, which is the one case the WR-01 clear must still catch.
+  const seed = await seedUpdate({ installed: pluginRecord("2.0.0", false) });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const state = await loadState(seed.locations.extensionRoot);
+  const record = state.marketplaces.mp?.plugins.hello;
+  assert.ok(record !== undefined);
+  record.resolvedSource = seed.pluginRoot;
+  record.resolvedSha = "stale-sha-from-a-prior-tag-pin";
+  await saveState(seed.locations.extensionRoot, state);
+
+  // act
+  await prepare(seed);
+
+  // assert
+  const refreshed = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.ok(refreshed !== undefined);
+  assert.strictEqual(refreshed.resolvedSha, undefined);
+  assert.strictEqual(Object.hasOwn(refreshed, "resolvedSha"), false);
+});
+
 test("does not rewrite an unchanged disabled pin", async (t) => {
   // arrange
   const seed = await seedUpdate({ installed: pluginRecord("2.0.0", false) });
