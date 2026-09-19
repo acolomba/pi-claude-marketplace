@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Internal: tuned GSD's agent model tiers and effort, and pinned babysit-pr's fallback model for Codex. (#199)
 - The changelog now lists one entry per pull request, ending in its number, and thanks every issue reporter and contributor. (#197)
 - Internal: every test suite now runs in a hermetic environment that owns `HOME` and the Pi agent directory. (#196)
 - Internal: the TypeScript rules and review skills moved under `skills/`, and each GSD agent loads only the ones it needs. (#195)
