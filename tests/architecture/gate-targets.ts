@@ -105,6 +105,14 @@ export const NETWORK_FREE_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts",
+  // LOAD-01 / NFR-5 / WR-06: the satisfaction walk composes dependency-index.ts
+  // -- already gated one group below -- and reads the memoized manifest cache
+  // and the warm clone cache only. It sits on the load path, where a stray
+  // fetch would make every session start wait on a remote, so the file that
+  // claims the walk is offline carries the gate that pins it. A future need to
+  // refresh a clone before deciding must route through
+  // orchestrators/plugin/clone-cache.ts.
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts",
   // ENBL-03: the enable/disable orchestrator re-materializes from cache
   // -- NO network.
   "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
