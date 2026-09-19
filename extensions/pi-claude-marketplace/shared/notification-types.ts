@@ -108,16 +108,6 @@ export const REASONS = [
   // materialized, and the pair says which of those two facts this command
   // is responsible for.
   "dependency promoted",
-  // D-05-14 / D-05-15 / PRUNE-05: the plugin the user named is still declared
-  // as a dependency by another installed plugin in the scope, so the uninstall
-  // was refused and nothing was removed. `plugins remain` cannot carry it: that
-  // token's documented subject is a marketplace that still records plugins,
-  // and this row's subject is a plugin that other plugins still need. The
-  // dependents ride the row's cause line (`required by <key>, <key>`) rather
-  // than the token, on the `dependency cycle` precedent -- a token names one
-  // fact about one plugin, and the list of who needs it is a fact about
-  // several.
-  "dependents remain",
   // D-05-11 / PRUNE-04: the plugin was recorded as another plugin's
   // dependency, nothing installed declares it any more, and `uninstall
   // --prune` removed it. It rides an ordinary `uninstalled` row because the
@@ -128,7 +118,7 @@ export const REASONS = [
   // dependency it declares is not satisfied in the same scope. It mirrors
   // upstream's `dependency-unsatisfied` error code, so the token names the
   // CONDITION and the remedy naming both parties rides the row's cause line --
-  // the same split `dependents remain` established, and the only one available:
+  // the same split `dependency cycle` established, and the only one available:
   // a reason is one to three lowercase words and this set is a literal tuple,
   // so no token can interpolate an identifier. `dependency disabled` cannot
   // carry it: that token's subject is the DEPENDENCY row inside an install

@@ -5,14 +5,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notification-types.ts` as the SINGLE source of catalog truth (OUT-08: the 59-entry
+ * in `notification-types.ts` as the SINGLE source of catalog truth (OUT-08: the 58-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 59-entry set.
+ * 58-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
@@ -35,26 +35,27 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * dependency off the benign-skip default (52 to 53). D-04-07 added
  * `dependency promoted`, install's marker for a recorded dependency the user
  * then asked for by name -- a state change, which the refusal `already
- * installed` cannot report on its own (53 to 54). D-05-14 added `dependents
- * remain`, uninstall's refusal marker for a plugin another installed plugin in
- * the scope still declares -- an error, not a benign skip, so it joins the
- * command-private reasons and not the idempotent group (54 to 55). D-05-11
+ * installed` cannot report on its own (53 to 54). D-05-11
  * added `dependency pruned`, the marker `uninstall --prune` stamps on each
  * orphaned dependency record it swept out after the named plugin -- a removal
  * the user did not name, so it is a state change and joins the command-private
- * reasons, not the idempotent group (55 to 56). LOAD-01 added `dependency
+ * reasons, not the idempotent group (54 to 55). LOAD-01 added `dependency
  * unsatisfied`, the load-time check's marker for a recorded plugin it disabled
  * because a dependency it declares is not satisfied in the scope -- a state
  * change the user did not ask for, so it joins the command-private reasons and
- * not the idempotent group (56 to 57). LOAD-01 added `dependency version
+ * not the idempotent group (55 to 56). LOAD-01 added `dependency version
  * unsatisfied`, the same check's marker for a dependency that IS recorded and
  * enabled at a version outside the declared range -- a second token rather than
  * a second use of the first, because the two remedies differ in kind and a grep
- * for either must not return the other (57 to 58). LOAD-03 added `dependents
+ * for either must not return the other (56 to 57). LOAD-03 added `dependents
  * unsatisfied`, uninstall's marker for a removal that went through while other
  * installed plugins still declared the target -- a state change reported on the
  * success row, so it joins the command-private reasons and not the idempotent
- * group (58 to 59).
+ * group (57 to 58), and D-06-07 RETIRED uninstall's refusal marker in the same
+ * edit, because the refusal it named no longer happens: the two cancel, which
+ * is why the count ends this phase where the sentence before it left off. The
+ * arithmetic above is renumbered rather than annotated with the gap, so the
+ * next member to join does not inherit one.
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -305,14 +306,6 @@ type CommandPrivateReason =
   // promotion mutates state, which is why it is not an idempotent reason.
   | "dependency promoted"
   | "plugins remain"
-  // D-05-14 / D-05-15: uninstall's refusal marker, owned by
-  // `orchestrators/plugin/uninstall.messaging.ts`. The named plugin is still
-  // declared by another installed plugin in the scope, so nothing was removed;
-  // the dependents are named on the cause line. It sits beside `plugins
-  // remain` because the two are the same shape of refusal about different
-  // subjects -- and it is NOT idempotent: the operation was refused, not
-  // already done.
-  | "dependents remain"
   // D-05-11 / PRUNE-04: uninstall's prune marker, owned by
   // `orchestrators/plugin/uninstall.messaging.ts`. The row's plugin was
   // recorded as another plugin's dependency and `--prune` removed it once

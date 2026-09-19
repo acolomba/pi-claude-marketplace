@@ -60,7 +60,7 @@ This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ct
 
 ### Reasons rendering
 
-Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 58-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only block is the dependency-cascade vocabulary -- `{no matching version}`, `{version conflict}`, `{constraint too complex}`, `{invalid version constraint}`, `{dependency marketplace not added}`, `{dependency cycle}`, `{dependency failed}`, `{dependency disabled}`, `{dependency promoted}`, `{dependents remain}`, `{dependency pruned}`, `{dependency unsatisfied}` and `{dependency version unsatisfied}` -- which sits after uninstall's data-disposition marker `{data kept}`.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 58-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only block is the dependency-cascade vocabulary -- `{no matching version}`, `{version conflict}`, `{constraint too complex}`, `{invalid version constraint}`, `{dependency marketplace not added}`, `{dependency cycle}`, `{dependency failed}`, `{dependency disabled}`, `{dependency promoted}`, `{dependency pruned}`, `{dependency unsatisfied}`, `{dependency version unsatisfied}` and `{dependents unsatisfied}` -- which sits after uninstall's data-disposition marker `{data kept}`.
 
 Structural `unavailable` rows derive reasons from resolver notes through `narrowResolverNotes`. Partial rows derive typed unsupported kinds through `narrowUnsupportedKinds`. The typed `workflows` kind uses the second path.
 
@@ -1099,18 +1099,18 @@ A plugin operation has failed.
   ⊘ helper (failed) {not installed, marketplace in project scope}
 ```
 
-### Failure -- refused, dependents remain (PRUNE-05 / D-05-14 / D-05-15)
+### Success -- removed while other plugins still declared it (LOAD-03 / D-06-06)
 
-Triggered when `uninstall <plugin>@<marketplace>` names a plugin that another installed plugin in the SAME scope still declares as a dependency. The uninstall is refused inside the locked state transaction, before any artifact leaves disk: no artifact, no installation record and no data directory is removed, and `state.json` is not rewritten. The row carries the `dependents remain` reason and the 4-space-indent `cause:` trailer names every dependent as a `name@marketplace` key, sorted, on the `dependency cycle` precedent -- the names ride the cause line and never the token. A DISABLED dependent still holds the target (D-05-04): installed is installed. Only the target scope's own `state.json` is consulted (D-05-05), and every declaration is read offline from the dependent's own manifest, with its marketplace entry as the fallback (D-05-06). The remedy is to uninstall the dependent first, or to run `uninstall <dependent> --prune`, which then sweeps the target as an orphan. The load-time reconcile refuses a config-driven uninstall the same way and reports the same row on every pass until the config is fixed (D-05-16; catalogued under `reconcile-applied-cascade`). Severity: `error`. No reload-hint -- nothing changed.
+Triggered when `uninstall <plugin>@<marketplace>` names a plugin that another installed plugin in the SAME scope still declares as a dependency. The removal PROCEEDS: this is upstream's behaviour, and it is what breaks the deadlock two plugins declaring each other would otherwise create. The row is the ordinary `uninstalled` row -- `info` severity, reload-hint, the same glyph -- carrying the `dependents unsatisfied` reason, and the 4-space-indent `cause:` trailer names every dependent as a `name@marketplace` key, sorted, on the `dependency cycle` precedent: the names ride the cause line and never the token. The severity stays `info` because the uninstall was carried out in full; the consequence for the dependents is not this row's subject and is reported at the next load, at `warning`, by the load-time dependency check, which gives each dependent its own row and the full remedy (`reconcile-dependency-unsatisfied`). A DISABLED dependent still holds the target (D-05-04): installed is installed. Only the target scope's own `state.json` is consulted (D-05-05), and every declaration is read offline from the dependent's own manifest, with its marketplace entry as the fallback (D-05-06). It is catalogued here beside the fail-closed refusal below because the two are the two outcomes of the same declarer read. Under `--prune`, a declarer the same command sweeps is not named: the declarer set and the sweep share one snapshot. The reconcile-driven uninstall does NOT carry this brace -- reporting it there would state one fact twice in a single emission, since the check already reports it better.
 
-<!-- catalog-state: refused-dependents-remain -->
+<!-- catalog-state: success-dependents-unsatisfied -->
 
 ```text
-A plugin operation has failed.
-
 ● official [user]
-  ⊘ helper v1.0.0 (failed) {dependents remain}
+  ○ helper v1.0.0 (uninstalled) {dependents unsatisfied}
     cause: required by deploy-kit@official
+
+/reload to pick up changes
 ```
 
 ### Failure -- refused, a declarer could not be read (D-05-07)
@@ -2766,22 +2766,6 @@ A plugin operation needs attention.
     cause: Update "secrets-vault@mp" to satisfy >=2.0.0 <3.0.0-0, or uninstall "deploy-kit@mp"
 
 Reconcile: 1 warning
-```
-
-### Load-time uninstall refused, dependents remain (PRUNE-05 / D-05-16)
-
-The load-time counterpart of the standalone `refused-dependents-remain` row. The user dropped `secrets-vault@mp` from `claude-plugins.json` and reloaded, but the still-declared `deploy-kit` depends on it, so the pass refuses the uninstall exactly as the typed command would (D-05-14): nothing is removed, `state.json` still records the plugin, and the row carries the `dependents remain` reason with the same `cause:` trailer naming the dependents. Every later pass reports the identical row until the config is fixed -- either by declaring the plugin again or by dropping the dependent too, after which the next pass removes both and the pass after it is silent. A pass retries every refused uninstall after the others in the same pass have run, so removing both converges in one pass whatever order `state.json` records them in (the install cascade records a dependency before its declarer). Reconcile never prunes (D-05-08), so an orphaned dependency record survives `/reload` and is removed only by an explicit `uninstall ... --prune`. Only a refused uninstall carries a cause onto this surface; a cascade-thrown uninstall failure (`{permission denied}`) keeps its bare row. The trailing tally counts the row as one failure. Severity: `error`; no reload-hint.
-
-<!-- catalog-state: reconcile-uninstall-refused-dependents -->
-
-```text
-A plugin operation has failed.
-
-● mp [project]
-  ⊘ secrets-vault (failed) {dependents remain}
-    cause: required by deploy-kit@mp
-
-Reconcile: 1 failure
 ```
 
 ### Load-time install failed by a dependency (RESV-06)

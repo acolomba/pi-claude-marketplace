@@ -161,12 +161,13 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
       },
     },
 
-    // D-05-14 / D-05-15 / PRUNE-05: another installed plugin in the scope
-    // still declares the target, so the uninstall is refused and nothing is
-    // removed. The dependents ride the cause line, never the token.
-    "refused-dependents-remain": {
+    // LOAD-03 / D-06-06: other installed plugins in the scope still declared
+    // the target and the removal went through anyway. The token rides the
+    // SUCCESS row; the dependents ride the cause line, never the token.
+    // The row is `info`, so the fixture omits `expectedSeverity`: notify
+    // passes no second argument on the info arm.
+    "success-dependents-unsatisfied": {
       pi: piWithBothLoaded(),
-      expectedSeverity: "error",
       message: {
         marketplaces: [
           {
@@ -174,12 +175,12 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "failed",
-                severity: "error",
-                needsReload: false,
+                status: "uninstalled",
+                severity: "info",
+                needsReload: true,
                 name: "helper",
                 version: "1.0.0",
-                reasons: ["dependents remain"],
+                reasons: ["dependents unsatisfied"],
                 cause: new Error("required by deploy-kit@official"),
               },
             ],

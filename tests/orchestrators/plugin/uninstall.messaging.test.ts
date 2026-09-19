@@ -13,7 +13,6 @@ import { type PluginUninstalledMessage } from "../../../extensions/pi-claude-mar
 
 import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-void ("dependents remain" satisfies UninstallPrivateReason);
 void ("dependents unsatisfied" satisfies UninstallPrivateReason);
 void ("dependency pruned" satisfies UninstallPrivateReason);
 

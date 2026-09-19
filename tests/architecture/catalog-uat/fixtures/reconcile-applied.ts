@@ -296,37 +296,6 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
       },
     },
 
-    // D-05-16 / PRUNE-05: the load-time counterpart of the standalone
-    // `dependents remain` refusal. The config dropped a plugin another
-    // installed plugin still declares, so the pass refuses the uninstall,
-    // reports the same row with the same cause line, and does so on every
-    // pass until the config is fixed.
-    "reconcile-uninstall-refused-dependents": {
-      pi: piWithBothLoaded(),
-      expectedSeverity: "error",
-      message: {
-        kind: "reconcile-applied-cascade",
-        label: "Reconcile",
-        cardinality: "plural",
-        marketplaces: [
-          {
-            name: "mp",
-            scope: "project",
-            plugins: [
-              {
-                status: "failed",
-                name: "secrets-vault",
-                reasons: ["dependents remain"],
-                cause: new Error("required by deploy-kit@mp"),
-                severity: "error",
-                needsReload: false,
-              },
-            ],
-          },
-        ],
-      },
-    },
-
     // LOAD-01: the load-time dependency check disabled a plugin whose declared
     // dependency has no record in the scope. The token names the condition and
     // the cause line carries the remedy, which names both parties.

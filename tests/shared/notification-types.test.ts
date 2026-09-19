@@ -73,7 +73,6 @@ const EXPECTED_REASONS = [
   "dependency failed",
   "dependency disabled",
   "dependency promoted",
-  "dependents remain",
   "dependency pruned",
   "dependency unsatisfied",
   "dependency version unsatisfied",

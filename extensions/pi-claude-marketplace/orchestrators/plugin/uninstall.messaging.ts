@@ -23,14 +23,12 @@ import type { Scope } from "../../shared/types.ts";
  */
 
 /**
- * D-05-14 / D-05-15 / D-05-11 / D-06-06: the command-private reasons owned by
- * `uninstall`. `dependents remain` is meaningful only to the uninstall flow (a
- * plugin that cannot be removed because another installed plugin in the scope
- * still declares it); `dependents unsatisfied` marks a removal that went
- * through while other installed plugins still declared the target; `dependency
- * pruned` marks a dependency record `--prune` swept out after the named
- * plugin. All are members of the closed `Reason` set; the pin below rejects a
- * typo at compile time.
+ * D-05-11 / D-06-06: the command-private reasons owned by `uninstall`. Both
+ * are meaningful only to this flow: `dependents unsatisfied` marks a removal
+ * that went through while other installed plugins in the scope still declared
+ * the target, and `dependency pruned` marks a dependency record `--prune`
+ * swept out after the named plugin. Both are members of the closed `Reason`
+ * set; the pin below rejects a typo at compile time.
  */
 // `_ReasonInSet<R extends Reason> = R` pins the private reasons to the closed
 // `Reason` set as it derives `UninstallPrivateReason`: an out-of-set literal
@@ -38,9 +36,7 @@ import type { Scope } from "../../shared/types.ts";
 // no runtime footprint.
 type _ReasonInSet<R extends Reason> = R;
 // fallow-ignore-next-line private-type-leak -- `_ReasonInSet` is the compile-time membership guard; exporting that helper would widen the command's public reason vocabulary.
-export type UninstallPrivateReason = _ReasonInSet<
-  "dependency pruned" | "dependents remain" | "dependents unsatisfied"
->;
+export type UninstallPrivateReason = _ReasonInSet<"dependency pruned" | "dependents unsatisfied">;
 
 /**
  * uninstall's private status set: a success `uninstalled` row or a `failed`

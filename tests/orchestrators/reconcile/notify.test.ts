@@ -1223,14 +1223,17 @@ describe("buildReconcileAppliedCascade", () => {
 
   test("D-05-16: carries the refusal cause on a plugin-uninstall-failed row that names one", () => {
     // arrange
-    const cause = new UninstallRefusedError("dependents remain", "required by keeper@mp");
+    const cause = new UninstallRefusedError(
+      "unreadable",
+      "cannot read the dependencies of keeper@mp: not declared by its marketplace",
+    );
     const outcomes: readonly PerEntryOutcome[] = [
       {
         kind: "plugin-uninstall-failed",
         scope: "project",
         marketplace: "mp",
         plugin: "orphan",
-        reason: "dependents remain",
+        reason: "unreadable",
         cause,
       },
     ];
@@ -1249,7 +1252,7 @@ describe("buildReconcileAppliedCascade", () => {
             {
               status: "failed",
               name: "orphan",
-              reasons: ["dependents remain"],
+              reasons: ["unreadable"],
               cause,
               severity: "error",
               needsReload: false,

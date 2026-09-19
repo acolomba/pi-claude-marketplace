@@ -118,8 +118,11 @@ void ({
   scope: "project",
   marketplace: "official",
   plugin: "formatter",
-  reason: "dependents remain",
-  cause: new UninstallRefusedError("dependents remain", "required by linter@official"),
+  reason: "unreadable",
+  cause: new UninstallRefusedError(
+    "unreadable",
+    "cannot read the dependencies of linter@official: not declared by its marketplace",
+  ),
 } satisfies PluginUninstallFailedOutcome);
 void ({
   kind: "plugin-enabled",

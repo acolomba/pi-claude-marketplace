@@ -65,29 +65,32 @@ test("OUT-08: REASONS is the closed 58-entry reason set", () => {
   // dependency the user then asked for by name. The record changes hands and
   // nothing is materialized; `already installed` alone is the refusal's brace
   // and cannot report a state change (53 -> 54).
-  // D-05-14 / D-05-15: +1 for `dependents remain` -- uninstall's refusal marker
-  // for a plugin another installed plugin in the scope still declares. Nothing
-  // is removed, the dependents ride the cause line, and the token is an error
-  // rather than a benign skip (54 -> 55).
   // D-05-11 / PRUNE-04: +1 for `dependency pruned` -- the marker `uninstall
   // --prune` stamps on each orphaned dependency record it removed after the
   // named plugin. An ordinary `uninstalled` row whose brace says why a plugin
-  // the user did not name went (55 -> 56).
+  // the user did not name went (54 -> 55).
   // LOAD-01: +1 for `dependency unsatisfied` -- the load-time check's marker
   // for a recorded plugin it disabled because a dependency it declares is not
   // satisfied in the scope. It names the CONDITION; the remedy naming both
   // parties rides the row's cause line, which no closed-set token could carry
-  // (56 -> 57).
+  // (55 -> 56).
   // LOAD-01: +1 for `dependency version unsatisfied` -- the same check's marker
   // for a dependency that IS recorded and enabled at a version outside the
   // declared range. It mirrors upstream's second error code, and the split is
   // what keeps the two remedies apart: one says install or enable the missing
-  // thing, the other says move an existing thing's version (57 -> 58).
+  // thing, the other says move an existing thing's version (56 -> 57).
   // LOAD-03 / D-06-06: +1 for `dependents unsatisfied` -- uninstall's marker
   // for a removal that went through while other installed plugins still
   // declared the target. It rides the SUCCESS row and names a consequence the
-  // next load reports, where `dependents remain` named a refusal (58 -> 59).
-  assert.equal(REASONS.length, 59);
+  // next load reports (57 -> 58).
+  //
+  // D-06-07 is the one RETIREMENT this narrative records rather than an
+  // addition: uninstall's refusal marker joined the set at 55 and left it
+  // again here, because the refusal it named no longer happens. The count is
+  // unchanged across this phase's last two edits for that reason, and the
+  // running arithmetic above is renumbered rather than annotated, so a reader
+  // adding the next member does not inherit a gap.
+  assert.equal(REASONS.length, 58);
 });
 
 test("SNM-02: STATUS_TOKENS is the closed 24-entry token set", () => {

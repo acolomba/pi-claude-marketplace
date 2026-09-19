@@ -127,15 +127,17 @@ A dependency that was installed partially, with some of its component kinds unsu
 
 ## Removing a plugin other plugins need
 
-`uninstall` refuses to remove a plugin while another installed plugin in the same scope declares it. A disabled plugin still counts as installed, so it still holds its dependencies. The refused row reads `{dependents remain}`, and its `cause:` line names each dependent as `name@marketplace`. Nothing is removed and nothing is written.
+`uninstall` removes a plugin even while another installed plugin in the same scope declares it. A disabled plugin still counts as installed, so it still holds its dependencies. The row reads `{dependents unsatisfied}`, and its `cause:` line names each dependent as `name@marketplace`. The plugin, its files and its record are gone when the command returns.
 
-To clear the refusal, uninstall the dependents first. If the plugin arrived as a dependency, you can also run `--prune` on the dependent. The dependent goes, and the plugin goes with it as an orphan (see the next section).
+At the next reload, each named dependent is disabled and told what to do: install the plugin again, or uninstall the dependent. Nothing is lost while you decide, because a disabled plugin keeps its record.
+
+To remove a dependent as well, uninstall it too. If the plugin arrived as a dependency, you can instead run `--prune` on the dependent. The dependent goes, and the plugin goes with it as an orphan (see the next section).
 
 ```text
 /claude:plugin uninstall <dependent>@<marketplace> --prune
 ```
 
-A reload applies the same rule. If you remove a plugin from the configuration file while another installed plugin still declares it, the reload refuses to remove it. The reload reports the same row every time until you fix the configuration. If you remove the dependent from the configuration file too, one reload removes both, whatever order they were installed in. Claude Code documents this refusal for `disable`; this extension applies it to `uninstall`.
+A reload applies the same rule. If you remove a plugin from the configuration file while another installed plugin still declares it, the reload removes it. The reload row is the plain one: the reload reports the dependents on their own rows instead, with the full remedy, on the pass after the removal.
 
 The check reads the declarations of every other installed plugin in the scope, offline, from each plugin's own manifest or its marketplace entry (D-05-06). If any one of them cannot be read, the uninstall is refused (D-05-07). This is a deliberate choice. This extension never removes a plugin on incomplete information. A declaration cannot be read in four cases: the plugin's marketplace no longer lists it, the marketplace manifest itself is unreadable, its `dependencies` value cannot be used, or the plugin's own manifest file exists but cannot be read. A plugin with no manifest file of its own (for example a git plugin whose clone is not on disk) is answered by its marketplace entry, and an entry with no `dependencies` value means the plugin declares nothing. A manifest file that exists but cannot be read never counts as one that declares nothing, because a damaged file may hide a dependency the plugin really declares. The refused row reads `{unreadable}`, and the `cause:` line names which plugin could not be read and why. The simplest repair is to uninstall the plugin that cannot be read: the check never reads the plugin being removed, so that command is not refused, and the check passes for everything else afterwards. If that plugin should stay, repair its manifest file, or update the marketplace so the manifest lists it again. If the whole marketplace is stale, remove it instead.
 

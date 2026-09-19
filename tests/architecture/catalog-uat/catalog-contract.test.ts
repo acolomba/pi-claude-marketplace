@@ -51,40 +51,49 @@ const EXPECTED_SECTION_COUNT = 20;
 // installed by name -- the `installed` row carrying `{already installed,
 // dependency promoted}`, the one install outcome that changes a record
 // without materializing anything (205 -> 206).
-// PRUNE-05 / D-05-14 / D-05-07: +2 states for uninstall's refusals -- the
-// `{dependents remain}` row whose cause line names who still needs the plugin,
-// and the fail-closed row that carries a declarer's read-failure token when
-// some other record's declarations could not be established (206 -> 208).
-// D-05-16: +1 state for the load-time refusal -- the reconcile pass reports
-// the same `{dependents remain}` row, cause line included, on every pass
-// until the config is fixed (208 -> 209).
+// D-05-07: +1 state for uninstall's fail-closed refusal -- the row that
+// carries a declarer's read-failure token when some other record's
+// declarations could not be established (206 -> 207).
 // PRUNE-01..04 / D-05-01 / D-05-09 / D-05-13: +3 states for `uninstall
 // --prune` -- the two-block sweep report with its `{dependency pruned}` rows,
 // the same under `--keep-data` with `{dependency pruned, data kept}`, and the
 // partial failure where one pruned member's warning row sits beside the
-// removals that stood (209 -> 212).
+// removals that stood (207 -> 210).
 // D-01-32: +1 state for the cold git-source `(remote)` row that carries the
-// entry-declared `dependencies:` line after the unresolved marker (212 -> 213).
+// entry-declared `dependencies:` line after the unresolved marker (210 -> 211).
 // RESV-06: +1 state for the load-time counterpart of the dependency-cascade
 // `{dependency failed}` row -- reconcile drives one outcome per declared
 // plugin, so the requesting plugin's own row carries both the token and the
-// failing dependency's cause line (213 -> 214).
+// failing dependency's cause line (211 -> 212).
 // RESV-06: +1 state for import's own dependency-cascade failure -- a
 // `DependencyCascadeError` now collapses onto the requesting plugin's row with
 // `{dependency failed}` instead of the unrelated `{not in manifest}` token the
 // unexpected-failure fallthrough carried before `dispatchFailedOutcome`
-// narrowed on it (214 -> 215).
+// narrowed on it (212 -> 213).
 // LOAD-01: +1 state for the load-time dependency disable -- the `(disabled)`
 // row carrying `{dependency unsatisfied}` and the remedy naming both the
 // dependency and the dependent on its cause line. It is the only `(disabled)`
 // row with a cause trailer, and the only realized transition row that renders
-// at warning severity (215 -> 216).
+// at warning severity (213 -> 214).
 // LOAD-01: +2 states for the check's other two arms -- a dependency recorded
 // but disabled (same token, enable remedy) and a dependency recorded at a
 // version outside the declared range (the second token, update remedy carrying
-// the canonical folded range) (216 -> 218).
-const EXPECTED_STATE_COUNT = 218;
-const EXPECTED_UTF8_BYTES = 29_802;
+// the canonical folded range) (214 -> 216).
+// LOAD-03 / D-06-06: +1 state for the uninstall that went through while other
+// plugins still declared the target -- an `(uninstalled)` row carrying
+// `{dependents unsatisfied}` with the dependents on its cause line, the only
+// uninstall row with a cause trailer (216 -> 217).
+//
+// D-06-07 is the one RETIREMENT this narrative records: the two states that
+// documented uninstall's dependents refusal -- the standalone row and its
+// load-time counterpart -- are gone, because the refusal they documented no
+// longer happens. The load-time surface gains no replacement: the
+// reconcile-driven removal renders the ordinary bare `(uninstalled)` row that
+// `reconcile-applied-cascade` already documents, and the consequence for the
+// dependents is reported by `reconcile-dependency-unsatisfied`. The arithmetic
+// above is renumbered rather than annotated with the gap.
+const EXPECTED_STATE_COUNT = 217;
+const EXPECTED_UTF8_BYTES = 29_652;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -373,7 +382,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 218 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 217 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);
