@@ -1309,7 +1309,8 @@ test("TAGS-02 / D-07-07 a path-source member whose marketplace root is not a git
 });
 
 test("TAGS-02 a path-source member WITH a satisfying tag is unaffected: no fallback, pin present", async (t) => {
-  // arrange: 07-01's behaviour must not move.
+  // arrange: a path-source member's own constraint resolution, which the
+  // git-backed arm below must not be able to change.
   const environment = await createHermeticEnvironment(t, "install-cascade-path-pinned-still-");
   const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
   const oid = await tagMarketplaceRoot(state, "bar--v1.0.0");
@@ -1441,10 +1442,8 @@ test("RESV-03 a constrained dependency whose marketplace entry is npm-sourced re
 });
 
 test("TAGS-02 a path-source member's local tag-listing failure resolves anyway, not a cascade failure", async (t) => {
-  // arrange: TAGS-02 supersedes the interim 07-01 behaviour -- a local
-  // read failure is never a transport failure, and it is no longer a cascade
-  // failure of any kind either. It takes the SAME fallback arm the
-  // no-matching-tag case does (D-07-07).
+  // arrange: a local tag-listing read failure takes the SAME fallback arm the
+  // no-matching-tag case does, and is never a cascade failure (D-07-07).
   const environment = await createHermeticEnvironment(t, "install-cascade-path-listing-failed-");
   const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
   const locations = locationsFor("project", environment.cwd);
@@ -1593,11 +1592,9 @@ test("RESV-03 a listing failure surfaces as its own arm carrying the classified 
   });
 });
 
-// TAGS-02: a path source's own no-matching-tag arm no longer fails the
-// cascade (it falls back to the marketplace's current copy instead), so it is
-// no longer a member of this loop -- see the dedicated TAGS-02 test below.
-// This loop's two remaining cases are both the "absent" tag-source arm, which
-// TAGS-02 does not touch.
+// TAGS-02: this loop covers the "absent" tag-source arm only. A path source's
+// no-matching-tag arm falls back to the marketplace's current copy and has its
+// own case below.
 for (const { label, pluginNames, gitSourced, knownMarketplaces, dependencyMarketplace } of [
   {
     label: "a source the snapshot records no marketplace for",
