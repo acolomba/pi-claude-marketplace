@@ -440,6 +440,34 @@ test("preserves installedAt while replacing an existing disabled record", async 
   );
 });
 
+test("LOAD-02: re-materializing a held-down record drops the dependency marker", async (t) => {
+  // arrange -- a record a previous load-time pass disabled and stamped.
+  const environment = await createHermeticEnvironment(t, "install-outcome-lift-");
+  const seeded = await seedPlugin(environment.cwd, { preinstalled: true });
+  const locations = locationsFor("project", environment.cwd);
+  const seededRecord = seeded.state.marketplaces.marketplace?.plugins.empty;
+  assert.notEqual(seededRecord, undefined);
+  Object.assign(seededRecord ?? {}, { dependencyDisabled: true });
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    allowExistingRecord: true,
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+  });
+
+  // assert -- a key-presence check, because the contract is that the state
+  // phase never NAMES the field, not that it writes a falsy one.
+  assert.equal(ledgerOutcome.kind, "installed");
+  const record = seeded.state.marketplaces.marketplace?.plugins.empty;
+  assert.equal(record?.enabled, true);
+  assert.equal(Object.hasOwn(record ?? {}, "dependencyDisabled"), false);
+});
+
 /**
  * The three `commitPrepared*` leak arms, one case per bridge.
  *

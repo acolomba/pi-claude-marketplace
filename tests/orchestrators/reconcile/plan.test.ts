@@ -11,6 +11,7 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { planReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
+import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import { mergeScopeConfigs } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 
 import type { ScopeSatisfactionVerdict } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
@@ -1028,6 +1029,94 @@ describe("planReconcile", () => {
         kind: "missing",
       },
     ]);
+  });
+
+  test("LOAD-02: lifts a marked record once the live verdict no longer names it", () => {
+    // arrange -- the marker says a previous pass held it down; the verdict says
+    // the dependency is satisfied now.
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "deploy-kit@keep": {} });
+    const state = stateWith({
+      keep: marketplaceRecord("keep", githubSource("acme/keep"), {
+        "deploy-kit": { ...pluginRecord(false), dependencyDisabled: true },
+      }),
+    });
+    const verdict: ScopeSatisfactionVerdict = { ok: true, unsatisfied: [] };
+
+    // act
+    const plan = planReconcile(merged, state, "project", verdict);
+
+    // assert
+    assert.deepStrictEqual(plan.pluginsToEnable, [
+      { scope: "project", plugin: "deploy-kit", marketplace: "keep" },
+    ]);
+    assert.deepStrictEqual(plan.pluginsToDependencyDisable, []);
+  });
+
+  test("LOAD-02: plans neither bucket for a marked record whose dependency is still unsatisfied", () => {
+    // arrange -- the terminal state of a consequence-disable. Bucketing it for
+    // enable would oscillate; bucketing it for the disable again would put the
+    // scope in the plan on every reload.
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "deploy-kit@keep": {} });
+    const state = stateWith({
+      keep: marketplaceRecord("keep", githubSource("acme/keep"), {
+        "deploy-kit": { ...pluginRecord(false), dependencyDisabled: true },
+      }),
+    });
+    const verdict: ScopeSatisfactionVerdict = {
+      ok: true,
+      unsatisfied: [
+        { dependent: "deploy-kit@keep", dependency: "secrets-vault@keep", kind: "missing" },
+      ],
+    };
+
+    // act
+    const plan = planReconcile(merged, state, "project", verdict);
+
+    // assert
+    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
+  });
+
+  test("LOAD-02: never lifts a disable the user asked for", () => {
+    // arrange -- a user disable writes `enabled: false` to the config AND the
+    // record, and stamps no marker. The satisfied verdict must not revive it.
+    const merged = mergedConfig(
+      { keep: { source: "acme/keep" } },
+      { "deploy-kit@keep": { enabled: false } },
+    );
+    const state = stateWith({
+      keep: marketplaceRecord("keep", githubSource("acme/keep"), {
+        "deploy-kit": pluginRecord(false),
+      }),
+    });
+    const verdict: ScopeSatisfactionVerdict = { ok: true, unsatisfied: [] };
+
+    // act
+    const plan = planReconcile(merged, state, "project", verdict);
+
+    // assert
+    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
+  });
+
+  test("LOAD-02: an unmarked disabled record is enabled by the ordinary path, not by the check", () => {
+    // arrange -- the config declares it enabled and the record is disabled, so
+    // the ordinary ENBL-02 divergence fires. The check's predicate gates
+    // nothing here, which is what makes the marker the only thing it lifts.
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "deploy-kit@keep": {} });
+    const state = stateWith({
+      keep: marketplaceRecord("keep", githubSource("acme/keep"), {
+        "deploy-kit": pluginRecord(false),
+      }),
+    });
+    const verdict: ScopeSatisfactionVerdict = { ok: true, unsatisfied: [] };
+
+    // act
+    const plan = planReconcile(merged, state, "project", verdict);
+
+    // assert
+    assert.deepStrictEqual(plan.pluginsToEnable, [
+      { scope: "project", plugin: "deploy-kit", marketplace: "keep" },
+    ]);
+    assert.deepStrictEqual(plan.pluginsToDependencyDisable, []);
   });
 
   test("plans the ordinary enable when the declaration walk could not reach a verdict", () => {

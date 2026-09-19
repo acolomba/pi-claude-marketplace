@@ -170,6 +170,33 @@ test("records an installed replacement and returns its exact outcome", () => {
   assert.strictEqual(recorded.installedAt, previous.installedAt);
 });
 
+test("LOAD-02: a reinstall of a held-down record drops the dependency marker", () => {
+  // arrange
+  const previous = oldRecord({ enabled: false, dependencyDisabled: true });
+  const state = stateWith(previous);
+
+  // act
+  recordReinstallOutcome({
+    partition: "reinstalled",
+    name: "plugin",
+    marketplace: "market",
+    scope: "project",
+    state,
+    oldRecord: previous,
+    installable: installable(),
+    handles: handles({ populated: true }),
+    hookEntries: undefined,
+  });
+
+  // assert -- a key-presence check: the rebuilt literal never names the field,
+  // and a key left behind set to false would read as a record the load-time
+  // check is still responsible for.
+  const recorded = state.marketplaces.market?.plugins.plugin;
+  assert.ok(recorded);
+  assert.strictEqual(recorded.enabled, true);
+  assert.strictEqual(Object.hasOwn(recorded, "dependencyDisabled"), false);
+});
+
 test("carries dependency provenance forward on reinstall", () => {
   // arrange
   const previous = oldRecord({ provenance: "dependency" });

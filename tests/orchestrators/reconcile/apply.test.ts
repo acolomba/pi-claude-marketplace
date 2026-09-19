@@ -395,6 +395,8 @@ async function writeMarketplaceSource(
 interface RecordSeed {
   readonly pluginRoot: string;
   readonly enabled?: boolean;
+  /** LOAD-02: the load-time check's own marker on a record it disabled. */
+  readonly dependencyDisabled?: boolean;
   readonly installable?: boolean;
   readonly supported?: readonly string[];
   readonly unsupported?: readonly string[];
@@ -423,6 +425,9 @@ function pluginRecord(seed: RecordSeed): PluginRecord {
       hooks: [...(seed.hooks ?? [])],
     },
     enabled: seed.enabled ?? true,
+    ...(seed.dependencyDisabled !== undefined && {
+      dependencyDisabled: seed.dependencyDisabled,
+    }),
     provenance: "explicit",
     installedAt: RECORDED_AT,
     updatedAt: RECORDED_AT,
@@ -3853,6 +3858,73 @@ describe("applyReconcile", () => {
     assert.equal(Object.hasOwn(record ?? {}, "dependencyDisabled"), false);
     assert.equal(await readFile(project.stateJsonPath, "utf8"), stateBytes);
     assert.equal((await stat(project.stateJsonPath)).mtimeMs, stateModifiedAt);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("LOAD-02: a satisfied dependency lifts the hold and the marker leaves the record", async (t) => {
+    // arrange -- the previous pass held deploy-kit down; secrets-vault is now
+    // recorded and enabled, so the live verdict no longer names it.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-lifted");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {}, "secrets-vault@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              enabled: false,
+              dependencyDisabled: true,
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+            "secrets-vault": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "secrets-vault"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert
+    const record = await recordFor(project, "mp", "deploy-kit");
+    assert.equal(record?.enabled, true);
+    // A key-presence check, not a truthiness one: the contract is that the
+    // marker is GONE, and a key left behind set to false would read as a
+    // record this check is still responsible for.
+    assert.equal(Object.hasOwn(record ?? {}, "dependencyDisabled"), false);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "\u25cf mp [project]\n" +
+          "  \u25cf deploy-kit v1.0.0 (installed)\n" +
+          "\n" +
+          "Reconcile: 1 success",
+      },
+    ]);
+    assert.deepStrictEqual(record?.resources.skills, ["deploy-kit:tool"]);
+    assert.equal(await pathExists(path.join(project.skillsTargetDir, "deploy-kit:tool")), true);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
