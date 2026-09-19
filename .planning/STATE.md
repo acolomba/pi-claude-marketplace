@@ -114,6 +114,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
+| 260919-c5m | Standardize on AGENTS.md instead of CLAUDE.md as the canonical project-instructions file | 2026-09-19 | 8f87272a | Complete | [260919-c5m-standardize-on-agents-md-instead-of-clau](./quick/260919-c5m-standardize-on-agents-md-instead-of-clau/) |
 | 260917-bh3 | Condense the #181 unreleased CHANGELOG entries | 2026-09-17 | 399dea49 | Complete | [260917-bh3-condense-the-181-unreleased-changelog-en](./quick/260917-bh3-condense-the-181-unreleased-changelog-en/) |
 | 260913-uwq | Gate and commit the issue-179 fix: agents omitting `tools:` inherit Pi's defaults, and the two dropped agent fields get targeted guidance | 2026-09-13 | a9186816 | Complete | [260913-uwq-issue-179-agent-tools-and-mcpservers-con](./quick/260913-uwq-issue-179-agent-tools-and-mcpservers-con/) |
 | 260913-ttl | Close the remaining SonarQube branch-coverage gap to reach 100% line and 100% branch coverage | 2026-09-13 | d2ef20fa..46815bd6 | Complete | [260913-ttl-close-the-remaining-sonarqube-branch-cov](./quick/260913-ttl-close-the-remaining-sonarqube-branch-cov/) |
