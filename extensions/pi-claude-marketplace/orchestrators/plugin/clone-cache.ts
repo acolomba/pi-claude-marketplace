@@ -672,11 +672,10 @@ export async function materializeMarketplaceTagClone(args: {
     // below is the ONLY thing that writes into the work tree, and it writes
     // exactly the tag's tree.
     await mkdir(staging, { recursive: true });
-    await cp(path.join(args.marketplaceRoot, ".git"), path.join(staging, ".git"), {
-      recursive: true,
-    });
-
     try {
+      await cp(path.join(args.marketplaceRoot, ".git"), path.join(staging, ".git"), {
+        recursive: true,
+      });
       // `force: true` -- the copied `.git`'s index already matches `tagOid`
       // whenever the tag names the marketplace's current HEAD (the common
       // case for a freshly-tagged release), so a non-forced checkout would

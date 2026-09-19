@@ -1695,6 +1695,34 @@ void test("materializeMarketplaceTagClone: a failed checkout cleans staging and 
   assert.deepEqual(await stagingEntries(locations), []);
 });
 
+void test("materializeMarketplaceTagClone: an unreadable marketplace gitdir cleans staging instead of leaking it", async () => {
+  // arrange: the marketplace root's `.git` is gone by the time the copy runs
+  // (WR-04's exact shape -- missing or unreadable), so the `cp` into staging
+  // throws before any checkout is attempted.
+  const locations = await freshLocations();
+  const marketplaceRoot = await buildMarketplaceCheckout({
+    originUrl: GITHUB_REPO_URL,
+    plugins: [],
+  });
+  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
+  await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+  await rm(path.join(marketplaceRoot, ".git"), { recursive: true, force: true });
+
+  // act & assert
+  await assert.rejects(
+    materializeMarketplaceTagClone({
+      locations,
+      marketplaceRoot,
+      marketplaceSource: GITHUB_REPO_URL,
+      marketplaceName: "marketplace",
+      pathSource: pathSource("./plugins/foo"),
+      tagOid,
+    }),
+    (err: unknown) => err instanceof Error && err.message.includes("ENOENT"),
+  );
+  assert.deepEqual(await stagingEntries(locations), []);
+});
+
 void test("materializeMarketplaceTagClone: no directory at the path source's relative path resolves the missing-subdir arm (D-07-08)", async () => {
   // arrange
   const locations = await freshLocations();
