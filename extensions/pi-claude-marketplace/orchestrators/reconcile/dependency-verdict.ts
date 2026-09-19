@@ -28,9 +28,17 @@
 // key has no record in the scope, its record is disabled, or its recorded
 // version falls outside the declared range. The range arm composes
 // `domain/dependency-range.ts` and adds no comparator of its own -- that module
-// is the single evaluator in this tree, and its documented coercion behaviour
-// for the PI-7 `hash-` / `sha-` fallback version forms (D-03-04) is an accepted
-// tradeoff rather than something to guard against locally.
+// is the single evaluator in this tree, so the D-03-04 coercion of the PI-7
+// `hash-` / `sha-` fallback version forms applies here unchanged.
+//
+// WR-07: the coercion costs more here than it does at install time. Install
+// time spends it on a candidate the user is watching; this walk spends it on a
+// dependent that is installed and working, and disables it on the next reload
+// with a remedy naming a semver version the dependency does not have. The
+// behaviour is kept -- the walk is not the place to special-case one version
+// form the single evaluator accepts -- and `docs/dependency-resolution.md`
+// describes the case under "The load-time check" so an operator who hits it
+// can recognize it.
 //
 // D-05-07: the walk inherits the declaration read's fail-closed posture. A
 // declarer whose manifest cannot be read ends the walk with the typed failure
