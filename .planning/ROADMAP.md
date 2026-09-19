@@ -146,8 +146,12 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 2. Every authorized item has verified implementation or a current disposition agreed here; archives and completed work are preserved.
 
 **Plans:** 2 plans
+**Wave 1**
 
 - [ ] 08-01-PLAN.md — Run every gate fresh at the phase HEAD as separate processes and record 08-MEASUREMENT.md (sections 1 to 7)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 08-02-PLAN.md — Close FLOW-05, SWTEST-01, the Phase 6 todo and the STATE.md row additively, write the item reconciliation (section 8), and advance REQUIREMENTS, ROADMAP and STATE by hand
 
 ## Progress
