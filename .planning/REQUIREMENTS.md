@@ -149,7 +149,7 @@ non-wildcard constraint on a path-source dependency fails
   relative path resolves the constraint against the marketplace repository's
   `{name}--v{version}` tags, read from the local marketplace clone without
   network (NFR-5).
-- [ ] **TAGS-02**: When no tag satisfies the constraint, the marketplace's
+- [x] **TAGS-02**: When no tag satisfies the constraint, the marketplace's
   current copy is installed and the constraint is checked at load (LOAD-01)
   rather than failing the install.
 - [x] **TAGS-03**: A constrained path-source dependency with a satisfying tag
@@ -275,7 +275,7 @@ this milestone.
 | LOAD-02 | Phase 6 | Complete |
 | LOAD-03 | Phase 6 | Complete |
 | TAGS-01 | Phase 7 | Complete |
-| TAGS-02 | Phase 7 | Pending |
+| TAGS-02 | Phase 7 | Complete |
 | TAGS-03 | Phase 7 | Complete |
 | EDEP-01 | Phase 8 | Pending |
 | EDEP-02 | Phase 8 | Pending |
