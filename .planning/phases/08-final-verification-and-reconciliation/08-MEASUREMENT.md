@@ -53,3 +53,86 @@ The three gates outside the chain ran the same way: one process each, exit captu
 | `pre-commit run --all-files` | 1 | 840 | 41 hooks: 35 `Passed`, 5 `Skipped` (`(no files to check)`: broken symlinks, sort simple yaml files, forbid submodules, forbid new submodules, Alphabetize Codeowners), 1 `Failed`: TruffleHog, with the error `failed to scan Git: error preparing repo: failed to read index file: open /home/acolomba/src/pi-claude-marketplace-test-backlog/.git/index: not a directory`. Every npm hook passed (`npm lint`, `npm format check`, `npm typecheck`, `npm fallow`, `npm lint workflows`, `npm direct coverage (changed pairs)`, `npm type members`, `npm type members (negative controls)`, `npm unit coverage (verified bundle)`, `npm coverage risk`). `detect private key`, mdformat, markdownlint-cli2, zizmor, yamllint, yamlfmt and prettier passed. `git status --short` before and after the run are byte-identical (`diff` printed `status diff exit=0`): no file was rewritten. | TruffleHog: environment, not regression (section 6). Every other hook: pass. |
 
 Post-run readbacks, exit captured directly. `npm run coverage:validate` printed `exit=0` and `Coverage bundle verified: 20260919T002923698Z-2c0f1c43, 239 file(s), 1865 function(s), 10393 statement(s), 3089 branch(es), schema 1, syntax model 1; manifest coverage/unit.manifest.json`. `npm run coverage:risk -- --report coverage/unit.risk.json` printed `exit=0` and `Coverage risk verified: 20260919T002923698Z-2c0f1c43, 1865 production function(s) in 239 file(s) measured, max CRAP 20.00 at extensions/pi-claude-marketplace/edge/browser/plugin-browser.ts:108:0 (statusTag), policy < 30; 13100 other row(s) not gated`. The manifest `runId` is the one the chain's `test:coverage:unit` log printed, its `acceptance.acceptedAt` is `2026-09-19T00:36:40.757Z` (before the pre-commit run started at 00:55:45Z), and `coverage/runs/` holds only `20260919T002923698Z-2c0f1c43`. So the `npm-coverage-unit` hook reused the bundle and did not replace it. The control `SKIP=trufflehog pre-commit run trufflehog --all-files` printed `TruffleHog ... Skipped` and `exit=0`.
+
+## 4. Aggregate unit coverage
+
+The published bundle is run `20260919T002923698Z-2c0f1c43`, read from `coverage/unit.manifest.json` after the chain and the additional gates finished: started 2026-09-19T00:29:23.700Z, completed 00:35:35.289Z, accepted 00:36:40.757Z. Its `runtime` object is `{"node":"v26.8.2","v8":"14.6.202.34-node.28","platform":"linux","arch":"x64"}`. The research capture was `20260918T225947291Z-f055e502` with manifest digest `39a577cc3a087653`. This run differs from it in every identity below, as it must.
+
+| Artifact | sha256, first 16 |
+| --- | --- |
+| `coverage/unit.lcov` | `efbd4718eaff6692` |
+| `coverage/unit.istanbul.json` | `c0cb21f8e662c151` |
+| `coverage/unit.manifest.json` | `e4324bf7acb84520` |
+| `coverage/unit.validation.json` | `bf9dfd7c6a6d8d6a` |
+
+Manifest `acceptance.population`, quoted without the per-file digests: `{"production":239,"loaded":230,"typeOnly":8,"executable":1}`. The nine unloaded production paths are `bridges/agents/types.ts`, `bridges/commands/types.ts`, `bridges/hooks/exec-result.ts`, `bridges/mcp/types.ts`, `bridges/skills/types.ts`, `domain/resolver-types.ts`, `edge/types.ts`, `orchestrators/import/types.ts` (all `type-only`) and `orchestrators/types.ts` (`executable`, 0 functions, 0 statements, 0 branches).
+
+Manifest `acceptance.denominators`, quoted verbatim: `{"native":{"records":230,"lines":{"found":63825,"hit":63825},"functions":{"found":1890,"hit":1890},"branches":{"found":9234,"hit":9234}},"syntax":{"files":239,"functions":{"total":1865,"covered":1865},"statements":{"total":10393,"covered":10392},"branchArms":{"total":6653,"covered":6633}}}`.
+
+The two models are kept apart. Neither row is derived from the other, and lines are never equated with statements.
+
+| Model | Files | Functions | Statements or lines | Branches |
+| --- | --- | --- | --- | --- |
+| Native (Node's LCOV over the 230 loaded production files) | 230 records | 1890/1890 | 63825/63825 lines | 9234/9234 blocks |
+| Syntax (the accepted Istanbul map over all 239 production files) | 239 | 1865/1865 | 10392/10393 statements | 6633/6653 arms |
+
+Independent recount, computed apart from the pipeline over the two public artifacts:
+
+| Check | Result |
+| --- | --- |
+| LCOV totals recounted line by line | 230 `SF:` records in the file, all 230 under `extensions/pi-claude-marketplace/`; LF 63825, LH 63825, FNF 1890, FNH 1890, BRF 9234, BRH 9234: equal to `acceptance.denominators.native` |
+| LCOV zero-count entries | zero `DA:...,0`, zero `BRDA:...,0` (or `-`), zero `FNDA:0,...` entries |
+| Map totals recounted over `f`, `s`, `b` | 239 files, functions 1865/1865, statements 10392/10393, arms 6633/6653: equal to `acceptance.denominators.syntax` |
+
+The native invariant holds on this run: 100.00 percent lines, functions and branches over the loaded production files.
+
+Comparison with Phase 7. The Phase 7 values are the certified figures of `07-MEASUREMENT.md` sections 4 and 9.3. They are the expected values, not this run's measurement.
+
+| Denominator | This run | Phase 7 certified | Verdict |
+| --- | --- | --- | --- |
+| Native lines | 63825/63825 | 63825/63825 | equal |
+| Native functions | 1890/1890 | 1890/1890 | equal |
+| Native branches | 9234/9234 | 9234/9234 | equal |
+| Syntax functions | 1865/1865 | 1865/1865 | equal |
+| Syntax statements | 10392/10393 | 10392/10393 | equal |
+| Syntax branch arms | 6633/6653 | 6633/6653 | equal |
+
+## 5. Deficits and CRAP distribution
+
+The fresh map holds 21 counters at zero, and every function executed. The one statement is `bridges/commands/discover.ts:289:6`. The twenty arms are `bridges/commands/discover.ts:288[0]`, `bridges/hooks/spawn-helpers.ts:113[1]`, `bridges/skills/stage.ts:391[1]`, `domain/source.ts:181[1]`, `edge/browser/plugin-browser.ts:309[1]`, `edge/browser/plugin-browser.ts:392[1]`, `orchestrators/marketplace/add.ts:734[1]`, `orchestrators/marketplace/autoupdate.ts:528[1]`, `orchestrators/plugin/clone-cache.ts:331[1]`, `orchestrators/plugin/info.ts:304[1]`, `orchestrators/plugin/info.ts:1602[1]`, `orchestrators/plugin/info.ts:1622[1]`, `orchestrators/plugin/install-outcome.ts:991[1]`, `orchestrators/plugin/reinstall-record.ts:78[1]`, `orchestrators/plugin/update-flow.ts:583[1]`, `orchestrators/plugin/update-swap.ts:318[1]`, `orchestrators/plugin/update-swap.ts:328[1]`, `orchestrators/plugin/update-swap.ts:338[1]`, `orchestrators/reconcile/apply.ts:618[1]` and `shared/notification-grammar.ts:171[1]`. This list is equal to `07-MEASUREMENT.md` section 6, with no delta. The dispositions in `07-MEASUREMENT.md` sections 8.2 and 8.3 stand unchanged.
+
+CRAP distribution computed from `coverage/unit.risk.json` (`status: passed`, `runId` `20260919T002923698Z-2c0f1c43`, `policy.maxCrap` 30, 1865 production functions in 239 files, 0 at or above 30, 13100 other rows all `estimated` and not gated):
+
+| Score | Functions |
+| --- | --- |
+| below 5 | 1394 |
+| 5 to 9.99 | 377 |
+| 10 to 19.99 | 88 |
+| 20 to 29.99 | 6 |
+| 30 or more | 0 |
+
+- Maximum 20.00, held by six functions of cyclomatic 20 at 100 percent statement coverage: `edge/browser/plugin-browser.ts` `statusTag` (108), `statusDescription` (140), `availableActions` (179); `orchestrators/plugin/install.messaging.ts` `composeInstallFailureMessage` (226); `shared/notification-grammar.ts` `renderPluginRow` (901); `shared/notification-types.ts` `pluginVersion` (434). The anchor the gate prints is `plugin-browser.ts:108:0 (statusTag)`.
+- One partially covered function: `bridges/commands/discover.ts:246 collectCommandFile`, 16 of 17 statements (ratio 0.9411764705882353), cyclomatic 6, score 6.007327498473438, labeled 6 by Fallow with `source: istanbul`.
+- `failures` is empty.
+
+Histogram, maximum, anchor, partial function and ratio are identical to `07-MEASUREMENT.md` sections 7 and 9.3.
+
+## 6. Red classification
+
+One non-zero exit was recorded in sections 2 and 3: `pre-commit run --all-files`. No chain member and no other gate was red.
+
+| Command | Verbatim error | Classification | Cause | Debt or fix |
+| --- | --- | --- | --- | --- |
+| `pre-commit run --all-files` | `2026-09-18T20:56:09-04:00	error	trufflehog	error running scan	{"error": "failed to scan Git: error preparing repo: failed to read index file: open /home/acolomba/src/pi-claude-marketplace-test-backlog/.git/index: not a directory"}` | environment | This checkout is a git worktree. Its `.git` is a 95-byte file that reads `gitdir: /home/acolomba/pi-claude-marketplace/.git/worktrees/pi-claude-marketplace-test-backlog`. TruffleHog opens `.git/index` as if `.git` were a directory, so the scan cannot start here. | No fix in this plan and no change to the hook configuration. `CLAUDE.md` line 17 already prescribes `SKIP=trufflehog` for commits made inside a worktree, and the control `SKIP=trufflehog pre-commit run trufflehog --all-files` printed `Skipped` with `exit=0`. `detect private key` passed in the same run. CI's `lint.yml` runs the same hook on a normal checkout. The remaining 40 hooks passed or had no files to check, and no file was rewritten. |
+
+## 7. What did not change
+
+No production source under `extensions/` changed. No test, no script, no coverage configuration, census pin, threshold, suppression, direct pin, `.fallowrc.json` value, ESLint rule, Sonar property, pre-commit hook or `package.json` script changed. `maxCrap: 0` stays disabled in `.fallowrc.json` and the policy in `scripts/coverage-risk-policy.json` stays 30. Nothing was loosened to turn a gate green.
+
+Evidence, exits captured directly:
+
+- `git diff --quiet 0844c2a7 HEAD -- extensions tests scripts package.json package-lock.json .fallowrc.json eslint.config.js sonar-project.properties .pre-commit-config.yaml; echo "exit=$?"` printed `exit=0` at the HEAD each section of this document was written against.
+- `git diff --name-only 0844c2a7 HEAD` lists 14 files, all under `.planning/`: `REQUIREMENTS.md`, `ROADMAP.md`, `STATE.md`, four Phase 7 records (`07-REVIEW-FIX.md`, `07-SECURITY.md`, `07-VALIDATION.md`, `07-VERIFICATION.md`) and seven Phase 8 records (`08-01-PLAN.md`, `08-02-PLAN.md`, `08-CONTEXT.md`, `08-MEASUREMENT.md`, `08-PATTERNS.md`, `08-RESEARCH.md`, `08-VALIDATION.md`). No path outside `.planning/` appears.
+- `scripts/test-coverage-direct.pin.json` still holds exactly two rows: `bridges/commands/discover.ts` (`branches 55/56, lines 412/414`, BC-019) and `orchestrators/plugin/install-outcome.ts` (`branches 109/111, lines 1039/1045`, D-08-A14). The section 3 all-pairs row matched both exactly and recorded no other shortfall.
+- `sonar-project.properties` has no `sonar.coverage.exclusions` line.
+- `rg -c "fallow-ignore" extensions tests scripts` sums to 10 matches in 8 files. Seven are live markers (`index.ts`, `domain/resolver-types.ts`, `bridges/hooks/async-rewake/ring-buffer.ts`, `bridges/hooks/async-rewake/registry.ts`, `orchestrators/plugin/reinstall-replace.ts`, and the two `tests/live-uat/*-canary.mjs` drivers). Three are string literals inside planted fixtures in `tests/architecture/fallow-production-mode.test.ts`. `.planning/codebase/CONVENTIONS.md` recorded 11 markers on 2026-08-18, one of them in `scripts/revalidation.mjs`, which no longer exists. The difference predates this phase: the code tree is byte-identical to `0844c2a7`, so this phase added or removed no marker.
