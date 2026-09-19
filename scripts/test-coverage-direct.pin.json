@@ -11,11 +11,12 @@
     },
     {
       "sourcePath": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
-      "reading": "branches 109/111, lines 1039/1045",
+      "reading": "branches 109/111, lines 1046/1052",
       "findingIds": ["D-08-A14"],
       "reasons": [
         "422-425 (branch at 421): re-validation of a manifest entry that the identical compiled schema already accepted in the same pass. MARKETPLACE_SCHEMA.plugins is Type.Array(PLUGIN_ENTRY_SCHEMA) and PLUGIN_ENTRY_VALIDATOR is Compile(PLUGIN_ENTRY_SCHEMA), so an entry reaching the re-check was already validated by that exact schema, in this process, from this parse. ARCHITECTURE.md records the re-check as deliberate defense-in-depth.",
-        "824-825 (branch at 823): the hooks re-parse guard, over bytes on which the resolver already ran both of parseHooksConfig's {ok:false} arms at install-entry under D-57-04. The only difference between the two calls is skipIfMap, and D-61-02 records that every compileIfPredicate failure collapses to MATCH_ALL_IF, so no if-field issue can produce a refusal. The guard fires only on a mutation between the resolve and the phase."
+        "824-825 (branch at 823): the hooks re-parse guard, over bytes on which the resolver already ran both of parseHooksConfig's {ok:false} arms at install-entry under D-57-04. The only difference between the two calls is skipIfMap, and D-61-02 records that every compileIfPredicate failure collapses to MATCH_ALL_IF, so no if-field issue can produce a refusal. The guard fires only on a mutation between the resolve and the phase.",
+        "Line numbers shifted +7 from a type-members-gate fix that extracted FrontmatterDegradationRow/AgentForeignFailureRow as shared interfaces (dedup so the analyzer's witness-tracing resolves both InstallLedgerContext and InstallLedgerSummary array-element reads to the same symbol); no behavior change, same two branches."
       ]
     },
     {
