@@ -103,16 +103,28 @@ export function applyMutationInPlace(
 
 /**
  * CR-01: reject non-object patches (null, array, primitive) early so a hook
- * returning `updatedInput: null` cannot trip `Object.assign`'s null-source
- * path or pollute via array index keys. The patch must be a plain object
- * shape; anything else is silently dropped.
+ * returning `updatedInput: null` cannot pollute via array index keys. The
+ * patch must be a plain object shape; anything else is silently dropped.
+ *
+ * Copies own enumerable keys one at a time via `Object.entries` rather than
+ * `Object.assign`, skipping an own `"__proto__"` key: `JSON.parse` creates
+ * `__proto__` as an ordinary own data property (not the prototype link), so
+ * a hook-supplied patch carrying that key would otherwise let
+ * `Object.assign` reassign `event.input`'s prototype.
  */
 function applyToolCallInputPatch(event: ToolCallEvent, updatedInput: unknown): void {
   if (updatedInput === null || typeof updatedInput !== "object" || Array.isArray(updatedInput)) {
     return;
   }
 
-  Object.assign(event.input as Record<string, unknown>, updatedInput as Record<string, unknown>);
+  const target = event.input as Record<string, unknown>;
+  for (const [key, value] of Object.entries(updatedInput as Record<string, unknown>)) {
+    if (key === "__proto__") {
+      continue;
+    }
+
+    target[key] = value;
+  }
 }
 
 /**

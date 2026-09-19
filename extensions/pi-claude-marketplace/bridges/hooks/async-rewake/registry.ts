@@ -244,7 +244,12 @@ export async function spawnAndRegister(
       });
       hookDebugLog(`async-rewake: child has no pid (${entry.pluginId}/${entry.claudeEvent})`);
       try {
-        child.kill("SIGKILL");
+        const killed = child.kill("SIGKILL");
+        if (!killed) {
+          hookDebugLog(
+            `async-rewake: kill(SIGKILL) returned false for pid-less child (${entry.pluginId}/${entry.claudeEvent})`,
+          );
+        }
       } catch {
         // best-effort
       }
@@ -259,8 +264,22 @@ export async function spawnAndRegister(
     // `defaultMaxListeners = 10` applies per-instance, not across the
     // bridge, so no `setMaxListeners` adjustment is needed even for
     // large fan-ins.
+    // EPIPE/ECONNRESET defense: attach the error listeners before "data" so a
+    // stream error during the SIGTERM/SIGKILL teardown races this registry
+    // runs cannot surface as an unhandled exception. Mirrors the child.stdin
+    // error defense below.
+    child.stderr?.on("error", (err) => {
+      hookDebugLog(
+        `async-rewake: stderr error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
+      );
+    });
     child.stderr?.on("data", (buf: Buffer) => {
       stderrBuffer.write(buf);
+    });
+    child.stdout?.on("error", (err) => {
+      hookDebugLog(
+        `async-rewake: stdout error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
+      );
     });
     child.stdout?.on("data", (buf: Buffer) => {
       stdoutBuffer.write(buf);
@@ -620,6 +639,7 @@ function isPidAlive(pid: number, probes: OrphanProbes = DEFAULT_ORPHAN_PROBES): 
       return true;
     }
 
+    hookDebugLog(`async-rewake: isPidAlive unrecognized errno for pid ${pid}: ${errorMessage(err)}`);
     return false;
   }
 }

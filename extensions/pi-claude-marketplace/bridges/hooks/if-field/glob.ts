@@ -287,7 +287,7 @@ function matchTokens(
     case "globstar":
       return matchGlobstar(tokens, text, ti, xi, crossSegment);
     default:
-      return assertNever(tok, `unreachable HookExecResult arm: ${JSON.stringify(tok)}`);
+      return assertNever(tok, `unreachable GlobToken arm: ${JSON.stringify(tok)}`);
   }
 }
 
@@ -532,7 +532,7 @@ function matchPathGlob(
     }
 
     default:
-      return assertNever(anchor, `unreachable HookExecResult arm: ${JSON.stringify(anchor)}`);
+      return assertNever(anchor, `unreachable PathAnchor arm: ${JSON.stringify(anchor)}`);
   }
 }
 

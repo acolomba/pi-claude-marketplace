@@ -349,7 +349,12 @@ async function spawnAndCollect(
       // arms the SIGKILL escalation 5s out for a child that ignores
       // SIGTERM.
       if (!child.killed) {
-        child.kill("SIGTERM");
+        const sent = child.kill("SIGTERM");
+        if (!sent) {
+          hookDebugLog(
+            `exec: SIGTERM kill() returned false (${entry.pluginId}/${entry.claudeEvent})`,
+          );
+        }
       }
 
       // 0 seconds: SIGTERM already went out synchronously above. The fresh
@@ -367,6 +372,8 @@ async function spawnAndCollect(
       () => {
         handleOverflow("stdout");
       },
+      "stdout",
+      ladderLabel,
     );
 
     accumulateStream(
@@ -378,6 +385,8 @@ async function spawnAndCollect(
       () => {
         handleOverflow("stderr");
       },
+      "stderr",
+      ladderLabel,
     );
 
     child.once("error", (err) => {
@@ -435,6 +444,8 @@ function accumulateStream(
   cap: number,
   onChunk: (chunk: string) => void,
   onOverflow: () => void,
+  which: "stdout" | "stderr",
+  label: string,
 ): void {
   if (stream === null) {
     return;
@@ -442,6 +453,13 @@ function accumulateStream(
 
   const decoder = new StringDecoder("utf8");
   let accumulated = 0;
+  // EPIPE/ECONNRESET defense: attach the error listener before "data" so a
+  // stream error during the SIGTERM/SIGKILL teardown races this dispatcher
+  // runs cannot surface as an unhandled exception. Mirrors child.stdin's
+  // error defense below.
+  stream.on("error", (err) => {
+    hookDebugLog(`exec: ${which} error (${label}): ${errorMessage(err)}`);
+  });
   stream.on("data", (chunk: Buffer | string) => {
     const text = typeof chunk === "string" ? chunk : decoder.write(chunk);
     accumulated += Buffer.byteLength(text, "utf8");

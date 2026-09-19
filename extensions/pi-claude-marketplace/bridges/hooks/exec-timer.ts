@@ -153,7 +153,10 @@ export function installTimerLadder(
     }
 
     hookDebugLog(`exec-timer: SIGTERM after ${seconds}s (${label})`);
-    child.kill("SIGTERM");
+    const sent = child.kill("SIGTERM");
+    if (!sent) {
+      hookDebugLog(`exec-timer: SIGTERM kill() returned false (${label})`);
+    }
   }, seconds * MS_PER_SECOND);
   sigtermTimer.unref();
 
@@ -164,7 +167,10 @@ export function installTimerLadder(
           `exec-timer: SIGKILL after ${seconds + SIGKILL_GRACE_SECONDS}s (${label}); ` +
             `the child ignored SIGTERM`,
         );
-        child.kill("SIGKILL");
+        const sent = child.kill("SIGKILL");
+        if (!sent) {
+          hookDebugLog(`exec-timer: SIGKILL kill() returned false (${label})`);
+        }
       }
     },
     (seconds + SIGKILL_GRACE_SECONDS) * MS_PER_SECOND,

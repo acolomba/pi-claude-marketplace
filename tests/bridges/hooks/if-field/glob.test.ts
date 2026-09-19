@@ -271,7 +271,7 @@ describe("compileBashGlob", () => {
     // act & assert
     assert.throws(
       testCorruptedTokens,
-      new Error('unreachable HookExecResult arm: {"kind":"unknown"}'),
+      new Error('unreachable GlobToken arm: {"kind":"unknown"}'),
     );
   });
 });
@@ -840,7 +840,7 @@ describe("compilePathGlob", () => {
     // act & assert
     assert.throws(
       testCorruptedAnchor,
-      new Error('unreachable HookExecResult arm: {"kind":"unknown"}'),
+      new Error('unreachable PathAnchor arm: {"kind":"unknown"}'),
     );
   });
 });
