@@ -32,5 +32,5 @@ fi
 
 codegraph install --target claude,codex --location local --no-permissions --init --yes
 
-# prevents shadowing of CLAUDE.md in codex/pi
-rm -f AGENTS.md .claude/CLAUDE.md
+# removes the generated per-tool copy, which would shadow the root file
+rm -f .claude/CLAUDE.md
