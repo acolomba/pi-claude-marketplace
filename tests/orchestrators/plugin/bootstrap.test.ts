@@ -351,7 +351,7 @@ test("preserves the committed add when the real autoupdate child rejects its con
         "Some operations have failed.",
         "",
         "⊘ claude-plugins-official [user] (failed)",
-        "  ⊘ claude-plugins-official (failed) {not found}",
+        "  ⊘ claude-plugins-official (failed) {invalid manifest}",
         '    cause: Config file "claude-plugins.json" failed schema validation.',
       ].join("\n"),
       severity: "error",
