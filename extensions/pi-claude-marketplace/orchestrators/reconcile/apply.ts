@@ -924,8 +924,10 @@ function applySourceMismatches(plan: ReconcilePlan, outcomes: PerEntryOutcome[])
  *   7. disable plugins the load-time check holds down (LOAD-01). It runs
  *      AFTER both toggle steps so a record the config already disabled in
  *      step 6 answers this step idempotently and is left unstamped
- *      (D-06-02), and after the install step so a plugin installed in this
- *      same pass is held down in this same pass rather than the next one.
+ *      (D-06-02). WR-05: a plugin INSTALLED by step 4 is not held down on
+ *      this pass. The bucket is built in the read pass from a verdict
+ *      computed over the pre-install snapshot, where that plugin has no
+ *      record and is therefore no declarer; the next pass holds it down.
  *   8. source-mismatch / dangling rows (report-only) folded last.
  */
 async function applyPlan(
