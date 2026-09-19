@@ -9,6 +9,7 @@
   - `uninstall --keep-data` keeps the plugin's data directory. Without the flag, `uninstall` deletes the directory and does not prompt.
   - A bare `<pluginRoot>/plugin.json` is now read, and a plugin that declares `"./skills/"` next to a `skills/` directory no longer warns about duplicate skills.
   - `info` lists every declared dependency, including object-shaped entries with a version constraint, and does so on a git-source plugin that is not yet fetched.
+- Internal: tuned GSD's agent model tiers and effort, and pinned babysit-pr's fallback model for Codex. (#199)
 - The changelog now lists one entry per pull request, ending in its number, and thanks every issue reporter and contributor. (#197)
 - Internal: every test suite now runs in a hermetic environment that owns `HOME` and the Pi agent directory. (#196)
 - Internal: the TypeScript rules and review skills moved under `skills/`, and each GSD agent loads only the ones it needs. (#195)

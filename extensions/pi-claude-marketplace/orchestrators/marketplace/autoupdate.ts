@@ -32,7 +32,7 @@
 // on the flip surface, for byte-form parity with the marketplace-list surface
 // header. Fresh flips render the bare marker; idempotent flips render the
 // marker + the `{already autoupdate}` / `{already no autoupdate}` brace. The
-// renderer (shared/notification-dispatch.ts) owns the byte composition; per CLAUDE.md IL-2
+// renderer (shared/notification-dispatch.ts) owns the byte composition; per AGENTS.md IL-2
 // all output still flows through notify(). The `autoupdate enabled` /
 // `autoupdate disabled` / `skipped` MarketplaceStatus discriminators carry the
 // outcome; the REASONS members are `already autoupdate` / `already no

@@ -9,7 +9,7 @@ allowed-tools: Bash, Read, Edit, Write, Grep, Glob, Agent, Skill, mcp__sonarqube
 
 # Babysit PR
 
-Run every subagent this skill spawns on Sonnet, or on Terra (`gpt-5.6-terra`) where Sonnet is not offered.
+Run every subagent this skill spawns on Sonnet in Claude Code, or on gpt-5.6-terra where Sonnet is not offered.
 
 Take an already-open pull request and harden it in two phases: a local **review-convergence** loop, then a **SonarQube** pass once CI has analyzed the pushed head. The point is to hand a human reviewer a PR that already clears the automated bars, with the expensive review and fixing done in subagents rather than in this conversation's context.
 

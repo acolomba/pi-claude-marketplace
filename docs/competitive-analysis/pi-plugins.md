@@ -454,7 +454,7 @@ These are their own self-documented limitations at this commit, not our findings
 
 ## Where we are behind on our own terms
 
-This section is the counterweight to the previous one. These limitations are recorded in `CLAUDE.md`, `docs/`, and `CHANGELOG.md`.
+This section is the counterweight to the previous one. These limitations are recorded in `AGENTS.md`, `docs/`, and `CHANGELOG.md`.
 
 Scope limits:
 
