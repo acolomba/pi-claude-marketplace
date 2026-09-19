@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v1.20
 milestone_name: transitive-dependencies
-current_phase: 06
-current_phase_name: Load-time dependency check and allowed uninstall
-status: verifying
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-09-19T02:56:46.192Z"
-last_activity: 2026-09-18
-last_activity_desc: Phase 06 execution started
-state_head: 975f3f12422495df32c7e38f1e0b3f3d5d2e3006
+current_phase: 07
+current_phase_name: Marketplace-repository tag resolution for path-source dependencies
+status: planning
+stopped_at: Phase 06 complete, ready to plan Phase 07
+last_updated: "2026-09-19T11:31:12.044Z"
+last_activity: 2026-09-19
+last_activity_desc: Phase 06 complete, transitioned to Phase 07
+state_head: 66ccffe9d85d8f6818d8fa1b065ea2c65f4ae32f
 progress:
   total_phases: 12
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 26
   completed_plans: 26
-  percent: 42
+  percent: 50
 ---
 
 # Project State
@@ -36,9 +36,9 @@ under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 06 (Load-time dependency check and allowed uninstall) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
+Phase: 07 — Marketplace-repository tag resolution for path-source dependencies
+Plan: Not started
+Status: Ready to plan
 
 All four plans are executed. LOAD-01, LOAD-02 and LOAD-03 are closed in
 `REQUIREMENTS.md`. PRUNE-05 stays in the record with a pointer naming LOAD-03,
@@ -335,7 +335,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-18 — Phase 06 execution started
+Last activity: 2026-09-19 — Phase 06 complete, transitioned to Phase 07
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 5 of 5 phases complete (100%).
@@ -362,7 +362,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 
 **Velocity:**
 
-- Total plans completed: 173
+- Total plans completed: 177
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -381,6 +381,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | 3 | 7 | - | - |
 | 04 | 6 | - | - |
 | 5 | 3 | - | - |
+| 06 | 4 | - | - |
 
 **Recent Trend:** 35 Phase 113 plans completed with all direct owner, review, validation, verification, security, and clean-repository gates green.
 **Per-Plan Metrics:**
@@ -883,7 +884,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-04-PLAN.md
+**Stopped at:** Phase 06 complete, ready to plan Phase 07
 
 **Resume file:** None
 `HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
