@@ -1,0 +1,58 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-09-19T11:44:00.179Z",
+  "phase": "07",
+  "phase_name": "marketplace-repo-tag-resolution",
+  "phase_dir": ".planning/phases/07-marketplace-repo-tag-resolution",
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "completed_tasks": [
+    { "id": "phase-06", "name": "Load-time dependency check and allowed uninstall — full phase (execute resume, 2-round code review, verification, phase.complete)", "status": "done" },
+    { "id": "phase-07-discuss-research", "name": "Loaded prior context and researched Phase 7's materialization mechanics question", "status": "done" }
+  ],
+  "remaining_tasks": [
+    { "id": "phase-07-discuss-clarify", "name": "Get the user's clarification on what they wanted to raise about the phase 7 discuss framing", "status": "not_started" },
+    { "id": "phase-07-discuss-finish", "name": "Complete discuss-phase 7, write 07-CONTEXT.md and 07-DISCUSSION-LOG.md, commit", "status": "not_started" },
+    { "id": "phase-07-plan-execute", "name": "Plan and execute phase 7 (TAGS-01/02/03, DIVG-01)", "status": "not_started" },
+    { "id": "phases-08-12", "name": "Continue autonomous loop through phases 8-12", "status": "not_started" },
+    { "id": "milestone-lifecycle", "name": "audit -> complete -> cleanup for v1.20", "status": "not_started" }
+  ],
+  "blockers": [
+    {
+      "description": "User rejected the first AskUserQuestion for Phase 7 discuss and asked to clarify before answering, then ran /gsd-pause-work before giving that clarification.",
+      "type": "human_action",
+      "workaround": "Ask a plain-text question on resume; do not re-present the same AskUserQuestion."
+    }
+  ],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {
+      "action": "Tell Claude what you wanted to clarify about the Phase 7 discuss framing/question before it re-asks anything.",
+      "context": "Claude proposed treating the ROADMAP's 'open mechanics question' (materializing a plugin's files from a specific marketplace-clone tag) as not a genuine user-facing gray area, based on finding an existing plugin-clones/ cache + isomorphic-git checkout(dir!=gitdir) precedent. The user pushed back before answering.",
+      "blocking": true
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "Phase 6 CR-01/WR-02/WR-04..WR-12 fixed; WR-01 and WR-03 deliberately left open as design decisions (not mechanical gaps)",
+      "rationale": "WR-01 tracked by existing backlog PENDING-VERDICT-01; WR-03 reopens a shared D-05-07 fail-closed posture with uninstall's dependents guard and needed a new backlog carrier (STALE-DECLARER-01, added this session) rather than a code fix",
+      "phase": "06"
+    },
+    {
+      "decision": "Candidate (unconfirmed) approach for Phase 7 TAGS-03 materialization: isomorphic-git checkout() with dir != gitdir into the plugin-clones/<key>/ cache, keyed by resolved tag SHA, reusing clone-gc.ts",
+      "rationale": "Avoids inventing a new staging mechanism; matches the existing git-source dependency pin precedent",
+      "phase": "07"
+    }
+  ],
+  "uncommitted_files": [
+    "M .claude/settings.json",
+    "M .codex/config.toml",
+    "M .planning/config.json",
+    "M .planning/state.json",
+    "?? .mcp.json"
+  ],
+  "next_action": "Ask the user (plain text, not AskUserQuestion): 'What would you like to clarify about phase 7?' and wait for their response before resuming discuss-phase 7.",
+  "context_notes": "Phase 6 is fully done and verified — no remaining work there. This is a long-running /gsd-autonomous --from 6 --interactive session; Phase 7 discuss was interrupted at the very first question. The uncommitted_files listed above pre-date this session (operator-owned config/mcp files) and were never touched — do not commit or revert them."
+}
