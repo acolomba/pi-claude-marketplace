@@ -333,6 +333,25 @@ test("refreshes a disabled pin without materializing its recorded resources", as
   assert.strictEqual(refreshed?.enabled, false);
 });
 
+test("WR-01: refreshing a disabled path-source pin drops a stale resolvedSha the record should no longer claim", async (t) => {
+  // arrange: a STALE `resolvedSha` on the record, as a `path`-source record
+  // could carry from a prior tag-pinned install/update. This refresh's
+  // re-resolution goes through the plain `resolveStrict` path (no tag probe,
+  // no pin), so it produces no sha of its own -- the old one must not survive.
+  const record = { ...pluginRecord("1.0.0", false), resolvedSha: "stale-sha-from-a-prior-tag-pin" };
+  const seed = await seedUpdate({ installed: record });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+
+  // act
+  await prepare(seed);
+
+  // assert
+  const refreshed = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.ok(refreshed !== undefined);
+  assert.strictEqual(refreshed.resolvedSha, undefined);
+  assert.strictEqual(Object.hasOwn(refreshed, "resolvedSha"), false);
+});
+
 test("does not rewrite an unchanged disabled pin", async (t) => {
   // arrange
   const seed = await seedUpdate({ installed: pluginRecord("2.0.0", false) });

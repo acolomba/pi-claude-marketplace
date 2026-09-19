@@ -976,7 +976,10 @@ async function runInstallLedgerBody(
         // D-77-02 / PURL-09: persist the full 40-hex resolved commit sha for
         // git-source installs (reinstall pins its re-clone checkout to this
         // full sha; clone GC presence-checks it to derive live clone keys).
-        // Path / github-name installs omit it.
+        // WR-01 / TAGS-01: a `path`-source install ALSO carries a resolvedSha
+        // when its constraint pinned a marketplace tag (`resolvePathPluginRoot`
+        // above); an unconstrained `path` or a github-name install still omits
+        // it.
         ...(c.resolvedSha !== undefined && { resolvedSha: c.resolvedSha }),
         // D-100-01 / ENBL-10: describe the hooks the install materialized, so
         // a later `info` need not read the config back off disk. Omitted when

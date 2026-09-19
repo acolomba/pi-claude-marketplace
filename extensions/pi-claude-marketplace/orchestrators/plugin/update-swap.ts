@@ -574,8 +574,13 @@ function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: Plug
   sRecord.resolvedSource = installable.pluginRoot;
   // PURL-06 / D-78-01: write the git-source commit identity so the
   // post-commit GC and the next update read the swapped sha. Undefined for
-  // path / github-name sources (they have no clone and protect none).
-  if (resolvedSha !== undefined) {
+  // an unpinned source (no clone to protect). WR-01: also clear a STALE
+  // `resolvedSha` a prior update or install left on the record -- otherwise
+  // a `path` source whose re-resolution no longer pins a tag would keep
+  // naming a commit `resolvedSource` no longer sits at.
+  if (resolvedSha === undefined) {
+    delete sRecord.resolvedSha;
+  } else {
     sRecord.resolvedSha = resolvedSha;
   }
 }

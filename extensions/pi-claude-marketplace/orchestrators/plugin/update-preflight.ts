@@ -454,7 +454,12 @@ async function refreshDisabledRecord(
 
     record.version = preflight.toVersion;
     record.resolvedSource = preflight.installable.pluginRoot;
-    if (preflight.resolvedSha !== undefined) {
+    // WR-01: a re-resolution that produced no pin (a `path` source with no
+    // satisfying marketplace tag) must not leave the OLD `resolvedSha` on the
+    // record -- it would name a commit `resolvedSource` no longer sits at.
+    if (preflight.resolvedSha === undefined) {
+      delete record.resolvedSha;
+    } else {
       record.resolvedSha = preflight.resolvedSha;
     }
 

@@ -12,7 +12,7 @@ import {
 import { preparePluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import { swapPluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { loadState, saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 // The flow suite supplies the real bridge, filesystem, rollback, and
@@ -76,6 +76,65 @@ test("atomically replaces staged resources and finalizes the update ledger", asy
         await readFile(path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md"), "utf8"),
         /Body for hello 2\.0\.0\./,
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-01: a successful path-source swap drops a stale resolvedSha the fresh resolve did not reproduce", async () => {
+  await withHermeticHome(async () => {
+    // arrange: a STALE `resolvedSha` on the record, as a `path`-source record
+    // could carry from a prior tag-pinned install/update. This plugin's
+    // marketplace entry is a plain path source with no tag constraint, so its
+    // fresh resolve produces no sha at all -- the old one must not survive.
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-stale-sha-"));
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "2.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const locations = locationsFor("project", cwd);
+      const state = await loadState(locations.extensionRoot);
+      const record = state.marketplaces.mp?.plugins.hello;
+      assert.ok(record !== undefined);
+      record.resolvedSha = "stale-sha-from-a-prior-tag-pin";
+      await saveState(locations.extensionRoot, state);
+      const preflight = await preparePluginUpdate({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        locations,
+        cleanupClones: () => Promise.resolve(),
+      });
+      assert.ok(!("partition" in preflight));
+
+      // act
+      const outcome = await swapPluginUpdate(
+        {
+          plugin: "hello",
+          marketplace: "mp",
+          scope: "project",
+          cwd,
+          locations,
+          hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+          completionCache: createCompletionCache(),
+          cascade: true,
+          cleanupClones: () => Promise.resolve(),
+        },
+        preflight,
+      );
+
+      // assert
+      assert.strictEqual(outcome.partition, "updated");
+      const after = await loadState(locations.extensionRoot);
+      const afterRecord = after.marketplaces.mp?.plugins.hello;
+      assert.ok(afterRecord !== undefined);
+      assert.strictEqual(afterRecord.resolvedSha, undefined);
+      assert.strictEqual(Object.hasOwn(afterRecord, "resolvedSha"), false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

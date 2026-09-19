@@ -140,6 +140,7 @@ test("records an installed replacement and returns its exact outcome", () => {
     installable: installable(),
     handles: handles({ populated: true }),
     hookEntries: undefined,
+    isGitSource: true,
   });
 
   // assert
@@ -186,6 +187,7 @@ test("LOAD-02: a reinstall of a held-down record drops the dependency marker", (
     installable: installable(),
     handles: handles({ populated: true }),
     hookEntries: undefined,
+    isGitSource: true,
   });
 
   // assert -- a key-presence check: the rebuilt literal never names the field,
@@ -213,6 +215,7 @@ test("carries dependency provenance forward on reinstall", () => {
     installable: installable(),
     handles: handles({ populated: true }),
     hookEntries: undefined,
+    isGitSource: true,
   });
 
   // assert
@@ -258,6 +261,7 @@ test("records partial compatibility, sha, hooks, and degradation exactly", () =>
     installable: installable("partially-available"),
     handles: handles({ degraded: true }),
     hookEntries: [{ event: "SessionStart" }],
+    isGitSource: true,
   });
 
   // assert
@@ -287,6 +291,35 @@ test("records partial compatibility, sha, hooks, and degradation exactly", () =>
   assert.deepStrictEqual(recorded.hookEntries, [{ event: "SessionStart" }]);
 });
 
+test("WR-01: a non-git source's reinstall drops a stale resolvedSha instead of carrying it forward", () => {
+  // arrange: the old record carries a tag-pin sha from a prior `path`-source
+  // install/update, but this reinstall re-resolves through the marketplace's
+  // current checkout (isGitSource: false) -- there is no pin to reaffirm.
+  const previous = oldRecord({ resolvedSha: "abc123" });
+  const state = stateWith(previous);
+
+  // act
+  recordReinstallOutcome({
+    partition: "reinstalled",
+    name: "plugin",
+    marketplace: "market",
+    scope: "project",
+    state,
+    oldRecord: previous,
+    installable: installable(),
+    handles: handles({ populated: true }),
+    hookEntries: undefined,
+    isGitSource: false,
+  });
+
+  // assert: the OLD sha must not survive onto a record whose resolvedSource
+  // no longer sits at the commit it named.
+  const recorded = state.marketplaces.market?.plugins.plugin;
+  assert.ok(recorded);
+  assert.strictEqual(recorded.resolvedSha, undefined);
+  assert.strictEqual(Object.hasOwn(recorded, "resolvedSha"), false);
+});
+
 test("rejects record mutation after concurrent removal", () => {
   // arrange
   const previous = oldRecord();
@@ -306,6 +339,7 @@ test("rejects record mutation after concurrent removal", () => {
         installable: installable(),
         handles: handles(),
         hookEntries: undefined,
+        isGitSource: true,
       }),
     /concurrently removed/u,
   );

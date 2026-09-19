@@ -33,6 +33,14 @@ export interface RecordReinstalledOutcomeInput extends ReinstallOutcomeTarget {
   readonly installable: MaterializablePlugin;
   readonly handles: ReinstallPreparedHandles;
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
+  /**
+   * Whether the reinstalled entry is a git-backed source (url / git-subdir /
+   * github). Only a git source's reinstall re-pins to its OLD recorded sha
+   * (PURL-07); a `path` source re-resolves through the marketplace's current
+   * checkout instead, so carrying its old `resolvedSha` forward would name a
+   * commit the fresh `resolvedSource` no longer sits at.
+   */
+  readonly isGitSource: boolean;
 }
 
 export interface RecordSkippedOutcomeInput extends ReinstallOutcomeTarget {
@@ -128,9 +136,10 @@ function recordReinstalledOutcome(
   marketplace.plugins[input.name] = {
     version: input.oldRecord.version,
     resolvedSource: input.installable.pluginRoot,
-    ...(input.oldRecord.resolvedSha !== undefined && {
-      resolvedSha: input.oldRecord.resolvedSha,
-    }),
+    ...(input.isGitSource &&
+      input.oldRecord.resolvedSha !== undefined && {
+        resolvedSha: input.oldRecord.resolvedSha,
+      }),
     compatibility: {
       installable: input.installable.state === "installable",
       notes: [...input.installable.notes],
