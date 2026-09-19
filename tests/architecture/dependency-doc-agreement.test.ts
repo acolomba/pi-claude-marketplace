@@ -19,6 +19,16 @@
 // proof on `kind` -- so an arm added to `DependencyClosureResult` or
 // `CascadeConstraintFailure` without a fixture here is a build failure rather
 // than a silently narrower sweep.
+//
+// DIVG-01 (07-03): the second half of this gate guards the same claim for
+// `docs/dependency-resolution.md`'s prose, not just its failure table. The
+// document told readers for one milestone that a path-source dependency could
+// satisfy no constraint but the wildcard, after TAGS-01/02 had already made
+// that false -- the same class of prose-versus-code drift the first half of
+// this file exists to catch. These cases drive `composeCascadeMemberRows`
+// with a `fellBackToCurrentCopy` member and read the document's resolution
+// and declaration sections, so a future rename or removal of the fallback
+// prose, or the reason token it must name, fails here rather than silently.
 
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -33,6 +43,7 @@ import {
 import { REPO_ROOT } from "./source-scan.ts";
 
 import type { DependencyClosureResult } from "../../extensions/pi-claude-marketplace/domain/dependency-closure.ts";
+import type { CascadeMsg } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts";
 import type { CascadeConstraintFailure } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts";
 import type { InstallMsg } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import type { Reason } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
@@ -254,5 +265,83 @@ test("RESV-06 the skip section names the reason a disabled dependency's row carr
     skipped.reasons.filter((reason) => !section.includes(reason)),
     [],
     `${DOC_REL}: the skipped dependency's row carries reasons the skip section never names`,
+  );
+});
+
+test("DIVG-01 the resolution section names every reason the fallback row carries", async () => {
+  // arrange: a path-source member that fell back to the marketplace's current
+  // copy, driven through the REAL composer -- the token under test comes from
+  // `composeCascadeMemberRows` itself, never as a literal in this test body.
+  const rows = composeCascadeMemberRows({
+    scope: "user",
+    rootKey: ROOT_KEY,
+    rootRow: ROOT_ROW,
+    installed: [
+      {
+        key: DEPENDENCY_KEY,
+        version: "1.0.0",
+        declaresAgents: false,
+        declaresMcp: false,
+        fellBackToCurrentCopy: true,
+      },
+    ],
+    alreadyInstalled: [],
+    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+  });
+  const fallback = rows.find(
+    (row): row is Extract<CascadeMsg, { readonly status: "installed" }> =>
+      row.status === "installed" && row.name === DEPENDENCY_KEY,
+  );
+  assert.ok(fallback !== undefined, "the fallback member still renders an installed row");
+
+  // act
+  const section = await readDocSection("## How a constrained dependency is resolved");
+
+  // assert: a sanity floor first, mirroring the failure-table case's floor above
+  // -- a renamed heading makes `readDocSection` return a slice that runs to the
+  // next "## ", and without a floor a mis-sliced section could satisfy the
+  // containment check below by accident.
+  assert.ok(
+    section.length > 200,
+    `${DOC_REL}: parsed a ${section.length.toString()}-character "How a constrained dependency is resolved" section`,
+  );
+  assert.deepStrictEqual(
+    (fallback.reasons ?? []).filter((reason) => !section.includes(reason)),
+    [],
+    `${DOC_REL}: the resolution section never names a reason the fallback row carries`,
+  );
+});
+
+test("DIVG-01 the resolution section carries the exact fallback subsection heading", async () => {
+  // arrange / act
+  const section = await readDocSection("## How a constrained dependency is resolved");
+
+  // assert: sanity floor, then heading equality -- a failure here names the
+  // actual heading text found, so a rename or a typo is visible on its own,
+  // separate from the reason-containment case above.
+  assert.ok(
+    section.length > 200,
+    `${DOC_REL}: parsed a ${section.length.toString()}-character "How a constrained dependency is resolved" section`,
+  );
+  const heading = /^### .+$/mu.exec(section)?.[0];
+  assert.strictEqual(
+    heading,
+    "### When no tag satisfies the constraint",
+    `${DOC_REL}: the fallback subsection heading has drifted from what DIVG-01 pins`,
+  );
+});
+
+test("DIVG-01 the plugin-declares section names the sha divergence from upstream", async () => {
+  // arrange / act
+  const section = await readDocSection("## What a plugin declares");
+
+  // assert: sanity floor, then the literal stem Task 1 commits to.
+  assert.ok(
+    section.length > 200,
+    `${DOC_REL}: parsed a ${section.length.toString()}-character "What a plugin declares" section`,
+  );
+  assert.ok(
+    section.includes("Claude Code accepts a"),
+    `${DOC_REL}: the "What a plugin declares" section never states that upstream accepts a sha field`,
   );
 });
