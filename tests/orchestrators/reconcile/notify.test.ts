@@ -1629,6 +1629,24 @@ describe("buildReconcilePendingNotification", () => {
       actions: { pluginsToEnable: [{ scope: "project", plugin: "cr", marketplace: "mp" }] },
       expectedRow: { status: "will enable", name: "cr" },
     },
+    {
+      // WR-02: the held-down bucket previews the same action the
+      // config-driven disable bucket does, so the projection gives it the
+      // same token rather than a new one.
+      bucket: "pluginsToDependencyDisable",
+      actions: {
+        pluginsToDependencyDisable: [
+          {
+            scope: "project",
+            plugin: "cr",
+            marketplace: "mp",
+            dependency: "dep@mp",
+            kind: "missing",
+          },
+        ],
+      },
+      expectedRow: { status: "will disable", name: "cr" },
+    },
   ] satisfies readonly {
     bucket: string;
     actions: PlannedActions;
@@ -2006,6 +2024,23 @@ describe("isReconcilePlanListEmpty", () => {
     {
       bucket: "a planned disable",
       actions: { pluginsToDisable: [{ scope: "project", plugin: "cr", marketplace: "mp" }] },
+    },
+    {
+      // WR-02: the load-time held-down bucket is an action the next reload
+      // performs, so a scope carrying only this bucket must not report as a
+      // steady state.
+      bucket: "a planned dependency disable",
+      actions: {
+        pluginsToDependencyDisable: [
+          {
+            scope: "project",
+            plugin: "cr",
+            marketplace: "mp",
+            dependency: "dep@mp",
+            kind: "missing",
+          },
+        ],
+      },
     },
     {
       bucket: "a source mismatch",

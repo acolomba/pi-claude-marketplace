@@ -405,7 +405,14 @@ export function buildReconcilePendingNotification(
       });
     }
 
-    for (const o of plan.pluginsToDisable) {
+    // LOAD-01 / WR-02: the held-down bucket previews the same action the
+    // config-driven disable bucket does, so both feed one loop and one token.
+    // The planner drops a key already claimed by `pluginsToDisable`
+    // (`plan.ts::claimedPluginKeys`), so the concatenation never names one
+    // plugin twice. The held-down bucket is empty for a caller that supplies
+    // no satisfaction verdict, which is every caller today
+    // (PENDING-VERDICT-01 / D-06-25).
+    for (const o of [...plan.pluginsToDisable, ...plan.pluginsToDependencyDisable]) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
       block.plugins.push({
         status: "will disable",
@@ -450,6 +457,12 @@ export function buildReconcilePendingNotification(
  * recorded plugins (its reload-deferred uninstall cascade); a removal with no
  * recorded plugins is immediate de-registration and contributes nothing. The
  * surviving plugin-level buckets always map to a pending row.
+ *
+ * WR-02: `pluginsToDependencyDisable` is counted alongside the other
+ * plugin-level buckets. It is empty for every caller that supplies no
+ * satisfaction verdict, so counting it changes nothing today -- and it stops a
+ * scope whose only pending change is a load-time disable from reporting
+ * "0 actions" once a caller starts populating it.
  */
 export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boolean {
   return plans.every(
@@ -459,6 +472,7 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
       p.pluginsToUninstall.length === 0 &&
       p.pluginsToEnable.length === 0 &&
       p.pluginsToDisable.length === 0 &&
+      p.pluginsToDependencyDisable.length === 0 &&
       p.sourceMismatches.length === 0,
   );
 }
