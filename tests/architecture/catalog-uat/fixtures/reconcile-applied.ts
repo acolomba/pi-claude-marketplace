@@ -357,6 +357,68 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
       },
     },
 
+    // LOAD-01: the same check, on the arm where the dependency IS recorded but
+    // its own record is disabled. Same token, because the dependency is not
+    // usable at all; the remedy says enable rather than install.
+    "reconcile-dependency-disabled": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "disabled",
+                name: "deploy-kit",
+                version: "1.0.0",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error('Enable "secrets-vault@mp" or uninstall "deploy-kit@mp"'),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LOAD-01: the same check, on the arm where the dependency is recorded and
+    // enabled at a version outside the declared range. The second token, and a
+    // remedy that names the canonical folded range.
+    "reconcile-dependency-version-unsatisfied": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "disabled",
+                name: "deploy-kit",
+                version: "1.0.0",
+                reasons: ["dependency version unsatisfied"],
+                cause: new Error(
+                  'Update "secrets-vault@mp" to satisfy >=2.0.0 <3.0.0-0, or uninstall "deploy-kit@mp"',
+                ),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // RESV-06: the load-time counterpart of the standalone dependency-cascade
     // {dependency failed} row. Reconcile drives ONE orchestrated outcome per
     // declared plugin, so the requesting plugin's own row carries both the

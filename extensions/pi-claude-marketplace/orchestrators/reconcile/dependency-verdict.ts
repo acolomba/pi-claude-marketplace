@@ -24,11 +24,25 @@
 // is never an input here, so a dependency that has since been satisfied lifts
 // the hold by simply not appearing in the next verdict.
 //
+// LOAD-01's condition is three-way and every arm is decided here: the declared
+// key has no record in the scope, its record is disabled, or its recorded
+// version falls outside the declared range. The range arm composes
+// `domain/dependency-range.ts` and adds no comparator of its own -- that module
+// is the single evaluator in this tree, and its documented coercion behaviour
+// for the PI-7 `hash-` / `sha-` fallback version forms (D-03-04) is an accepted
+// tradeoff rather than something to guard against locally.
+//
 // D-05-07: the walk inherits the declaration read's fail-closed posture. A
 // declarer whose manifest cannot be read ends the walk with the typed failure
 // arm naming it, and is never read as a record that declares nothing -- which
 // would silently leave a dependent enabled on incomplete information.
 
+import {
+  intersectDependencyRanges,
+  isUnconstrainedRange,
+  recordedVersionSatisfies,
+} from "../../domain/dependency-range.ts";
+import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { buildScopeDeclarationDetail } from "../plugin/dependency-index.ts";
 
 import type { loadMarketplaceManifest } from "../../domain/manifest.ts";
@@ -80,40 +94,122 @@ export type ScopeSatisfactionVerdict =
       readonly cause: Error;
     };
 
-/** Every `name@marketplace` key the scope records. */
-function recordedKeys(state: ExtensionState): ReadonlySet<string> {
-  const keys = new Set<string>();
+/**
+ * The recorded facts a declared key is measured against: whether the record is
+ * currently enabled, and the version it records.
+ *
+ * Structural, so a state record satisfies it directly and no projection step
+ * sits between the snapshot and the decision.
+ */
+interface RecordedPlugin {
+  readonly enabled: boolean;
+  readonly version: string;
+}
+
+/** Every `name@marketplace` key the scope records, with its recorded facts. */
+function recordedPlugins(state: ExtensionState): ReadonlyMap<string, RecordedPlugin> {
+  const recorded = new Map<string, RecordedPlugin>();
   for (const marketplace of Object.values(state.marketplaces)) {
-    for (const name of Object.keys(marketplace.plugins)) {
-      keys.add(`${name}@${marketplace.name}`);
+    for (const [name, record] of Object.entries(marketplace.plugins)) {
+      recorded.set(`${name}@${marketplace.name}`, record);
     }
   }
 
-  return keys;
+  return recorded;
+}
+
+/**
+ * The version constraints one declarer names for each key it declares, in
+ * first-declaration order.
+ *
+ * D-03-02.1: several elements may name the same dependency with different
+ * constraints, and the satisfaction question is about their INTERSECTION -- so
+ * the constraints are accumulated per key before anything is evaluated, exactly
+ * as `resolveMemberConstraints` accumulates them for the install cascade. A
+ * `sha` pin is not collected: it is an install-time selector, not a range the
+ * recorded version can be measured against.
+ */
+function constraintsByKey(
+  declared: readonly AddressedDependency[],
+): ReadonlyMap<string, readonly string[]> {
+  const byKey = new Map<string, string[]>();
+  for (const dependency of declared) {
+    const key = `${dependency.name}@${dependency.marketplace}`;
+    const ranges = byKey.get(key) ?? [];
+    if (dependency.version !== undefined) {
+      ranges.push(dependency.version);
+    }
+
+    byKey.set(key, ranges);
+  }
+
+  return byKey;
+}
+
+/**
+ * The effective range a recorded version fails, or `undefined` when it holds.
+ *
+ * A fold that produces no range -- declarations that contradict each other, or
+ * a set that trips one of the two project-owned input caps -- is reported as
+ * out-of-range against the conjunction of what was declared. It is never read
+ * as "no constraint" (T-06-10): the caps exist to refuse work, and failing open
+ * on one would silently satisfy every dependency an attacker can make expensive
+ * to fold. The declared texts are joined rather than sliced, and the row bounds
+ * the result through `renderConstraintRange`.
+ *
+ * The unconstrained short-circuit tests canonicalization rather than string
+ * identity, so two authors independently spelling "any version" differently
+ * still fold to no constraint instead of to a range to be evaluated.
+ */
+function unsatisfiedRange(ranges: readonly string[], version: string): string | undefined {
+  const folded = intersectDependencyRanges(ranges);
+  if (!folded.ok) {
+    return ranges.join(" ");
+  }
+
+  if (isUnconstrainedRange(folded.range)) {
+    return undefined;
+  }
+
+  return recordedVersionSatisfies(version, folded.range) ? undefined : folded.range;
 }
 
 /**
  * The declarations of one record that the scope does not satisfy, in
- * declaration order.
+ * first-declaration order, one entry per declared key.
  *
- * A declared key with no record in the scope is `missing`. A declared key this
- * pass has already decided to hold down is `disabled`: the record is installed,
- * so naming it missing would offer an install remedy for a plugin that is
- * already there.
+ * A declared key with no record in the scope is `missing`. A declared key whose
+ * record is disabled is `disabled` -- either because the record is stored that
+ * way, or because this same pass has already decided to hold it down. Both
+ * facts are the same fact about the dependency and carry the same remedy, so
+ * they share one arm; reporting them separately would emit two entries for one
+ * dependency. `disabled` rather than `missing` because the record IS installed,
+ * and an install remedy for a plugin that is already there would be false.
+ *
+ * A key that is recorded and enabled is measured against its declared range.
  */
 function unsatisfiedEntries(
   dependent: string,
   declared: readonly AddressedDependency[],
-  recorded: ReadonlySet<string>,
+  recorded: ReadonlyMap<string, RecordedPlugin>,
   held: ReadonlySet<string>,
 ): readonly UnsatisfiedDeclaration[] {
   const entries: UnsatisfiedDeclaration[] = [];
-  for (const dependency of declared) {
-    const key = `${dependency.name}@${dependency.marketplace}`;
-    if (!recorded.has(key)) {
+  for (const [key, ranges] of constraintsByKey(declared)) {
+    const record = recorded.get(key);
+    if (record === undefined) {
       entries.push({ dependent, dependency: key, kind: "missing" });
-    } else if (held.has(key)) {
+      continue;
+    }
+
+    if (held.has(key) || isRecordedButDisabled(record)) {
       entries.push({ dependent, dependency: key, kind: "disabled" });
+      continue;
+    }
+
+    const range = unsatisfiedRange(ranges, record.version);
+    if (range !== undefined) {
+      entries.push({ dependent, dependency: key, kind: "out-of-range", range });
     }
   }
 
@@ -136,7 +232,7 @@ function unsatisfiedEntries(
  */
 function propagateUnsatisfied(
   declarations: ReadonlyMap<string, readonly AddressedDependency[]>,
-  recorded: ReadonlySet<string>,
+  recorded: ReadonlyMap<string, RecordedPlugin>,
 ): readonly UnsatisfiedDeclaration[] {
   const declarers = [...declarations];
   const held = new Set<string>();
@@ -177,6 +273,6 @@ export async function buildScopeSatisfactionVerdict(
 
   return {
     ok: true,
-    unsatisfied: propagateUnsatisfied(detail.declarations, recordedKeys(options.state)),
+    unsatisfied: propagateUnsatisfied(detail.declarations, recordedPlugins(options.state)),
   };
 }

@@ -227,6 +227,15 @@ export const DEPENDENCY_UNSATISFIED_ROW_REASONS = [
 ] as const satisfies readonly ContentReason[];
 
 /**
+ * LOAD-01: the brace of the same row on its version arm. A separate constant
+ * rather than a second member of the brace above: exactly one of the two tokens
+ * rides any given row, and which one is decided by the unsatisfied kind.
+ */
+export const DEPENDENCY_VERSION_UNSATISFIED_ROW_REASONS = [
+  "dependency version unsatisfied",
+] as const satisfies readonly ContentReason[];
+
+/**
  * D-04 / D-05: the applied cascade's `CommandContext`. `Messaging.label` is the
  * human operation name `"Reconcile"`. The `render` map is total over
  * `ReconcileAppliedStatus` (D-10). Both reconcile contexts reuse the shared

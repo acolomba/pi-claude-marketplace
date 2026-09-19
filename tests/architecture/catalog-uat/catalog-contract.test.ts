@@ -79,8 +79,12 @@ const EXPECTED_SECTION_COUNT = 20;
 // dependency and the dependent on its cause line. It is the only `(disabled)`
 // row with a cause trailer, and the only realized transition row that renders
 // at warning severity (215 -> 216).
-const EXPECTED_STATE_COUNT = 216;
-const EXPECTED_UTF8_BYTES = 29_363;
+// LOAD-01: +2 states for the check's other two arms -- a dependency recorded
+// but disabled (same token, enable remedy) and a dependency recorded at a
+// version outside the declared range (the second token, update remedy carrying
+// the canonical folded range) (216 -> 218).
+const EXPECTED_STATE_COUNT = 218;
+const EXPECTED_UTF8_BYTES = 29_802;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -369,7 +373,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 216 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 218 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

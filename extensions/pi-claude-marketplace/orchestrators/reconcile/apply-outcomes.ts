@@ -35,7 +35,10 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
-import { DEPENDENCY_UNSATISFIED_ROW_REASONS } from "./reconcile.messaging.ts";
+import {
+  DEPENDENCY_UNSATISFIED_ROW_REASONS,
+  DEPENDENCY_VERSION_UNSATISFIED_ROW_REASONS,
+} from "./reconcile.messaging.ts";
 
 import type { UnsatisfiedKind } from "./dependency-verdict.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
@@ -348,6 +351,21 @@ function dependencyRemedy(held: {
 }
 
 /**
+ * The row's brace for one unsatisfied kind.
+ *
+ * The version arm carries its own token because its remedy is a different kind
+ * of instruction -- move an existing plugin's version, rather than install or
+ * enable a missing one -- and the two upstream error codes it mirrors are
+ * likewise a pair. The missing and disabled arms share the first token: both
+ * name a dependency that is not usable at all.
+ */
+function dependencyRowReasons(kind: UnsatisfiedKind): readonly ContentReason[] {
+  return kind === "out-of-range"
+    ? DEPENDENCY_VERSION_UNSATISFIED_ROW_REASONS
+    : DEPENDENCY_UNSATISFIED_ROW_REASONS;
+}
+
+/**
  * Build the load-time disable outcome for one held-down plugin.
  *
  * It lives beside the shape rather than inside the apply step, on the
@@ -376,7 +394,7 @@ export function dependencyDisabledOutcome(
     marketplace: held.marketplace,
     plugin: held.plugin,
     ...(version !== undefined && { version }),
-    reasons: DEPENDENCY_UNSATISFIED_ROW_REASONS,
+    reasons: dependencyRowReasons(held.kind),
     cause: new Error(dependencyRemedy(held)),
   };
 }

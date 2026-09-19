@@ -200,9 +200,16 @@ test("reports a recorded version outside its declared range as out-of-range", as
     loadManifest,
   });
 
-  // assert
+  // assert -- the carried range is the CANONICAL fold of what was declared, not
+  // the declared text: one evaluator canonicalizes, and a caret that kept its
+  // shorthand here would mean the row and the comparison read different ranges.
   assert.deepStrictEqual(unsatisfiedOf(verdict), [
-    { dependent: "app@mp", dependency: "vault@mp", kind: "out-of-range", range: "^2.0.0" },
+    {
+      dependent: "app@mp",
+      dependency: "vault@mp",
+      kind: "out-of-range",
+      range: ">=2.0.0 <3.0.0-0",
+    },
   ]);
 });
 

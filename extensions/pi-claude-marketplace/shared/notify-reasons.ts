@@ -5,14 +5,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notification-types.ts` as the SINGLE source of catalog truth (OUT-08: the 57-entry
+ * in `notification-types.ts` as the SINGLE source of catalog truth (OUT-08: the 58-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 57-entry set.
+ * 58-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
@@ -46,7 +46,11 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * unsatisfied`, the load-time check's marker for a recorded plugin it disabled
  * because a dependency it declares is not satisfied in the scope -- a state
  * change the user did not ask for, so it joins the command-private reasons and
- * not the idempotent group (56 to 57).
+ * not the idempotent group (56 to 57). LOAD-01 added `dependency version
+ * unsatisfied`, the same check's marker for a dependency that IS recorded and
+ * enabled at a version outside the declared range -- a second token rather than
+ * a second use of the first, because the two remedies differ in kind and a grep
+ * for either must not return the other (57 to 58).
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -316,6 +320,11 @@ type CommandPrivateReason =
   // remedy naming both parties rides the cause line. NOT idempotent: the record
   // changed state, and the user did not ask for it.
   | "dependency unsatisfied"
+  // LOAD-01: the same check's marker on its version arm, owned by the same
+  // module. The dependency is recorded and enabled, and the row's cause line
+  // carries the range the recorded version missed. NOT idempotent, for the same
+  // reason its neighbour is not.
+  | "dependency version unsatisfied"
   | "stale clone"
   | "duplicate name"
   | "marketplace not added"

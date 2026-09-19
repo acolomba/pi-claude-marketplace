@@ -137,6 +137,17 @@ export const REASONS = [
   // words, different subject, different surface -- one token for both would
   // make a grep for either fact return the other.
   "dependency unsatisfied",
+  // LOAD-01: the same load-time check, on the arm where the dependency IS
+  // recorded and enabled but its recorded version falls outside the declared
+  // range. It mirrors upstream's second error code,
+  // `dependency-version-unsatisfied`, so the pair of tokens tracks the pair of
+  // upstream codes. `dependency unsatisfied` cannot carry this case: the two
+  // remedies differ in kind -- one says install or enable the missing thing,
+  // the other says move an existing thing's version -- and a reader who greps
+  // one token must not be shown the other's situation. As with its neighbour
+  // the token names the CONDITION and the remedy, which interpolates both the
+  // dependency and the range, rides the row's cause line.
+  "dependency version unsatisfied",
 ] as const;
 
 /** Literal union derived from the closed reason vocabulary. */
