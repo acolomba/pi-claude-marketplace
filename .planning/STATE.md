@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v1.20
 milestone_name: transitive-dependencies
-current_phase: 6
+current_phase: 06
 current_phase_name: Load-time dependency check and allowed uninstall
-status: planning
-stopped_at: Phase 6 context gathered
-last_updated: "2026-09-18T22:46:01.253Z"
+status: executing
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-09-19T00:25:28.762Z"
 last_activity: 2026-09-18
-last_activity_desc: Extended v1.20 with Phases 6-12 from HANDOFF-upstream-dependency-parity.md
-state_head: f6671f90239cac530f7b7b9181c406d8a8beda39
+last_activity_desc: Phase 06 execution started
+state_head: 8a420691a6e7e2e8a166bea8951f3bab5f89023e
 progress:
   total_phases: 12
   completed_phases: 5
   total_plans: 26
-  completed_plans: 22
+  completed_plans: 23
   percent: 42
 ---
 
@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-09-17 after Phase 5 prune-on-uninstall
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Milestone v1.20 parity extension — Phases 6-12 align the
+**Current focus:** Phase 06 — Load-time dependency check and allowed uninstall
 shipped dependency feature with the Claude Code dependency docs.
 Installing a plugin that declares dependencies should install what it needs.
 44 requirements across 12 phases (25 shipped in Phases 1-5 as PR #198, 19
@@ -36,9 +36,9 @@ under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 6 (Load-time dependency check and allowed uninstall) — READY TO EXECUTE
-Plan: —
-Status: Roadmap extended 2026-09-18; next is `/gsd-discuss-phase 6`
+Phase: 06 (Load-time dependency check and allowed uninstall) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
 
 **Phases 6-12 were added on 2026-09-18** from
 `.planning/HANDOFF-upstream-dependency-parity.md`, after Phases 1-5 shipped as
@@ -324,7 +324,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-17 — Shipped milestone v1.20 as PR #198 (features/manifest -> main)
+Last activity: 2026-09-18 — Phase 06 execution started
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 5 of 5 phases complete (100%).
@@ -510,6 +510,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 05 P01 | 47 min | 3 tasks | 26 files |
 | Phase 05 P02 | 54min | 3 tasks | 24 files |
 | Phase 05 P03 | 19 min | 3 tasks | 4 files |
+| Phase 06 P01 | 100 min | 3 tasks | 32 files |
 
 ## Accumulated Context
 
@@ -759,6 +760,11 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 05]: The prune member body is total: AG-5 and every other cascade failure become a warning row; the one save runs after the sweep, so a member fault cannot ghost the primary's record (NFR-3)
 - [Phase 05]: Pruned rows render in fixpoint removal order: each pass is sorted by key, so a same-pass orphan precedes a next-pass dependency within a marketplace block (A-8 measured)
 - [Phase 05]: marketplace remove keeps bypassing the dependents guard (PRUNE-GUARD-MR-01 backlogged); it is the documented exit for the two-stale-records refusal, so any future guard there must keep that exit open
+- [Phase 06]: D-06-08: the load-time disable runs through setPluginEnabled in orchestrated mode; a record-only write would leave a disabled plugin's artifacts materialized and its config write-back skipped is what keeps the consequence out of claude-plugins.json
+- [Phase 06]: D-06-09: a dependency the same pass holds down is reported as kind disabled, not missing, because an install remedy for an installed plugin would be false
+- [Phase 06]: D-06-10: planReconcile's verdict parameter is optional, so pending and every convergence proof keep their three-argument call; the default means nothing is held down
+- [Phase 06]: D-06-11: the dependency-disabled outcome carries the rendered remedy and the row's brace, not the structured verdict fields, on the plugin-uninstall-failed cause precedent
+- [Phase 06]: D-06-12: a verdict failure is reported as a (failed) {unreadable} row naming the declarer, suppressed when the pass already reported that plugin
 
 ### Pending Todos
 
@@ -850,9 +856,9 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 6 context gathered
+**Stopped at:** Completed 06-01-PLAN.md
 
-**Resume file:** .planning/phases/06-load-time-dependency-check-and-allowed-uninstall/06-CONTEXT.md
+**Resume file:** None
 `HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
 content was folded into `04-CONTEXT.md`: the supersession warning and the
 ordering constraint into `<decisions>`, and the operational anti-patterns
@@ -862,7 +868,7 @@ carried-notes block under `<specifics>`.
 
 **Read beside it:** `.planning/phases/04-install-provenance/04-CONTEXT.md`
 
-Last session: 2026-09-18T21:53:24.433Z
+Last session: 2026-09-19T00:25:17.084Z
 resumed a paused Phase 4 discussion, answered its two open questions (the
 config-write reversal lands entirely in Phase 4 in a fixed order; reconcile
 keeps sweeping genuine orphans with one exemption), wrote `04-CONTEXT.md` and
