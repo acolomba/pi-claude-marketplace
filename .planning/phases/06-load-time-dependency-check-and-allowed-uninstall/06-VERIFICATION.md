@@ -62,7 +62,7 @@ covered_files:
   - "tests/persistence/state-io.test.ts"
   - "tests/shared/notification-grammar.test.ts"
   - "tests/shared/notification-types.test.ts"
-covered_digest: "v1:sha256:fe56ec5ab6ae7df861f932e01d917dfe6c0e9925568fcf86d5621de24a986d7c"
+covered_digest: "v1:sha256:31a5282728222af38937d0fdebfcadbe4fe7c4c98a436c53835e03d4b050e0e3"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
