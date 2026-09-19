@@ -89,5 +89,6 @@
       "project": "embed"
     }
   },
+  "claude_md_path": "AGENTS.md",
   "context_window": 1000000
 }
