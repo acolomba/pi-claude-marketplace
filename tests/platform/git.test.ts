@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { readFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
 import * as git from "isomorphic-git";
@@ -836,6 +838,20 @@ describe("local Git operations", () => {
 
     // assert
     assert.strictEqual(await currentBranch({ dir: repository.dir }), "feature");
+  });
+
+  test("forwards force so a checkout into an empty work tree writes the target tree", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const staging = await mkdtemp(join(tmpdir(), "pi-cm-git-force-checkout-"));
+    t.after(() => rm(staging, { recursive: true, force: true }));
+    await cp(join(repository.dir, ".git"), join(staging, ".git"), { recursive: true });
+
+    // act
+    await checkout({ dir: staging, ref: repository.initialOid, force: true });
+
+    // assert
+    assert.strictEqual(fs.existsSync(join(staging, "README.md")), true);
   });
 });
 
