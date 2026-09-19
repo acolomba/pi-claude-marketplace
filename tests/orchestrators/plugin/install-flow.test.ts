@@ -3074,11 +3074,9 @@ test("WR-03: installPlugin's marketplaceTagProbe seam reaches a path-source depe
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wr03-marketplace-tag-probe-"));
     try {
       // arrange: a path-source dependency constrained to `^1.0.0`, on a
-      // marketplace root that is deliberately NOT a git repository. Before
-      // this fix, `installPlugin` had no seam for this arm (unlike the
-      // network `tagProbe` sibling's), so the real local probe was always
-      // reached and its `ENOENT` on `.git` was the only outcome obtainable --
-      // no fixture-free unit test could answer this constraint at all.
+      // marketplace root that is deliberately NOT a git repository -- the
+      // `marketplaceTagProbe` seam is what lets this case answer the
+      // constraint instead of taking the real probe's `ENOENT` on `.git`.
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
