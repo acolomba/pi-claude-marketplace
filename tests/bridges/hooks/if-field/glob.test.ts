@@ -269,10 +269,7 @@ describe("compileBashGlob", () => {
     const testCorruptedTokens = () => bashGlob.test("git");
 
     // act & assert
-    assert.throws(
-      testCorruptedTokens,
-      new Error('unreachable GlobToken arm: {"kind":"unknown"}'),
-    );
+    assert.throws(testCorruptedTokens, new Error('unreachable GlobToken arm: {"kind":"unknown"}'));
   });
 });
 
@@ -838,9 +835,6 @@ describe("compilePathGlob", () => {
     const testCorruptedAnchor = () => pathGlob.testAbsolute("/workspace/project/file.txt");
 
     // act & assert
-    assert.throws(
-      testCorruptedAnchor,
-      new Error('unreachable PathAnchor arm: {"kind":"unknown"}'),
-    );
+    assert.throws(testCorruptedAnchor, new Error('unreachable PathAnchor arm: {"kind":"unknown"}'));
   });
 });

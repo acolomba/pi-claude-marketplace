@@ -639,7 +639,9 @@ function isPidAlive(pid: number, probes: OrphanProbes = DEFAULT_ORPHAN_PROBES): 
       return true;
     }
 
-    hookDebugLog(`async-rewake: isPidAlive unrecognized errno for pid ${pid}: ${errorMessage(err)}`);
+    hookDebugLog(
+      `async-rewake: isPidAlive unrecognized errno for pid ${pid}: ${errorMessage(err)}`,
+    );
     return false;
   }
 }
