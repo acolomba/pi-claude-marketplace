@@ -129,7 +129,7 @@ A dependency that was installed partially, with some of its component kinds unsu
 
 `uninstall` removes a plugin even while another installed plugin in the same scope declares it. A disabled plugin still counts as installed, so it still holds its dependencies. The row reads `{dependents unsatisfied}`, and its `cause:` line names each dependent as `name@marketplace`. The plugin, its files and its record are gone when the command returns.
 
-At the next reload, each named dependent is disabled and told what to do: install the plugin again, or uninstall the dependent. Nothing is lost while you decide, because a disabled plugin keeps its record.
+At the next reload, each named dependent is disabled and told what to do: install the plugin again, or uninstall the dependent. Nothing is lost while you decide, because a disabled plugin keeps its record. See [The load-time check](#the-load-time-check) for what that reload reports.
 
 To remove a dependent as well, uninstall it too. If the plugin arrived as a dependency, you can instead run `--prune` on the dependent. The dependent goes, and the plugin goes with it as an orphan (see the next section).
 
@@ -162,6 +162,50 @@ The sweep never removes a plugin you installed by name, whatever declares it. A 
 Each removed dependency shows its own `(uninstalled) {dependency pruned}` row under its marketplace. `--keep-data` covers every plugin the command removes, and the rows then read `{dependency pruned, data kept}`. When nothing qualifies, the command prints the plain uninstall row and nothing more. If one removed dependency fails to remove, the others stay removed and its row shows the failure (D-05-13). The failed plugin is still installed, so the dependencies only it declares stay too.
 
 A reload never prunes. An orphaned dependency stays installed until you run `--prune`, because its install record says that it arrived through another plugin (see [Where a dependency lands](#where-a-dependency-lands)). This matches Claude Code, which keeps orphaned dependencies on disk in case you reinstall a plugin that needs them.
+
+## The load-time check
+
+A dependency can go missing after the install that brought it in. You can uninstall it, disable it, or move it to another version. Every reload therefore re-reads what each installed plugin in the scope declares and checks it against what the scope has now.
+
+A declaration is unsatisfied in three cases: the dependency is not installed, the dependency is installed but disabled, or the dependency's recorded version falls outside the declared range.
+
+A plugin whose declaration is unsatisfied is disabled. Its skills, prompts, agents, MCP entries and hooks come off disk, so it stops loading instead of running against a dependency that is not there. Its install record stays, so nothing else is lost.
+
+The row says which of the three cases the plugin hit. The `cause:` line names the remedy, and it names both plugins, so you can see what to repair and what to remove.
+
+The dependency is not installed:
+
+```text
+● mp [project]
+  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}
+    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"
+```
+
+The dependency is installed but disabled:
+
+```text
+● mp [project]
+  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}
+    cause: Enable "secrets-vault@mp" or uninstall "deploy-kit@mp"
+```
+
+The dependency's recorded version is outside the declared range. This case carries its own reason, because its remedy is a different kind of action:
+
+```text
+● mp [project]
+  ◍ deploy-kit v1.0.0 (disabled) {dependency version unsatisfied}
+    cause: Update "secrets-vault@mp" to satisfy >=2.0.0 <3.0.0-0, or uninstall "deploy-kit@mp"
+```
+
+The range on that line is the range the check actually tested. It is every constraint the dependent declared for that dependency, intersected and written in full form. So a declared `^2.0.0` reads `>=2.0.0 <3.0.0-0`.
+
+This disable is a consequence, not a choice you made. So this extension does not write it into `claude-plugins.json` or `claude-plugins.local.json`. Those files hold what you asked for. The install record carries a marker instead, and the check works that marker out again on every reload.
+
+A reload does not flip the plugin back and forth. While the dependency stays unsatisfied, later reloads leave the plugin disabled and report nothing new about it. When you satisfy the dependency, the next reload enables the plugin again and drops the marker. You edit nothing to lift it.
+
+A disable you asked for is never lifted this way. The check lifts only the disable it applied itself.
+
+One broken dependency reaches every plugin above it in a single reload. If `a` needs `b` and `b` needs `c`, then uninstalling `c` disables both `b` and `a` on the next reload, not one of them per reload. Installing `c` again brings both back on the next reload too.
 
 ## Why a dependency can fail
 
