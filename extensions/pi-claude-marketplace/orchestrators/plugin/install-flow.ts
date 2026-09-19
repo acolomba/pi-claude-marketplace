@@ -1044,7 +1044,8 @@ async function installPluginWithTransaction(
     }
 
     case "installed": {
-      const { installCtx, landedDisabled } = outcome;
+      const installCtx = outcome.installCtx;
+      const landedDisabled = outcome.landedDisabled;
       const postCommitWarnings = await collectPostCommitWarnings(
         installCtx,
         completionCache,

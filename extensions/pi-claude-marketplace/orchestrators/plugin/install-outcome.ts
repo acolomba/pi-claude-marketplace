@@ -185,6 +185,24 @@ export interface InstallFailureCapture {
   version: string | undefined;
 }
 
+// SKILL-01 / CMD-01 / WARN-01: one frontmatter-parse degrade record. Shared by
+// `InstallLedgerSummary` and `InstallLedgerContext` (one declaration, not two
+// structurally-identical ones) so a read against either side's array resolves
+// to the same member.
+export interface FrontmatterDegradationRow {
+  kind: DegradeKind;
+  generatedName: string;
+  parseError: string;
+}
+
+// AS-7 / W-08 / B-08: one agents-bridge foreign-content row preserved on disk
+// during prepare. Shared with `InstallLedgerContext` for the same reason as
+// `FrontmatterDegradationRow`.
+export interface AgentForeignFailureRow {
+  generatedName: string;
+  reason: string;
+}
+
 /** Readonly facts exposed after a completed ledger run. */
 export interface InstallLedgerSummary {
   readonly locations: ScopedLocations;
@@ -194,21 +212,14 @@ export interface InstallLedgerSummary {
   readonly resolved: MaterializablePlugin;
   readonly version: string;
   readonly pluginDataDir: string;
-  readonly frontmatterDegradations: readonly {
-    readonly kind: DegradeKind;
-    readonly generatedName: string;
-    readonly parseError: string;
-  }[];
+  readonly frontmatterDegradations: readonly FrontmatterDegradationRow[];
   readonly stagedSkillNames: readonly string[];
   readonly stagedCommandNames: readonly string[];
   readonly stagedAgentNames: readonly string[];
   readonly stagedMcpServerNames: readonly string[];
   readonly bridgeWarnings: readonly string[];
   readonly discoveryWarnings: readonly string[];
-  readonly agentForeignFailures: readonly {
-    readonly generatedName: string;
-    readonly reason: string;
-  }[];
+  readonly agentForeignFailures: readonly AgentForeignFailureRow[];
 }
 
 /** Caller-facing result of the guard-free install ledger. */
@@ -275,17 +286,13 @@ interface InstallLedgerContext {
   // warnings beside them stay suppressed.
   discoveryWarnings: string[];
   // Bridge-side per-record AG-5 foreign-content rows -- routed to notifyWarning post-success.
-  agentForeignFailures: { generatedName: string; reason: string }[];
+  agentForeignFailures: AgentForeignFailureRow[];
   // SKILL-01 / CMD-01 / WARN-01: per-component frontmatter-parse degrade records
   // collected from the skills + commands bridges. Feed the one-per-plugin
   // `{malformed skill}` / `{malformed command}` reason token (standalone row),
   // the per-component parse-error detail (orchestrated postCommitWarnings), and
   // the `degradedKinds` outcome seam the reconcile composer consumes.
-  frontmatterDegradations: {
-    kind: DegradeKind;
-    generatedName: string;
-    parseError: string;
-  }[];
+  frontmatterDegradations: FrontmatterDegradationRow[];
   // Mutable handle to the state snapshot loaded by the caller's locked transaction.
   readonly stateSnapshot: ExtensionState;
 }

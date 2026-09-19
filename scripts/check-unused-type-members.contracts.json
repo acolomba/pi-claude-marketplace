@@ -410,12 +410,12 @@
       "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:58:29"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1003:3",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1010:3",
       "owner": "FailedRunPhasesResult",
       "key": "ok",
       "category": "type-refinement",
       "purpose": "Narrows ok at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1002:30"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1009:30"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:108:78",
