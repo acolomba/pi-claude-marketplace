@@ -157,6 +157,7 @@ test("config migration, merge, and planning converge populated state for project
     pluginsToUninstall: [],
     pluginsToEnable: [],
     pluginsToDisable: [],
+    pluginsToDependencyDisable: [],
     sourceMismatches: [],
   });
 });
@@ -179,6 +180,7 @@ test("config migration, merge, and planning converge populated state for user sc
     pluginsToUninstall: [],
     pluginsToEnable: [],
     pluginsToDisable: [],
+    pluginsToDependencyDisable: [],
     sourceMismatches: [],
   });
 });
@@ -240,6 +242,7 @@ test("a distinct declared alias resolves to the canonical recorded marketplace",
     pluginsToUninstall: [],
     pluginsToEnable: [],
     pluginsToDisable: [],
+    pluginsToDependencyDisable: [],
     sourceMismatches: [],
   });
 });

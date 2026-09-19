@@ -5,14 +5,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notification-types.ts` as the SINGLE source of catalog truth (OUT-08: the 56-entry
+ * in `notification-types.ts` as the SINGLE source of catalog truth (OUT-08: the 57-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 56-entry set.
+ * 57-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
@@ -42,7 +42,11 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * added `dependency pruned`, the marker `uninstall --prune` stamps on each
  * orphaned dependency record it swept out after the named plugin -- a removal
  * the user did not name, so it is a state change and joins the command-private
- * reasons, not the idempotent group (55 to 56).
+ * reasons, not the idempotent group (55 to 56). LOAD-01 added `dependency
+ * unsatisfied`, the load-time check's marker for a recorded plugin it disabled
+ * because a dependency it declares is not satisfied in the scope -- a state
+ * change the user did not ask for, so it joins the command-private reasons and
+ * not the idempotent group (56 to 57).
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -306,6 +310,12 @@ type CommandPrivateReason =
   // recorded as another plugin's dependency and `--prune` removed it once
   // nothing installed declared it. NOT idempotent: a record left the state.
   | "dependency pruned"
+  // LOAD-01: the load-time check's marker, owned by
+  // `orchestrators/reconcile/reconcile.messaging.ts`. The row's plugin declares
+  // a dependency the scope does not satisfy, so the check disabled it; the
+  // remedy naming both parties rides the cause line. NOT idempotent: the record
+  // changed state, and the user did not ask for it.
+  | "dependency unsatisfied"
   | "stale clone"
   | "duplicate name"
   | "marketplace not added"

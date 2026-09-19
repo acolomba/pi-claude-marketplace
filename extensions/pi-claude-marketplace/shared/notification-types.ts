@@ -124,6 +124,19 @@ export const REASONS = [
   // operation IS an uninstall; the brace says why this plugin, which the user
   // did not name, went. Under `--keep-data` it precedes `data kept` (D-05-09).
   "dependency pruned",
+  // LOAD-01: the load-time check disabled this recorded plugin, because a
+  // dependency it declares is not satisfied in the same scope. It mirrors
+  // upstream's `dependency-unsatisfied` error code, so the token names the
+  // CONDITION and the remedy naming both parties rides the row's cause line --
+  // the same split `dependents remain` established, and the only one available:
+  // a reason is one to three lowercase words and this set is a literal tuple,
+  // so no token can interpolate an identifier. `dependency disabled` cannot
+  // carry it: that token's subject is the DEPENDENCY row inside an install
+  // cascade, reporting a dependency the cascade declined to install, where this
+  // token's subject is the DEPENDENT the load-time check just disabled. Same
+  // words, different subject, different surface -- one token for both would
+  // make a grep for either fact return the other.
+  "dependency unsatisfied",
 ] as const;
 
 /** Literal union derived from the closed reason vocabulary. */
@@ -292,6 +305,18 @@ export interface PluginDisabledMessage extends TransitionMessageBase {
   readonly description?: string;
   readonly reasons?: readonly ContentReason[];
   readonly enableHint?: boolean;
+  /**
+   * LOAD-01: the load-time dependency disable's remedy, naming the dependency
+   * and the dependent. It is the ONE thing this field carries: the ordinary
+   * toggle disable and the install-disabled cascade both omit it, and their
+   * rows stay byte-frozen.
+   *
+   * It rides the cause chain because the sentence interpolates two plugin
+   * identifiers, and the cause chain is the only channel in this grammar that
+   * legally interpolates one -- every frozen trailer constant interpolates
+   * nothing by contract.
+   */
+  readonly cause?: Error;
 }
 
 /** Available plugin row. */

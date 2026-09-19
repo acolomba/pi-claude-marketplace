@@ -60,7 +60,7 @@ This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ct
 
 ### Reasons rendering
 
-Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 56-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only block is the dependency-cascade vocabulary -- `{no matching version}`, `{version conflict}`, `{constraint too complex}`, `{invalid version constraint}`, `{dependency marketplace not added}`, `{dependency cycle}`, `{dependency failed}`, `{dependency disabled}`, `{dependency promoted}`, `{dependents remain}` and `{dependency pruned}` -- which sits after uninstall's data-disposition marker `{data kept}`.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 57-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only block is the dependency-cascade vocabulary -- `{no matching version}`, `{version conflict}`, `{constraint too complex}`, `{invalid version constraint}`, `{dependency marketplace not added}`, `{dependency cycle}`, `{dependency failed}`, `{dependency disabled}`, `{dependency promoted}`, `{dependents remain}`, `{dependency pruned}` and `{dependency unsatisfied}` -- which sits after uninstall's data-disposition marker `{data kept}`.
 
 Structural `unavailable` rows derive reasons from resolver notes through `narrowResolverNotes`. Partial rows derive typed unsupported kinds through `narrowUnsupportedKinds`. The typed `workflows` kind uses the second path.
 
@@ -2718,6 +2718,22 @@ The load-time counterpart of the standalone install-disabled row: the user hand-
     Run enable on this plugin to use its components.
 
 Reconcile: 1 success
+```
+
+### Load-time disable, declared dependency unsatisfied (LOAD-01)
+
+The load-time dependency check disabled a plugin whose declared dependency has no record in the scope. The row reuses the realized `(disabled)` transition token -- the disable DID happen -- and carries `{dependency unsatisfied}`, the closed-set marker mirroring upstream's `dependency-unsatisfied` error code. The remedy names both parties and therefore cannot ride the token (a reason is 1-3 lowercase words, and the set is a literal tuple), so it rides the `cause:` trailer, the one channel in this grammar that interpolates an identifier. This is the only `(disabled)` row that carries a cause line; the toggle disable and the `{installs disabled}` row above both omit it and stay byte-frozen. Severity is `warning`, not `info`: the disable was carried out in full, but the desired state -- the plugin loading -- was not reached. The disable is a CONSEQUENCE the config does not express, so it is never written back to `claude-plugins.json`; the record carries a `dependencyDisabled` marker instead, re-derived on every pass. A later pass that finds the dependency installed and enabled lifts the disable and the plugin returns to an ordinary `(installed)` row. The trailing tally counts the row as one warning; no reload-hint.
+
+<!-- catalog-state: reconcile-dependency-unsatisfied -->
+
+```text
+A plugin operation needs attention.
+
+● mp [project]
+  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}
+    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"
+
+Reconcile: 1 warning
 ```
 
 ### Load-time uninstall refused, dependents remain (PRUNE-05 / D-05-16)

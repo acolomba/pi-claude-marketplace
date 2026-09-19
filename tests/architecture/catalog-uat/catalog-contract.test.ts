@@ -74,8 +74,13 @@ const EXPECTED_SECTION_COUNT = 20;
 // `{dependency failed}` instead of the unrelated `{not in manifest}` token the
 // unexpected-failure fallthrough carried before `dispatchFailedOutcome`
 // narrowed on it (214 -> 215).
-const EXPECTED_STATE_COUNT = 215;
-const EXPECTED_UTF8_BYTES = 29_161;
+// LOAD-01: +1 state for the load-time dependency disable -- the `(disabled)`
+// row carrying `{dependency unsatisfied}` and the remedy naming both the
+// dependency and the dependent on its cause line. It is the only `(disabled)`
+// row with a cause trailer, and the only realized transition row that renders
+// at warning severity (215 -> 216).
+const EXPECTED_STATE_COUNT = 216;
+const EXPECTED_UTF8_BYTES = 29_363;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -364,7 +369,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 215 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 216 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

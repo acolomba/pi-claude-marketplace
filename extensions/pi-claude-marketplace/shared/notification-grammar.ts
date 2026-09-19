@@ -1622,7 +1622,15 @@ export function composePluginLinesWith(
     lines.push(`    ${ENABLE_HINT_TRAILER}`);
   }
 
-  if (p.status === "failed" || p.status === "manual recovery") {
+  // LOAD-01: the `disabled` status joins the two failure statuses here because
+  // the load-time dependency disable is the one realized transition whose row
+  // has to name a remedy, and the remedy interpolates two plugin identifiers.
+  // The branch above already pushes a 4-space-indented trailer onto a
+  // `(disabled)` row for the frozen enable hint, so a trailer on this row has
+  // precedent; what is new is that this one interpolates, which is exactly why
+  // it rides the cause chain rather than a fifth frozen trailer constant. Every
+  // other `(disabled)` producer omits `cause` and keeps its byte-frozen row.
+  if (p.status === "failed" || p.status === "manual recovery" || p.status === "disabled") {
     const trailer = renderIndentedCauseChain(p.cause, "    ");
     if (trailer !== "") {
       lines.push(trailer);

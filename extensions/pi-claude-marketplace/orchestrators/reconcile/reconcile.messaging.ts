@@ -12,6 +12,7 @@ import {
   composeReasons,
 } from "../../shared/notification-grammar.ts";
 import {
+  type ContentReason,
   type PluginDisabledMessage,
   type PluginFailedMessage,
   type PluginInstalledMessage,
@@ -206,21 +207,31 @@ const renderForceInstalled: RenderFn<PluginPartiallyInstalledMessage> = (p, prob
 /**
  * `(disabled)` -- realized disable row. NO dependencies. Lifted verbatim from
  * the central `renderPluginRow` `disabled` arm, including its ENBL-16 /
- * D-100-07 reason threading: reconcile's producer stamps no reason today (the
- * row reports a transition it just carried out), so this passes an absent field
- * through and the brace collapses, but a reason a later producer stamps cannot
- * be dropped here without a byte change anyone can see. Both soft-dep flags
- * stay hard-coded false (ENBL-15 / D-100-06).
+ * D-100-07 reason threading: the toggle disable stamps no reason (the row
+ * reports a transition it just carried out) and its brace collapses, while the
+ * load-time dependency disable stamps `DEPENDENCY_UNSATISFIED_ROW_REASONS`
+ * below and renders it. Both soft-dep flags stay hard-coded false (ENBL-15 /
+ * D-100-06).
  */
 const renderDisabled: RenderFn<PluginDisabledMessage> = (p, probe, mpScope) =>
   pluginRow(ICON_DISABLED, p, mpScope, "(disabled)", probe);
 
 /**
+ * LOAD-01: the brace of the load-time dependency-disable row, owned here beside
+ * the row it rides. The token names the condition; the remedy naming the
+ * dependency and the dependent rides the row's cause line, which is the only
+ * channel in this grammar that interpolates an identifier.
+ */
+export const DEPENDENCY_UNSATISFIED_ROW_REASONS = [
+  "dependency unsatisfied",
+] as const satisfies readonly ContentReason[];
+
+/**
  * D-04 / D-05: the applied cascade's `CommandContext`. `Messaging.label` is the
  * human operation name `"Reconcile"`. The `render` map is total over
  * `ReconcileAppliedStatus` (D-10). Both reconcile contexts reuse the shared
- * closed reason set (`notify-reasons.ts`); reconcile declares no command-private
- * reasons.
+ * closed reason set (`notify-reasons.ts`); the one reason reconcile owns is the
+ * load-time `dependency unsatisfied` brace declared above.
  */
 export const RECONCILE_APPLIED_CONTEXT = {
   Messaging: { label: "Reconcile" },

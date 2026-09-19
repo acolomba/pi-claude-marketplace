@@ -327,6 +327,36 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
       },
     },
 
+    // LOAD-01: the load-time dependency check disabled a plugin whose declared
+    // dependency has no record in the scope. The token names the condition and
+    // the cause line carries the remedy, which names both parties.
+    "reconcile-dependency-unsatisfied": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "disabled",
+                name: "deploy-kit",
+                version: "1.0.0",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error('Install "secrets-vault@mp" or uninstall "deploy-kit@mp"'),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // RESV-06: the load-time counterpart of the standalone dependency-cascade
     // {dependency failed} row. Reconcile drives ONE orchestrated outcome per
     // declared plugin, so the requesting plugin's own row carries both the

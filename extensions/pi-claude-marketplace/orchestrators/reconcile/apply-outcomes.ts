@@ -25,6 +25,7 @@
 
 import path from "node:path";
 
+import { renderConstraintRange } from "../../domain/dependency-range.ts";
 import {
   DependencyCascadeError,
   PluginShapeError,
@@ -33,6 +34,8 @@ import {
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
+
+import { DEPENDENCY_UNSATISFIED_ROW_REASONS } from "./reconcile.messaging.ts";
 
 import type { UnsatisfiedKind } from "./dependency-verdict.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
@@ -292,11 +295,56 @@ export interface PluginDisabledOutcome extends PluginOutcomeBase {
 export interface PluginDependencyDisabledOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-dependency-disabled";
   readonly version?: string;
-  /** `name@marketplace` of the declared dependency the scope does not satisfy. */
+  /**
+   * The row's brace, stamped by the producer rather than named in the renderer
+   * (`notify.ts` maps an arm to a row and composes no vocabulary of its own).
+   */
+  readonly reasons: readonly ContentReason[];
+  /**
+   * The remedy, naming the dependency and the dependent. It is built here, at
+   * production time, for the same reason `plugin-uninstall-failed` carries its
+   * refusal: the row renders a sentence the orchestrator composed, and the
+   * renderer composes none.
+   *
+   * T-06-01: the message is built from `name@marketplace` keys whose names
+   * passed the declaration token pattern, and it chains NO nested cause, so the
+   * renderer's chain walk -- which does not redact on its own -- has no raw
+   * message behind it to print.
+   */
+  readonly cause: Error;
+}
+
+/**
+ * The remedy sentence for one unsatisfied declaration, in the three shapes
+ * LOAD-01 pins, transcribed from the upstream wording rather than paraphrased.
+ *
+ * T-06-02: the two interpolated keys are built from names that passed
+ * `domain/dependencies.ts`'s token pattern, which admits no control, bidi,
+ * ANSI, whitespace or quote character -- so a hostile plugin name cannot forge
+ * a row here. T-06-05: a declared range is bounded by `renderConstraintRange`,
+ * never sliced by hand.
+ */
+function dependencyRemedy(held: {
+  readonly marketplace: string;
+  readonly plugin: string;
   readonly dependency: string;
-  readonly unsatisfied: UnsatisfiedKind;
-  /** The declared range, present only on the out-of-range kind. */
+  readonly kind: UnsatisfiedKind;
   readonly range?: string;
+}): string {
+  const dependent = `${held.plugin}@${held.marketplace}`;
+  switch (held.kind) {
+    case "missing":
+      return `Install "${held.dependency}" or uninstall "${dependent}"`;
+    case "disabled":
+      return `Enable "${held.dependency}" or uninstall "${dependent}"`;
+    case "out-of-range":
+      // The verdict carries a range on this kind. One that arrives without it
+      // still names the remedy's two parties, rather than rendering an empty
+      // constraint the operator cannot act on.
+      return held.range === undefined
+        ? `Update "${held.dependency}" or uninstall "${dependent}"`
+        : `Update "${held.dependency}" to satisfy ${renderConstraintRange(held.range)}, or uninstall "${dependent}"`;
+  }
 }
 
 /**
@@ -328,9 +376,8 @@ export function dependencyDisabledOutcome(
     marketplace: held.marketplace,
     plugin: held.plugin,
     ...(version !== undefined && { version }),
-    dependency: held.dependency,
-    unsatisfied: held.kind,
-    ...(held.range !== undefined && { range: held.range }),
+    reasons: DEPENDENCY_UNSATISFIED_ROW_REASONS,
+    cause: new Error(dependencyRemedy(held)),
   };
 }
 

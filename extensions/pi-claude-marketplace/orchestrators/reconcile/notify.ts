@@ -862,10 +862,16 @@ function applyPluginOutcomeToBlock(
         status: "disabled",
         name: outcome.plugin,
         ...(outcome.version !== undefined && { version: outcome.version }),
-        // LOAD-01: the disable was carried out in full, but the desired state
-        // -- the plugin loading -- was not reached, which is the warning arm of
-        // the tri-state severity model. The toggle arm above stays `info` and
-        // byte-frozen; the producing orchestrator stamps this one.
+        // LOAD-01: the brace and the remedy are both composed by the producer;
+        // this arm forwards them. The remedy interpolates the dependency and
+        // the dependent, so it rides the cause chain -- no closed-set token and
+        // no frozen trailer can carry an identifier.
+        reasons: outcome.reasons,
+        cause: outcome.cause,
+        // The disable was carried out in full, but the desired state -- the
+        // plugin loading -- was not reached, which is the warning arm of the
+        // tri-state severity model. The toggle arm above stays `info` and
+        // byte-frozen.
         severity: "warning",
         needsReload: true,
       });

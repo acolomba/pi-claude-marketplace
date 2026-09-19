@@ -674,6 +674,18 @@ async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<v
   const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
   const marketplaceRoot = path.join(cwd, "mp-src");
   await mkdir(extensionRoot, { recursive: true });
+  // LOAD-01: the recorded plugin's marketplace declares it. A state whose
+  // marketplace manifest is absent is a scope whose declarations cannot be
+  // established, which the load-time check reports rather than passing over --
+  // so a seed that omits the manifest describes a broken installation instead
+  // of the ordinary one every case here is about.
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({ name: "mp", plugins: [{ name: "plug", source: "./plugins/plug" }] }),
+    "utf8",
+  );
   await writeFile(
     path.join(extensionRoot, "state.json"),
     JSON.stringify({
