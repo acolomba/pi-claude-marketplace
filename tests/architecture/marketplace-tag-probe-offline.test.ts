@@ -1,14 +1,20 @@
 /**
- * TAGS-01 / D-07-05 (07-marketplace-repo-tag-resolution): a POSITIVE proof
- * that the local, network-free tag probe never reaches the network.
+ * TAGS-01 / D-07-05: pins `marketplace-tag-probe.ts`'s DIRECT, brace-form
+ * named-import surface from a `platform/git` specifier to exactly `listTags`
+ * and `resolveTagOid`.
  *
  * `no-orchestrator-network.test.ts` proves the ABSENCE of a named forbidden
- * token; this gate instead pins the EXACT set of symbols
- * `marketplace-tag-probe.ts` imports from `platform/git.ts` to equality. That
- * is stronger than a forbidden-substring scan: a future edit that adds
- * `listRemoteTags`, `clone`, `fetch`, or `resolveRemoteRef` fails on set
- * inequality without this gate having had to enumerate what is forbidden in
- * advance.
+ * token; this gate instead pins the exact set of named imports to equality,
+ * so a future edit that adds `listRemoteTags`, `clone`, `fetch`, or
+ * `resolveRemoteRef` to THAT import clause fails on set inequality without
+ * this gate having had to enumerate what is forbidden in advance.
+ *
+ * What this gate does NOT see: a namespace import (`import * as git from
+ * "../../platform/git.ts"`) alongside the named clause, a dynamic
+ * `import("../../platform/git.ts")`, or a network reach through any OTHER
+ * module this file imports (e.g. `dependency-tag-probe.ts`, `clone-cache.ts`)
+ * -- it is a regex over one file's one import clause, not a transitive
+ * import-graph walk.
  *
  * The companion assertion pins `domain/release-tag.ts` to zero imports from
  * `platform/` at all, which is what keeps the shared release-tag selection
