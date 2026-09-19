@@ -4,17 +4,17 @@ milestone: v1.20
 milestone_name: transitive-dependencies
 current_phase: 06
 current_phase_name: Load-time dependency check and allowed uninstall
-status: executing
-stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-09-19T02:35:31.862Z"
+status: verifying
+stopped_at: Completed 06-04-PLAN.md
+last_updated: "2026-09-19T02:56:46.192Z"
 last_activity: 2026-09-18
 last_activity_desc: Phase 06 execution started
-state_head: 96e923a6520ff1ef621d791ce083d52dccd3de51
+state_head: 975f3f12422495df32c7e38f1e0b3f3d5d2e3006
 progress:
   total_phases: 12
   completed_phases: 5
   total_plans: 26
-  completed_plans: 25
+  completed_plans: 26
   percent: 42
 ---
 
@@ -38,7 +38,18 @@ under `.planning/milestones/v1.19-*`.
 
 Phase: 06 (Load-time dependency check and allowed uninstall) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
+
+All four plans are executed. LOAD-01, LOAD-02 and LOAD-03 are closed in
+`REQUIREMENTS.md`. PRUNE-05 stays in the record with a pointer naming LOAD-03,
+Phase 6, and which halves of D-05-14..16 survive; the supersession record D-06-07
+required is `06-04-SUMMARY.md`. `PRUNE-GUARD-MR-01` is re-triaged and still open
+as a reporting question, and `PENDING-VERDICT-01` is new and unclaimed — `/claude:plugin
+pending` still previews an enable the load-time check will undo. The phase's one
+open verification item is runtime UAT: three plans each recorded a
+`manual_procedural` coverage entry at `status: unknown`, because nothing
+automated proves Pi's own resource view follows the disable and the one-pass
+lift in a live session.
 
 **Phases 6-12 were added on 2026-09-18** from
 `.planning/HANDOFF-upstream-dependency-parity.md`, after Phases 1-5 shipped as
@@ -513,6 +524,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 06 P01 | 100 min | 3 tasks | 32 files |
 | Phase 06 P02 | 165min | 3 tasks | 24 files |
 | Phase 06 P03 | 45min | 3 tasks | 20 files |
+| Phase 06 P04 | 20min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -776,6 +788,10 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: D-06-18: a declarer the same --prune run sweeps is filtered out of the surviving set by code; the shared snapshot does not already exclude it
 - [Phase 06]: D-06-19: the reconcile uninstall-failure cause field survives the retirement because it also carries the D-05-07 unreadable-declarer refusal
 - [Phase 06]: D-06-20: the uninstalled row gains a cause trailer, on the precedent LOAD-01 set for the disabled row
+- [Phase 06]: D-06-22: the load-time-check prose lands after the pruning section, so the removal section's see-the-next-section pointer stays correct
+- [Phase 06]: D-06-23: docs/dependency-resolution.md was re-triaged against 06-03's edit, not rewritten; only the new section and one cross-reference are this plan's
+- [Phase 06]: D-06-24: PRUNE-GUARD-MR-01 keeps its heading while its body records the guard is retired, because three historical records address it by that heading
+- [Phase 06]: D-06-25: the pending-preview gap got a BACKLOG carrier (PENDING-VERDICT-01) rather than a fourth summary note
 
 ### Pending Todos
 
@@ -867,7 +883,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-03-PLAN.md
+**Stopped at:** Completed 06-04-PLAN.md
 
 **Resume file:** None
 `HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
@@ -879,7 +895,7 @@ carried-notes block under `<specifics>`.
 
 **Read beside it:** `.planning/phases/04-install-provenance/04-CONTEXT.md`
 
-Last session: 2026-09-19T02:35:31.645Z
+Last session: 2026-09-19T02:56:45.979Z
 resumed a paused Phase 4 discussion, answered its two open questions (the
 config-write reversal lands entirely in Phase 4 in a fixed order; reconcile
 keeps sweeping genuine orphans with one exemption), wrote `04-CONTEXT.md` and

@@ -311,7 +311,7 @@ Plans:
 3. `uninstall <plugin>` removes a plugin other installed plugins in the scope still declare; the row names the dependents, and each dependent is reported unsatisfied at the next load. The reload-path refusal goes with it. `--prune` semantics are unchanged. (LOAD-03)
 4. PRUNE-05's refusal (`assertNoDependents`, D-05-14..16), its `dependents remain` row and the `docs/dependency-resolution.md` §138 "documents this for `disable`; this extension applies it to `uninstall`" sentences are retired, with a decision record superseding D-05-14; BACKLOG `PRUNE-GUARD-MR-01` is re-triaged, since a `marketplace remove` that leaves dependents dangling is now reported by the check rather than needing a guard.
 
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans executed
 
 Plans:
 **Wave 1**
@@ -328,7 +328,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 06-04-PLAN.md — Documentation, the supersession record, and the backlog re-triage
+- [x] 06-04-PLAN.md — Documentation, the supersession record, and the backlog re-triage
 
 **Notes.** The design point to settle in discuss, before any row is worded: how the "disabled as a consequence" state is persisted so reconcile respects it. The config cannot carry it (D-04-02: the config names only what the user asked for, and enablement there is the user's word), so it is a record-level flag or reason that `orchestrators/reconcile/plan.ts` reads when it buckets enables — and the lift condition (dependency installed, enabled, in range) is the same predicate the check runs. `recordedVersionSatisfies` in `domain/dependency-range.ts` already answers the range half. Interaction with the update family: Phase 10 keeps an update from moving a dependency out of range, so the range arm here fires only on hand-edited records and pre-Phase-10 updates. Owners: `orchestrators/reconcile/plan.ts` / `apply.ts` (new outcome kinds), `orchestrators/plugin/uninstall.ts`, `shared/notification-types.ts` + `notify-reasons.ts` + `docs/output-catalog.md` + `tests/architecture/catalog-uat` for the tokens.
 
@@ -502,7 +502,7 @@ plugin names — so plan these phases with the UI gate skipped.
 | 3. Dependency resolution | v1.20 | 7/7 | Complete    | 2026-09-15 |
 | 4. Install provenance | v1.20 | 6/6 | Complete    | 2026-09-16 |
 | 5. Prune on uninstall | v1.20 | 3/3 | Complete    | 2026-09-16 |
-| 6. Load-time dependency check and allowed uninstall | v1.20 | 3/4 | In Progress|  |
+| 6. Load-time dependency check and allowed uninstall | v1.20 | 4/4 | In Progress|  |
 | 7. Marketplace-repository tag resolution for path-source dependencies | v1.20 | 0/0 | Not started | — |
 | 8. Enablement parity for dependencies | v1.20 | 0/0 | Not started | — |
 | 9. Reload installs missing declared dependencies | v1.20 | 0/0 | Not started | — |
