@@ -30,7 +30,7 @@ The string shape carries a caret range only, because `@^` is the marker that sep
 
 The object shape accepts four keys. Only `name` is required. `marketplace`, `version` and `sha` are optional. The `sha` field holds a git object name. The constraint rules below describe the `version` field.
 
-This extension resolves a dependency by version range only. It does not pin a dependency to a commit. So an element that carries a `sha` is refused, and the install fails with `{invalid manifest}` (D-03-36). It is not ignored. If the extension ignored it, the dependency would install at whatever commit its marketplace names while the plugin author believed it was pinned.
+This extension resolves a dependency by version range only. It does not pin a dependency to a commit. Claude Code accepts a `sha` field on a dependency element and pins the dependency to that commit. This extension refuses the field instead, and the install fails with `{invalid manifest}` (D-03-36). It is not ignored. If the extension ignored it, the dependency would install at whatever commit its marketplace names while the plugin author believed it was pinned.
 
 Every field must match a character rule.
 
@@ -62,6 +62,8 @@ A version constraint follows the semantic versioning range syntax. This extensio
 
 Matching follows the standard semantic versioning rules, including prerelease precedence. So `1.0.0-beta.1` comes before `1.0.0`. A range that names no prerelease does not match a prerelease version: `^1.0.0` accepts `1.4.2` and rejects `1.4.2-rc.1`.
 
+See [How a constrained dependency is resolved](#how-a-constrained-dependency-is-resolved) for what a constraint is evaluated against, which now differs by source kind.
+
 ## How several declarations combine
 
 Two plugins can both depend on a third one and ask for different versions. This extension then intersects the constraints. The effective constraint accepts only the versions that every declaration accepts.
@@ -81,7 +83,11 @@ If an input passes either limit, this extension refuses it as too complex. It me
 
 If the effective constraint is the wildcard, the dependency installs like any other plugin and nothing extra happens.
 
-If the effective constraint is anything else, this extension reads the tag list of the dependency's source repository over the network. It then pins the install to a tag that satisfies the constraint. This read happens even when a usable copy of the dependency is already in the cache, because the constraint can ask for a different tag than the cached one. This is the one network call that dependency resolution adds (NFR-5, amended by D-03-03).
+If the effective constraint is anything else, this extension reads a tag list and pins the install to a tag that satisfies the constraint. This read happens even when a usable copy of the dependency is already in the cache, because the constraint can ask for a different tag than the cached one.
+
+A dependency whose marketplace entry names a git-backed source (`url`, a git repository plus a subdirectory, or `owner/repo`) has a source repository of its own, and this extension reads that repository's tag list over the network. This is the one network call that dependency resolution adds (NFR-5, amended by D-03-03).
+
+A dependency whose marketplace entry is a relative path has no source repository of its own. Most marketplaces declare their plugins this way, for example `"source": "./plugins/formatter"`, so this is the common case and not a corner case. This extension instead reads the tag list of the marketplace repository itself, from the local clone already on disk, with no network call at all.
 
 The tag must be named `<plugin-name>--v<version>`, for example `formatter--v1.2.0`.
 
@@ -89,13 +95,15 @@ A dependency pinned this way records the version the tag names, for example `1.2
 
 This name comes from Anthropic's own plugin-release tooling. Git does not define it, and most repositories outside Anthropic do not use it. Such a repository reports no matching tag. Today that is the expected answer for most third-party sources. It is not a defect in the repository or in this extension.
 
-### Only a git-backed dependency can be version-constrained
+### When no tag satisfies the constraint
 
-Release tags live in a git repository. So a dependency can satisfy a real constraint only when its marketplace entry names a git-backed source: `url`, a git repository plus a subdirectory, or `owner/repo`.
+This fallback applies only to a path-source dependency. A git-backed dependency with no satisfying tag still fails the install with `{no matching version}` (see [Why a dependency can fail](#why-a-dependency-can-fail)); a path source falls back instead, because its tags live in the marketplace clone you already have on disk, not in a separate repository that might simply be unreachable or untagged.
 
-A `path` source has no tag list at all. Most marketplaces use path sources, for example `"source": "./plugins/formatter"`, so this is the common case and not a corner case. Such a dependency reports `{no matching version}` for every constraint except the wildcard. To depend on a path-source plugin, declare it with no version.
+The highest tag that satisfies the constraint is selected, and the plugin's files come from the marketplace repository at that tag, not from the marketplace's current checkout. When no tag satisfies -- including when the marketplace clone carries no tags at all, or none named for that plugin -- the install goes ahead anyway, with the marketplace's current copy. The dependency's row reads `{dependency current copy}`, and the install succeeds.
 
-The already-installed check does not have this limit, and the difference is deliberate. That check reads the version already in the record and never asks a repository for anything, so a path-source dependency you installed earlier can satisfy a constraint that the same plugin, not yet installed, cannot. The two answers come from two different questions: what is on disk now, and what could be fetched.
+Claude Code reports this same fallback as a warning. This extension reports it as a plain note instead, because nothing has gone wrong at install time; the [load-time check](#the-load-time-check) is what decides whether anything is actually wrong. That check runs on every reload afterward: it disables the dependent if the fallback copy really is out of range, and lifts the disable again once it is not (D-07-03).
+
+The already-installed check does not depend on any of this. It reads the version already in the record and never asks a repository for anything, so a path-source dependency you installed earlier can satisfy a constraint that the same plugin, not yet installed, cannot. The two answers come from two different questions: what is on disk now, and what could be fetched.
 
 ## What happens to a dependency you already installed
 
