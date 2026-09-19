@@ -11,7 +11,7 @@ orchestrators/reconcile/
 ├── README.md            # this file
 ├── types.ts             # ReconcilePlan + per-bucket record types
 ├── apply-outcomes.ts    # PerEntryOutcome union consumed by the apply cascade
-├── plan.ts              # planReconcile(merged, state, scope) -- the pure planner
+├── plan.ts              # planReconcile(merged, state, scope, verdict) -- the pure planner
 ├── notify.ts            # pure plan-to-message + outcomes-to-message projections
 ├── preview.ts           # /claude:plugin preview orchestrator (read-only)
 └── apply.ts             # load-time apply orchestrator (drives the mutators)
@@ -19,13 +19,13 @@ orchestrators/reconcile/
 
 ## Purity discipline
 
-`plan.ts` exports `planReconcile(MergedConfig, ExtensionState, Scope) -> ReconcilePlan`. It is a pure bidirectional 7-bucket diff: no `node:fs`, no `platform/git`, no `notify`, no `saveState` / `saveConfig` / `atomicWriteJson` / `withStateGuard` / `withLockedStateTransaction`. The architecture grep-gate at `tests/architecture/reconcile-planner-purity.test.ts` enforces this structurally; the gate operates on the comment-stripped source so the header docstring may legally mention forbidden symbols without self-invalidation.
+`plan.ts` exports `planReconcile(MergedConfig, ExtensionState, Scope, ScopeSatisfactionVerdict) -> ReconcilePlan`. It is a pure bidirectional 8-bucket diff: no `node:fs`, no `platform/git`, no `notify`, no `saveState` / `saveConfig` / `atomicWriteJson` / `withStateGuard` / `withLockedStateTransaction`. The architecture grep-gate at `tests/architecture/reconcile-planner-purity.test.ts` enforces this structurally; the gate operates on the comment-stripped source so the header docstring may legally mention forbidden symbols without self-invalidation.
 
 `notify.ts` exports two pure projections: `buildReconcilePreviewNotification(plans) -> CascadeNotificationMessage` for the preview surface and `buildReconcileAppliedCascade(outcomes) -> ReconcileAppliedCascadeMessage` for the apply surface. Neither projection calls `ctx.ui.notify`; `preview.ts` and `apply.ts` own the single sanctioned `notify()` call per invocation (IL-2).
 
-## The 7-bucket model
+## The 8-bucket model
 
-The pure planner partitions the union of declared (from `MergedConfig`) and recorded (from `ExtensionState`) entries into seven action buckets:
+The pure planner partitions the union of declared (from `MergedConfig`) and recorded (from `ExtensionState`) entries into eight action buckets:
 
 1. `marketplacesToAdd` -- declared but not recorded (or recorded only under a different name with a matching source -- see CR-01 source-claim below).
 2. `marketplacesToRemove` -- recorded but not declared (and not source-claimed by a differently-named declared entry).
@@ -33,7 +33,8 @@ The pure planner partitions the union of declared (from `MergedConfig`) and reco
 4. `pluginsToUninstall` -- recorded but not declared. Plugins under a marketplace in `marketplacesToRemove` are EXCLUDED here -- the apply path's marketplace-remove cascade unstages them, so listing each as a separate uninstall would double-bill the work.
 5. `pluginsToEnable` -- declared+enabled AND recorded-but-disabled. The bucket IS populated: `plan.ts` imports `state-io.ts::isRecordedButDisabled`, which reads the record's explicit `enabled: false` boolean and NOTHING else (ENBL-05), and the `plan.ts::classifyDeclaredPlugin` recorded-and-declared-enabled branch pushes onto the bucket when the marker matches. The predicate is deliberately single-axis. The five `resources.*` arrays are not read: emptiness is a consequence of disabling, never the marker. `compatibility.installable` is not read either: availability is an ORTHOGONAL axis, so a soft-degraded record the user disabled is still recognized as disabled, and a degraded record the user never disabled is still materialized.
 6. `pluginsToDisable` -- declared with `enabled === false` but still recorded with populated artifacts.
-7. `sourceMismatches` -- four per-cause planner diagnostics on one bucket (`source-mismatch`, `unknown-stored`, `dangling-reference`, `malformed-plugin-key`). Each variant carries only the fields its diagnostic actually renders; subjects derive via `types.ts::plannedSourceMismatchSubject` (marketplace name for the first three causes; raw config key for malformed-plugin-key).
+7. `pluginsToDependencyDisable` -- recorded plugins the load-time check holds down, because a dependency they declare is not satisfied in the same scope (LOAD-01). The satisfaction verdict is an INPUT (D-06-04): establishing it reads plugin manifests, which the planner may not do, so the apply path's read pass computes it inside its own locked closure and passes it in. A caller that omits the argument holds no plugin down.
+8. `sourceMismatches` -- four per-cause planner diagnostics on one bucket (`source-mismatch`, `unknown-stored`, `dangling-reference`, `malformed-plugin-key`). Each variant carries only the fields its diagnostic actually renders; subjects derive via `types.ts::plannedSourceMismatchSubject` (marketplace name for the first three causes; raw config key for malformed-plugin-key).
 
 Disabled-entry rule: `enabled === false` excludes the plugin from the desired-materialised set; `enabled === true` and `enabled === undefined` include (D-04 consume-time default -- the absent field includes, only explicit `false` excludes).
 
@@ -41,11 +42,13 @@ Plugin keys are flat-keyed `"${plugin}@${marketplace}"` and parsed by `lastIndex
 
 ## Sentinel contracts
 
-The planner and the apply path coordinate via one structural sentinel, plus one explicit schema field that REPLACED an earlier structural marker:
+The planner and the apply path coordinate via one structural sentinel, plus two explicit schema fields. The first of the two REPLACED an earlier structural marker:
 
 - **Explicit `enabled` field for "currently disabled" (ENBL-02 / ENBL-05).** A recorded plugin is currently disabled iff its `enabled` boolean is `false`. `state-io.ts::isRecordedButDisabled` is the single definition and reads that field and NOTHING else; a drift gate asserts no second definition exists, in any spelling.
 
   This replaced a two-axis structural marker that intersected all-empty `resources.*` with `compatibility.installable === true`. Neither conjunct survives, and the reasons are worth keeping: emptiness is a CONSEQUENCE of disabling rather than the marker, and `installable` tracks availability, which is ORTHOGONAL to user intent. The `installable === true` half was not merely redundant but actively wrong -- a partial install always persists `installable: false`, so the guard excluded exactly the disabled-partial record and no other shape, making every disabled-detection path silently take the wrong branch (ENBL-04 violation, repaired by ENBL-05..09).
+
+- **Explicit `dependencyDisabled` field for "the load-time check put this record down" (LOAD-01 / D-06-02).** The apply path stamps it on every record the dependency-disable step itself flipped from enabled to disabled, which keeps the check's consequence distinguishable from the user's own `disable`. The marker leaves the record when the hold lifts: the enable branch re-runs the install ledger's state phase, and that phase REBUILDS the record from a literal that does not name the field (`install-outcome.ts`). Exactly two readers decide anything on it: `plan.ts::isAlreadyDependencyDisabled`, which is the only place it decides an ACTION (it keeps a record that is already down out of the bucket, so an unchanged tree re-drives nothing), and `dependency-verdict.ts::isDisabledIndependently`, which uses it to tell a dependency the check itself disabled from one the user disabled. `state-io.ts` only serializes it.
 
 - **Tri-state `samePlannedSource` sentinel.** `domain/source.ts` exports `samePlannedSource(record, declared): "same" | "different" | "unknown-stored"`. Earlier shapes returned `boolean | "unknown-stored"`, which a careless `if (...)` treated as a source match for the `"unknown-stored"` arm. The tri-state cut closes that footgun: every consumer (`plan.ts::diffMarketplaces`, `plan.ts::findRecordedBySource`) must switch on the explicit literal.
 
@@ -66,8 +69,11 @@ The planner and the apply path coordinate via one structural sentinel, plus one 
    ```text
    uninstall plugins -> remove marketplaces -> add marketplaces
                      -> install plugins -> enable plugins -> disable plugins
+                     -> dependency-disable plugins (LOAD-01)
                      -> source-mismatch rows (report-only)
    ```
+
+   The dependency-disable step runs after both toggle steps, so a record the config already disabled answers it idempotently and keeps its marker off (D-06-02). Its own marker write is wrapped in `runScopeIsolated`, so a transient lock or permission failure becomes one `state.json` row instead of discarding the cascade for both scopes.
 
    Each driven orchestrator is invoked with `notifications: { mode: "orchestrated" }` and wrapped in a try/catch ladder that translates typed marketplace/plugin throws (`StateLockHeldError`, `PluginShapeError`, the file-shape probe classifiers) into closed-set `Reason` tokens BEFORE they reach the projection (T-55-02-02: raw `error.message` never reaches the rendered output).
 

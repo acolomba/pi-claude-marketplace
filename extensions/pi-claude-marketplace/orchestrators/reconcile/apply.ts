@@ -11,10 +11,10 @@
 //     surrounding lock covers the cross-process concurrent-first-load race;
 //     the D-13 existsSync gate is observed at the transaction's internal
 //     loadState BEFORE the closure runs), then `loadMergedScopeConfig(loc)`,
-//     then the CFG-03 invalid-arm check, then
-//     `planReconcile(merged, state, scope)`. Closure returns the plan +
-//     invalid blocks; lock releases on closure return; state.json bytes +
-//     mtime stay untouched.
+//     then the CFG-03 invalid-arm check, then the LOAD-01 satisfaction
+//     verdict, then `planReconcile(merged, state, scope, verdict)`. Closure
+//     returns the plan + invalid blocks; lock releases on closure return;
+//     state.json bytes + mtime stay untouched.
 //   - Per-scope APPLY PASS with NO outer lock (CR-01 lesson preserved): for
 //     each scope's plan (skip when invalid-config aborted the read pass),
 //     drive the five orchestrators (uninstallPlugin, removeMarketplace,
@@ -22,6 +22,7 @@
 //     each step's precondition is established by the previous step:
 //
 //        uninstall -> remove -> add -> install -> enable -> disable
+//                  -> dependency-disable (LOAD-01)
 //                  -> source-mismatch (report-only)
 //
 //     Each driven orchestrator call passes `notifications: { mode:
