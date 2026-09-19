@@ -1277,7 +1277,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("D-05-16: dropping a plugin and its dependent together converges in ONE pass when the dependency is recorded first, as the install cascade writes it", async (t) => {
+  test("LOAD-03: dropping a plugin and its dependent together converges in ONE pass in plain record order", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "uninstall-refused-order");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -1299,7 +1299,11 @@ describe("applyReconcile", () => {
           rawSource: marketplaceRoot,
           manifestPath,
           marketplaceRoot,
-          // D-03-07 post-order: the dependency's record precedes its declarer's.
+          // D-03-07 post-order: the dependency's record precedes its declarer's,
+          // which used to be the ORDER THAT REFUSED -- removing `orphan` first
+          // met a still-recorded `keeper` that declared it. LOAD-03 removed
+          // that refusal, so the bucket now settles in plain record order and
+          // the retry loop has nothing to retry.
           plugins: {
             orphan: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "orphan") }),
             keeper: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "keeper") }),
@@ -1320,8 +1324,8 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ○ keeper v1.0.0 (uninstalled)\n" +
           "  ○ orphan v1.0.0 (uninstalled)\n" +
+          "  ○ keeper v1.0.0 (uninstalled)\n" +
           "\n" +
           "Reconcile: 2 successes",
       },
@@ -1417,6 +1421,129 @@ describe("applyReconcile", () => {
         (call) => `${call.arguments[0].plugin}@${call.arguments[0].marketplace}`,
       ),
       ["gone@mp", "orphan@mp"],
+    );
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-05-16 / D-05-07: a removal refused by an unreadable declarer is retried after the rest of the pass and then settles", async (t) => {
+    // arrange: `stray` is recorded but its marketplace does not declare it, so
+    // its declarations cannot be established. Uninstalling `victim` therefore
+    // refuses (the walk excludes only the target), while uninstalling `stray`
+    // itself succeeds -- which is exactly the ordering the retry loop exists
+    // for. It is the D-05-07 refusal that keeps the loop earning its keep now
+    // that LOAD-03 retired the dependents refusal.
+    const { cwd, project } = await createHermeticScopes(t, "uninstall-refused-unreadable");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      victim: { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({ marketplaces: { mp: { source: marketplaceRoot } }, plugins: {} }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            victim: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "victim") }),
+            stray: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "stray") }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ○ stray v1.0.0 (uninstalled)\n" +
+          "  ○ victim v1.0.0 (uninstalled)\n" +
+          "\n" +
+          "Reconcile: 2 successes",
+      },
+    ]);
+    assert.deepStrictEqual(
+      Object.keys((await loadState(project.extensionRoot)).marketplaces["mp"]?.plugins ?? {}),
+      [],
+    );
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-05-16 / D-05-07: a refusal that no retry can settle reports its own row and removes nothing", async (t) => {
+    // arrange: `stray` is recorded, unreadable AND still declared in the
+    // config, so it is never uninstalled and never becomes readable. The
+    // refusal it causes therefore survives every retry, which is the arm that
+    // reports the refused outcomes instead of retrying them again.
+    const { cwd, project } = await createHermeticScopes(t, "uninstall-refused-terminal");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      victim: { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "stray@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            victim: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "victim") }),
+            stray: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "stray") }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some plugin operations have failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ victim (failed) {unreadable}\n" +
+          "    cause: cannot read the dependencies of stray@mp: not declared by its marketplace\n" +
+          // `stray` itself is declared but its marketplace does not list it, so
+          // its own re-resolution fails on the same unreadable manifest entry.
+          "  ⊘ stray (failed) {unreadable}\n" +
+          "\n" +
+          "Reconcile: 2 failures",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(
+      Object.keys((await loadState(project.extensionRoot)).marketplaces["mp"]?.plugins ?? {}),
+      ["victim", "stray"],
     );
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();

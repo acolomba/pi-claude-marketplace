@@ -229,6 +229,10 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
     "dependency pruned",
     "dependency unsatisfied",
     "dependency version unsatisfied",
+    // D-06-06: uninstall's consequence marker for a removal that went through
+    // while other installed plugins still declared the target. It rides the
+    // success row; the dependents ride the cause line, never the token.
+    "dependents unsatisfied",
   ];
 
   // act

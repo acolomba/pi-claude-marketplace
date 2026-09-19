@@ -148,6 +148,20 @@ export const REASONS = [
   // the token names the CONDITION and the remedy, which interpolates both the
   // dependency and the range, rides the row's cause line.
   "dependency version unsatisfied",
+  // LOAD-03 / D-06-06: the plugin the command just removed was still declared
+  // as a dependency by other installed plugins in the same scope. The removal
+  // WENT THROUGH -- that is upstream's behaviour, and it is what breaks the
+  // deadlock two plugins declaring each other would otherwise create -- so the
+  // token rides the SUCCESS row and states the consequence rather than a
+  // refusal: each dependent named beside it becomes unsatisfied at the next
+  // load, where the check disables it and names the remedy. `dependency
+  // unsatisfied` cannot carry this: that token's subject is the DEPENDENT the
+  // check just disabled, and this one's subject is the DEPENDENCY that just
+  // left, reported on the row of the command that removed it. The dependent
+  // keys ride the row's cause line rather than the token, on the `dependency
+  // cycle` precedent -- a token names one fact about one plugin, and the list
+  // of who needed it is a fact about several.
+  "dependents unsatisfied",
 ] as const;
 
 /** Literal union derived from the closed reason vocabulary. */
@@ -305,6 +319,18 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
   readonly version?: string;
   readonly scope?: Scope;
   readonly reasons?: readonly ContentReason[];
+  /**
+   * LOAD-03: the `name@marketplace` keys of the plugins that still declared
+   * the removed plugin, on the `PluginDisabledMessage.cause` precedent. It is
+   * the ONE thing this field carries: the plain uninstall, the `--prune`
+   * member rows and the reconcile-driven removal all omit it and keep their
+   * byte-frozen rows.
+   *
+   * It rides the cause chain because the sentence interpolates plugin
+   * identifiers, and the cause chain is the only channel in this grammar that
+   * legally interpolates one.
+   */
+  readonly cause?: Error;
 }
 
 /** Disabled plugin row. */

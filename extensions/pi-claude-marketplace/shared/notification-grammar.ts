@@ -671,9 +671,10 @@ export function renderUninstalledRow(
     renderScopeBracket(p.scope, mpScope),
     renderVersion(p.version),
     "(uninstalled)",
-    // WR-06: the row's only reason today is uninstall's `data kept` disposition,
-    // and the field is optional, so a producer with nothing to report composes
-    // the brace-less row. Both soft-dep flags stay hard-coded false: MSG-SD-3
+    // WR-06 / LOAD-03: the row's reasons are uninstall's `data kept`
+    // disposition and its `dependents unsatisfied` consequence, and the field
+    // is optional, so a producer with nothing to report composes the
+    // brace-less row. Both soft-dep flags stay hard-coded false: MSG-SD-3
     // keeps `{requires pi-...}` markers off uninstall rows by construction (the
     // variant has no `dependencies` field to read).
     composeReasons(p.reasons, false, false, probe),
@@ -1630,7 +1631,19 @@ export function composePluginLinesWith(
   // precedent; what is new is that this one interpolates, which is exactly why
   // it rides the cause chain rather than a fifth frozen trailer constant. Every
   // other `(disabled)` producer omits `cause` and keeps its byte-frozen row.
-  if (p.status === "failed" || p.status === "manual recovery" || p.status === "disabled") {
+  //
+  // LOAD-03: `uninstalled` joins them for the same reason on the opposite side
+  // of the outcome. The one uninstalled row that names anything names the
+  // plugins that still declared what it removed, which interpolates a list of
+  // identifiers, so it takes the same channel. Every other `uninstalled`
+  // producer -- the plain removal, the `--prune` member rows, the
+  // reconcile-driven removal -- omits `cause` and keeps its byte-frozen row.
+  if (
+    p.status === "failed" ||
+    p.status === "manual recovery" ||
+    p.status === "disabled" ||
+    p.status === "uninstalled"
+  ) {
     const trailer = renderIndentedCauseChain(p.cause, "    ");
     if (trailer !== "") {
       lines.push(trailer);

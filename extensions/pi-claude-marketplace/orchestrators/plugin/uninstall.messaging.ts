@@ -23,12 +23,14 @@ import type { Scope } from "../../shared/types.ts";
  */
 
 /**
- * D-05-14 / D-05-15 / D-05-11: the command-private reasons owned by
+ * D-05-14 / D-05-15 / D-05-11 / D-06-06: the command-private reasons owned by
  * `uninstall`. `dependents remain` is meaningful only to the uninstall flow (a
  * plugin that cannot be removed because another installed plugin in the scope
- * still declares it); `dependency pruned` marks a dependency record `--prune`
- * swept out after the named plugin. Both are members of the closed `Reason`
- * set; the pin below rejects a typo at compile time.
+ * still declares it); `dependents unsatisfied` marks a removal that went
+ * through while other installed plugins still declared the target; `dependency
+ * pruned` marks a dependency record `--prune` swept out after the named
+ * plugin. All are members of the closed `Reason` set; the pin below rejects a
+ * typo at compile time.
  */
 // `_ReasonInSet<R extends Reason> = R` pins the private reasons to the closed
 // `Reason` set as it derives `UninstallPrivateReason`: an out-of-set literal
@@ -36,7 +38,9 @@ import type { Scope } from "../../shared/types.ts";
 // no runtime footprint.
 type _ReasonInSet<R extends Reason> = R;
 // fallow-ignore-next-line private-type-leak -- `_ReasonInSet` is the compile-time membership guard; exporting that helper would widen the command's public reason vocabulary.
-export type UninstallPrivateReason = _ReasonInSet<"dependency pruned" | "dependents remain">;
+export type UninstallPrivateReason = _ReasonInSet<
+  "dependency pruned" | "dependents remain" | "dependents unsatisfied"
+>;
 
 /**
  * uninstall's private status set: a success `uninstalled` row or a `failed`
@@ -103,6 +107,83 @@ export function composePrunedRow(args: {
     name: args.plugin,
     version: args.version,
     reasons: args.keepData ? PRUNED_ROW_REASONS_DATA_KEPT : PRUNED_ROW_REASONS,
+    severity: "info",
+    needsReload: true,
+  };
+}
+
+/** WR-06 / DATA-01: the named plugin's row under `--keep-data` alone. */
+const UNINSTALLED_ROW_REASONS_DATA_KEPT = ["data kept"] as const satisfies readonly ContentReason[];
+
+/**
+ * LOAD-03 / D-06-06: the named plugin's row when other installed plugins in
+ * the scope still declared it. The removal went through, so the token rides
+ * the success row and states the consequence; the dependents themselves ride
+ * the row's cause line.
+ */
+const UNINSTALLED_ROW_REASONS_DEPENDENTS = [
+  "dependents unsatisfied",
+] as const satisfies readonly ContentReason[];
+
+/**
+ * LOAD-03 / D-05-09: both axes on one row. The order is contractual, and it is
+ * the pruned row's rule applied to this row's pair: the brace says what the
+ * removal means for the rest of the scope before it says what was left on
+ * disk, because the disposition is a footnote about the plugin that went while
+ * the dependents are the fact the operator has to act on.
+ */
+const UNINSTALLED_ROW_REASONS_DEPENDENTS_DATA_KEPT = [
+  "dependents unsatisfied",
+  "data kept",
+] as const satisfies readonly ContentReason[];
+
+/**
+ * The named plugin's brace, composed from the two INDEPENDENT axes the row can
+ * carry: what the removal means for the rest of the scope, and what it left on
+ * disk. Neither replaces the other, and with neither present the row keeps its
+ * byte-frozen brace-less form (D-02-01).
+ */
+function uninstalledRowReasons(
+  keepData: boolean,
+  hasDependents: boolean,
+): readonly ContentReason[] | undefined {
+  if (hasDependents) {
+    return keepData
+      ? UNINSTALLED_ROW_REASONS_DEPENDENTS_DATA_KEPT
+      : UNINSTALLED_ROW_REASONS_DEPENDENTS;
+  }
+
+  return keepData ? UNINSTALLED_ROW_REASONS_DATA_KEPT : undefined;
+}
+
+/**
+ * The named plugin's success row. It stays an `info` row with its reload stamp
+ * whatever the brace says: the uninstall was carried out in full, which is the
+ * info arm of the severity model. The consequence for the dependents is not
+ * this row's subject -- it is reported at the next load, at warning, by the
+ * load-time check, which gives each dependent its own row and the full remedy.
+ *
+ * T-06-01 / T-06-02: the cause line is built from `name@marketplace` keys
+ * whose names already passed `domain/dependencies.ts`'s token pattern, and no
+ * nested cause is chained behind it, so no absolute path and no control
+ * character can reach the rendered sentence.
+ */
+export function composeUninstalledRow(args: {
+  readonly plugin: string;
+  readonly version?: string;
+  readonly keepData: boolean;
+  /** Sorted `name@marketplace` keys of the records that still declare the plugin. */
+  readonly dependents: readonly string[];
+}): PluginUninstalledMessage {
+  const hasDependents = args.dependents.length > 0;
+  const reasons = uninstalledRowReasons(args.keepData, hasDependents);
+  return {
+    status: "uninstalled",
+    name: args.plugin,
+    ...(args.version !== undefined && { version: args.version }),
+    ...(reasons !== undefined && { reasons }),
+    ...(hasDependents && { cause: new Error(`required by ${args.dependents.join(", ")}`) }),
+    // D-03/D-06: realized uninstall transition -> info, reloads Pi resources.
     severity: "info",
     needsReload: true,
   };

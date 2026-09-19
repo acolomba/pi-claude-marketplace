@@ -5,10 +5,11 @@
 // Composition (D-09):
 //   withLockedStateTransaction(locations, async (tx) => {
 //     PU-5 silent converge: if record absent, set alreadyGone=true and return (NO save)
-//     D-05-14 dependents guard: throw UninstallRefusedError if any OTHER record
-//       in this scope declares the target, or if some record's declarations
-//       cannot be read (D-05-07) -- BEFORE the cascade, so nothing leaves disk;
-//       the guard hands back the declaration index and the walked records
+//     D-06-06 declarer read: collect the OTHER records in this scope that
+//       declare the target, and throw UninstallRefusedError only when some
+//       record's declarations cannot be read (D-05-07) -- BEFORE the cascade,
+//       so a refusal leaves nothing off disk; the read hands back the
+//       declaration index, the walked records and the dependent keys
 //     outcome = await cascadeUnstagePlugin(plugin, marketplace, locations, installed)
 //     if (!outcome.ok) throw outcome.cause  // PU-7 propagation; state record retained
 //     delete state.marketplaces[mp].plugins[plugin]
@@ -39,8 +40,8 @@
 // orchestrators/marketplace/shared.ts ONLY (NOT from add.ts/remove.ts/etc).
 //
 // NFR-5 (no network): this file MUST NOT import platform/git or DEFAULT_GIT_OPS.
-// The architectural source-grep test gates this file by name: the D-05-14
-// guard composes an offline manifest read through `dependency-index.ts`
+// The architectural source-grep test gates this file by name: the D-06-06
+// declarer read composes an offline manifest read through `dependency-index.ts`
 // (memoized manifest cache + warm clone cache only, D-05-06), and that leaf is
 // gated beside it.
 //
@@ -86,6 +87,7 @@ import {
 import {
   composePrunedRow,
   composeRemovalBlocks,
+  composeUninstalledRow,
   UNINSTALL_CONTEXT,
 } from "./uninstall.messaging.ts";
 
@@ -209,13 +211,16 @@ export type UninstallHooksRouting = Pick<
 >;
 
 /**
- * D-05-14 / D-05-07: the uninstall was REFUSED inside the locked transaction
- * before anything left disk -- either another installed plugin in the scope
- * still declares the target (`dependents remain`) or some other record's
- * declarations could not be established (`unreadable`: the D-47-B "we could
- * not read on-disk state" member, because the row's subject is the target and
- * the declarer's own read-failure token would make a false claim about the
- * target's manifest; the cause line names the declarer).
+ * D-05-07: the uninstall was REFUSED inside the locked transaction before
+ * anything left disk, because some other record's declarations could not be
+ * established. The reason is `unreadable`: the D-47-B "we could not read
+ * on-disk state" member, because the row's subject is the target and the
+ * declarer's own read-failure token would make a false claim about the
+ * target's manifest; the cause line names the declarer.
+ *
+ * D-06-06 narrowed this class to that ONE outcome. A target other installed
+ * plugins still declare is no longer refused -- it is removed, and the
+ * dependents are named on the success row.
  *
  * `message` IS the rendered cause line, so it carries only `name@marketplace`
  * keys, field paths or already-redacted text -- never an absolute path -- and
@@ -235,35 +240,48 @@ export class UninstallRefusedError extends Error {
 /** The guard's successful walk: the declaration index and the records it indexed. */
 type DeclarationSnapshot = Extract<ScopeDeclarationIndexResult, { readonly ok: true }>;
 
+/** The declaration walk, plus the records that declare the plugin being removed. */
+interface DeclarerReading {
+  readonly snapshot: DeclarationSnapshot;
+  /** Sorted `name@marketplace` keys, empty when nothing declares the target. */
+  readonly dependents: readonly string[];
+}
+
 /**
- * D-05-14 / PRUNE-05: refuse to remove `key` while any other record in this
- * scope's state declares it, and refuse (D-05-07) while any other record's
- * declarations cannot be established. Runs INSIDE the locked transaction over
- * `tx.state`, so the declarer set and the removal decision share one snapshot
- * under one cross-process lock (T-05-03). Returns the walk on the way
- * through, because the orphan sweep that follows the removal consumes both
- * its index and its candidate records.
+ * D-06-06 / D-05-07: read who declares `key` in this scope, and refuse only
+ * when that question cannot be answered. Runs INSIDE the locked transaction
+ * over `tx.state`, so the declarer set and the removal decision share one
+ * snapshot under one cross-process lock (T-05-03). Returns the walk on the way
+ * through, because the orphan sweep that follows the removal consumes both its
+ * index and its candidate records.
+ *
+ * A non-empty dependent set no longer blocks the removal (D-06-06, superseding
+ * D-05-14): it is reported on the success row, and each dependent is disabled
+ * with a remedy at the next load by the load-time check. Who counts as a
+ * declarer is unchanged -- a disabled record still holds its declarations
+ * (D-05-04), only this scope is consulted (D-05-05), and every declaration is
+ * read offline (D-05-06).
  */
-async function assertNoDependents(args: {
+async function readDeclarers(args: {
   readonly state: ExtensionState;
   readonly locations: ScopedLocations;
   readonly key: string;
-}): Promise<DeclarationSnapshot> {
+}): Promise<DeclarerReading> {
   const result = await buildScopeDeclarationIndex({
     state: args.state,
     locations: args.locations,
     exclude: args.key,
   });
+  // D-05-07 fail-closed, PRESERVED by D-06-06 and NOT to be relaxed alongside
+  // the dependents refusal it used to sit beside: an unreadable record is
+  // never read as "declares nothing". Without this throw a damaged manifest
+  // would turn into a silent removal of something another plugin needs, which
+  // is the one outcome this read must never produce.
   if (!result.ok) {
     throw new UninstallRefusedError("unreadable", result.cause.message);
   }
 
-  const dependents = findDependents(args.key, result.index);
-  if (dependents.length > 0) {
-    throw new UninstallRefusedError("dependents remain", `required by ${dependents.join(", ")}`);
-  }
-
-  return result;
+  return { snapshot: result, dependents: findDependents(args.key, result.index) };
 }
 
 const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
@@ -276,12 +294,14 @@ const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
 };
 
 /**
- * Narrow an Error thrown out of the locked transaction -- a D-05-14 refusal,
- * a lock already held, or a `cascadeUnstagePlugin` failure (PU-7 propagation
- * path) -- to a closed-set Reason for `PluginFailedMessage.reasons`. Mirrors
- * the typed-cause dispatch in `orchestrators/marketplace/remove.ts`: the
- * refusal carries its own token and is classified FIRST (before the errno
- * fallthrough could read it as `unreadable`), then instanceof
+ * Narrow an Error thrown out of the locked transaction -- a D-05-07
+ * unreadable-declarer refusal, a lock already held, or a
+ * `cascadeUnstagePlugin` failure (PU-7 propagation path) -- to a closed-set
+ * Reason for `PluginFailedMessage.reasons`. Mirrors the typed-cause dispatch
+ * in `orchestrators/marketplace/remove.ts`: the refusal carries its own token
+ * and is classified FIRST (before the errno fallthrough could read it as
+ * `unreadable`, which would lose the distinction between a declarer that
+ * could not be read and a cascade that could not remove), then instanceof
  * `StateLockHeldError`, then instanceof `AgentsUnstageFailureError`, then
  * `NodeJS.ErrnoException.code`, permissive fallback last. Closed-set Reasons
  * live in `shared/notification-types.ts::REASONS`.
@@ -323,7 +343,7 @@ function narrowCascadeFailure(cause: Error): ContentReason {
 
 /**
  * RECON-03: route a transaction-failure cause -- a cascade failure, a held
- * lock, or a D-05-14 refusal -- to either the typed orchestrated outcome or
+ * lock, or a D-05-07 refusal -- to either the typed orchestrated outcome or
  * the standalone notify() row. The refusal renders through this one channel
  * on purpose: the version, the cause line (the error's message), error
  * severity and the absent reload hint are already what a refused row needs.
@@ -592,8 +612,8 @@ async function removeDependencyMember(args: {
  * still an installed declarer. So `gone` carries only the keys that actually
  * left the snapshot, and each key is re-checked against it just before its
  * removal: every holder of a key precedes it in the order, so the check is
- * exact when it runs, and a key only a failed member holds is kept -- exactly
- * as the guard would refuse it if named directly (D-05-14).
+ * exact when it runs, and a key only a failed member holds is kept -- the
+ * sweep removes only what nothing remaining declares (D-05-01).
  */
 async function sweepOrphans(args: {
   readonly snapshot: DeclarationSnapshot;
@@ -627,6 +647,27 @@ async function sweepOrphans(args: {
   }
 
   return pruned;
+}
+
+/**
+ * D-06-06: the declarers that are still installed once the sweep has run. The
+ * declarer set is read from the snapshot BEFORE the removal, and `--prune`
+ * then removes members out of that same snapshot, so a record that both
+ * declares the target and is itself swept would otherwise be named on the row
+ * as needing something while it was going in the very same command. A member
+ * that FAILED to remove keeps its record and stays a declarer, which is why
+ * the filter reads `removed` rather than membership in the sweep.
+ */
+function survivingDependents(
+  dependents: readonly string[],
+  members: readonly PrunedMember[],
+): readonly string[] {
+  const gone = new Set(
+    members
+      .filter((member) => member.removed)
+      .map((member) => `${member.plugin}@${member.marketplace}`),
+  );
+  return gone.size === 0 ? dependents : dependents.filter((key) => !gone.has(key));
 }
 
 /**
@@ -859,34 +900,6 @@ function emitAlreadyGone(args: {
 }
 
 /**
- * The standalone success row.
- *
- * WR-06 / DATA-01: the data disposition rides the PRESERVING branch only. The
- * deleting branch keeps the byte-frozen bare row (D-02-01), and stamping the
- * reversible outcome is what makes the irreversible one legible: a brace-less
- * `(uninstalled)` row now means the data tree went with the plugin.
- *
- * The orchestrated arm carries no counterpart. Reconcile has no command line to
- * spell a disposition with, so it always takes the deletion default and has
- * nothing to report (D-02-01 keeps its outcome contract unchanged).
- */
-function buildUninstalledRow(
-  plugin: string,
-  removedVersion: string | undefined,
-  keepData: boolean,
-): PluginUninstalledMessage {
-  return {
-    status: "uninstalled",
-    name: plugin,
-    ...(removedVersion !== undefined && { version: removedVersion }),
-    ...(keepData && { reasons: ["data kept"] as const }),
-    // D-03/D-06: realized uninstall transition -> info, reloads Pi resources.
-    severity: "info",
-    needsReload: true,
-  };
-}
-
-/**
  * RECON-03: returns `UninstallPluginOutcome` in orchestrated mode and
  * `undefined` in standalone mode (after firing the standalone notify()).
  *
@@ -989,6 +1002,10 @@ async function uninstallPluginWithTransaction(
   // D-05-10: the sweep's members, carried out of the closure for the
   // post-commit cleanup and the report.
   const prunedMembers: PrunedMember[] = [];
+  // D-06-06: the records that still declared the removed plugin, hoisted out
+  // of the guard closure the way `removedVersion` already is, so the success
+  // emission can name them without re-reading state outside the lock.
+  let dependents: readonly string[] = [];
   const keepData = opts.keepData ?? false;
 
   try {
@@ -1034,13 +1051,16 @@ async function uninstallPluginWithTransaction(
 
       removedVersion = installed.version;
 
-      // D-05-14 / D-05-07: the dependents guard runs AFTER the two converge
-      // arms (a target that is not installed is `{not installed}`, never a
-      // refusal -- D-05-03) and BEFORE the cascade, so a refusal throws out of
-      // the guard with nothing removed and NO save. The walk it hands back is
-      // the sweep's input (same snapshot, same lock).
+      // D-06-06 / D-05-07: the declarer read runs AFTER the two converge arms
+      // (a target that is not installed is `{not installed}`, never a refusal
+      // -- D-05-03) and BEFORE the cascade, so the declarer set and the
+      // removal decision share one snapshot, and an unreadable declarer throws
+      // out of the closure with nothing removed and NO save. The walk it hands
+      // back is the sweep's input (same snapshot, same lock).
       const primaryKey = `${plugin}@${marketplace}`;
-      const snapshot = await assertNoDependents({ state, locations, key: primaryKey });
+      const reading = await readDeclarers({ state, locations, key: primaryKey });
+      const snapshot = reading.snapshot;
+      dependents = reading.dependents;
 
       // PU-1 ordering enforced INSIDE cascadeUnstagePlugin (D-03:
       // skills -> commands -> agents -> mcp).
@@ -1096,6 +1116,7 @@ async function uninstallPluginWithTransaction(
             transaction,
           })),
         );
+        dependents = survivingDependents(dependents, prunedMembers);
       }
 
       // WR-04: explicit save on the mutating success arm, ONCE, after the
@@ -1108,8 +1129,8 @@ async function uninstallPluginWithTransaction(
     });
   } catch (err) {
     // PU-7 propagation: AG-5 (or any other cascade failure), a held lock, or
-    // the D-05-14 refusal thrown by the dependents guard. State was NOT saved
-    // (guard contract); the plugin record stays intact for retry.
+    // the D-05-07 refusal thrown when a declarer could not be read. State was
+    // NOT saved (guard contract); the plugin record stays intact for retry.
     const cause = err as Error;
     return emitCascadeFailure({
       ctx,
@@ -1204,6 +1225,12 @@ async function uninstallPluginWithTransaction(
   // closure ran). The renderer suppresses the `v<version>` token on
   // undefined or empty anyway, so the empty-version edge case is handled
   // structurally.
+  // D-06-06: the orchestrated arm deliberately carries NO dependents. On the
+  // reconcile surface the same fact is already reported, and reported better:
+  // the load-time check gives each unsatisfied dependent its own row with the
+  // full remedy naming both parties, where a dependents brace here would only
+  // list names. Carrying both would state one fact twice inside a single
+  // emission, which the single-emit discipline treats as a defect.
   if (orchestrated) {
     return {
       status: "uninstalled",
@@ -1215,7 +1242,12 @@ async function uninstallPluginWithTransaction(
   // PRUNE-04: the cardinality stays `single` with members present -- the user
   // named ONE plugin, and the pruned rows are that uninstall's consequence
   // (the install cascade's precedent), so no tally line joins the report.
-  const uninstalledRow = buildUninstalledRow(plugin, removedVersion, keepData);
+  const uninstalledRow = composeUninstalledRow({
+    plugin,
+    ...(removedVersion !== undefined && { version: removedVersion }),
+    keepData,
+    dependents,
+  });
   notifyWithContext(
     ctx,
     pi,

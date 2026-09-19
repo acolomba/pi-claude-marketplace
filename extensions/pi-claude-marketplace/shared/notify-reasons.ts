@@ -5,14 +5,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notification-types.ts` as the SINGLE source of catalog truth (OUT-08: the 58-entry
+ * in `notification-types.ts` as the SINGLE source of catalog truth (OUT-08: the 59-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 58-entry set.
+ * 59-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
@@ -50,7 +50,11 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * unsatisfied`, the same check's marker for a dependency that IS recorded and
  * enabled at a version outside the declared range -- a second token rather than
  * a second use of the first, because the two remedies differ in kind and a grep
- * for either must not return the other (57 to 58).
+ * for either must not return the other (57 to 58). LOAD-03 added `dependents
+ * unsatisfied`, uninstall's marker for a removal that went through while other
+ * installed plugins still declared the target -- a state change reported on the
+ * success row, so it joins the command-private reasons and not the idempotent
+ * group (58 to 59).
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -325,6 +329,15 @@ type CommandPrivateReason =
   // carries the range the recorded version missed. NOT idempotent, for the same
   // reason its neighbour is not.
   | "dependency version unsatisfied"
+  // LOAD-03 / D-06-06: uninstall's consequence marker, owned by
+  // `orchestrators/plugin/uninstall.messaging.ts`. Other installed plugins in
+  // the scope still declared the plugin this command removed, and the removal
+  // went through; the keys of those plugins ride the cause line. NOT
+  // idempotent: a record left the state. It is the one member of this group
+  // that rides a SUCCESS row -- the command was carried out in full, and the
+  // consequence it names is reported at the next load, at warning, by the
+  // check that owns `dependency unsatisfied`.
+  | "dependents unsatisfied"
   | "stale clone"
   | "duplicate name"
   | "marketplace not added"

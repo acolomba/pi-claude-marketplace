@@ -83,7 +83,11 @@ test("OUT-08: REASONS is the closed 58-entry reason set", () => {
   // declared range. It mirrors upstream's second error code, and the split is
   // what keeps the two remedies apart: one says install or enable the missing
   // thing, the other says move an existing thing's version (57 -> 58).
-  assert.equal(REASONS.length, 58);
+  // LOAD-03 / D-06-06: +1 for `dependents unsatisfied` -- uninstall's marker
+  // for a removal that went through while other installed plugins still
+  // declared the target. It rides the SUCCESS row and names a consequence the
+  // next load reports, where `dependents remain` named a refusal (58 -> 59).
+  assert.equal(REASONS.length, 59);
 });
 
 test("SNM-02: STATUS_TOKENS is the closed 24-entry token set", () => {

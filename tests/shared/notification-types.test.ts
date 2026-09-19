@@ -77,6 +77,7 @@ const EXPECTED_REASONS = [
   "dependency pruned",
   "dependency unsatisfied",
   "dependency version unsatisfied",
+  "dependents unsatisfied",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [
