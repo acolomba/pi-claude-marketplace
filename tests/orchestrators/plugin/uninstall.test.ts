@@ -4832,15 +4832,20 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// D-05-14 / D-05-15 / PRUNE-05: the dependents guard.
+// LOAD-03 / D-06-06 / D-06-07: the declarer snapshot.
 //
-// `uninstall X` in a scope where any other installed record declares X is
-// REFUSED inside the locked transaction: nothing is removed, the row carries
-// `{dependents remain}` at error severity with no reload hint, and the cause
-// line names the dependents as sorted `name@marketplace` keys. A disabled
-// declarer holds (D-05-04), only the target scope's own state is consulted
-// (D-05-05), every declaration is read offline (D-05-06), and an unreadable
-// declarer refuses rather than risks (D-05-07).
+// `uninstall X` in a scope where other installed records declare X PROCEEDS.
+// The record and its artifacts go, and the success row names the dependents
+// the next load will report unsatisfied: an `(uninstalled)` row at info
+// severity with its reload stamp -- the command was carried out in full -- and
+// the dependent keys ride the cause line as sorted `name@marketplace` keys.
+//
+// Who counts as a declarer is unchanged from Phase 5: a disabled declarer
+// still holds (D-05-04), only the target scope's own state is consulted
+// (D-05-05), and every declaration is read offline (D-05-06). The
+// fail-closed refusal survives too (D-05-07): a declarer whose declarations
+// cannot be established still REFUSES and still removes nothing. Only the
+// found-dependents outcome moved from refuse to proceed.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface DeclaringSeed {
@@ -4938,6 +4943,86 @@ async function seedDeclaringMarketplace(
   await seedDeclaringScope(locations, { [marketplace]: plugins }, cwd);
 }
 
+interface DependentsCase {
+  readonly title: string;
+  readonly plugins: Readonly<Record<string, DeclaringSeed>>;
+  readonly expectedCause: string;
+  /** The `plugin@marketplace` keys still recorded after the target is removed. */
+  readonly remaining: readonly string[];
+}
+
+const DEPENDENTS_CASES: readonly DependentsCase[] = [
+  {
+    title: "LOAD-03: the uninstall proceeds while one installed plugin declares the target",
+    plugins: { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
+    expectedCause: "required by app@mp",
+    remaining: ["app@mp"],
+  },
+  {
+    title: "LOAD-03: two dependents are named on the cause line in sorted key order",
+    plugins: {
+      helper: {},
+      zeta: { dependencies: ["helper@mp"] },
+      alpha: { dependencies: ["helper"] },
+    },
+    expectedCause: "required by alpha@mp, zeta@mp",
+    remaining: ["alpha@mp", "zeta@mp"],
+  },
+  {
+    title: "D-05-04: a DISABLED installed plugin still holds the target",
+    plugins: { helper: {}, app: { dependencies: ["helper"], enabled: false } },
+    expectedCause: "required by app@mp",
+    remaining: ["app@mp"],
+  },
+];
+
+for (const { title, plugins, expectedCause, remaining } of DEPENDENTS_CASES) {
+  test(title, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-dependents-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedDeclaringMarketplace(locations, "mp", plugins, cwd);
+        const dataDir = await locations.pluginDataDir("mp", "helper");
+        await mkdir(dataDir, { recursive: true });
+        await writeFile(path.join(dataDir, "session"), "gone\n");
+        const { ctx, pi, notifications } = makeCtx();
+
+        // act
+        const outcome = await uninstallWithFreshOwner({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "helper",
+        });
+
+        // assert
+        assert.equal(outcome, undefined);
+        assert.deepStrictEqual(notifications, [
+          {
+            message:
+              `● mp [project]\n` +
+              `  ○ helper v0.0.1 (uninstalled) {dependents unsatisfied}\n` +
+              `    cause: ${expectedCause}\n\n` +
+              `/reload to pick up changes`,
+          },
+        ]);
+        assert.deepStrictEqual(Object.keys(await recordedInventory(locations)).sort(), [
+          ...remaining,
+        ]);
+        assert.deepStrictEqual(await stagedSkills(locations, ["mp-helper-skill"]), {
+          "mp-helper-skill": false,
+        });
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 interface RefusalCase {
   readonly title: string;
   readonly plugins: Readonly<Record<string, DeclaringSeed>>;
@@ -4946,28 +5031,6 @@ interface RefusalCase {
 }
 
 const REFUSAL_CASES: readonly RefusalCase[] = [
-  {
-    title: "D-05-14: uninstall is refused while one installed plugin declares the target",
-    plugins: { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
-    expectedRow: "⊘ helper v0.0.1 (failed) {dependents remain}",
-    expectedCause: "required by app@mp",
-  },
-  {
-    title: "D-05-15: two dependents are named on the cause line in sorted key order",
-    plugins: {
-      helper: {},
-      zeta: { dependencies: ["helper@mp"] },
-      alpha: { dependencies: ["helper"] },
-    },
-    expectedRow: "⊘ helper v0.0.1 (failed) {dependents remain}",
-    expectedCause: "required by alpha@mp, zeta@mp",
-  },
-  {
-    title: "D-05-04: a DISABLED installed plugin still holds the target",
-    plugins: { helper: {}, app: { dependencies: ["helper"], enabled: false } },
-    expectedRow: "⊘ helper v0.0.1 (failed) {dependents remain}",
-    expectedCause: "required by app@mp",
-  },
   {
     title: "D-05-07: a record its marketplace manifest does not list refuses the uninstall",
     plugins: { helper: {}, other: { listed: false } },
@@ -5029,6 +5092,39 @@ for (const { title, plugins, expectedRow, expectedCause } of REFUSAL_CASES) {
   });
 }
 
+test("LOAD-03: an installed sibling that declares nothing leaves the bare uninstalled row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-no-declarer-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(locations, "mp", { helper: {}, app: {} }, cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "helper",
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ○ helper v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(await recordedInventory(locations), { "app@mp": ["mp-app-skill"] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("D-05-05: a declarer installed only in the OTHER scope is not consulted", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-dependents-other-scope-"));
@@ -5072,7 +5168,7 @@ test("D-05-05: a declarer installed only in the OTHER scope is not consulted", a
   });
 });
 
-test("D-05-14: the orchestrated refusal returns the typed failed outcome and emits nothing", async () => {
+test("D-06-06: the orchestrated uninstall of a still-declared plugin succeeds and names no dependents", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-dependents-orchestrated-"));
     try {
@@ -5099,15 +5195,55 @@ test("D-05-14: the orchestrated refusal returns the typed failed outcome and emi
 
       // assert
       assert.deepStrictEqual(outcome, {
+        status: "uninstalled",
+        name: "helper",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(await recordedInventory(locations), { "app@mp": ["mp-app-skill"] });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-05-07: the orchestrated unreadable-declarer refusal still returns the typed failed outcome", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-unreadable-orchestrated-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { helper: {}, other: { listed: false } },
+        cwd,
+      );
+      const { ctx, pi, notifications } = makeCtx();
+      const cause = "cannot read the dependencies of other@mp: not declared by its marketplace";
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "helper",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
         status: "failed",
-        reason: "dependents remain",
-        error: new UninstallRefusedError("dependents remain", "required by app@mp"),
-        cause: "required by app@mp",
+        reason: "unreadable",
+        error: new UninstallRefusedError("unreadable", cause),
+        cause,
       });
       assert.deepStrictEqual(notifications, []);
       assert.deepStrictEqual(await recordedInventory(locations), {
         "helper@mp": ["mp-helper-skill"],
-        "app@mp": ["mp-app-skill"],
+        "other@mp": ["mp-other-skill"],
       });
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -5542,9 +5678,9 @@ test("D-05-03: --prune on a plugin that is not installed prunes nothing, even wi
   });
 });
 
-test("D-05-03: a refused uninstall with --prune prunes nothing, even with an orphan in the scope", async () => {
+test("LOAD-03: --prune sweeps the orphan while the surviving declarer is named on the primary row", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-refused-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-dependents-"));
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -5554,7 +5690,6 @@ test("D-05-03: a refused uninstall with --prune prunes nothing, even with an orp
         { x: {}, keeper: { dependencies: ["x"] }, o: { provenance: "dependency" } },
         cwd,
       );
-      const stateBefore = await readFile(locations.stateJsonPath);
       const { ctx, pi, notifications } = makeCtx();
 
       // act
@@ -5573,17 +5708,63 @@ test("D-05-03: a refused uninstall with --prune prunes nothing, even with an orp
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n" +
-            "  ⊘ x v0.0.1 (failed) {dependents remain}\n" +
-            "    cause: required by keeper@mp",
-          severity: "error",
+            "● mp [project]\n" +
+            "  ○ x v0.0.1 (uninstalled) {dependents unsatisfied}\n" +
+            "    cause: required by keeper@mp\n" +
+            "  ○ o v0.0.1 (uninstalled) {dependency pruned}\n\n" +
+            "/reload to pick up changes",
         },
       ]);
-      assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
+      assert.deepStrictEqual(Object.keys(await recordedInventory(locations)), ["keeper@mp"]);
       assert.deepStrictEqual(await stagedSkills(locations, ["mp-x-skill", "mp-o-skill"]), {
-        "mp-x-skill": true,
-        "mp-o-skill": true,
+        "mp-x-skill": false,
+        "mp-o-skill": false,
       });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LOAD-03: a declarer the same --prune run sweeps is not named as a surviving dependent", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-adjacent-"));
+    try {
+      // arrange: `dep` declares the target AND is a dependency record nothing
+      // else declares, so the sweep removes it in the same locked snapshot the
+      // declarer set was read from.
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { x: {}, dep: { provenance: "dependency", dependencies: ["x"] } },
+        cwd,
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ○ x v0.0.1 (uninstalled)\n" +
+            "  ○ dep v0.0.1 (uninstalled) {dependency pruned}\n\n" +
+            "/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(await recordedInventory(locations), {});
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

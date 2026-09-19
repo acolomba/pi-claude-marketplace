@@ -1206,9 +1206,9 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("D-05-16: a config-driven uninstall of a still-declared plugin is refused on every pass and converges once the dependent is gone", async (t) => {
+  test("LOAD-03: a config-driven uninstall of a still-declared plugin proceeds and the next pass holds the dependent down", async (t) => {
     // arrange
-    const { cwd, project } = await createHermeticScopes(t, "uninstall-refused");
+    const { cwd, project } = await createHermeticScopes(t, "uninstall-still-declared");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
       keeper: { skill: "clean", dependencies: ["orphan"] },
       orphan: { skill: "clean" },
@@ -1238,54 +1238,41 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(3, 6);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 4);
     const { gitOps, clonedUrls } = createOfflineGitOps();
-    const refusal = {
-      message:
-        "A plugin operation has failed.\n" +
-        "\n" +
-        "● mp [project]\n" +
-        "  ⊘ orphan (failed) {dependents remain}\n" +
-        "    cause: required by keeper@mp\n" +
-        "\n" +
-        "Reconcile: 1 failure",
-      severity: "error",
-    };
 
     // act
     await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
     const afterFirst = await loadState(project.extensionRoot);
     await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
     const afterSecond = await loadState(project.extensionRoot);
-    await writeUnder(
-      project.configJsonPath,
-      configBytes({ marketplaces: { mp: { source: marketplaceRoot } }, plugins: {} }),
-    );
-    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
     await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
-      refusal,
-      refusal,
       {
         message:
-          "● mp [project]\n" +
-          "  ○ keeper v1.0.0 (uninstalled)\n" +
-          "  ○ orphan v1.0.0 (uninstalled)\n" +
+          "● mp [project]\n" + "  ○ orphan v1.0.0 (uninstalled)\n" + "\n" + "Reconcile: 1 success",
+      },
+      {
+        message:
+          "A plugin operation needs attention.\n" +
           "\n" +
-          "Reconcile: 2 successes",
+          "● mp [project]\n" +
+          "  ◍ keeper v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "orphan@mp" or uninstall "keeper@mp"\n' +
+          "\n" +
+          "Reconcile: 1 warning",
+        severity: "warning",
       },
     ]);
-    assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["mp"]?.plugins ?? {}), [
-      "keeper",
-      "orphan",
-    ]);
-    assert.deepStrictEqual(afterSecond, afterFirst);
-    assert.deepStrictEqual(
-      Object.keys((await loadState(project.extensionRoot)).marketplaces["mp"]?.plugins ?? {}),
-      [],
-    );
+    // LOAD-03: the removal happened on the FIRST pass -- the reconcile-driven
+    // uninstall no longer refuses -- and the row that reports the consequence
+    // for `keeper` is the load-time check's, on the next pass (D-06-06).
+    assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["mp"]?.plugins ?? {}), ["keeper"]);
+    assert.equal(afterFirst.marketplaces["mp"]?.plugins["keeper"]?.enabled, true);
+    assert.equal(afterSecond.marketplaces["mp"]?.plugins["keeper"]?.enabled, false);
+    assert.equal(afterSecond.marketplaces["mp"]?.plugins["keeper"]?.dependencyDisabled, true);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
@@ -1344,9 +1331,9 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("D-05-16 / PU-5: a converged entry beside a refusal is settled in one pass", async (t) => {
+  test("D-05-16 / PU-5: a converged entry beside a still-declared removal is settled in one pass", async (t) => {
     // arrange
-    const { cwd, project } = await createHermeticScopes(t, "uninstall-converged-beside-refused");
+    const { cwd, project } = await createHermeticScopes(t, "uninstall-converged-beside-declared");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
       gone: { skill: "clean" },
       keeper: { skill: "clean", dependencies: ["orphan"] },
@@ -1418,19 +1405,12 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "A plugin operation has failed.\n" +
-          "\n" +
-          "● mp [project]\n" +
-          "  ⊘ orphan (failed) {dependents remain}\n" +
-          "    cause: required by keeper@mp\n" +
-          "\n" +
-          "Reconcile: 1 failure",
-        severity: "error",
+          "● mp [project]\n" + "  ○ orphan v1.0.0 (uninstalled)\n" + "\n" + "Reconcile: 1 success",
       },
     ]);
     assert.deepStrictEqual(
       Object.keys((await loadState(project.extensionRoot)).marketplaces["mp"]?.plugins ?? {}),
-      ["orphan", "keeper"],
+      ["keeper"],
     );
     assert.deepStrictEqual(
       uninstallPlugin.mock.calls.map(
