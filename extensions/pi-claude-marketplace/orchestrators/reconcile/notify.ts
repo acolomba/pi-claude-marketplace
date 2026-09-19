@@ -31,6 +31,14 @@
 //   pluginsToEnable       -> child row { status: "will enable" }
 //                            (recorded-but-disabled detection via the
 //                            empty-resources marker)
+//   pluginsToDependencyDisable
+//                         -> child row { status: "will disable" }, folded into
+//                            the pluginsToDisable loop (LOAD-01). The planner's
+//                            claimedPluginKeys keeps the two buckets from
+//                            naming one plugin twice. The bucket is empty for a
+//                            caller that passes no satisfaction verdict, which
+//                            is every caller today (PENDING-VERDICT-01 /
+//                            D-06-25).
 //
 // The empty-plan case is handled by the orchestrator (`pending.ts`) which
 // switches on `plans.every(isPlanEmpty)` and emits a free-form advisory line
@@ -282,9 +290,10 @@ function forceInstallKey(scope: Scope, marketplace: string, plugin: string): str
  * default), never a crash on this read-only surface (IL-2).
  *
  * D-66-05: there is deliberately NO `will partially update` analog. The
- * `ReconcilePlan` has no update bucket (install/uninstall/enable/disable +
- * marketplace add/remove + sourceMismatches only), so only `pluginsToInstall`
- * is resolved here -- the will-partially-update token is vacuous.
+ * `ReconcilePlan` has no update bucket (install/uninstall/enable/disable/
+ * dependency-disable + marketplace add/remove + sourceMismatches only), so only
+ * `pluginsToInstall` is resolved here -- the will-partially-update token is
+ * vacuous.
  */
 export async function resolvePendingForceInstalls(
   plans: readonly ReconcilePlan[],
@@ -349,6 +358,14 @@ export async function resolvePendingForceInstalls(
  *   - pluginsToEnable       -> child row { status: "will enable" }
  *                              (recorded-but-disabled detection via the
  *                              empty-resources marker)
+ *   - pluginsToDependencyDisable
+ *                           -> child row { status: "will disable" }, folded
+ *                              into the pluginsToDisable loop (LOAD-01). The
+ *                              planner's claimedPluginKeys keeps the two
+ *                              buckets from naming one plugin twice. The
+ *                              bucket is empty for a caller that passes no
+ *                              satisfaction verdict, which is every caller
+ *                              today (PENDING-VERDICT-01 / D-06-25).
  *
  * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
  * case-insensitive, project-before-user secondary). Plugin rows within a
@@ -386,9 +403,9 @@ export function buildReconcilePendingNotification(
       // ahead of time by resolvePendingForceInstalls). The modifier renders
       // `(will partially install)` in place of `(will install)`. D-66-05: there is
       // deliberately NO `will partially update` analog -- the ReconcilePlan has no
-      // update bucket (only install/uninstall/enable/disable + marketplace
-      // add/remove + sourceMismatches), so no partial-update row is ever
-      // constructed here; the will-partially-update token is vacuous.
+      // update bucket (only install/uninstall/enable/disable/dependency-disable +
+      // marketplace add/remove + sourceMismatches), so no partial-update row is
+      // ever constructed here; the will-partially-update token is vacuous.
       const force = forceInstallKeys.has(forceInstallKey(o.scope, o.marketplace, o.plugin));
       block.plugins.push({
         status: "will install",
