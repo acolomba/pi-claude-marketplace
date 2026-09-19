@@ -98,6 +98,7 @@ function member(overrides: Partial<CascadeInstalledRow> = {}): CascadeInstalledR
     version: "2.1.0",
     declaresAgents: false,
     declaresMcp: false,
+    fellBackToCurrentCopy: false,
     ...overrides,
   };
 }
@@ -295,6 +296,71 @@ describe("composeCascadeMemberRows", () => {
         "/reload to pick up changes",
       ].join("\n"),
     });
+  });
+
+  test("TAGS-02 / D-07-03 a member that fell back to the marketplace's current copy names it as a quiet note", () => {
+    // arrange
+    const rows = composeCascadeMemberRows({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootRow: ROOT_ROW,
+      installed: [member({ fellBackToCurrentCopy: true })],
+      alreadyInstalled: [],
+      probe: PROBE_BOTH_LOADED,
+    });
+
+    // act
+    const installedRow = rows.find((row) => row.name === "formatter@tools");
+    const rootRow = rows.find((row) => row.name === "helper");
+
+    // assert: an exact array equality, so a failure-class token riding along
+    // would fail the assertion.
+    assert.ok(installedRow?.status === "installed");
+    assert.deepStrictEqual(installedRow.reasons, ["dependency current copy"]);
+    assert.strictEqual(installedRow.severity, "info");
+    // the requesting plugin's own row is untouched.
+    assert.deepStrictEqual(rootRow, ROOT_ROW);
+  });
+
+  test("TAGS-02 / D-07-03 the fallback never overwrites a genuine companion degradation", () => {
+    // arrange: the SAME fallback member also declares an unloaded companion --
+    // the fallback names itself without raising or lowering the companion
+    // probe's own verdict.
+    const rows = composeCascadeMemberRows({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootRow: ROOT_ROW,
+      installed: [member({ fellBackToCurrentCopy: true, declaresAgents: true })],
+      alreadyInstalled: [],
+      probe: PROBE_NO_AGENTS,
+    });
+
+    // act
+    const installedRow = rows.find((row) => row.name === "formatter@tools");
+
+    // assert
+    assert.ok(installedRow?.status === "installed");
+    assert.deepStrictEqual(installedRow.reasons, ["dependency current copy"]);
+    assert.strictEqual(installedRow.severity, "warning");
+  });
+
+  test("TAGS-02 a member that did NOT fall back renders byte-identically to today's row", () => {
+    // arrange
+    const rows = composeCascadeMemberRows({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootRow: ROOT_ROW,
+      installed: [member({ fellBackToCurrentCopy: false })],
+      alreadyInstalled: [],
+      probe: PROBE_BOTH_LOADED,
+    });
+
+    // act
+    const installedRow = rows.find((row) => row.name === "formatter@tools");
+
+    // assert: no `reasons` key at all -- not an empty array.
+    assert.ok(installedRow?.status === "installed");
+    assert.ok(!("reasons" in installedRow), "a non-fallback row carries no reasons key");
   });
 });
 

@@ -5,14 +5,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notification-types.ts` as the SINGLE source of catalog truth (OUT-08: the 58-entry
+ * in `notification-types.ts` as the SINGLE source of catalog truth (OUT-08: the 59-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 58-entry set.
+ * 59-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
@@ -53,7 +53,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * success row, so it joins the command-private reasons and not the idempotent
  * group (57 to 58), and D-06-07 RETIRED uninstall's refusal marker in the same
  * edit, because the refusal it named no longer happens: the two cancel, which
- * is why the count ends this phase where the sentence before it left off. The
+ * is why the count ends this phase where the sentence before it left off.
+ * TAGS-02 / D-07-03 added `dependency current copy`, install-cascade's marker
+ * for a path-source member whose marketplace clone carried no tag satisfying
+ * its constraint: the install proceeds with the marketplace's CURRENT copy
+ * instead of failing (58 to 59). It joins the command-private reasons rather
+ * than the idempotent group because it is not a no-op -- a copy installed --
+ * and it is not a failure reason because the install succeeded; the
+ * constraint itself is left for the LOAD-01 load-time check to enforce. The
  * arithmetic above is renumbered rather than annotated with the gap, so the
  * next member to join does not inherit one.
  *
@@ -296,6 +303,13 @@ type CommandPrivateReason =
   | "dependency marketplace not added"
   | "dependency cycle"
   | "dependency failed"
+  // TAGS-02 / D-07-03: no marketplace tag satisfied the path-source
+  // dependency's constraint, so the marketplace's CURRENT copy installed
+  // instead of failing. Rides an `installed` row because the install
+  // succeeded -- it is not an idempotent reason (a copy installed, which is
+  // not a no-op) and not a failure reason (nothing failed). The constraint
+  // itself is checked at load by the LOAD-01 check, not here.
+  | "dependency current copy"
   // RESV-05: the skipped dependency is recorded but disabled, so it
   // materialized nothing. It joins `already installed` in the same brace and
   // is what lifts that row off the benign-skip default.

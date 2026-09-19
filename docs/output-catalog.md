@@ -819,6 +819,20 @@ A plugin operation needs attention.
 
 The same skip, against a record that is DISABLED. A disabled record keeps its inventory and its name reservations while its artifacts are off disk (ENBL-18 / ENBL-19), so `helper` installed against a dependency that materialized nothing. `{already installed}` alone is in the idempotent closed set and would report that as fine; `{dependency disabled}` names it, and `skipSeverity` reads the pair and computes `warning`, which raises the block. The install still stands and the dependency is still untouched -- enablement is never decided on a dependency's behalf (see `docs/plugin-enablement.md`), so the row is the whole remedy and `/claude:plugin enable linter@tools` is the user's move.
 
+### Dependency cascade -- a path-source dependency falls back to the marketplace's current copy (TAGS-02 / D-07-03)
+
+<!-- catalog-state: dependency-cascade-fallback-current-copy -->
+
+```text
+● official [user]
+  ● formatter@tools v2.1.0 (installed) {dependency current copy}
+  ● helper v1.0.0 (installed)
+
+/reload to pick up changes
+```
+
+`formatter` is a PATH-source dependency (declared with a relative `source`, the common case for a marketplace's own plugins) whose marketplace clone carries no release tag satisfying `helper`'s declared constraint. Rather than failing the whole install the way the git-backed arm below does, the cascade installs the marketplace's CURRENT copy instead and names it on the dependency's own row with a quiet `info`-level note (D-07-03) -- a deliberate divergence from upstream, which surfaces this exact fallback as a warning. The constraint itself is left unenforced here: Phase 6's load-time check is what disables `helper` later if the fallback copy turns out to be genuinely out of range. The token rides an `installed` row and never a failure row, because the install DID succeed; it never raises the row's severity on its own, and a member whose companion is unloaded still reports that genuine SEV-01 degradation on top of it.
+
 ### Dependency cascade -- no release tag satisfies the constraint (RESV-03)
 
 <!-- catalog-state: dependency-no-matching-version -->
@@ -832,7 +846,7 @@ Some plugin operations have failed.
   ⊘ helper (failed) {dependency failed}
 ```
 
-The effective constraint is valid and the tag listing was read; nothing in it falls inside the constraint. `{no matching version}` is deliberately distinct from the transport tokens below: it says the listing held nothing usable, not that it could not be read. A source that does not follow Anthropic's `<plugin-name>--v<semver>` release-tag convention reports this, which today is the expected answer for most third-party sources (see `docs/dependency-resolution.md`). The constraint rides the `cause:` trailer bounded by the same renderer every constraint row uses. No reload-hint -- nothing landed, and the cascade rolled back whatever it had already materialized.
+The effective constraint is valid and the tag listing was read; nothing in it falls inside the constraint. `{no matching version}` is deliberately distinct from the transport tokens below: it says the listing held nothing usable, not that it could not be read. This arm is reachable ONLY from a git-backed dependency source: TAGS-02 gives the path-source arm (the state above) a non-failure fallback instead. A git-backed source that does not follow Anthropic's `<plugin-name>--v<semver>` release-tag convention reports this, which today is the expected answer for most third-party git sources (see `docs/dependency-resolution.md`). The constraint rides the `cause:` trailer bounded by the same renderer every constraint row uses. No reload-hint -- nothing landed, and the cascade rolled back whatever it had already materialized.
 
 ### Dependency cascade -- contradictory declarations (RESV-03)
 

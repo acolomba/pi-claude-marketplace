@@ -113,6 +113,15 @@ export interface CascadeInstalledRow {
   readonly version: string;
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
+  /**
+   * TAGS-02: whether this member installed the marketplace's current copy
+   * because no tag satisfied its constraint, rather than a pin.
+   *
+   * REQUIRED, not optional, on the same D-07 rationale as
+   * `CascadeMemberOutcome.fellBackToCurrentCopy`: a hand-built row that omits
+   * it is a compile error rather than a silently unreported fact.
+   */
+  readonly fellBackToCurrentCopy: boolean;
 }
 
 /**
@@ -203,6 +212,11 @@ export function composeCascadeMemberRows(args: {
       name: member.key,
       dependencies: stagedDependencies(member),
       version: member.version,
+      // TAGS-02 / D-07-03: the fallback names itself on the row but never
+      // touches severity -- that stays exactly what `companionSeverity`
+      // computes, so a member with an unloaded companion still reports the
+      // genuine SEV-01 degradation the fallback must not paper over.
+      ...(member.fellBackToCurrentCopy && { reasons: ["dependency current copy"] as const }),
       severity: companionSeverity(
         { declaresAgents: member.declaresAgents, declaresMcp: member.declaresMcp },
         args.probe,

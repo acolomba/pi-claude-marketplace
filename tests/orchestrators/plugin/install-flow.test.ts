@@ -11157,13 +11157,14 @@ test("RESV-06: a dependency its marketplace does not declare is what the block n
   });
 });
 
-test("TAGS-02: an unsatisfiable path-source constraint still renders one row per member", async () => {
+test("TAGS-02 / D-07-03: an unsatisfiable path-source constraint installs the current copy, named on its own row", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-tags02-cascade-row-"));
     try {
       // arrange: the dependency resolves; only its VERSION constraint cannot be
       // satisfied, and its path source's marketplace clone carries no tag that
-      // satisfies it. TAGS-02: the install succeeds anyway.
+      // satisfies it. TAGS-02: the install succeeds anyway, and the fallback
+      // dependency's OWN row names it as a quiet info note.
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -11185,7 +11186,7 @@ test("TAGS-02: an unsatisfiable path-source constraint still renders one row per
           message: [
             "● mp [project]",
             "  ● hello v0.0.1 (installed)",
-            "  ● some-other-plugin@mp v0.0.1 (installed)",
+            "  ● some-other-plugin@mp v0.0.1 (installed) {dependency current copy}",
             "",
             "/reload to pick up changes",
           ].join("\n"),

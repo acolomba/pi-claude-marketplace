@@ -229,6 +229,11 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
     // while other installed plugins still declared the target. It rides the
     // success row; the dependents ride the cause line, never the token.
     "dependents unsatisfied",
+    // TAGS-02 / D-07-03: no marketplace tag satisfied a path-source
+    // dependency's constraint, so the marketplace's current copy installed
+    // instead of failing. Rides an `installed` row -- the install succeeded --
+    // and is neither idempotent nor a failure reason.
+    "dependency current copy",
   ];
 
   // act

@@ -26,7 +26,7 @@ import {
   STATUS_TOKENS,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
-test("OUT-08: REASONS is the closed 58-entry reason set", () => {
+test("OUT-08: REASONS is the closed 59-entry reason set", () => {
   // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
   // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
   // MCPR-03 / D-02: +1 for the malformed mcp failure-class member (34 -> 35).
@@ -90,7 +90,10 @@ test("OUT-08: REASONS is the closed 58-entry reason set", () => {
   // unchanged across this phase's last two edits for that reason, and the
   // running arithmetic above is renumbered rather than annotated, so a reader
   // adding the next member does not inherit a gap.
-  assert.equal(REASONS.length, 58);
+  // TAGS-02 / D-07-03: +1 for `dependency current copy` -- the marker for a
+  // path-source dependency that installed the marketplace's current copy
+  // because no tag satisfied its constraint (58 -> 59).
+  assert.equal(REASONS.length, 59);
 });
 
 test("SNM-02: STATUS_TOKENS is the closed 24-entry token set", () => {

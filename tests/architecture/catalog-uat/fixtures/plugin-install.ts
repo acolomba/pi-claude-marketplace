@@ -451,6 +451,45 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
       },
     },
 
+    // TAGS-02 / D-07-03: a PATH-source dependency whose marketplace clone
+    // carries no release tag satisfying the declared constraint. Rather than
+    // failing the whole install (the git-backed arm below), the cascade
+    // installs the marketplace's CURRENT copy instead and names it on the
+    // dependency's own row with a quiet `info`-level note -- the install
+    // succeeded, so the row is not a failure row and the token is not a
+    // failure-class reason. Severity stays whatever the companion probe
+    // computes; the fallback never raises or lowers it on its own.
+    "dependency-cascade-fallback-current-copy": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "formatter@tools",
+                version: "2.1.0",
+                dependencies: [],
+                reasons: ["dependency current copy"],
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "installed",
+                name: "helper",
+                version: "1.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // RESV-05: the same skip, against a record that is DISABLED. A disabled
     // record keeps its inventory and its name reservations while its artifacts
     // are off disk, so the requesting plugin installed against a dependency

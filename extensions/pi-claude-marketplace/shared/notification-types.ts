@@ -152,6 +152,12 @@ export const REASONS = [
   // cycle` precedent -- a token names one fact about one plugin, and the list
   // of who needed it is a fact about several.
   "dependents unsatisfied",
+  // TAGS-02 / D-07-03: no marketplace tag satisfied a path-source dependency's
+  // constraint, so the marketplace's CURRENT copy installed instead of
+  // failing. It rides an `installed` row -- the install succeeded -- and is
+  // neither idempotent (a copy installed) nor a failure reason. The
+  // constraint itself is left for the LOAD-01 load-time check to enforce.
+  "dependency current copy",
 ] as const;
 
 /** Literal union derived from the closed reason vocabulary. */
