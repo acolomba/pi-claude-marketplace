@@ -692,7 +692,9 @@ export async function materializeMarketplaceTagClone(args: {
     await promoteStagingToClone(removalOps, staging, dest, "marketplace tag clone staging");
   }
 
-  const rootResult = await resolveGitSubdirRoot(dest, args.pathSource.raw);
+  // WR-07: label the failure with the source kind the user actually used --
+  // this is the pinned-`path` arm, not a `git-subdir` source.
+  const rootResult = await resolveGitSubdirRoot(dest, args.pathSource.raw, "path");
   if (rootResult.kind !== "materialized") {
     return rootResult;
   }

@@ -1717,6 +1717,11 @@ void test("materializeMarketplaceTagClone: no directory at the path source's rel
 
   // assert
   assert.equal(result.kind, "missing-subdir");
+  // WR-07: the detail must name the source kind the user actually used
+  // (`path`), not `git-subdir` -- a kind this install never touched.
+  assert.ok(result.kind === "missing-subdir");
+  assert.match(result.detail, /^path path "/u);
+  assert.doesNotMatch(result.detail, /git-subdir/u);
 });
 
 void test("materializeMarketplaceTagClone: a marketplace checkout with no discoverable origin remote still derives a key (RESEARCH A2)", async () => {

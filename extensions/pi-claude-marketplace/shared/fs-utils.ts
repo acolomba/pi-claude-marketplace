@@ -316,10 +316,18 @@ export async function rollbackReplacementCommon(
  * pluginRoot on success (the caller stamps the resolvedSha). fs-only -- no git
  * seam, no network -- so both the git-tainted clone-cache seam and the
  * network-free presence probe can share it.
+ *
+ * WR-07: `label` names the source kind in the `escapes` / `missing-subdir`
+ * detail strings (default `"git-subdir"`, this verb's original and most
+ * common caller). `materializeMarketplaceTagClone` passes `"path"` for the
+ * pinned-`path` arm, so a `path`-source user reads a failure about the
+ * source kind they actually used, not a `git-subdir` source kind and a
+ * "plugin clone" they never declared.
  */
 export async function resolveGitSubdirRoot(
   cloneRoot: string,
   subPath: string,
+  label = "git-subdir",
 ): Promise<
   | { kind: "materialized"; pluginRoot: string }
   | { kind: "escapes"; detail: string }
@@ -327,7 +335,7 @@ export async function resolveGitSubdirRoot(
 > {
   const pluginRoot = path.resolve(cloneRoot, subPath);
   try {
-    await assertPathInside(cloneRoot, pluginRoot, `git-subdir path "${subPath}"`);
+    await assertPathInside(cloneRoot, pluginRoot, `${label} path "${subPath}"`);
   } catch (err) {
     if (err instanceof PathContainmentError) {
       return { kind: "escapes", detail: err.message };
@@ -339,7 +347,7 @@ export async function resolveGitSubdirRoot(
   if (!(await pathExists(pluginRoot))) {
     return {
       kind: "missing-subdir",
-      detail: `git-subdir path "${subPath}" does not exist in the plugin clone`,
+      detail: `${label} path "${subPath}" does not exist in the plugin clone`,
     };
   }
 
