@@ -9,6 +9,19 @@ audit_acknowledged:
 
 # No gate detects an unused type member
 
+**Closed 2026-09-17 — test-backlog Phase 6.** `lint:type-members` and
+`lint:type-members:negative` are members of `npm run check` and of two
+pre-commit hooks. The residual is carried by exact member coordinate in
+`scripts/check-unused-type-members.exceptions.json`, with no count, threshold
+or path glob expressible. At the Phase 8 HEAD, `08-MEASUREMENT.md` section 2
+rows 15 and 16 record
+`Unused type member gate passed with 5 recorded exception(s).` and
+`Unused type member negative controls passed (7 of 7).` Independent
+verification passed 2/2. See
+[verification](../../phases/06-unused-type-member-gate/06-VERIFICATION.md).
+Moved to completed/ at the Phase 8 reconciliation; the promotion note and the
+deferred history below are preserved.
+
 **Promoted 2026-09-14:** explicitly authorized for test-backlog Phase 6,
 MEMBER-01/02. The older exclusions below are historical, not current scope.
 

@@ -389,7 +389,22 @@ Related: FLOW-01 (unzoned files are boundary-unchecked) is the same class of
 problem -- a gate that is complete by accident of the current tree rather than
 by construction.
 
-## FLOW-05: revisit CRAP and real coverage in the fallow health gate
+## ~~FLOW-05: revisit CRAP and real coverage in the fallow health gate~~ -- CLOSED
+
+Closed 2026-09-18 in test-backlog Phase 7; recorded here at the Phase 8
+reconciliation. CRAP is now measured from the verified Istanbul map that the
+`scripts/coverage-unit.mjs` pipeline publishes (`docs/coverage-metrics.md`). It
+is gated at the threshold in `scripts/coverage-risk-policy.json` (30) through
+`npm run coverage:risk`, a member of `check`, pre-commit and CI. The whole-tree
+`.fallowrc.json` `maxCrap: 0` is unchanged by design: the policy file, not the
+fallow configuration, owns the threshold. The fresh result in
+`08-MEASUREMENT.md` section 5 is 0 of 1865 production functions at or above 30,
+maximum 20.00. Independent verification passed 8/8 (frontmatter; the report
+body counts 10/10). See
+[verification](phases/07-reliable-coverage-metrics/07-VERIFICATION.md).
+The original filing below is preserved as history. Its three bullets about
+`c8` `-1` columns and the 25 to 238 swing are why the conversion had to be
+owned first.
 
 Filed 2026-08-16 alongside the FLOW-04 closure (quick task 260816-qov).
 
@@ -2808,7 +2823,7 @@ recursion, no wrapper stripping. Both command arms now guard on
 `event.toolName` so `Bash(...)` rules no longer fire on powershell events.
 -->
 
-## SWTEST-01: the Sonar way ruleset stops at `extensions/`; `tests/` is unmeasured by it
+## ~~SWTEST-01: the Sonar way ruleset stops at `extensions/`; `tests/` is unmeasured by it~~ -- CLOSED
 
 **Closed 2026-09-14 — test-backlog Phase 2.** The three assertion rules now
 run as errors on tests. Seven exact type-only owner files retain their compile-time
