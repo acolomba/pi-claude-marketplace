@@ -95,15 +95,34 @@ export type ScopeSatisfactionVerdict =
     };
 
 /**
- * The recorded facts a declared key is measured against: whether the record is
- * currently enabled, and the version it records.
- *
- * Structural, so a state record satisfies it directly and no projection step
- * sits between the snapshot and the decision.
+ * The recorded facts a declared key is measured against: whether it is disabled
+ * for a reason this check must take as given, and the version it records.
  */
 interface RecordedPlugin {
-  readonly enabled: boolean;
+  readonly disabled: boolean;
   readonly version: string;
+}
+
+/**
+ * LOAD-02: whether a record is disabled by something OTHER than this check.
+ *
+ * A record carrying the check's own marker reads as enabled here, because this
+ * same pass will lift it if its own declarations are satisfied. Without that
+ * optimism a broken chain would go down in one pass and come back up one level
+ * per reload, which is the asymmetry a user experiences as the plugin taking
+ * three restarts to return. The optimism is never wrong for longer than the
+ * walk: the fixpoint's held set re-holds the record on this same pass when its
+ * own dependency is still unsatisfied, and its dependents then see it held.
+ *
+ * A record disabled WITHOUT the marker is the user's own decision, or a config
+ * that declares it off. The check never second-guesses either, so its
+ * dependents stay held.
+ */
+function isDisabledIndependently(record: {
+  readonly enabled: boolean;
+  readonly dependencyDisabled?: boolean;
+}): boolean {
+  return isRecordedButDisabled(record) && record.dependencyDisabled !== true;
 }
 
 /** Every `name@marketplace` key the scope records, with its recorded facts. */
@@ -111,7 +130,10 @@ function recordedPlugins(state: ExtensionState): ReadonlyMap<string, RecordedPlu
   const recorded = new Map<string, RecordedPlugin>();
   for (const marketplace of Object.values(state.marketplaces)) {
     for (const [name, record] of Object.entries(marketplace.plugins)) {
-      recorded.set(`${name}@${marketplace.name}`, record);
+      recorded.set(`${name}@${marketplace.name}`, {
+        disabled: isDisabledIndependently(record),
+        version: record.version,
+      });
     }
   }
 
@@ -180,7 +202,8 @@ function unsatisfiedRange(ranges: readonly string[], version: string): string | 
  *
  * A declared key with no record in the scope is `missing`. A declared key whose
  * record is disabled is `disabled` -- either because the record is stored that
- * way, or because this same pass has already decided to hold it down. Both
+ * way for a reason this check must take as given, or because this same pass has
+ * already decided to hold it down (`isDisabledIndependently`). Both
  * facts are the same fact about the dependency and carry the same remedy, so
  * they share one arm; reporting them separately would emit two entries for one
  * dependency. `disabled` rather than `missing` because the record IS installed,
@@ -202,7 +225,7 @@ function unsatisfiedEntries(
       continue;
     }
 
-    if (held.has(key) || isRecordedButDisabled(record)) {
+    if (held.has(key) || record.disabled) {
       entries.push({ dependent, dependency: key, kind: "disabled" });
       continue;
     }

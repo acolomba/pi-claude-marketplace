@@ -73,6 +73,11 @@ import {
   applyReconcile as applyReconcileWithRouting,
   createApplyReconcile,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import { buildScopeSatisfactionVerdict } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
+import { planReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
+import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
+import { loadConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+import { mergeScopeConfigs } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -92,7 +97,10 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ReconcileStateReader } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
-import type { ApplyReconcileOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
+import type {
+  ApplyReconcileOptions,
+  ReconcilePlan,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { TestContext } from "node:test";
@@ -502,6 +510,23 @@ function configBytes(declaration: {
     null,
     2,
   );
+}
+
+/**
+ * LOAD-02: re-plan one scope from what is on disk, the way the read pass does.
+ *
+ * The convergence question is about the SECOND pass, so the plan has to be
+ * built from the state and config the first pass left behind rather than from
+ * the literals the case seeded. There is no `.local.json` in these fixtures, so
+ * the merge takes an empty local half.
+ */
+async function replanFromDisk(locations: ScopedLocations): Promise<ReconcilePlan> {
+  const state = await loadState(locations.extensionRoot);
+  const loaded = await loadConfig(locations.configJsonPath);
+  assert.equal(loaded.status, "valid");
+  const merged = mergeScopeConfigs(loaded.status === "valid" ? loaded.config : {}, {});
+  const verdict = await buildScopeSatisfactionVerdict({ state, locations });
+  return planReconcile(merged, state, locations.scope, verdict);
 }
 
 /** Read one plugin record back through the persistence loader. */
@@ -3927,6 +3952,204 @@ describe("applyReconcile", () => {
     assert.equal(await pathExists(path.join(project.skillsTargetDir, "deploy-kit:tool")), true);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
+  });
+
+  test("LOAD-02: a second reload over an unchanged unsatisfied tree re-plans nothing and is silent", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "dependency-converges");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const first = createNotificationBoundary(1, 2);
+    const second = createNotificationBoundary(0, 0);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx: first.ctx, pi: first.pi, cwd, scope: "project", gitOps });
+    const settledBytes = await readFile(project.stateJsonPath, "utf8");
+    const settledModifiedAt = (await stat(project.stateJsonPath)).mtimeMs;
+    const replanned = await replanFromDisk(project);
+    await applyReconcile({ ctx: second.ctx, pi: second.pi, cwd, scope: "project", gitOps });
+
+    // assert -- the plan is compared against the FACTORY, so a bucket added
+    // later cannot slip past this case by being absent from a hand-written
+    // literal.
+    assert.equal(first.notifications.length, 1);
+    assert.deepStrictEqual(replanned, emptyReconcilePlan("project"));
+    assert.deepStrictEqual(second.notifications, []);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), settledBytes);
+    assert.equal((await stat(project.stateJsonPath)).mtimeMs, settledModifiedAt);
+    assert.deepStrictEqual(clonedUrls(), []);
+    first.verifyBoundary();
+    second.verifyBoundary();
+  });
+
+  test("LOAD-02: one pass propagates a broken dependency the full depth of a chain", async (t) => {
+    // arrange -- alfa declares bravo, bravo declares the absent charlie. A
+    // single non-repeating pass would need two reloads to reach alfa.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-chain");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      alfa: { dependencies: ["bravo"], skill: "clean" },
+      bravo: { dependencies: ["charlie"], skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "alfa@mp": {}, "bravo@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            alfa: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "alfa") }),
+            bravo: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "bravo") }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert -- the exact set and the exact order, not "at least one row": the
+    // fixpoint's sorted batch order puts bravo (held by the absent charlie)
+    // before alfa (held by bravo), and an assertion that merely counted rows
+    // would pass against an implementation that propagated nothing.
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some plugin operations need attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ◍ bravo v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "charlie@mp" or uninstall "bravo@mp"\n' +
+          "  ◍ alfa v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Enable "bravo@mp" or uninstall "alfa@mp"\n' +
+          "\n" +
+          "Reconcile: 2 warnings",
+        severity: "warning",
+      },
+    ]);
+    const alfa = await recordFor(project, "mp", "alfa");
+    const bravo = await recordFor(project, "mp", "bravo");
+    assert.deepStrictEqual(
+      { alfa: alfa?.enabled, bravo: bravo?.enabled },
+      { alfa: false, bravo: false },
+    );
+    assert.deepStrictEqual(await replanFromDisk(project), emptyReconcilePlan("project"));
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("LOAD-02: restoring the dependency lifts the whole chain in one pass", async (t) => {
+    // arrange -- the settled state of the case above, plus charlie back.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-chain-lift");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      alfa: { dependencies: ["bravo"], skill: "clean" },
+      bravo: { dependencies: ["charlie"], skill: "clean" },
+      charlie: { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "alfa@mp": {}, "bravo@mp": {}, "charlie@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            alfa: pluginRecord({
+              enabled: false,
+              dependencyDisabled: true,
+              pluginRoot: path.join(marketplaceRoot, "plugins", "alfa"),
+            }),
+            bravo: pluginRecord({
+              enabled: false,
+              dependencyDisabled: true,
+              pluginRoot: path.join(marketplaceRoot, "plugins", "bravo"),
+            }),
+            charlie: pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "charlie"),
+            }),
+          },
+        }),
+      },
+    });
+    const first = createNotificationBoundary(1, 2);
+    const second = createNotificationBoundary(0, 0);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx: first.ctx, pi: first.pi, cwd, scope: "project", gitOps });
+    const settledBytes = await readFile(project.stateJsonPath, "utf8");
+    await applyReconcile({ ctx: second.ctx, pi: second.pi, cwd, scope: "project", gitOps });
+
+    // assert
+    const alfa = await recordFor(project, "mp", "alfa");
+    const bravo = await recordFor(project, "mp", "bravo");
+    assert.deepStrictEqual(
+      {
+        alfaEnabled: alfa?.enabled,
+        alfaMarked: Object.hasOwn(alfa ?? {}, "dependencyDisabled"),
+        bravoEnabled: bravo?.enabled,
+        bravoMarked: Object.hasOwn(bravo ?? {}, "dependencyDisabled"),
+      },
+      { alfaEnabled: true, alfaMarked: false, bravoEnabled: true, bravoMarked: false },
+    );
+    assert.equal(first.notifications.length, 1);
+    assert.deepStrictEqual(second.notifications, []);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), settledBytes);
+    assert.deepStrictEqual(clonedUrls(), []);
+    first.verifyBoundary();
+    second.verifyBoundary();
   });
 
   test("D-05-07: a declarer whose own manifest cannot be read is reported and nothing in the scope is disabled", async (t) => {

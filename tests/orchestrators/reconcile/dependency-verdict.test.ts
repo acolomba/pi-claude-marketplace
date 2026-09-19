@@ -29,6 +29,8 @@ type MarketplaceRecord = ExtensionState["marketplaces"][string];
 
 interface RecordSeed {
   readonly enabled?: boolean;
+  /** LOAD-02: the check's own marker on a record it disabled. */
+  readonly dependencyDisabled?: boolean;
   readonly version?: string;
 }
 
@@ -39,6 +41,9 @@ function pluginRecord(seed: RecordSeed = {}): PluginRecord {
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
     enabled: seed.enabled ?? true,
+    ...(seed.dependencyDisabled !== undefined && {
+      dependencyDisabled: seed.dependencyDisabled,
+    }),
     provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -481,14 +486,46 @@ test("orders each pass by localeCompare over the declarer keys", async () => {
   ]);
 });
 
-test("returns rather than looping when two recorded plugins declare each other", async () => {
-  // arrange -- app and helper declare each other, and helper also declares the
-  // absent vault, so both end the walk held down.
-  const mp = marketplaceRecord("mp", { app: {}, helper: {} });
+test("reads a record this check itself disabled as available to its dependents", async () => {
+  // arrange -- a previous pass held helper down; vault is back, so this pass
+  // lifts helper. app must not be held by the hold that is being lifted, or a
+  // chain would come back one level per reload while it went down in one.
+  const mp = marketplaceRecord("mp", {
+    app: {},
+    helper: { enabled: false, dependencyDisabled: true },
+    vault: {},
+  });
   const loadManifest = manifestLoader({
     [mp.manifestPath]: manifestOf("mp", {
       app: { dependencies: ["helper"] },
-      helper: { dependencies: ["app", "vault"] },
+      helper: { dependencies: ["vault"] },
+      vault: {},
+    }),
+  });
+
+  // act
+  const verdict = await buildScopeSatisfactionVerdict({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), []);
+});
+
+test("still holds a dependent whose marked dependency is itself still unsatisfied", async () => {
+  // arrange -- the same shape with vault removed. The optimism above must not
+  // survive the walk: helper is re-held on this pass, and app with it.
+  const mp = marketplaceRecord("mp", {
+    app: {},
+    helper: { enabled: false, dependencyDisabled: true },
+  });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: { dependencies: ["helper"] },
+      helper: { dependencies: ["vault"] },
     }),
   });
 
@@ -506,6 +543,39 @@ test("returns rather than looping when two recorded plugins declare each other",
     { dependent: "app@mp", dependency: "helper@mp", kind: "disabled" },
   ]);
 });
+
+// The cycle case fails by HANGING rather than by asserting false, so it states
+// its own bound: a regression in the fixpoint's exit must fail the run in
+// bounded time instead of stalling it until the runner's global timeout.
+test(
+  "returns rather than looping when two recorded plugins declare each other",
+  { timeout: 5_000 },
+  async () => {
+    // arrange -- app and helper declare each other, and helper also declares the
+    // absent vault, so both end the walk held down.
+    const mp = marketplaceRecord("mp", { app: {}, helper: {} });
+    const loadManifest = manifestLoader({
+      [mp.manifestPath]: manifestOf("mp", {
+        app: { dependencies: ["helper"] },
+        helper: { dependencies: ["app", "vault"] },
+      }),
+    });
+
+    // act
+    const verdict = await buildScopeSatisfactionVerdict({
+      state: stateOf(mp),
+      locations: LOCATIONS,
+      reader: ownManifests(),
+      loadManifest,
+    });
+
+    // assert
+    assert.deepStrictEqual(unsatisfiedOf(verdict), [
+      { dependent: "helper@mp", dependency: "vault@mp", kind: "missing" },
+      { dependent: "app@mp", dependency: "helper@mp", kind: "disabled" },
+    ]);
+  },
+);
 
 test("returns identical results for two walks over one snapshot", async () => {
   // arrange
