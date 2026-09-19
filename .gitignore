@@ -1,8 +1,10 @@
 # ai harnesses
-# third-party skills, restored from skills-lock.json by scripts/init.sh
+# third-party skills; scripts/init.sh fetches the latest version of each
 /.agents/skills/herdr/
 /.agents/skills/humanizer/
 /.agents/skills/simple-english/
+# fetch record for the skills above, not a version pin (see CONTRIBUTING.md)
+/skills-lock.json
 
 # pi
 /.pi/git/

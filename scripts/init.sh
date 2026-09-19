@@ -23,22 +23,8 @@ fi
 npm install
 
 # skills
-# the installer refreshes each hash in skills-lock.json to whatever it fetched.
-# updating a skill is a deliberate step (see CONTRIBUTING.md), so a lock that
-# was clean before the install is restored after it.
-lock_clean=0
-git diff --quiet -- skills-lock.json && lock_clean=1
-npx --yes skills@latest experimental_install
-if [[ $lock_clean == 1 ]]; then
-    git checkout -- skills-lock.json
-fi
-
-# experimental_install only wires agents that read .agents/skills/ directly.
-# Claude Code reads .claude/skills/ instead, so link each locked skill there too.
-mkdir -p .claude/skills
-while IFS= read -r name; do
-    ln -sfn "../../.agents/skills/$name" ".claude/skills/$name"
-done < <(node -e "console.log(Object.keys(require('./skills-lock.json').skills).join('\n'))")
+npx --yes skills@latest add blader/humanizer -a universal claude-code -y
+npx --yes skills@latest add AminBlg/SimpleEnglish -a universal claude-code -y
 
 # gsd
 npx --yes @opengsd/gsd-core@latest --install --local --claude --codex --force-statusline
@@ -52,3 +38,8 @@ codegraph install --target claude,codex --location local --no-permissions --init
 
 # removes the generated per-tool copy, which would shadow the root file
 rm -f .claude/CLAUDE.md
+
+# codegraph's install regenerates AGENTS.md's CodeGraph block with minor
+# drift (unicode dashes, blank lines); normalize it the same way
+# pre-commit would at commit time, so it doesn't sit dirty afterward.
+SKIP=trufflehog pre-commit run --files AGENTS.md || true
