@@ -624,10 +624,14 @@ function claimedPluginKeys(
  * of the oscillation LOAD-02 forbids: a reload over an unchanged tree must be
  * silent.
  *
- * This is the ONLY place the stored marker is read. It answers "did the check
- * already do this", never "should the check keep doing this" -- the second
- * question belongs to the live verdict alone, and answering it from the marker
- * is what would make the lift impossible.
+ * This is the only place the stored marker decides an ACTION. It answers "did
+ * the check already do this", never "should the check keep doing this" -- the
+ * second question belongs to the live verdict alone, and answering it from the
+ * marker is what would make the lift impossible.
+ *
+ * `dependency-verdict.ts::isDisabledIndependently` is the marker's one other
+ * reader. It uses the marker to tell the check's own hold from a user's
+ * disable, and never to decide whether the hold continues.
  *
  * A record disabled WITHOUT the marker is not in this state: it is the user's
  * own disable, or a disable from before the marker existed, and it stays in the
