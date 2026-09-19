@@ -347,11 +347,13 @@ Plans:
 3. When a tag satisfies, the plugin's files come from the marketplace repository at that tag — not the current checkout — and the record's version reflects it. (TAGS-03)
 4. `docs/dependency-resolution.md` says that upstream accepts a `sha` field on a dependency element and that this extension refuses it (D-03-36), next to the divergences it already lists; §"What a version constraint can say" and §path source describe the new resolution. (DIVG-01)
 
-**Plans**: 0 plans
+**Plans**: 3 plans
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 7 to break down)
+- [ ] 07-01-PLAN.md — tracer: a constrained path-source dependency installs from the marketplace tag that satisfies it (TAGS-01, TAGS-03)
+- [ ] 07-02-PLAN.md — no satisfying tag installs the current copy and the row says so (TAGS-02)
+- [ ] 07-03-PLAN.md — `docs/dependency-resolution.md` records the new resolution and the `sha` divergence (DIVG-01)
 
 **Notes.** `orchestrators/plugin/dependency-tag-probe.ts::probeDependencyTags` today lists the *dependency's own source repository* tags over the network; a path source has no such repository, which is why every non-wildcard constraint fails. The marketplace clone is local, so tag listing goes through `platform/git.ts` against the clone (isomorphic-git `listTags`), not the advertised-refs path — and `no-orchestrator-network.test.ts` must keep passing for the gated install owners. Materializing "the plugin at that tag" from a clone whose checkout is at a different commit is the open mechanics question for discuss: a second worktree-like checkout under the plugin's clone root, or reading the tree at the tag oid into the staging directory. Containment (NFR-10) applies either way.
 
