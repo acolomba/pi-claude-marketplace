@@ -202,7 +202,7 @@ describe("probeMarketplaceTags", () => {
 
     const first = await probeMarketplaceTags(options({ seam: failing.seam, tagMemo }));
     assert.deepStrictEqual(first, { kind: "tag-listing-failed", cause: err });
-    assert.strictEqual(tagMemo.has(MARKETPLACE_ROOT), false);
+    assert.deepStrictEqual([...tagMemo], []);
 
     const recovered = createFakeSeam({ tagsByName: { "formatter--v1.0.0": "oid-1" } });
     const second = await probeMarketplaceTags(

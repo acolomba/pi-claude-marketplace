@@ -436,7 +436,7 @@ test("a failed listing is never memoized, so a later attempt re-queries instead 
     cause: transportFailure,
     classification: undefined,
   });
-  assert.strictEqual(tagMemo.has(PLUGIN_REPO_URL), false);
+  assert.deepStrictEqual([...tagMemo], []);
   assert.deepStrictEqual(second, first);
   assert.deepStrictEqual(queried, [PLUGIN_REPO_URL, PLUGIN_REPO_URL]);
 });
