@@ -3037,3 +3037,22 @@ one that states the same fact twice across two commands -- the same trade
 LOAD-03 already settled for the reconcile-driven uninstall, which deliberately
 carries no dependents brace for exactly this reason. Refusing the removal is
 NOT on the table: it would re-introduce the deadlock this phase removed.
+
+## PENDING-VERDICT-01: `pending` previews an enable the next reload will undo
+
+Surfaced by the Phase 6 load-time dependency check (2026-09-18), recorded by
+all three of its implementation plans and by none of their file scopes.
+`orchestrators/reconcile/pending.ts` calls `planReconcile` with three
+arguments, so it takes the optional verdict parameter's frozen empty default
+(D-06-10) and plans as though nothing were held down. `/claude:plugin pending`
+therefore previews `will enable` for a plugin whose declared dependency is
+unsatisfied, and the reload it is previewing disables that plugin instead. The
+preview is wrong in exactly the situation the check exists to report.
+
+Scope when picked up: decide whether the preview computes a satisfaction
+verdict of its own. It can -- `buildScopeSatisfactionVerdict` is offline and
+reads only the scope's own records and cached manifests, so NFR-5 holds -- at
+the cost of the declaration walk on a read-only command. If it does, the
+preview also needs a row for the disable it would then foresee, which is a
+closed-set question, not just a wiring one. Doing nothing is defensible if the
+preview is read as "what the config says", but it is not what the row claims.
