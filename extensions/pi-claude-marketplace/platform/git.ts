@@ -421,7 +421,9 @@ const MAX_TAG_PEEL_HOPS = 10;
  * Resolves `refs/tags/<name>` via `resolveRef`, then attempts `readTag` on the
  * result:
  *   - a throw means the oid already names a non-tag object (a LIGHTWEIGHT tag
- *     resolves directly to its target), and is returned as-is;
+ *     resolves directly to its target); the target's own type decides the
+ *     result -- a commit is returned as-is, anything else (blob / tree) is
+ *     not checkout-able and yields `undefined`;
  *   - `tag.type === "commit"` returns `tag.object`, the commit the tag names;
  *   - `tag.type === "tag"` is a tag pointing at another tag; the peel repeats
  *     on that tag's own object, bounded by `MAX_TAG_PEEL_HOPS` so a
@@ -447,7 +449,15 @@ export async function resolveTagOid(opts: ResolveTagOidOptions): Promise<string 
     try {
       read = await git.readTag({ fs, dir: opts.dir, oid });
     } catch {
-      return oid;
+      // Not a tag object: a LIGHTWEIGHT tag names its target directly. Only a
+      // commit is checkout-able, so anything else -- a blob, a tree, or an
+      // unreadable object -- is dropped like an annotated blob/tree tag is.
+      try {
+        await git.readCommit({ fs, dir: opts.dir, oid });
+        return oid;
+      } catch {
+        return undefined;
+      }
     }
 
     if (read.tag.type === "commit") {

@@ -1287,6 +1287,31 @@ describe("resolveTagOid", () => {
     assert.strictEqual(oid, repository.initialOid);
   });
 
+  test("WR-01: a lightweight tag pointing at a blob resolves to undefined so the caller can drop it", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const blobOid = await git.writeBlob({
+      fs,
+      dir: repository.dir,
+      blob: new Uint8Array(Buffer.from("hello")),
+    });
+    await git.writeRef({
+      fs,
+      dir: repository.dir,
+      ref: "refs/tags/blob-tag",
+      value: blobOid,
+      force: true,
+    });
+
+    // act
+    const oid = await resolveTagOid({ dir: repository.dir, name: "blob-tag" });
+
+    // assert: a lightweight tag's target is not decided by the throw alone --
+    // a commit target still resolves, so a non-commit target must be checked
+    // and dropped the same way an annotated blob/tree tag is.
+    assert.strictEqual(oid, undefined);
+  });
+
   test("an annotated tag resolves to the commit it points at, not the tag object's own oid", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
