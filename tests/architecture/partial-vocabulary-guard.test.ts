@@ -66,6 +66,13 @@ const SELF = path.relative(REPO_ROOT, fileURLToPath(import.meta.url));
  * Naming the roots rather than counting files is what makes the widening
  * checkable: a walk that silently stopped matching, or one pointed at the wrong
  * directory, still returns "a lot of files" but stops naming one of these.
+ *
+ * Every root here has to EXIST, because the clause below asserts each one
+ * contributed a file. That is the opposite of an allow-list: the walk itself is
+ * the whole of `tests/` minus the two separately-scripted roots, so a root that
+ * is absent from this list is still read and still policed -- it simply has no
+ * standing claim that it was reached. `tests/scripts` is absent for exactly that
+ * reason and no other.
  */
 const POLICED_TEST_ROOTS = [
   "architecture",
@@ -75,7 +82,6 @@ const POLICED_TEST_ROOTS = [
   "orchestrators",
   "persistence",
   "platform",
-  "scripts",
   "shared",
   "transaction",
 ] as const;
@@ -199,12 +205,12 @@ test("D-75-01 guard: the recursive unit-test walk reached every policed root", (
     testSources.length > 0,
     `the guard read ${GUARDED_SOURCES.size} files and NONE of them was a test source, so every ABSENCE check below reports success over nothing`,
   );
-  assert.deepEqual(
+  assert.deepStrictEqual(
     [...unreached],
     [],
     `the walk read ${testSources.length} test sources of ${GUARDED_SOURCES.size} guarded files but reached none under these roots, so their retired vocabulary is unpoliced:\n  ${unreached.join("\n  ")}`,
   );
-  assert.equal(
+  assert.strictEqual(
     testSources.includes(SELF),
     false,
     "this guard file must stay out of its own ABSENCE surface: it spells every retired token in order to forbid it",
@@ -255,6 +261,12 @@ const TOKEN_WAIVERS: readonly TokenWaiver[] = [
     token: '"unsupported"',
     category: "homonym",
     why: '`Object.hasOwn(clean, "unsupported")` reads the SAME component-kind field as the fixture above, as a property key. NREG-01 needs the absent-key fact, which cannot be asserted without naming the key.',
+  },
+  {
+    file: "tests/scripts/check-unused-type-members.audit.test.ts",
+    token: '"unsupported"',
+    category: "homonym",
+    why: "the unused-type-member audit names its own refusal categories, one of which is the members the analysis could not settle. The case asserts that category by name, and it is the audit's vocabulary, not this project's plugin verdict vocabulary.",
   },
   {
     file: "tests/edge/handlers/plugin/reinstall.test.ts",
@@ -365,7 +377,7 @@ const ABSENT_TOKENS = [
 for (const token of ABSENT_TOKENS) {
   test(`D-75-01 guard: absent everywhere (code + docs + unit tests) -- ${token}`, () => {
     const hits = unwaivedHits(token, GUARDED_SOURCES);
-    assert.equal(
+    assert.strictEqual(
       hits.length,
       0,
       `in-scope token ${JSON.stringify(token)} must be ABSENT after the rename; found in:\n  ${hits.join("\n  ")}`,
@@ -385,7 +397,7 @@ test("D-75-01 guard: every token waiver is load-bearing", () => {
   );
 
   // assert
-  assert.deepEqual(
+  assert.deepStrictEqual(
     inert.map((waiver) => `${waiver.file} -- ${waiver.token} (${waiver.category})`),
     [],
     "a waiver whose file no longer spells its token, or whose token is no longer forbidden, silences a check nobody needs silenced. Delete the row rather than leaving it to cover a future regression.",
@@ -410,7 +422,7 @@ const ABSENT_FORCE_PROSE: readonly RegExp[] = [
 for (const re of ABSENT_FORCE_PROSE) {
   test(`D-75-01 guard: force-family prose absent -- ${re.source}`, () => {
     const hits = filesMatching(re, GUARDED_SOURCES);
-    assert.equal(
+    assert.strictEqual(
       hits.length,
       0,
       `retired force-family prose /${re.source}/ must be ABSENT after the rename; found in:\n  ${hits.join("\n  ")}`,
@@ -426,7 +438,7 @@ for (const re of ABSENT_FORCE_PROSE) {
 test("D-75-01 guard: verdict render `(unsupported)` absent outside the info.ts component suffix", () => {
   const ALLOW = "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
   const hits = filesContaining("`(unsupported)`", GUARDED_SOURCES).filter((f) => f !== ALLOW);
-  assert.equal(
+  assert.strictEqual(
     hits.length,
     0,
     `the verdict render \`(unsupported)\` must be ABSENT (renamed to \`(partially-available)\`) outside the allowlisted component-suffix docs in ${ALLOW}; found in:\n  ${hits.join("\n  ")}`,
@@ -443,7 +455,7 @@ test("D-75-01 guard: verdict render `(unsupported)` absent outside the info.ts c
 test("D-75-01 guard: standalone backtick verdict `unsupported` absent (allowlist: array/kind homonyms)", () => {
   const re = /`unsupported`(?! (array|kind))/;
   const hits = filesMatching(re, GUARDED_SOURCES);
-  assert.equal(
+  assert.strictEqual(
     hits.length,
     0,
     `the standalone backtick verdict \`unsupported\` must be ABSENT (renamed to \`partially-available\`), except the allowlisted \`unsupported\` array/kind component homonyms; found in:\n  ${hits.join("\n  ")}`,
@@ -612,11 +624,11 @@ function completionDescriptions(rel: string): string[] {
   assert.ok(content !== undefined, `expected ${rel} in the extension sources`);
   const out: string[] = [];
   const re = /description:\s*"((?:[^"\\]|\\.)*)"/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(content)) !== null) {
-    const value = m[1];
-    if (value !== undefined) {
-      out.push(value);
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(content)) !== null) {
+    const description = match[1];
+    if (description !== undefined) {
+      out.push(description);
     }
   }
 
@@ -637,7 +649,7 @@ test("D-75-01 guard: completion descriptions carry no PLUGIN-level `unsupported`
     }
   }
 
-  assert.equal(
+  assert.strictEqual(
     offenders.length,
     0,
     `completion descriptions must not call a PLUGIN "unsupported" (use "partially available"); offenders:\n  ${offenders.join("\n  ")}`,
@@ -654,7 +666,7 @@ test("D-75-01 guard: completion descriptions carry no retired `force` verb", () 
     }
   }
 
-  assert.equal(
+  assert.strictEqual(
     offenders.length,
     0,
     `completion descriptions must not use the retired "force" verb (use a neutral verb like "install"); offenders:\n  ${offenders.join("\n  ")}`,
@@ -741,7 +753,7 @@ test("D-75-01 guard: the widened scan fires on a retired token planted in a copy
     const hits = unwaivedHits(CONTROL_TOKEN, await sourcesUnder(root, [CONTROL_TARGET]));
 
     // assert
-    assert.deepEqual(
+    assert.deepStrictEqual(
       hits,
       [CONTROL_TARGET],
       `the ABSENCE check must report ${CONTROL_TARGET} once a retired render token is planted in it; a silent pass here means the widened surface is read but not policed`,
@@ -758,7 +770,7 @@ test("D-75-01 guard: an unmutated copy of the same real unit-test source passes"
     const hits = unwaivedHits(CONTROL_TOKEN, await sourcesUnder(root, [CONTROL_TARGET]));
 
     // assert
-    assert.deepEqual(
+    assert.deepStrictEqual(
       hits,
       [],
       `the byte-identical copy of ${CONTROL_TARGET} must pass, or the offender case above proves only that the check fails everything`,

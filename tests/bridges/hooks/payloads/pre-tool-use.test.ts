@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { translate } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts";
+import { translatePreToolUse } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts";
 
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { ToolCallEvent } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -38,7 +38,7 @@ test("maps a built-in tool to the complete PreToolUse envelope", () => {
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translatePreToolUse(event, context);
 
   // assert
   assert.deepStrictEqual(payload, expectedPayload);
@@ -77,7 +77,7 @@ test("preserves a custom tool name and input without mutation", () => {
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translatePreToolUse(event, context);
 
   // assert
   assert.deepStrictEqual(payload, expectedPayload);

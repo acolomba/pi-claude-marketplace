@@ -26,9 +26,10 @@ export function isErrnoException(err: unknown): err is NodeJS.ErrnoException & {
  * Exhaustiveness check helper for discriminated unions.
  * Call in the `default` case of a switch to get a compile-time error if a new
  * variant is added without updating the switch.
+ * A caller may supply its established error message.
  */
-export function assertNever(x: never): never {
-  throw new Error(`Unexpected value: ${String(x)}`);
+export function assertNever(x: never, message = `Unexpected value: ${String(x)}`): never {
+  throw new Error(message);
 }
 
 /**
@@ -175,21 +176,21 @@ export function causeChainTrailer(err: unknown): string {
   return `${PREFIX}${rendered.join(JOINER)}`;
 }
 
-function linkMessage(c: unknown): string {
-  if (c instanceof CleanupContextError) {
-    const details = c.cleanupFailures.map(renderCleanupFailure).join("; ");
-    return `${c.message} (cleanup: ${details})`;
+function linkMessage(link: unknown): string {
+  if (link instanceof CleanupContextError) {
+    const details = link.cleanupFailures.map(renderCleanupFailure).join("; ");
+    return `${link.message} (cleanup: ${details})`;
   }
 
-  if (c instanceof Error) {
-    return c.message;
+  if (link instanceof Error) {
+    return link.message;
   }
 
-  if (typeof c === "string") {
-    return c;
+  if (typeof link === "string") {
+    return link;
   }
 
-  return Object.prototype.toString.call(c);
+  return Object.prototype.toString.call(link);
 }
 
 function renderCleanupFailure(failure: CleanupFailure): string {
@@ -386,24 +387,6 @@ export class ConcurrentInstallError extends Error {
 }
 
 /**
- * PU-5 silent-converge sentinel for uninstall.
- *
- * Thrown inside the `withStateGuard` closure of
- * orchestrators/plugin/uninstall.ts when the plugin record is already
- * absent at re-load time (another process completed the uninstall first).
- * The caller catches this sentinel and returns success with no
- * user-visible notification per PRD §5.2.2 PU-5 verbatim semantics.
- */
-export class ConcurrentUninstallError extends Error {
-  readonly plugin: string;
-  constructor(plugin: string) {
-    super(`Plugin "${plugin}" already uninstalled.`);
-    this.name = "ConcurrentUninstallError";
-    this.plugin = plugin;
-  }
-}
-
-/**
  * Stable producer fact for state that changes between update preflight and
  * its guarded intent/finalize writes. Consumers narrow on `kind`; the message
  * remains diagnostic text only.
@@ -511,11 +494,15 @@ export class StateLockHeldError extends Error {
  * RECOVERY_PLUGIN_REINSTALL_PREFIX-composed recovery hint; the
  * `Error.cause` (passed via the options bag) carries the chained
  * originating error for the depth-5 `causeChainTrailer` walk.
+ *
+ * The entry shape carries no per-entry cause. `update-swap.ts`'s
+ * `UpdatePhase3Failure` restates the slot as a required `Error`, and that
+ * narrower declaration is where the one production read of an originating
+ * error resolves (`update-flow.ts`'s `rollbackPartialCauseSlot`).
  */
 export interface Phase3Failure {
   readonly phase: "skills" | "commands" | "agents" | "hooks" | "mcp";
   readonly msg: string;
-  readonly cause: unknown;
   readonly cleanupFailures?: readonly CleanupFailure[];
 }
 

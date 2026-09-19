@@ -1,9 +1,11 @@
 // orchestrators/edge-deps.ts
 //
 // D-04: registration-glue helper that constructs a
-// `LocationsResolver` (interface defined in edge/completions/data.ts) from
-// the persistence/state-io + persistence/locations + domain/manifest +
-// domain/resolver surfaces. This file lives in `orchestrators/` so that
+// `LocationsResolver` (both the resolver surface and the state-record
+// shape it returns are declared HERE; edge/completions/data.ts
+// republishes the resolver under that spelling) from the
+// persistence/state-io + persistence/locations +
+// domain/manifest + domain/resolver surfaces. This file lives in `orchestrators/` so that
 // `edge/register.ts` (which legally imports from `orchestrators/`) can
 // reach all four underlying modules without violating BLOCK C
 // (edge/ -> persistence/ and edge/ -> domain/ are forbidden).
@@ -11,8 +13,9 @@
 // Architectural seam:
 //   - shared/completion-cache.ts: pure paths + rebuild callbacks
 //     (shared/ MUST NOT import persistence/).
-//   - edge/completions/data.ts: declares the LocationsResolver interface
-//     (edge/ MUST NOT import persistence/).
+//   - edge/completions/data.ts: republishes `LocationsResolverLike` below
+//     as `LocationsResolver` (edge/ MUST NOT import persistence/, and the
+//     republish is type-only, so it does not).
 //   - orchestrators/edge-deps.ts: IMPLEMENTS the resolver by closing over
 //     loadState + manifest read + resolveStrict (orchestrators/ MAY
 //     import persistence/ and domain/).
@@ -43,28 +46,56 @@ import type { PluginIndexRow } from "../shared/completion-cache.ts";
 import type { Scope } from "../shared/types.ts";
 
 // ---------------------------------------------------------------------------
-// LocationsResolverLike: a structural alias for the
-// `edge/completions/data.ts::LocationsResolver` interface. Re-declared
-// here -- NOT imported -- because BLOCK C forbids orchestrators/ from
-// importing edge/. TypeScript structural typing guarantees the return
-// value of `makeLocationsResolver` is assignable to
-// `LocationsResolver` at the edge-side call site (`edge/register.ts`).
-// The fields MUST stay in sync with edge/completions/data.ts; a future
-// rename would be caught by the edge-side TypeScript compile (the
-// consumer asserts the structural shape it needs).
+// The completions-resolver seam. BLOCK C forbids orchestrators/ from
+// importing edge/, so whatever the two sides share has to be declared
+// here and named from the edge side, never the reverse.
+//
+// Both shapes are declared here exactly once.
+// `MarketplaceStateRecordLike` is the state-record shape and
+// `LocationsResolverLike` is the resolver surface;
+// edge/completions/data.ts imports the resolver type-only and republishes
+// it as `LocationsResolver`, and every other consumer -- production and
+// test alike -- names these declarations. Neither shape can drift, because
+// there is no second declaration of either to drift from.
+//
+// Do not reintroduce an edge-side mirror of either one. The old mirror
+// carried a claim that a rename would be caught by the edge-side compile,
+// and that claim was measured false: the mirrors were compared
+// structurally, so a single-field rename on one side still compiled (the
+// same optional-field silent-omission class this repo has hit before).
 // ---------------------------------------------------------------------------
 
+/**
+ * Minimal shape the completion reads need from a state record: the installed
+ * plugin names, and nothing else. The full state record lives in
+ * persistence; the completion consumers in edge/ and their tests name this
+ * declaration directly.
+ */
 export interface MarketplaceStateRecordLike {
-  readonly manifestPath?: string;
   readonly plugins?: Record<string, unknown>;
 }
 
+/**
+ * Injection surface that lets edge/completions reach into persistence/state
+ * + domain/manifest WITHOUT importing them (D-11 / ESLint BLOCK C keeps
+ * edge/ from importing persistence/). Constructed by `makeLocationsResolver`
+ * below and threaded through getArgumentCompletions by edge/register.ts,
+ * which reaches it through the `LocationsResolver` republish in
+ * edge/completions/data.ts.
+ *
+ * The two rebuild-callback resolvers (loadStateForScope,
+ * loadManifestForMarketplace) MUST throw to signal failure -- the cache layer
+ * uses ManifestSoftFailError as the soft-fail discriminator (TC-8); any
+ * other thrown error propagates verbatim (TC-9: state.json errors surface).
+ */
 export interface LocationsResolverLike {
-  marketplaceNamesCachePath(scope: Scope): string;
+  /** Cache file path for a scoped marketplace's plugin index. */
   pluginCachePath(scope: Scope, marketplace: string): Promise<string>;
+  /** Loads state.json for a scope (cache-miss rebuild path). */
   loadStateForScope(scope: Scope): Promise<{
     marketplaces: Record<string, MarketplaceStateRecordLike>;
   }>;
+  /** Loads + bucketizes a marketplace's manifest into PluginIndexRow shape. */
   loadManifestForMarketplace(scope: Scope, marketplace: string): Promise<readonly PluginIndexRow[]>;
 }
 
@@ -146,17 +177,11 @@ async function classifyNotInstalledPluginRow(
  */
 export function makeLocationsResolver(cwd: string): LocationsResolverLike {
   return {
-    marketplaceNamesCachePath(scope: Scope): string {
-      return locationsFor(scope, cwd).marketplaceNamesCacheFile;
-    },
-
     pluginCachePath(scope: Scope, marketplace: string): Promise<string> {
       return locationsFor(scope, cwd).pluginCacheFile(marketplace);
     },
 
-    async loadStateForScope(scope: Scope): Promise<{
-      marketplaces: Record<string, MarketplaceStateRecordLike>;
-    }> {
+    async loadStateForScope(scope: Scope) {
       const locations = locationsFor(scope, cwd);
       const state = await loadState(locations.extensionRoot);
       // Project the persistence-level state shape into the structural
@@ -165,10 +190,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
       // exists to document the contract surface explicitly.
       const projected: Record<string, MarketplaceStateRecordLike> = {};
       for (const [name, record] of Object.entries(state.marketplaces)) {
-        projected[name] = {
-          manifestPath: record.manifestPath,
-          plugins: record.plugins,
-        };
+        projected[name] = { plugins: record.plugins };
       }
 
       return { marketplaces: projected };

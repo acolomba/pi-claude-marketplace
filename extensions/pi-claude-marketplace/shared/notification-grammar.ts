@@ -68,8 +68,12 @@ export const ICON_DISABLED = "◍";
  * `(remote)` row -- a not-installed git-source plugin whose clone/mirror is not
  * yet materialized locally. The dotted circle reads "declared but not
  * present". Distinct from `ICON_DISABLED`, which uses `◍` (U+25CD).
+ *
+ * Module-private: two renderers carry this glyph to a row -- `renderRemoteRow`
+ * below and `pluginInfoStatusGlyph`'s `remote` arm, which the `info` plugin row
+ * joins -- so those rows' bytes are its public contract.
  */
-export const ICON_REMOTE = "◌";
+const ICON_REMOTE = "◌";
 
 /**
  * FSTAT-02 / D-66-03: dedicated glyph for a `partially-installed` row -- a
@@ -91,8 +95,13 @@ export const ICON_PARTIALLY_INSTALLED = "◉";
  * components dropped" rather than "blocked". DISTINCT from `⊘`
  * (`ICON_UNINSTALLABLE`, reserved for unavailable / blocked / failed / manual-
  * recovery) and from `◉` (`ICON_PARTIALLY_INSTALLED`, the *installed*-degraded row).
+ *
+ * Module-private: two renderers carry this glyph to a row --
+ * `renderPartiallyAvailableRow` below and `pluginInfoStatusGlyph`'s
+ * `partially-available` arm, which the `info` plugin row joins -- so those
+ * rows' bytes are its public contract.
  */
-export const ICON_PARTIALLY_AVAILABLE = "⊖";
+const ICON_PARTIALLY_AVAILABLE = "⊖";
 
 /**
  * PL-4 column-66 description truncation. Strings longer than 66 chars are
@@ -1422,7 +1431,7 @@ export function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatu
     ),
   ];
 
-  const pluginRow = joinTokens([
+  const pluginRowLine = joinTokens([
     pluginInfoStatusGlyph(plugin.status),
     plugin.name,
     renderScopeBracket(plugin.scope, message.marketplaceScope),
@@ -1430,7 +1439,7 @@ export function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatu
     `(${plugin.status})`,
     composeReasons(plugin.reasons, false, false, probe),
   ]);
-  lines.push(`  ${pluginRow}`);
+  lines.push(`  ${pluginRowLine}`);
 
   if (plugin.description !== undefined && plugin.description.length > 0) {
     lines.push(...wrapDescription(plugin.description, 4, DESCRIPTION_MAX_COLS));
@@ -1497,7 +1506,7 @@ export function composeReconcileAppliedBody(
  * losing its description line. The list inventory rows carry it; a cascade
  * `installed` row never sets `description`, so those stay single-line.
  */
-const DESCRIPTION_BEARING_STATUS: Record<PluginNotificationMessage["status"], boolean> = {
+const DESCRIPTION_BEARING_STATUS = {
   installed: true,
   upgradable: true,
   available: true,
@@ -1517,12 +1526,23 @@ const DESCRIPTION_BEARING_STATUS: Record<PluginNotificationMessage["status"], bo
   "will uninstall": false,
   "will enable": false,
   "will disable": false,
-};
+} as const satisfies Record<PluginNotificationMessage["status"], boolean>;
 
-/** Narrow to the rows whose variant declares an optional `description`. */
+/**
+ * The statuses the map above marks description-bearing, read back off that map
+ * so the predicate's narrowing and its runtime decision come from one place and
+ * cannot drift apart.
+ */
+type DescriptionBearingStatus = {
+  [K in PluginNotificationMessage["status"]]: (typeof DESCRIPTION_BEARING_STATUS)[K] extends true
+    ? K
+    : never;
+}[PluginNotificationMessage["status"]];
+
+/** Narrow to the rows whose variant carries an optional `description`. */
 function isDescriptionBearingRow(
   p: PluginNotificationMessage,
-): p is Extract<PluginNotificationMessage, { description?: string }> {
+): p is Extract<PluginNotificationMessage, { status: DescriptionBearingStatus }> {
   return DESCRIPTION_BEARING_STATUS[p.status];
 }
 

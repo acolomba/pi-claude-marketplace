@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { translate } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts";
+import { translatePostToolUse } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts";
 
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { ToolResultEvent } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -43,7 +43,7 @@ test("maps a successful built-in tool to the complete PostToolUse envelope", () 
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translatePostToolUse(event, context);
 
   // assert
   assert.deepStrictEqual(payload, expectedPayload);
@@ -92,7 +92,7 @@ test("preserves a successful custom tool name and nested values without mutation
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translatePostToolUse(event, context);
 
   // assert
   assert.deepStrictEqual(payload, expectedPayload);

@@ -40,6 +40,7 @@
 // every-entry-must-run.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
+import { assertNever } from "../../shared/errors.ts";
 
 import { dispatchHookExec } from "./dispatch-exec.ts";
 import {
@@ -49,9 +50,9 @@ import {
   adaptToolResultResult,
   applyMutationInPlace,
 } from "./event-adapters.ts";
-import { assertNever, type HookExecResult } from "./exec-result.ts";
 import { ifFires } from "./if-field/index.ts";
 
+import type { HookExecResult } from "./exec-result.ts";
 import type { RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent, DispatchableEvent } from "../../domain/components/hook-events.ts";
@@ -119,6 +120,8 @@ function matcherFiresOnToolEvent(matcher: ParsedMatcher, toolName: string): bool
     case "regex":
     case "unmapped":
       return false;
+    default:
+      return assertNever(matcher, `unreachable ParsedMatcher arm: ${JSON.stringify(matcher)}`);
   }
 }
 
@@ -168,7 +171,7 @@ interface ReducedBucket {
 
 async function reduceBucket(
   runtime: HooksRuntime,
-  bucket: ReadonlyArray<RoutingEntry>,
+  bucket: readonly RoutingEntry[],
   event: unknown,
   ctx: ExtensionContext,
   pi: ExtensionAPI | undefined,
@@ -220,7 +223,7 @@ async function reduceBucket(
       case "noop":
         continue;
       default:
-        return assertNever(r);
+        return assertNever(r, `unreachable HookExecResult arm: ${JSON.stringify(r)}`);
     }
   }
 
@@ -258,7 +261,7 @@ export interface BucketOutcome {
  */
 export async function collectBucketOutcomes(
   runtime: HooksRuntime,
-  bucket: ReadonlyArray<RoutingEntry>,
+  bucket: readonly RoutingEntry[],
   event: unknown,
   ctx: ExtensionContext,
   pi: ExtensionAPI | undefined,
@@ -437,6 +440,12 @@ function adaptForEvent(
       adaptObservationResultForEvent(runtime, reduced.result, claudeEvent, provenance);
       return undefined;
     }
+
+    default:
+      return assertNever(
+        claudeEvent,
+        `unreachable CompositeDispatchEvent arm: ${JSON.stringify(claudeEvent)}`,
+      );
   }
 }
 
@@ -505,5 +514,11 @@ function entryFires(
     case "PostCompact":
     case "UserPromptSubmit":
       return true;
+
+    default:
+      return assertNever(
+        claudeEvent,
+        `unreachable CompositeDispatchEvent arm: ${JSON.stringify(claudeEvent)}`,
+      );
   }
 }

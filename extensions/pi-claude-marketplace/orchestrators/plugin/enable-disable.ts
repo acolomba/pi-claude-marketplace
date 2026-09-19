@@ -73,8 +73,6 @@ import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
-import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
-import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
 import {
   DISABLE_CONTEXT,
@@ -85,7 +83,6 @@ import {
   type DisableMsg,
   type EnableMsg,
 } from "./enable-disable.messaging.ts";
-import { runInstallLedger } from "./install-outcome.ts";
 import {
   absentTargetReasons,
   applyPartialCascadeFold,
@@ -93,20 +90,26 @@ import {
   missIsNotInstalled,
   enableRowDependencies,
   resolveCrossScopePluginTarget,
-  selectDeclaringConfigWriteTarget,
+  type selectDeclaringConfigWriteTarget,
   type CrossScopePluginResolution,
   type DeclaringConfigWriteTarget,
   type LedgerDegradationSignals,
-  writeAdoptingConfigEntries,
+  type writeAdoptingConfigEntries,
 } from "./shared.ts";
 
-import type { InstallFailureCapture, InstallLedgerResult } from "./install-outcome.ts";
+import type {
+  InstallFailureCapture,
+  InstallLedgerResult,
+  runInstallLedger,
+} from "./install-outcome.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
+import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import type { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
 
 /**
@@ -160,23 +163,28 @@ export type EnableDegradationSignals = LedgerDegradationSignals;
  *   structural `"marketplace not added"` sentinel can flow through the same field.
  */
 export type EnableDisablePluginOutcome =
+  | ({ readonly status: "enabled"; readonly version?: string } & EnableDisableSubject &
+      EnableDegradationSignals)
+  | ({ readonly status: "disabled"; readonly version?: string } & EnableDisableSubject)
   | ({
-      readonly status: "enabled";
-      readonly name: string;
-      readonly version?: string;
-    } & EnableDegradationSignals)
-  | { readonly status: "disabled"; readonly name: string; readonly version?: string }
-  | {
       readonly status: "skipped";
-      readonly name: string;
       readonly reason: "already enabled" | "already disabled" | "not installed";
-    }
+    } & EnableDisableSubject)
   | {
       readonly status: "failed";
       readonly reason: Reason;
       readonly error: Error;
       readonly cause: string;
     };
+
+/**
+ * The plugin every non-failed arm names. Declared once so a reader of any arm
+ * credits the same slot -- the failed arm carries no subject, which is why the
+ * base is intersected rather than hoisted over the whole union.
+ */
+export interface EnableDisableSubject {
+  readonly name: string;
+}
 
 /**
  * D-54-01 options bundle for `setPluginEnabled`. Mirrors
@@ -215,14 +223,6 @@ export interface EnableDisableTransaction {
   readonly withLockedStateTransaction: typeof withLockedStateTransaction;
   readonly writeConfigEntries: typeof writeAdoptingConfigEntries;
 }
-
-const REAL_ENABLE_DISABLE_TRANSACTION: EnableDisableTransaction = {
-  cascadeUnstagePlugin,
-  runInstallLedger,
-  selectConfigWriteTarget: selectDeclaringConfigWriteTarget,
-  withLockedStateTransaction,
-  writeConfigEntries: writeAdoptingConfigEntries,
-};
 
 /** Hook route effects required by enable and disable after durable state changes. */
 export type EnableDisableHooksRouting = Pick<
@@ -1009,13 +1009,6 @@ export function createSetPluginEnabled(
   }
 
   return configuredSetPluginEnabled;
-}
-
-/** Compose the real enable/disable transaction with one required routing owner. */
-export function createNodeSetPluginEnabled(
-  hooksRouting: EnableDisableHooksRouting,
-): SetPluginEnabledOperation {
-  return createSetPluginEnabled(REAL_ENABLE_DISABLE_TRANSACTION, hooksRouting);
 }
 
 /**

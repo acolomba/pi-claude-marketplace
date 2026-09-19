@@ -16,19 +16,25 @@ import {
 } from "../../../orchestrators/marketplace/update.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
+import { extractLocalFlag } from "../shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { EdgeDeps } from "../../types.ts";
 
-const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|project]";
+const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|project] [--local]";
 
 export function makeMarketplaceUpdateHandler(
   pi: ExtensionAPI,
   deps: Pick<EdgeDeps, "completionCache" | "gitOps" | "pluginUpdate">,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
+    const localFlag = extractLocalFlag(args, ctx, USAGE);
+    if (localFlag === undefined) {
+      return;
+    }
+
     const parsed = parseCommandArgs(
-      args,
+      localFlag.residualArgs,
       {
         positional: [{ name: "name", required: false }] as const,
         usage: USAGE,

@@ -44,8 +44,11 @@ import type { GitCredentials } from "./git.ts";
  *   - approve: persist a credential to the OS keychain
  *   - reject: evict a credential from the OS keychain
  *
- * The default implementation spawns `git credential fill/approve/reject`.
- * `createCredentialOps` accepts a process launcher for alternate adapters.
+ * `createCredentialOps` takes its process launcher and its timeout as
+ * explicit collaborators. `NODE_CREDENTIAL_SPAWN` is the launcher that runs
+ * the real `git credential fill/approve/reject` subprocess; the composition
+ * owner (`orchestrators/auth-host.ts`) supplies it, and an alternate adapter
+ * supplies its own.
  *
  * buildAuthCallbacks consumes this seam.
  *
@@ -92,15 +95,29 @@ export type CredentialSpawn = (
   options: CredentialSpawnOptions,
 ) => CredentialProcess;
 
+/**
+ * The real process launcher: Node's own `spawn`, narrowed to the
+ * `CredentialSpawn` contract.
+ *
+ * D-21 keeps the `node:child_process` IMPORT in this module; this binding is
+ * how the composition owner names the production launcher without acquiring
+ * that import itself. The cast narrows `ChildProcess` to the three streams
+ * and two events `gitCredentialIO` actually uses -- the runtime value is
+ * Node's `spawn`, unwrapped.
+ */
+export const NODE_CREDENTIAL_SPAWN = spawn as CredentialSpawn;
+
 export interface CreateCredentialOpsOptions {
-  readonly spawn?: CredentialSpawn;
-  readonly timeoutMs?: number;
+  /** The process launcher. `NODE_CREDENTIAL_SPAWN` in production. */
+  readonly spawn: CredentialSpawn;
+  /** Milliseconds before a pending `git credential` subprocess is SIGTERMed. */
+  readonly timeoutMs: number;
 }
 
 /**
  * Spawn `git credential <subcommand>` and feed `input` over stdin. Returns
  * { stdout, code } on close. Rejects on subprocess "error" (ENOENT
- * et al.) or on timeout (default 5_000ms).
+ * et al.) or on the caller-supplied timeout.
  *
  * Timeout discipline (CP-4): the setTimeout handle calls .unref() so a
  * pending timer cannot keep the host Pi process alive past success.
@@ -294,11 +311,15 @@ async function credentialReject(
   }
 }
 
-export function createCredentialOps(options: CreateCredentialOpsOptions = {}): CredentialOps {
-  const spawnProcess = options.spawn ?? (spawn as CredentialSpawn);
-  const timeoutMs = options.timeoutMs ?? 5_000;
+/**
+ * Bind a `CredentialOps` triple to one launcher and one timeout.
+ *
+ * Construction performs no I/O: the three returned primitives close over the
+ * launcher and only invoke it when they are called.
+ */
+export function createCredentialOps(options: CreateCredentialOpsOptions): CredentialOps {
   const runGitCredential: RunGitCredential = (subcommand, input) =>
-    gitCredentialIO(subcommand, input, spawnProcess, timeoutMs);
+    gitCredentialIO(subcommand, input, options.spawn, options.timeoutMs);
 
   return {
     fill: (host) => credentialFill(host, runGitCredential),
@@ -306,5 +327,3 @@ export function createCredentialOps(options: CreateCredentialOpsOptions = {}): C
     reject: (host, cred) => credentialReject(host, cred, runGitCredential),
   };
 }
-
-export const DEFAULT_CREDENTIAL_OPS: CredentialOps = createCredentialOps();

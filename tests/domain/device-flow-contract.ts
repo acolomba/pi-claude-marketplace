@@ -395,6 +395,7 @@ export function registerDeviceFlowContract(
   ) => DeviceFlowContractParticipant | Promise<DeviceFlowContractParticipant>,
 ): void {
   for (const contractCase of deviceFlowContractCases) {
+    // eslint-disable-next-line sonarjs/assertions-in-tests -- Each selected contractCase.run performs its own assertions; Sonar cannot follow the dynamic dispatch.
     test(contractCase.name, async (context) => {
       // arrange
       const createParticipant: DeviceFlowContractFactory = (scenario) =>

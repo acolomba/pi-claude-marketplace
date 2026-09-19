@@ -4,7 +4,7 @@
  * Wires the full auth stack end-to-end without going through the
  * full add/update orchestrators:
  *
- *   buildAuthCallbacks (platform/git.ts)
+ *   buildAuthCallbacks (platform/git-auth-callbacks.ts)
  *     -> onAuth / onAuthFailure closures
  *       -> initiateDeviceFlow (domain/github-auth.ts)
  *         -> CredentialOps (tests/platform/credential-ops-fake.ts)
@@ -26,7 +26,7 @@ import { initiateDeviceFlow } from "../../extensions/pi-claude-marketplace/domai
 import {
   buildAuthCallbacks,
   type OnAuthRequiredFn,
-} from "../../extensions/pi-claude-marketplace/platform/git.ts";
+} from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { makeRawNotifyFn } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";

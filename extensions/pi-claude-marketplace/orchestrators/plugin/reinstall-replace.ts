@@ -49,13 +49,19 @@ import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { RmOptions } from "node:fs";
 
 type BridgePhase = "skills" | "commands" | "agents" | "mcp";
 
-/** Filesystem removal seam used after a committed reinstall. */
+/**
+ * Filesystem removal seam used after a committed reinstall. The options
+ * narrow Node's own removal options: both slots are optional booleans there,
+ * and pinning each to `true` is what stops a non-recursive or non-forced
+ * removal from satisfying the seam.
+ */
 export type RemoveDataDirFn = (
   path: string,
-  options: { recursive: true; force: true },
+  options: RmOptions & { recursive: true; force: true },
 ) => Promise<void>;
 
 /** Prepared bridge handles retained until state persistence commits. */
@@ -143,17 +149,35 @@ export interface ReinstallMaintenanceInput {
   readonly removeDataDir?: RemoveDataDirFn;
 }
 
-/** Owns reinstall's prepare, replacement, compensation, and commit schedule. */
+/**
+ * Owns reinstall's prepare, replacement, compensation, and commit schedule.
+ *
+ * Each schedule step is declared as an explicit signature rather than `typeof`
+ * its implementation: the implementations are module-private, and the explicit
+ * form makes `REAL_REINSTALL_TRANSACTION`'s annotation the place a signature
+ * drift surfaces as a compile error.
+ */
 export interface ReinstallTransaction {
-  readonly finalizeReinstalledPlugin: typeof finalizeReinstalledPlugin;
+  readonly finalizeReinstalledPlugin: (
+    replacement: ReinstallReplacement,
+  ) => Promise<readonly string[]>;
   /**
    * D-05-01: the transaction owns which physical bridges the replacement
    * schedule drives, so replacement and compensation reach the same owner.
    */
   readonly replaceOperations: ReinstallReplaceOperations;
-  readonly replaceReinstalledPlugin: typeof replaceReinstalledPlugin;
-  readonly rollbackReinstalledPlugin: typeof rollbackReinstalledPlugin;
-  readonly runPostSuccessMaintenance: typeof runPostSuccessMaintenance;
+  readonly replaceReinstalledPlugin: (
+    input: ReplaceReinstalledPluginInput,
+    operations: ReinstallReplaceOperations,
+  ) => Promise<ReinstallReplacement>;
+  readonly rollbackReinstalledPlugin: (
+    replacement: ReinstallReplacement,
+  ) => Promise<readonly string[]>;
+  readonly runPostSuccessMaintenance: (
+    input: ReinstallMaintenanceInput,
+    locations: ScopedLocations,
+    completionCache: CompletionCache,
+  ) => Promise<readonly string[]>;
   readonly withLockedStateTransaction: typeof withLockedStateTransaction;
 }
 
@@ -197,7 +221,7 @@ const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
 };
 
 /** Prepare every bridge, then replace them as one compensatable operation. */
-export async function replaceReinstalledPlugin(
+async function replaceReinstalledPlugin(
   input: ReplaceReinstalledPluginInput,
   operations: ReinstallReplaceOperations,
 ): Promise<ReinstallReplacement> {
@@ -230,7 +254,7 @@ export async function replaceReinstalledPlugin(
 }
 
 /** Roll back every physically replaced bridge in reverse order. */
-export async function rollbackReinstalledPlugin(
+async function rollbackReinstalledPlugin(
   replacement: ReinstallReplacement,
 ): Promise<readonly string[]> {
   return rollbackReplacements(
@@ -241,7 +265,7 @@ export async function rollbackReinstalledPlugin(
 }
 
 /** Remove bridge backups after the state transaction commits. */
-export async function finalizeReinstalledPlugin(
+async function finalizeReinstalledPlugin(
   replacement: ReinstallReplacement,
 ): Promise<readonly string[]> {
   return finalizeReplacements(
@@ -252,7 +276,7 @@ export async function finalizeReinstalledPlugin(
 }
 
 /** Run non-fatal cache and data-directory cleanup after commit. */
-export async function runPostSuccessMaintenance(
+async function runPostSuccessMaintenance(
   input: ReinstallMaintenanceInput,
   locations: ScopedLocations,
   completionCache: CompletionCache,
@@ -293,7 +317,6 @@ async function prepareAllHandles(
   try {
     handles.skills = await operations.prepareStageSkills(ops, {
       locations: input.locations,
-      marketplaceName: input.marketplace,
       pluginName: input.plugin,
       pluginRoot: input.installable.pluginRoot,
       pluginDataDir: input.pluginDataDir,
@@ -303,7 +326,6 @@ async function prepareAllHandles(
     });
     handles.commands = await operations.prepareStageCommands(ops, {
       locations: input.locations,
-      marketplaceName: input.marketplace,
       pluginName: input.plugin,
       pluginRoot: input.installable.pluginRoot,
       pluginDataDir: input.pluginDataDir,
@@ -317,7 +339,6 @@ async function prepareAllHandles(
       pluginName: input.plugin,
       pluginRoot: input.installable.pluginRoot,
       pluginDataDir: input.pluginDataDir,
-      resolved: input.installable,
       agentsDirs: input.agentsDirs,
       knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
       cwd: input.cwd,

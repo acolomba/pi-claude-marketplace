@@ -174,7 +174,14 @@ export type UninstallHooksRouting = Pick<
   "rebuildRoutingTables" | "removePluginConfigFromCache"
 >;
 
-const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
+/**
+ * The one concrete binding of uninstall's semantic transaction contract.
+ * `orchestrators/plugin/operations.ts` is its single consumer: three of the six
+ * members are steps of the uninstall algorithm itself and stay private to this
+ * module, so the bound object -- not its parts -- is what the composition owner
+ * imports (D-03).
+ */
+export const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
   cascadeUnstagePlugin,
   commitPluginRemoval,
   loadTargetConfig: loadConfig,
@@ -382,7 +389,7 @@ function foldPartialCascadeFailure(
  */
 function commitPluginRemoval(
   mp: { plugins: Record<string, unknown> },
-  ids: { readonly scope: Scope; readonly marketplace: string; readonly plugin: string },
+  ids: { readonly plugin: string },
 ): void {
   // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- mp.plugins is a dynamic-key Record<string, ...>.
   delete mp.plugins[ids.plugin];
@@ -718,7 +725,7 @@ async function uninstallPluginWithTransaction(
         return;
       }
 
-      transaction.commitPluginRemoval(mp, { scope, marketplace, plugin });
+      transaction.commitPluginRemoval(mp, { plugin });
 
       if (!orchestrated) {
         await transaction.sweepConfigLayers(locations, plugin, marketplace);
@@ -870,12 +877,4 @@ export function createUninstallPlugin(
   }
 
   return configuredUninstallPlugin;
-}
-
-/** Production uninstall operation bound to the root lifecycle routing owner. */
-export function createNodeUninstallPlugin(
-  hooksRouting: UninstallHooksRouting,
-  completionCache: CompletionCache,
-): UninstallPluginOperation {
-  return createUninstallPlugin(REAL_UNINSTALL_TRANSACTION, hooksRouting, completionCache);
 }

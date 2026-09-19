@@ -58,7 +58,10 @@ import { loadMergedScopeConfig, type MergedConfig } from "../../persistence/conf
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { type PluginFailedMessage } from "../../shared/notification-types.ts";
+import {
+  type MarketplaceDetails,
+  type PluginFailedMessage,
+} from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -78,6 +81,9 @@ import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
+
+/** Rows actually returned by the loader; listPlugins constructs failure notifications separately. */
+type PayloadListMsg = Exclude<ListMsg, { status: "failed" }>;
 
 /**
  * PluginRenderStatus retained as an internal alias to keep the orchestrator's
@@ -305,7 +311,7 @@ async function enumerateMarketplacePlugins(args: {
    */
   pluginScopeConfig: MergedConfig;
   excludeFromAvailable?: ReadonlySet<string> | undefined;
-}): Promise<ListMsg[]> {
+}): Promise<PayloadListMsg[]> {
   const {
     opts,
     mpName,
@@ -316,7 +322,7 @@ async function enumerateMarketplacePlugins(args: {
     pluginScopeConfig,
     excludeFromAvailable = new Set<string>(),
   } = args;
-  const rows: ListMsg[] = [];
+  const rows: PayloadListMsg[] = [];
   const installedRecords = mpRecord.plugins;
   const installedNames = new Set(Object.keys(installedRecords));
 
@@ -382,11 +388,12 @@ async function enumerateMarketplacePlugins(args: {
  * "loaded" and "could not be read" are a single state rather than a manifest
  * plus a separate flag that can drift out of agreement (BOUND-03 / D-95-04).
  * `ok: false` is the ONLY state in which an absence claim is unsupported, so
- * the enumerator tests it once.
+ * the enumerator tests it once. The failure arm carries no message: BOUND-03 /
+ * D-95-05 keeps the bare `(installed)` row and suppresses only the unverified
+ * claim, so nothing on this surface renders a read failure's text.
  */
 type ScopedManifest =
-  | { readonly ok: true; readonly manifest: MarketplaceManifest }
-  | { readonly ok: false; readonly loadError: string };
+  { readonly ok: true; readonly manifest: MarketplaceManifest } | { readonly ok: false };
 
 /**
  * Resolve one installed record against its marketplace's manifest read.
@@ -431,8 +438,8 @@ async function loadMarketplaceManifestSoftly(
   try {
     const manifest = await loadManifestSoftly(mpRecord.manifestPath);
     return { ok: true, manifest };
-  } catch (err) {
-    return { ok: false, loadError: errorMessage(err) };
+  } catch {
+    return { ok: false };
   }
 }
 
@@ -455,7 +462,7 @@ async function loadMarketplaceManifestSoftly(
  * state (lines 168-182).
  */
 interface BuiltMarketplace {
-  readonly mp: MarketplaceRows<ListMsg>;
+  readonly mp: MarketplaceRows<PayloadListMsg>;
   readonly emitScope: Scope;
 }
 
@@ -525,7 +532,7 @@ async function buildMarketplaceMessage(args: {
   autoupdate: boolean;
   /** DFEN-04: `mpScope`'s merged config view -- the enumeration's plugin scope. */
   scopeConfig: MergedConfig;
-  extraPlugins: readonly ListMsg[];
+  extraPlugins: readonly PayloadListMsg[];
   excludeFromAvailable?: ReadonlySet<string>;
 }): Promise<BuiltMarketplace> {
   const {
@@ -574,7 +581,7 @@ async function buildMarketplaceMessage(args: {
     pluginScopeConfig: scopeConfig,
     excludeFromAvailable,
   });
-  const merged: readonly ListMsg[] = [...ownPlugins, ...extraPlugins];
+  const merged: readonly PayloadListMsg[] = [...ownPlugins, ...extraPlugins];
 
   // `details` is OPTIONAL and INDEPENDENT of status per D-15-06. The
   // plugin-list surface carries only the `autoupdate` marker;
@@ -586,7 +593,7 @@ async function buildMarketplaceMessage(args: {
   // reference: every `/claude:plugin list` fixture at
   // docs/output-catalog.md:139-263 has `details: { autoupdate: true }` --
   // no `lastUpdatedAt` field.
-  const detailsField: { readonly details?: { autoupdate: boolean } } = autoupdate
+  const detailsField: { readonly details?: Pick<MarketplaceDetails, "autoupdate"> } = autoupdate
     ? { details: { autoupdate: true } }
     : {};
 
@@ -609,7 +616,7 @@ async function buildMarketplaceMessage(args: {
  */
 export async function loadPluginListPayload(
   opts: ListPluginsOptions,
-): Promise<readonly MarketplaceRows<ListMsg>[]> {
+): Promise<readonly MarketplaceRows<Exclude<ListMsg, { status: "failed" }>>[]> {
   // D-13-19: read both scopes' state.
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);

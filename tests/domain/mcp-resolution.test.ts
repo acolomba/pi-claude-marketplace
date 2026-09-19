@@ -445,21 +445,24 @@ test("classifies a wrapped malformed map like an inline malformed map", async ()
   );
 });
 
-test("resolves valid loose entry MCP without filesystem access", async () => {
+test("resolves valid inline entry MCP without filesystem access", async () => {
   // arrange
-  const { resolveLooseMcp } =
+  const { resolveStrictMcp } =
     await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
 
   // act
-  const dirty = await resolveLooseMcp(
+  const dirty = await resolveStrictMcp(
     {
       entry: { mcpServers: { alpha: {} } },
       manifest: null,
       pluginRoot: "/plugins/alpha",
       resolution,
     },
-    () => Promise.reject(new Error("must not inspect standalone MCP")),
+    {
+      statKind: () => Promise.reject(new Error("must not inspect standalone MCP")),
+      readFileText: () => Promise.reject(new Error("must not read standalone MCP")),
+    },
   );
 
   // assert
@@ -472,105 +475,18 @@ test("resolves valid loose entry MCP without filesystem access", async () => {
   );
 });
 
-test("reports manifest and standalone loose MCP without an entry as one conflict", async () => {
+test("treats fully absent strict MCP as empty", async () => {
   // arrange
-  const { resolveLooseMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
-  const manifestResolution = emptyResolution();
-  const standaloneResolution = emptyResolution();
-
-  // act
-  const manifestDirty = await resolveLooseMcp(
-    {
-      entry: {},
-      manifest: { mcpServers: { alpha: {} } },
-      pluginRoot: "/plugins/manifest",
-      resolution: manifestResolution,
-    },
-    () => Promise.resolve(null),
-  );
-  const standaloneDirty = await resolveLooseMcp(
-    {
-      entry: {},
-      manifest: null,
-      pluginRoot: "/plugins/standalone",
-      resolution: standaloneResolution,
-    },
-    (candidate) => Promise.resolve(candidate === "/plugins/standalone/.mcp.json" ? "file" : null),
-  );
-
-  // assert
-  const conflictResolution = {
-    notes: [
-      "component declarations conflict: manifest/standalone mcpServers without entry-level declaration",
-    ],
-    mcpServers: {},
-  };
-  assert.deepStrictEqual(
-    { manifestDirty, manifestResolution, standaloneDirty, standaloneResolution },
-    {
-      manifestDirty: true,
-      manifestResolution: conflictResolution,
-      standaloneDirty: true,
-      standaloneResolution: conflictResolution,
-    },
-  );
-});
-
-test("treats fully absent loose MCP as empty", async () => {
-  // arrange
-  const { resolveLooseMcp } =
+  const { resolveStrictMcp } =
     await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
 
   // act
-  const dirty = await resolveLooseMcp(
+  const dirty = await resolveStrictMcp(
     { entry: {}, manifest: null, pluginRoot: "/plugins/alpha", resolution },
-    () => Promise.resolve(null),
+    mcpFiles({}),
   );
 
   // assert
   assert.deepStrictEqual({ dirty, resolution }, { dirty: false, resolution: emptyResolution() });
-});
-
-test("distinguishes loose string references from malformed inline values", async () => {
-  // arrange
-  const { resolveLooseMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
-  const referenceResolution = emptyResolution();
-  const malformedResolution = emptyResolution();
-
-  // act
-  const referenceDirty = await resolveLooseMcp(
-    {
-      entry: { mcpServers: "servers.json" },
-      manifest: null,
-      pluginRoot: "/plugins/alpha",
-      resolution: referenceResolution,
-    },
-    () => Promise.resolve(null),
-  );
-  const malformedDirty = await resolveLooseMcp(
-    {
-      entry: { mcpServers: 42 },
-      manifest: null,
-      pluginRoot: "/plugins/alpha",
-      resolution: malformedResolution,
-    },
-    () => Promise.resolve(null),
-  );
-
-  // assert
-  assert.deepStrictEqual(
-    { referenceDirty, referenceResolution, malformedDirty, malformedResolution },
-    {
-      referenceDirty: true,
-      referenceResolution: {
-        notes: ['unsupported mcpServers string reference in loose mode: "servers.json"'],
-        mcpServers: {},
-      },
-      malformedDirty: true,
-      malformedResolution: { notes: ["malformed mcpServers"], mcpServers: {} },
-    },
-  );
 });

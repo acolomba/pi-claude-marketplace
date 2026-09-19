@@ -316,6 +316,7 @@ export const credentialOpsContractCases = [
 
 export function registerCredentialOpsContract(createCredentialOps: CredentialOpsFactory): void {
   for (const contractCase of credentialOpsContractCases) {
+    // eslint-disable-next-line sonarjs/assertions-in-tests -- Each selected contractCase.run performs its own assertions; Sonar cannot follow the dynamic dispatch.
     test(contractCase.name, async () => {
       // arrange
       const runCase = contractCase.run;

@@ -19,8 +19,6 @@ import { notify } from "../../shared/notification-dispatch.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
-import { runPhases } from "../../transaction/phase-ledger.ts";
-import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin, crossScopeFlag } from "../marketplace/shared.ts";
 
 import { probeInstallClone } from "./install-clone-probe.ts";
@@ -54,6 +52,8 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { runPhases } from "../../transaction/phase-ledger.ts";
+import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { InstallPluginOutcome } from "../types.ts";
 
@@ -189,11 +189,6 @@ export interface InstallTransaction {
   readonly runPhases: typeof runPhases;
   readonly withLockedStateTransaction: typeof withLockedStateTransaction;
 }
-
-const REAL_INSTALL_TRANSACTION: InstallTransaction = {
-  runPhases: (...args) => runPhases(...args),
-  withLockedStateTransaction: (...args) => withLockedStateTransaction(...args),
-};
 
 /**
  * Assemble the `InstallLedgerOptions` from the entrypoint options, spreading
@@ -762,7 +757,6 @@ async function installPluginWithTransaction(
         // no edit to any of the six phase bodies.
         const disableResult = await disableCascade.disableFreshInstall({
           state,
-          scope,
           locations,
           marketplace,
           plugin,
@@ -1121,12 +1115,4 @@ export function createInstallPlugin(
   completionCache: CompletionCache,
 ): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
   return (opts) => installPluginWithTransaction(transaction, hooksRouting, completionCache, opts);
-}
-
-/** Bind production install behavior to required routing and completion-cache owners. */
-export function createNodeInstallPlugin(
-  hooksRouting: InstallHooksRouting,
-  completionCache: CompletionCache,
-): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
-  return createInstallPlugin(REAL_INSTALL_TRANSACTION, hooksRouting, completionCache);
 }

@@ -37,7 +37,7 @@
 // `unlinkPidTable` ALL trap their own exceptions, debug-log them at
 // the OBS-01 seam (`hookDebugLog`), and return / resolve without
 // escape. The orphan-reap pass treats every failure as fail-clean
-// (NFR-3): missing data simply means no orphans to reap.
+// (NFR-3): missing data means no orphans to reap.
 
 import { readFile, unlink } from "node:fs/promises";
 import path from "node:path";
@@ -50,14 +50,14 @@ import { assertPathInside } from "../../../shared/path-safety.ts";
 import type { ScopedLocations } from "../../../persistence/locations.ts";
 
 /** D-62-05: on-disk filename for the per-scope pid table. */
-export const ASYNC_REWAKE_PIDS_FILENAME = "async-rewake-pids.json";
+const ASYNC_REWAKE_PIDS_FILENAME = "async-rewake-pids.json";
 
 /**
  * D-62-05: hardcoded envelope discriminator. v1.14+ migrations bump
  * this constant and the reader's shape probe atomically; readers that
  * predate the bump see an unknown version and fall back to `[]`.
  */
-export const ASYNC_REWAKE_PID_TABLE_VERSION = 1;
+const ASYNC_REWAKE_PID_TABLE_VERSION = 1;
 
 /**
  * One row in the pid table. Fields are populated by the registry at

@@ -3,94 +3,8 @@ import { describe, test } from "node:test";
 
 import {
   emitGeneratedAgentFile,
-  emitYamlScalar,
   parseFrontmatter,
-  sanitizeProvenanceValue,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
-
-describe("emitYamlScalar", () => {
-  for (const { description, scalar, expectedScalar } of [
-    {
-      description: "plain text unchanged",
-      scalar: "plain description",
-      expectedScalar: "plain description",
-    },
-    {
-      description: "matching double quotes inside single quotes",
-      scalar: '"quoted description"',
-      expectedScalar: `'"quoted description"'`,
-    },
-    {
-      description: "matching single quotes inside double quotes",
-      scalar: "'quoted description'",
-      expectedScalar: `"'quoted description'"`,
-    },
-    {
-      description: "an unmatched opening double quote unchanged",
-      scalar: '"quoted description',
-      expectedScalar: '"quoted description',
-    },
-    {
-      description: "an unmatched opening single quote unchanged",
-      scalar: "'quoted description",
-      expectedScalar: "'quoted description",
-    },
-    {
-      description: "LF and CRLF sequences as spaces",
-      scalar: "first line\nsecond line\r\nthird line",
-      expectedScalar: "first line second line third line",
-    },
-    {
-      description: "the empty scalar unchanged",
-      scalar: "",
-      expectedScalar: "",
-    },
-  ]) {
-    test(`emits ${description}`, () => {
-      // arrange
-      const descriptionScalar = scalar;
-      const expectedDescriptionScalar = expectedScalar;
-
-      // act
-      const emittedDescriptionScalar = emitYamlScalar(descriptionScalar);
-
-      // assert
-      assert.strictEqual(emittedDescriptionScalar, expectedDescriptionScalar);
-    });
-  }
-});
-
-describe("sanitizeProvenanceValue", () => {
-  for (const { description, provenanceValue, expectedProvenanceValue } of [
-    {
-      description: "plain provenance unchanged",
-      provenanceValue: "agents/reviewer.md",
-      expectedProvenanceValue: "agents/reviewer.md",
-    },
-    {
-      description: "LF and CRLF sequences as spaces",
-      provenanceValue: "agents/reviewer.md\ninjected: field\r\nwarning",
-      expectedProvenanceValue: "agents/reviewer.md injected: field warning",
-    },
-    {
-      description: "the empty provenance unchanged",
-      provenanceValue: "",
-      expectedProvenanceValue: "",
-    },
-  ]) {
-    test(`emits ${description}`, () => {
-      // arrange
-      const provenance = provenanceValue;
-      const expectedProvenance = expectedProvenanceValue;
-
-      // act
-      const sanitizedProvenance = sanitizeProvenanceValue(provenance);
-
-      // assert
-      assert.strictEqual(sanitizedProvenance, expectedProvenance);
-    });
-  }
-});
 
 describe("parseFrontmatter", () => {
   for (const { description, agentFile, expectedAgentFile } of [
@@ -666,6 +580,150 @@ Body.
 });
 
 describe("emitGeneratedAgentFile", () => {
+  for (const { description, scalar, expectedScalar } of [
+    {
+      description: "plain text unchanged",
+      scalar: "plain description",
+      expectedScalar: "plain description",
+    },
+    {
+      description: "matching double quotes inside single quotes",
+      scalar: '"quoted description"',
+      expectedScalar: `'"quoted description"'`,
+    },
+    {
+      description: "matching single quotes inside double quotes",
+      scalar: "'quoted description'",
+      expectedScalar: `"'quoted description'"`,
+    },
+    {
+      description: "an unmatched opening double quote unchanged",
+      scalar: '"quoted description',
+      expectedScalar: '"quoted description',
+    },
+    {
+      description: "an unmatched opening single quote unchanged",
+      scalar: "'quoted description",
+      expectedScalar: "'quoted description",
+    },
+    {
+      description: "LF and CRLF sequences as spaces",
+      scalar: "first line\nsecond line\r\nthird line",
+      expectedScalar: "first line second line third line",
+    },
+    {
+      description: "the empty scalar unchanged",
+      scalar: "",
+      expectedScalar: "",
+    },
+  ]) {
+    test(`emits a description with ${description}`, () => {
+      // arrange
+      const expectedAgentFile = `---
+name: reviewer
+description: ${expectedScalar}
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: reviewer
+  sourcePath: agents/reviewer.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Review files.
+`;
+
+      // act
+      const agentFile = emitGeneratedAgentFile({
+        frontmatter: { name: "reviewer", description: scalar, skills: [], inheritSkills: false },
+        provenance: {
+          pluginName: "acme",
+          sourceName: "reviewer",
+          sourcePath: "agents/reviewer.md",
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        },
+        body: "Review files.",
+      });
+
+      // assert
+      assert.strictEqual(agentFile, expectedAgentFile);
+    });
+  }
+
+  for (const { description, provenanceValue, expectedProvenanceValue } of [
+    {
+      description: "plain provenance unchanged",
+      provenanceValue: "agents/reviewer.md",
+      expectedProvenanceValue: "agents/reviewer.md",
+    },
+    {
+      description: "LF and CRLF sequences as spaces",
+      provenanceValue: "agents/reviewer.md\ninjected: field\r\nwarning",
+      expectedProvenanceValue: "agents/reviewer.md injected: field warning",
+    },
+    {
+      description: "the empty provenance unchanged",
+      provenanceValue: "",
+      expectedProvenanceValue: "",
+    },
+  ]) {
+    test(`emits source provenance with ${description}`, () => {
+      // arrange
+      const expectedAgentFile = `---
+name: reviewer
+description: Reviews files
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: reviewer
+  sourcePath: ${expectedProvenanceValue}
+  originalModel: ${expectedProvenanceValue}
+  droppedFields:
+    - ${expectedProvenanceValue}
+  droppedTools:
+    - ${expectedProvenanceValue}
+  warnings:
+    - ${expectedProvenanceValue}
+---
+
+Review files.
+`;
+
+      // act
+      const agentFile = emitGeneratedAgentFile({
+        frontmatter: {
+          name: "reviewer",
+          description: "Reviews files",
+          skills: [],
+          inheritSkills: false,
+        },
+        provenance: {
+          pluginName: "acme",
+          sourceName: "reviewer",
+          sourcePath: provenanceValue,
+          originalModel: provenanceValue,
+          droppedFields: [provenanceValue],
+          droppedTools: [provenanceValue],
+          warnings: [provenanceValue],
+        },
+        body: "Review files.",
+      });
+
+      // assert
+      assert.strictEqual(agentFile, expectedAgentFile);
+    });
+  }
+
   test("emits complete metadata, sanitized provenance, a skill legend, and exact body bytes", () => {
     // arrange
     const generatedAgent = {

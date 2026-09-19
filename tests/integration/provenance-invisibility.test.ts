@@ -31,10 +31,8 @@ import path from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 
-import {
-  emitGeneratedAgentFile,
-  GENERATED_AGENT_MARKER,
-} from "../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
+import { emitGeneratedAgentFile } from "../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
+import { GENERATED_AGENT_MARKER } from "../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 
 interface PiSubagentsFrontmatterModule {
   readonly parseFrontmatter: (content: string) => {

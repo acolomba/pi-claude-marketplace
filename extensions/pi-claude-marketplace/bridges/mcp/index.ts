@@ -16,5 +16,4 @@ export {
   rollbackMcpReplacement,
 } from "./stage.ts";
 export { unstageMcpServers } from "./unstage.ts";
-export { resolvePluginMcpServers } from "./parse.ts";
 export type { McpReplacement, PreparedMcpStaging } from "./types.ts";

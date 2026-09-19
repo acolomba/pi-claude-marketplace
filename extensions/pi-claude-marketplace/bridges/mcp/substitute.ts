@@ -49,7 +49,7 @@ function substituteLeaf(value: string, map: ReadonlyMap<string, string>): string
  * booleans, null, and any other non-plain value pass through untouched. Returns
  * fresh nodes -- the input is never mutated.
  */
-export function deepSubstitute(node: unknown, map: ReadonlyMap<string, string>): unknown {
+function deepSubstitute(node: unknown, map: ReadonlyMap<string, string>): unknown {
   if (typeof node === "string") {
     return substituteLeaf(node, map);
   }

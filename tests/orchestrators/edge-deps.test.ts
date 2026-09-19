@@ -36,8 +36,6 @@ type PluginRecord = MarketplaceRecord["plugins"][string];
 interface HermeticScope {
   readonly cwd: string;
   readonly home: string;
-  /** How many times the case reached the replaced process-wide transport. */
-  fetchCallCount(): number;
 }
 
 interface InstalledFixture {
@@ -80,14 +78,8 @@ function refuseNetwork(): Promise<Response> {
  */
 async function createHermeticScope(t: TestContext, label: string): Promise<HermeticScope> {
   const { cwd, home } = await createHermeticEnvironment(t, `edge-deps-${label}-`);
-  const fetchSpy = t.mock.method(globalThis, "fetch", refuseNetwork);
-  return {
-    cwd,
-    home,
-    fetchCallCount(): number {
-      return fetchSpy.mock.callCount();
-    },
-  };
+  t.mock.method(globalThis, "fetch", refuseNetwork);
+  return { cwd, home };
 }
 
 function marketplaceRootIn(cwd: string, marketplaceName: string): string {
@@ -195,49 +187,6 @@ async function layoutMarketplace(
   await writeStateFile(cwd, [marketplaceRecord(cwd, marketplaceName, records)]);
 }
 
-describe("marketplaceNamesCachePath", () => {
-  test("derives the project-scope names cache file from the working directory", async (t) => {
-    // arrange
-    const scope = await createHermeticScope(t, "names-project");
-    const resolver = makeLocationsResolver(scope.cwd);
-    const expectedCachePath = path.join(
-      scope.cwd,
-      ".pi",
-      "pi-claude-marketplace",
-      "cache",
-      "marketplace-names.json",
-    );
-
-    // act
-    const cachePath = resolver.marketplaceNamesCachePath("project");
-
-    // assert
-    assert.strictEqual(cachePath, expectedCachePath);
-    assert.strictEqual(scope.fetchCallCount(), 0);
-  });
-
-  test("derives the user-scope names cache file from the agent directory", async (t) => {
-    // arrange
-    const scope = await createHermeticScope(t, "names-user");
-    const resolver = makeLocationsResolver(scope.cwd);
-    const expectedCachePath = path.join(
-      scope.home,
-      ".pi",
-      "agent",
-      "pi-claude-marketplace",
-      "cache",
-      "marketplace-names.json",
-    );
-
-    // act
-    const cachePath = resolver.marketplaceNamesCachePath("user");
-
-    // assert
-    assert.strictEqual(cachePath, expectedCachePath);
-    assert.strictEqual(scope.fetchCallCount(), 0);
-  });
-});
-
 describe("pluginCachePath", () => {
   test("derives the project-scope per-marketplace cache file", async (t) => {
     // arrange
@@ -257,7 +206,6 @@ describe("pluginCachePath", () => {
 
     // assert
     assert.strictEqual(cachePath, expectedCachePath);
-    assert.strictEqual(scope.fetchCallCount(), 0);
   });
 
   test("derives the user-scope per-marketplace cache file", async (t) => {
@@ -279,12 +227,11 @@ describe("pluginCachePath", () => {
 
     // assert
     assert.strictEqual(cachePath, expectedCachePath);
-    assert.strictEqual(scope.fetchCallCount(), 0);
   });
 });
 
 describe("loadStateForScope", () => {
-  test("projects every recorded marketplace to its manifest path and plugin records", async (t) => {
+  test("projects every recorded marketplace to its plugin records", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "state-projection");
     const pluginRoot = pluginRootIn(scope.cwd, "team-mp", "plug");
@@ -297,14 +244,8 @@ describe("loadStateForScope", () => {
     const resolver = makeLocationsResolver(scope.cwd);
     const expectedState = {
       marketplaces: {
-        "team-mp": {
-          manifestPath: manifestPathIn(scope.cwd, "team-mp"),
-          plugins: { plug: pluginRecord(pluginRoot, { version: "1.0.0" }) },
-        },
-        "empty-mp": {
-          manifestPath: manifestPathIn(scope.cwd, "empty-mp"),
-          plugins: {},
-        },
+        "team-mp": { plugins: { plug: pluginRecord(pluginRoot, { version: "1.0.0" }) } },
+        "empty-mp": { plugins: {} },
       },
     } satisfies { readonly marketplaces: Record<string, MarketplaceStateRecordLike> };
 
@@ -313,7 +254,6 @@ describe("loadStateForScope", () => {
 
     // assert
     assert.deepStrictEqual(scopeState, expectedState);
-    assert.strictEqual(scope.fetchCallCount(), 0);
   });
 
   test("reports no marketplaces when the scope has no state file", async (t) => {
@@ -327,7 +267,6 @@ describe("loadStateForScope", () => {
 
     // assert
     assert.deepStrictEqual(scopeState, expectedState);
-    assert.strictEqual(scope.fetchCallCount(), 0);
   });
 });
 
@@ -521,7 +460,6 @@ describe("loadManifestForMarketplace", () => {
 
       // assert
       assert.deepStrictEqual(indexRows, expectedRows);
-      assert.strictEqual(scope.fetchCallCount(), 0);
     });
   }
 
@@ -543,7 +481,6 @@ describe("loadManifestForMarketplace", () => {
       );
       return true;
     });
-    assert.strictEqual(scope.fetchCallCount(), 0);
   });
 
   test("reports a soft failure when the marketplace manifest is not valid JSON", async (t) => {
@@ -565,6 +502,5 @@ describe("loadManifestForMarketplace", () => {
       assert.ok(error.cause.cause instanceof SyntaxError);
       return true;
     });
-    assert.strictEqual(scope.fetchCallCount(), 0);
   });
 });

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { translate } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts";
+import { translateSessionEnd } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts";
 
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { SessionShutdownEvent } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -21,7 +21,7 @@ test("emits the complete SessionEnd envelope with the quit reason", () => {
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translateSessionEnd(event, context);
 
   // assert
   assert.deepStrictEqual(payload, {
@@ -49,7 +49,7 @@ test("propagates the reload reason in a complete SessionEnd envelope", () => {
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translateSessionEnd(event, context);
 
   // assert
   assert.deepStrictEqual(payload, {
@@ -75,7 +75,7 @@ test("propagates the new reason without emitting the target session file", () =>
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translateSessionEnd(event, context);
 
   // assert
   assert.deepStrictEqual(payload, {
@@ -101,7 +101,7 @@ test("propagates the resume reason without emitting the target session file", ()
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translateSessionEnd(event, context);
 
   // assert
   assert.deepStrictEqual(payload, {
@@ -127,7 +127,7 @@ test("propagates the fork reason without emitting the target session file", () =
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translateSessionEnd(event, context);
 
   // assert
   assert.deepStrictEqual(payload, {
@@ -152,7 +152,7 @@ test("preserves accepted empty context values in the complete envelope", () => {
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translateSessionEnd(event, context);
 
   // assert
   assert.deepStrictEqual(payload, {

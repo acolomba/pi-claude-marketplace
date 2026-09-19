@@ -60,9 +60,13 @@ import type { Scope } from "../../shared/types.ts";
  * removal, diagnostics, tests) can read individual failure reasons WITHOUT
  * re-parsing the textual message. The message formatting is preserved for the
  * user-visible surface.
+ *
+ * @param message The formatted user-visible failure message.
+ * @param failedAgents The structured per-agent failures from the agents bridge.
  */
 export class AgentsUnstageFailureError extends Error {
   readonly failedAgents: readonly UnstageAgentFailure[];
+
   constructor(message: string, failedAgents: readonly UnstageAgentFailure[]) {
     super(message);
     this.name = "AgentsUnstageFailureError";
@@ -474,7 +478,7 @@ export function classifyAutoupdateFlip(
  * caller's withStateGuard wraps the state mutation that follows; an
  * additional fresh load happens inside that guard.
  */
-export async function resolveScopeFromState(
+async function resolveScopeFromState(
   mpName: string,
   userLocations: ScopedLocations,
   projectLocations: ScopedLocations,

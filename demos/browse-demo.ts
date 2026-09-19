@@ -1,3 +1,4 @@
+// fallow-ignore-file unused-file -- standalone operator-run demo driver: an engineer invokes it from the command line and no module ever imports it, so being unreachable from the import graph is its intended shape, not a defect.
 /**
  * Standalone interactive demo for the `/claude:plugin browse` picker.
  *
@@ -26,8 +27,8 @@ import type {
 } from "../extensions/pi-claude-marketplace/edge/browser/plugin-browser.ts";
 import type { PluginNotificationMessage } from "../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
-// ─── mock theme (hand-rolled ANSI; the real Theme lives behind the package
-//     `exports` map, unreachable from outside) ─────────────────────────────
+// Mock theme (hand-rolled ANSI; the real Theme lives behind the package
+// `exports` map, unreachable from outside).
 
 const RESET = "\x1b[0m";
 const FG: Record<string, string> = {
@@ -45,7 +46,7 @@ const theme = {
   bold: (text: string): string => `\x1b[1m${text}${RESET}`,
 };
 
-// ─── canned data ───────────────────────────────────────────────────────────
+// Canned data.
 
 const marketplaces: readonly MarketplaceEntry[] = [
   {
@@ -95,9 +96,7 @@ const team: readonly PluginNotificationMessage[] = [
   { status: "remote", name: "gitlab-bridge" },
 ];
 
-const pluginLoader = async (
-  mp: MarketplaceEntry,
-): Promise<readonly PluginNotificationMessage[]> => {
+async function pluginLoader(mp: MarketplaceEntry): Promise<readonly PluginNotificationMessage[]> {
   switch (mp.name) {
     case "anthropic-official":
       return official;
@@ -106,9 +105,9 @@ const pluginLoader = async (
     default:
       return [];
   }
-};
+}
 
-// ─── run ───────────────────────────────────────────────────────────────────
+// Run.
 
 function main(): void {
   const terminal = new ProcessTerminal();

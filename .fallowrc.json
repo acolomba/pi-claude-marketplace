@@ -1,6 +1,10 @@
 {
-  "entry": ["extensions/pi-claude-marketplace/index.ts"],
-  "production": false,
+  "entry": ["extensions/pi-claude-marketplace/index.ts", "scripts/coverage-capture.runtime.mjs"],
+  "production": {
+    "deadCode": true,
+    "health": false,
+    "dupes": false
+  },
   "health": {
     "maxCyclomatic": 20,
     "maxCognitive": 15,

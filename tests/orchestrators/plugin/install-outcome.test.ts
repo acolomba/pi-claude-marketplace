@@ -732,10 +732,10 @@ test("collects the per-source frontmatter degrade records from the skills and co
   assert.deepStrictEqual(ledgerOutcome.summary.stagedCommandNames, ["empty:bad-command"]);
 });
 
-test("AS-7: a foreign file under a generated agent name lands on agentForeignFailures, not the rollback path", async (t) => {
+test("AS-7: a retired foreign agent target is preserved while a distinct agent installs", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-agent-foreign-");
-  const seeded = await seedPlugin(environment.cwd, { components: { agents: ["gamma"] } });
+  const seeded = await seedPlugin(environment.cwd, { components: { agents: ["new-gamma"] } });
   const locations = locationsFor("project", environment.cwd);
   const generatedName = "pi-claude-marketplace-empty-gamma";
   await mkdir(locations.agentsDir, { recursive: true });
@@ -777,9 +777,18 @@ test("AS-7: a foreign file under a generated agent name lands on agentForeignFai
 
   // assert
   assert.ok(ledgerOutcome.kind === "installed");
-  assert.deepStrictEqual(
-    ledgerOutcome.summary.agentForeignFailures.map((failure) => failure.generatedName),
-    [generatedName],
+  assert.deepStrictEqual(ledgerOutcome.summary.agentForeignFailures, [
+    {
+      generatedName,
+      reason: `target ${path.join(locations.agentsDir, `${generatedName}.md`)} is missing the generated marker`,
+    },
+  ]);
+  assert.deepStrictEqual(ledgerOutcome.summary.stagedAgentNames, [
+    "pi-claude-marketplace-empty-new-gamma",
+  ]);
+  assert.strictEqual(
+    await readFile(path.join(locations.agentsDir, `${generatedName}.md`), "utf8"),
+    "---\nname: foreign\n---\n\nNo marker.\n",
   );
   // AS-7: the install SUCCEEDED. A preserved foreign row is the user's problem
   // to resolve by hand, not a reason to unwind the plugin around it.

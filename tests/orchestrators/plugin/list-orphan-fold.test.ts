@@ -194,3 +194,23 @@ test("repeated and parallel folds remain independent and deterministic", async (
     ["beta", "alpha"],
   );
 });
+
+// Folding narrows to installed inventory, and ordering preserves that row contract.
+type FoldedRow = ReturnType<typeof foldOrphanListRows>["folded"][number];
+type ExpectedFoldedStatus =
+  "installed" | "upgradable" | "disabled" | "partially-installed" | "partially-upgradable";
+void (true satisfies [FoldedRow["status"]] extends [ExpectedFoldedStatus]
+  ? [ExpectedFoldedStatus] extends [FoldedRow["status"]]
+    ? true
+    : false
+  : false);
+// @ts-expect-error failed notifications cannot be folded inventory rows
+void ("failed" satisfies FoldedRow["status"]);
+// @ts-expect-error available candidates cannot be folded inventory rows
+void ("available" satisfies FoldedRow["status"]);
+type OrderedInstalledRow = ReturnType<
+  typeof orderPluginListBlocks<Extract<ListMsg, { status: "installed" }>>
+>[number]["plugins"][number];
+void (true satisfies OrderedInstalledRow["status"] extends "installed" ? true : false);
+// @ts-expect-error ordering must preserve its caller's narrowed row type
+void ("remote" satisfies OrderedInstalledRow["status"]);

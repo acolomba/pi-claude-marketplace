@@ -1,65 +1,74 @@
 ---
 gsd_state_version: "1.0"
-milestone: refine-unit-tests
-milestone_name: Refine Unit Tests
-status: Awaiting next milestone
-stopped_at: "Milestone closed and archived. PR #181 has since merged to main; quick tasks 260913-csn (PR #180 evaluation and suite repair, branch pr-180) and 260913-skt (SKTK-01 skill-token rewrite, branch features/skill-token-rewrite) followed, then 260913-f6a and 260913-l07 hardened the CI workflows."
-last_updated: "2026-09-14T12:00:00.000Z"
-last_activity: 2026-09-17
-last_activity_desc: Quick task 260917-bh3 condensed the #181 unreleased CHANGELOG entries
-state_head: 6551dfbf387d166f655004ec9e0421686b86cb1d
+milestone: test-backlog
+status: "test-backlog milestone shipped — PR #202"
+stopped_at: Milestone test-backlog complete and archived; next is /gsd-new-milestone
+last_updated: "2026-09-19T15:23:18.451Z"
+last_activity: 2026-09-19
+last_activity_desc: test-backlog milestone shipped as PR #202 (retroactive per-phase security audits added first)
+state_head: d79fecef9d88897700364b19b217c634282fb36d
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 213
-  completed_plans: 213
+  total_phases: 8
+  completed_phases: 8
+  total_plans: 65
+  completed_plans: 65
   percent: 100
+milestone_name: test-backlog
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-13 after the refine-unit-tests milestone)
+See: `.planning/PROJECT.md` (updated 2026-09-18 after the test-backlog milestone)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** None. No milestone is active — define the next one with
-`/gsd-new-milestone`.
+**Current focus:** Planning the next milestone
 
 ## Current Position
 
-Milestone `refine-unit-tests` closed 2026-09-13: 9 of 9 phases, 213 of 213 plans,
-412 tasks. Every phase reads `verification_status: passed`. The milestone audit
-passed with no blockers — requirements 30/30, phases 9/9, integration 6/6.
+Phase: Milestone test-backlog complete
+Plan: —
+Status: test-backlog milestone shipped — PR #202
+Last activity: 2026-09-19 — test-backlog milestone shipped as PR #202 (retroactive per-phase security audits added first)
 
-The milestone's full narrative now lives in its archive rather than here. This file
-was reset at close so the next milestone starts from a readable state:
+### test-backlog closeout: `override_closeout`
 
-- **Entry:** [`.planning/MILESTONES.md`](MILESTONES.md) — the curated summary,
-  driver, accomplishments, closeout type, and accepted gaps.
-- **Detail:** `.planning/milestones/refine-unit-tests-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`,
-  with phase directories under `refine-unit-tests-phases/` and quick tasks under
-  `refine-unit-tests-quick/`. That bucket holds the 15 tasks done inside this
-  milestone's window. The 29 older ones the close had swept in with them were
-  filed under `v1.19-quick-tasks/` instead, by date against v1.19's ship date.
-  260909-h38 was filed after the close: its only commit lived on
-  `features/random-refinements`, so the close, which ran on main, never saw it.
-- **Carried forward:** [`.planning/ROADMAP.md`](ROADMAP.md) — what the next
-  milestone inherits, with evidence for each item.
+Shipped 2026-09-18, no npm release. All eight phases read `status: passed`
+(5/5, 4/4, 18/18, 7/7, 10/10, 2/2, 8/8, 7/7); the audit is `tech_debt` with no
+blockers (requirements 18/18, phases 8/8, integration 9/9, flows 2/2). Two
+override reasons, neither an outcome failure:
 
-### Closeout type: `override_closeout`
+1. **`init.manager` reports every phase `stale`** because each `covered_files`
+   list names `STATE.md`, `ROADMAP.md` and `REQUIREMENTS.md`, which every later
+   close rewrites. Third milestone with this artifact.
+2. **Two artifacts acknowledged at close** (the Phase 5 and Phase 6 deferred-item
+   records). Known verification overrides: **2 newly acknowledged, 16 carried
+   forward**.
 
-Two reasons, neither an outcome failure.
+The refine-unit-tests close (2026-09-13) carried the same shape: 4 newly
+acknowledged, 17 carried forward, and the phase-25 table conversion.
 
-1. **`init.manager` reports eight of nine phases `stale`.** This is a timestamp
-   verdict, not an outcome verdict. Their `covered_files` include
-   `REQUIREMENTS.md`, `ROADMAP.md` and `STATE.md`, which every later plan rewrites,
-   so re-verifying re-stales them and the loop never converges. All nine
-   `VERIFICATION.md` files read `status: passed` with full scores.
-2. **Four open artifacts were acknowledged at close.** Known verification
-   overrides: **4 newly acknowledged, 17 carried forward** from a prior close.
+### Known snags for the next close
+
+- `phase.complete` drops `current_phase_name`, resets Current Position to
+  `Plan: Not started`, and rewrites the historical `Stopped at:` line under an
+  older heading. Restore by hand and check with `git diff`.
+- `milestone complete` leaves every original-path deletion **unstaged**
+  (`git add -u .planning/phases .planning/quick`) and writes 40 verbose
+  accomplishment bullets that need a hand rewrite. `.planning/workstreams/` no
+  longer exists, so the verb runs; the earlier `--ws` refusal is gone.
+- The `audit-open` line parser stops at a frontmatter list item that begins
+  with a backtick, so a complete quick task reads `unknown`, and the
+  acknowledge writer then **replaces the whole frontmatter** with its marker.
+  Quote the scalar instead of acknowledging; restore the file from git if the
+  writer already ran.
+- A table-shaped deferred item still cannot be acknowledged; convert it to
+  bullets with every cell preserved.
+- `state.advance-plan` resets `Status:` and rewrites a historical `Stopped at:`
+  line; re-read STATE.md after every state verb.
 
 ## Known Risk Worth Revisiting
 
@@ -73,11 +82,13 @@ Items acknowledged and deferred at milestone close, most recent first.
 
 | Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
+| deferred_items | 05/deferred-items.md: the Phase 5 record (five open comment-drift items, three closed; the scanner reads the file as one entry)                                                                | acknowledged    | 2026-09-18           | test-backlog |
+| deferred_items | 06/deferred-items.md: Six ledger notes name a witness coordinate the fresh report no longer holds (table converted to bullets at this close; item 1 was resolved by the #196 hermetic merge)  | acknowledged    | 2026-09-18           | test-backlog |
 | quick_tasks    | 260907-qqo-hkps-01-if-field-powershell-rule-prefix-                                                                                                                                           | unknown (work is complete; scanner misreads it) | 2026-09-13 | refine-unit-tests |
 | deferred_items | 06/deferred-items.md: 1. Stale notification hub reference outside Plan 06-19 callers                                                                                                          | acknowledged — RESOLVED, condition no longer holds | 2026-09-13 | refine-unit-tests |
 | deferred_items | 06/deferred-items.md: 2. Node 26 direct-coverage negative-control subprocess capture                                                                                                          | acknowledged — promoted to backlog `NEGCTL-01` | 2026-09-13 | refine-unit-tests |
 | deferred_items | 25/deferred-items.md (archived v1.4.1): `tests/e2e/import-command.test.ts` 3 failures                                                                                                         | acknowledged — promoted to backlog `E2EIMP-01` | 2026-09-13 | refine-unit-tests |
-| Tooling        | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted)                                    | Pending         | Phase 116 discussion | v1.19     |
+| Tooling        | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted)                                    | closed — test-backlog Phase 6 (06-VERIFICATION 2/2); gate `lint:type-members` in `check` | Phase 116 discussion | v1.19     |
 | quick_tasks    | 260720-d8i-move-agent-provenance-from-body-comment-                                                                                                                                           | unknown         | 2026-09-04           | v1.19     |
 | todos          | 2026-09-02-detect-unused-code-and-type-members.md                                                                                                                                             | (presence-only) | 2026-09-04           | v1.19     |
 | uat_gaps       | 89/89-UAT.md (archived v1.16)                                                                                                                                                                 | passed          | 2026-09-04           | v1.19     |
@@ -115,45 +126,19 @@ hit the same wall; convert it rather than re-disclosing it.
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
 | 260919-c5m | Standardize on AGENTS.md instead of CLAUDE.md as the canonical project-instructions file | 2026-09-19 | 8f87272a | Complete | [260919-c5m-standardize-on-agents-md-instead-of-clau](./quick/260919-c5m-standardize-on-agents-md-instead-of-clau/) |
-| 260917-bh3 | Condense the #181 unreleased CHANGELOG entries | 2026-09-17 | 399dea49 | Complete | [260917-bh3-condense-the-181-unreleased-changelog-en](./quick/260917-bh3-condense-the-181-unreleased-changelog-en/) |
-| 260913-uwq | Gate and commit the issue-179 fix: agents omitting `tools:` inherit Pi's defaults, and the two dropped agent fields get targeted guidance | 2026-09-13 | a9186816 | Complete | [260913-uwq-issue-179-agent-tools-and-mcpservers-con](./quick/260913-uwq-issue-179-agent-tools-and-mcpservers-con/) |
-| 260913-ttl | Close the remaining SonarQube branch-coverage gap to reach 100% line and 100% branch coverage | 2026-09-13 | d2ef20fa..46815bd6 | Complete | [260913-ttl-close-the-remaining-sonarqube-branch-cov](./quick/260913-ttl-close-the-remaining-sonarqube-branch-cov/) |
-| 260913-r2h | Make a FIFO state-harness over-read fail loudly instead of hanging to the test timeout | 2026-09-13 | c45850af | Complete | [260913-r2h-make-a-fifo-harness-over-read-fail-loudl](./quick/260913-r2h-make-a-fifo-harness-over-read-fail-loudl/) |
-| 260913-n7w | Fix the FIFO state server so each reader open receives exactly one payload | 2026-09-13 | e4f12cce | Complete | [260913-n7w-fix-the-fifo-state-server-reader-pairing](./quick/260913-n7w-fix-the-fifo-state-server-reader-pairing/) |
-| 260913-l07 | Fix every remaining zizmor finding, drop the severity floor, and simplify the gate comments | 2026-09-13 | 729348b4 | Complete | [260913-l07-fix-remaining-zizmor-findings-and-simpli](./quick/260913-l07-fix-remaining-zizmor-findings-and-simpli/) |
-| 260913-f6a | Gate the two SonarQube workflow findings, githubactions:S6505 and githubactions:S7637 | 2026-09-13 | 8a8a0396..69797ebc | Complete | [260913-f6a-gate-sonar-workflow-findings-s6505-and-s](./quick/260913-f6a-gate-sonar-workflow-findings-s6505-and-s/) |
 
 ## Session Continuity
 
-**Stopped at:** Milestone `refine-unit-tests` closed and archived on 2026-09-13.
+**Last session:** 2026-09-19T01:45:00Z
+**Stopped at:** Milestone test-backlog complete and archived
+**Resume file:** None
 
-PR #181 merged to main on 2026-09-13, closing the milestone's branch.
-
-Since then, four quick tasks landed on `features/random-refinements`: 260909-h38 made
-three cross-process concurrency proofs deterministic, 260913-f6a and 260913-l07
-hardened the CI workflows and gated them, and 260913-n7w fixed a reader-pairing race
-the first of those introduced. 260913-r2h then closed that harness's remaining over-read hang. That branch is
-PR #183, awaiting merge.
-
-Quick task 260913-ttl then landed on `features/100-coverage`: it measured the
-SonarQube 98.6% branch reading as ~133 phantom lcov-merge conditions plus one
-real branch, retired that branch by narrowing `isErrnoException`, and pointed
-`sonar.javascript.lcov.reportPaths` at `coverage/unit.lcov` alone — proven
-locally at 100.00% line and 100.00% branch coverage. Awaiting PR.
-
-**Next:** merge PR #183, then `/gsd-new-milestone`.
-
-### Known snag for the next close
-
-`gsd-tools query phase.complete` and the state verbs refuse in this checkout: they
-see `.planning/workstreams/` and demand `--ws`, but this milestone's ROADMAP and
-STATE were the ROOT files and no workstream is named `refine-unit-tests`. Hand-edit
-and verify by diff. Two further CLI gaps were worked around at this close and will
-recur: `milestone complete` leaves the original-path deletions **unstaged**
-(`git add -u .planning/`), and it wrote `completed_phases: 1` / `percent: 11` for a
-9-of-9 milestone, which was corrected by hand.
+**Current work:** none. test-backlog shipped 2026-09-18 on `features/test-backlog`;
+the branch has never been pushed, so the next steps are `/gsd-ship` (pull request)
+and `/gsd-new-milestone`.
+Earlier milestone continuity is preserved in
+`inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Squash-merge PR #183 (all checks green; the repository allows squash merges only)
-- Start the next milestone with `/gsd-new-milestone`
+- Start the next milestone with /gsd-new-milestone

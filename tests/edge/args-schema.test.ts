@@ -27,18 +27,7 @@ test("parseCommandArgs returns each required positional under its declared name"
   assert.deepStrictEqual(usageErrors, []);
 });
 
-// The loop above iterates `schema.positional`, not `parsed.positional`, so an
-// index the schema does not declare is never read and a token sitting there is
-// discarded without a diagnostic. That is this module's rule and it is
-// user-visible -- a mistyped extra word is swallowed rather than reported.
-//
-// The two callers that rely on it (`tests/edge/handlers/plugin/shared.test.ts`
-// and `tests/edge/handlers/marketplace/shared.test.ts`) each keep their own
-// claim, which is that they forward the parsed value; neither owns the rule.
-//
-// The case above is the discriminator: with the same token at index 1 and a
-// schema that DOES declare it, the value comes back under its name.
-test("parseCommandArgs drops a positional the schema does not declare, with no usage error", () => {
+test("parseCommandArgs rejects a positional the schema does not declare", () => {
   // arrange
   const usageErrors: string[] = [];
   const schema = {
@@ -52,8 +41,8 @@ test("parseCommandArgs drops a positional the schema does not declare, with no u
   });
 
   // assert
-  assert.deepStrictEqual(parsedArgs, { marketplace: "official" });
-  assert.deepStrictEqual(usageErrors, []);
+  assert.strictEqual(parsedArgs, undefined);
+  assert.deepStrictEqual(usageErrors, ["Too many arguments."]);
 });
 
 for (const { args, placement } of [
@@ -129,7 +118,7 @@ test("parseCommandArgs omits an absent optional tail positional instead of setti
   assert.deepStrictEqual(usageErrors, []);
 });
 
-test("parseCommandArgs omits a blank optional tail positional and reports no usage error", () => {
+test("parseCommandArgs rejects a supplied blank optional tail positional", () => {
   // arrange
   const usageErrors: string[] = [];
   const schema = {
@@ -146,8 +135,8 @@ test("parseCommandArgs omits a blank optional tail positional and reports no usa
   });
 
   // assert
-  assert.deepStrictEqual(parsedArgs, { marketplace: "official" });
-  assert.deepStrictEqual(usageErrors, []);
+  assert.strictEqual(parsedArgs, undefined);
+  assert.deepStrictEqual(usageErrors, ["Argument must not be empty."]);
 });
 
 test("parseCommandArgs reports usage and yields nothing when a required positional is absent", () => {
@@ -257,11 +246,19 @@ test("parseCommandArgs reports the tokenizer diagnostic and never reaches positi
   ]);
 });
 
-for (const { args, form } of [
-  { args: "official --scope", form: "the last token" },
-  { args: 'official --scope ""', form: "followed by an empty quoted value" },
+for (const { args, form, diagnostic } of [
+  {
+    args: "official --scope",
+    form: "the last token",
+    diagnostic: '--scope requires a value: "user" or "project".',
+  },
+  {
+    args: 'official --scope ""',
+    form: "followed by an empty quoted value",
+    diagnostic: 'Invalid --scope value: "". Must be "user" or "project".',
+  },
 ]) {
-  test(`parseCommandArgs reports the missing --scope value when the flag is ${form}`, () => {
+  test(`parseCommandArgs reports the invalid --scope input when the flag is ${form}`, () => {
     // arrange
     const usageErrors: string[] = [];
     const schema = {
@@ -276,6 +273,61 @@ for (const { args, form } of [
 
     // assert
     assert.deepStrictEqual(parsedArgs, undefined);
-    assert.deepStrictEqual(usageErrors, ['--scope requires a value: "user" or "project".']);
+    assert.deepStrictEqual(usageErrors, [diagnostic]);
+  });
+}
+
+for (const { args, positional, diagnostic } of [
+  { args: "surplus", positional: [], diagnostic: "Too many arguments." },
+  {
+    args: "official surplus",
+    positional: [{ name: "marketplace", required: false }],
+    diagnostic: "Too many arguments.",
+  },
+  { args: "--bogus", positional: [], diagnostic: 'Unknown flag: "--bogus".' },
+  {
+    args: "--bogus official",
+    positional: [{ name: "marketplace" }],
+    diagnostic: 'Unknown flag: "--bogus".',
+  },
+  {
+    args: "official --bogus",
+    positional: [{ name: "marketplace" }],
+    diagnostic: 'Unknown flag: "--bogus".',
+  },
+]) {
+  test(`parseCommandArgs rejects ${JSON.stringify(args)} with ${diagnostic}`, () => {
+    // arrange
+    const usageErrors: string[] = [];
+    const schema = { positional, usage: "Usage: test" };
+
+    // act
+    const parsed = parseCommandArgs(args, schema, (message) => {
+      usageErrors.push(message);
+    });
+
+    // assert
+    assert.strictEqual(parsed, undefined);
+    assert.deepStrictEqual(usageErrors, [diagnostic]);
+  });
+}
+
+for (const args of ['""', "''"]) {
+  test(`parseCommandArgs rejects a supplied empty optional operand ${args}`, () => {
+    // arrange
+    const usageErrors: string[] = [];
+    const schema = {
+      positional: [{ name: "marketplace", required: false }] as const,
+      usage: "Usage: test",
+    };
+
+    // act
+    const parsedArgs = parseCommandArgs(args, schema, (message) => {
+      usageErrors.push(message);
+    });
+
+    // assert
+    assert.strictEqual(parsedArgs, undefined);
+    assert.deepStrictEqual(usageErrors, ["Argument must not be empty."]);
   });
 }

@@ -41,7 +41,7 @@ type MarketplaceRun = Parameters<typeof makeSingleNameMarketplaceHandler>[2];
 type MarketplaceRunOptions = Parameters<MarketplaceRun>[0];
 type Scope = NonNullable<MarketplaceRunOptions["scope"]>;
 
-const INFO_USAGE = "Usage: /claude:plugin marketplace info <name> [--scope user|project]";
+const INFO_USAGE = "Usage: /claude:plugin marketplace info <name> [--scope user|project] [--local]";
 const ADD_USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|project] [--local]";
 
 describe("makeSingleNameMarketplaceHandler", () => {
@@ -100,7 +100,7 @@ describe("makeSingleNameMarketplaceHandler", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Missing required argument.\n\nUsage: /claude:plugin marketplace info <name> [--scope user|project]",
+          "Missing required argument.\n\nUsage: /claude:plugin marketplace info <name> [--scope user|project] [--local]",
         severity: "error",
       },
     ]);
@@ -108,21 +108,23 @@ describe("makeSingleNameMarketplaceHandler", () => {
     verify(run);
   });
 
-  test("passes the first positional on and ignores a second one the schema does not declare", async () => {
+  test("rejects surplus input before reading cwd or calling the run collaborator", async () => {
     // arrange
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(0, 0, {
-      reads: 1,
-      value: "/work/project",
-    });
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const run = mock<MarketplaceRun>({ exactParams: true, name: "marketplace run" });
-    when(() => run({ ctx, cwd: "/work/project", name: "official", pi })).thenResolve(undefined);
     const handler = makeSingleNameMarketplaceHandler(pi, INFO_USAGE, run);
 
     // act
     await handler("official surplus", ctx);
 
     // assert
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Too many arguments.\n\nUsage: /claude:plugin marketplace info <name> [--scope user|project] [--local]",
+        severity: "error",
+      },
+    ]);
     verifyBoundary();
     verify(run);
   });
@@ -140,7 +142,7 @@ describe("makeSingleNameMarketplaceHandler", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Invalid --scope value: "global". Must be "user" or "project".\n\nUsage: /claude:plugin marketplace info <name> [--scope user|project]',
+          'Invalid --scope value: "global". Must be "user" or "project".\n\nUsage: /claude:plugin marketplace info <name> [--scope user|project] [--local]',
         severity: "error",
       },
     ]);
@@ -174,6 +176,23 @@ describe("makeSingleNameMarketplaceHandler", () => {
     remove.verifyBoundary();
     verify(infoRun);
     verify(removeRun);
+  });
+
+  test("rejects unknown flags before calling its delegate", async () => {
+    // arrange
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const run = mock<MarketplaceRun>({ exactParams: true, name: "marketplace run" });
+    const handler = makeSingleNameMarketplaceHandler(pi, INFO_USAGE, run);
+
+    // act
+    await handler("official --bogus", ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: `Unknown flag: "--bogus".\n\n${INFO_USAGE}`, severity: "error" },
+    ]);
+    verifyBoundary();
+    verify(run);
   });
 });
 

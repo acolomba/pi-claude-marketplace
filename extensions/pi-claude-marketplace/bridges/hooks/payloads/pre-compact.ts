@@ -23,7 +23,7 @@ function compactTrigger(reason: SessionBeforeCompactEvent["reason"]): PreCompact
   return reason === "manual" ? "manual" : "auto";
 }
 
-export function translate(
+export function translatePreCompact(
   event: SessionBeforeCompactEvent,
   ctx: TranslationContext,
 ): PreCompactStdin {

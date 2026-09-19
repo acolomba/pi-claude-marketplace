@@ -35,7 +35,7 @@
 // this dispatcher. Tests inject a hermetic mock resolver.
 
 import { SCOPES } from "../../shared/types.ts";
-import { completionFlagEntries, isCatalogVerb } from "../flag-catalog.ts";
+import { completionFlagEntries, isCatalogVerb, parseFlagNames } from "../flag-catalog.ts";
 import { MARKETPLACE_SUBCOMMANDS, TOP_LEVEL_SUBCOMMANDS } from "../router.ts";
 
 import {
@@ -85,30 +85,48 @@ function scopeValueCompletions(current: string, headPrefix: string): Autocomplet
   }));
 }
 
-/**
- * Map a completion positional head to its catalog verb key, or `null` for
- * heads that are not catalog verbs (e.g. `marketplace`). `ls` is the router
- * alias for `list`. The verb set derives from the catalog via `isCatalogVerb`,
- * so a new catalog verb gets flag completions without touching this file.
- */
-function catalogVerbForHead(positionalHead: string): CatalogVerb | null {
-  const key = positionalHead === "ls" ? "list" : positionalHead;
+// Canonical command keys shared by flag and positional completion.
+const CATALOG_ALIASES = new Map<string, CatalogVerb>([
+  ["ls", "list"],
+  ["marketplace ls", "marketplace list"],
+  ["marketplace rm", "marketplace remove"],
+]);
+
+function catalogVerbForPositionals(positionals: readonly string[]): CatalogVerb | null {
+  const [head = "", subcommand = ""] = positionals;
+  const command = head === "marketplace" ? `marketplace ${subcommand}` : head;
+  const key = CATALOG_ALIASES.get(command) ?? command;
   return isCatalogVerb(key) ? key : null;
 }
 
+/**
+ * Verbs that accept no flag at all, not even the global `--scope`. `bootstrap`,
+ * `browse` and `marketplace help` reject every argument; `help` reads what
+ * follows as a topic name rather than parsing flags. Suggesting `--scope` for
+ * any of them would offer a token its handler answers with a usage error.
+ */
+const NO_FLAG_VERBS: ReadonlySet<CatalogVerb> = new Set([
+  "bootstrap",
+  "browse",
+  "help",
+  "marketplace help",
+]);
+
 function flagCompletions(
   current: string,
-  positionalHead: string,
+  positionals: readonly string[],
   headPrefix: string,
 ): AutocompleteItem[] {
-  // `--scope` is the global base flag offered for EVERY head; the catalog governs
-  // only the per-verb extra flags spread after it. RINST-01 / D-67-03: reinstall
-  // contributes no extra completion flags -- overwrite is unconditional.
+  const verb = catalogVerbForPositionals(positionals);
+  if (verb !== null && NO_FLAG_VERBS.has(verb)) {
+    return [];
+  }
+
+  // The no-flag verbs reject scope; all other commands use the global base flag.
   const flags: { name: string; description: string }[] = [
     { name: "--scope", description: "Scope: user or project" },
   ];
 
-  const verb = catalogVerbForHead(positionalHead);
   if (verb !== null) {
     flags.push(...(completionFlagEntries(verb) as { name: string; description: string }[]));
   }
@@ -268,30 +286,25 @@ export async function getArgumentCompletions(
     return topLevelCompletions(current);
   }
 
-  // RINST-01 / D-67-03: reinstall takes no overwrite flag, so it needs no
-  // positional strip here. LIST-02 / D-67-02: `--partial` IS a
-  // recognized boolean flag for install/update, so it must be skipped during
-  // positional extraction (else `install --partial <TAB>` mis-parses `--partial`
-  // as the plugin positional and returns null). The head is the first positional
-  // regardless of boolean flags (the subcommand token is never a flag), so a
-  // flag-free first pass recovers it before deciding which boolean flags apply.
-  const head = extractPositionals(tokens)[0] ?? "";
-  const booleanFlags = head === "install" || head === "update" ? ["--partial"] : [];
+  // Resolve the complete command before stripping its accepted boolean flags.
+  // This preserves marketplace names after --local and plugin refs after flags.
+  const verb = catalogVerbForPositionals(extractPositionals(tokens));
+  const booleanFlags = verb === null ? [] : [...parseFlagNames(verb)];
   const positionals = extractPositionals(tokens, booleanFlags);
   const positionalHead = positionals[0] ?? "";
   const explicitScope = extractScope(tokens);
-  const partial = booleanFlags.length > 0 && tokens.includes("--partial");
+  const partial = booleanFlags.includes("--partial") && tokens.includes("--partial");
 
   // Branch 2a (TC-4): token immediately after `--scope`.
   const prevToken = tokens.at(-1);
   if (prevToken === "--scope") {
-    return scopeValueCompletions(current, headPrefix);
+    return verb === "bootstrap" ? [] : scopeValueCompletions(current, headPrefix);
   }
 
   // Branch 2b (TC-3): flag-name completion (- or -- prefix; pi only has
   // long flags so both behave identically).
   if (current.startsWith("-")) {
-    return flagCompletions(current, positionalHead, headPrefix);
+    return flagCompletions(current, positionals, headPrefix);
   }
 
   // Branch 3 (TC-2): nested marketplace subcommand keyword. The completion

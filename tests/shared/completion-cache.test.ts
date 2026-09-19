@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
@@ -7,8 +7,6 @@ import { describe, test } from "node:test";
 import {
   createCompletionCache,
   ManifestSoftFailError,
-  MARKETPLACE_NAMES_CACHE_SCHEMA,
-  PLUGIN_INDEX_CACHE_SCHEMA,
 } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type {
@@ -16,69 +14,154 @@ import type {
   PluginIndexRow,
 } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
-describe("cache schemas", () => {
-  test("publishes marketplace names schema version 2", () => {
-    // arrange
-    const expectedSchema = {
-      type: "object",
-      required: ["schemaVersion", "names"],
-      properties: {
-        schemaVersion: { type: "number", const: 2 },
-        names: { type: "array", items: { type: "string" } },
-      },
-    };
+type IsExact<Actual, Expected> = [Actual] extends [Expected]
+  ? [Expected] extends [Actual]
+    ? true
+    : false
+  : false;
 
-    // act
-    const schema = JSON.parse(JSON.stringify(MARKETPLACE_NAMES_CACHE_SCHEMA)) as unknown;
+// Public rows remain closed even if a future change widens status to string.
+void (true satisfies IsExact<
+  PluginIndexRow["status"],
+  | "installed"
+  | "upgradable"
+  | "partially-installed"
+  | "partially-installed-upgradable"
+  | "partially-upgradable"
+  | "available"
+  | "partially-available"
+  | "unavailable"
+  | "remote"
+>);
 
-    // assert
-    assert.deepStrictEqual(schema, expectedSchema);
-  });
+test("hydrates every supported plugin status and retains exact cache bytes", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(os.tmpdir(), "completion-all-statuses-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const cachePath = path.join(directory, "plugin-index.json");
+  const bytes =
+    '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "row-1", "status": "installed", "version": "1.0"}, {"name": "row-2", "status": "upgradable", "version": "1.0"}, {"name": "row-3", "status": "partially-installed", "version": "1.0"}, {"name": "row-4", "status": "partially-installed-upgradable", "version": "1.0"}, {"name": "row-5", "status": "partially-upgradable", "version": "1.0"}, {"name": "row-6", "status": "available", "version": "1.0"}, {"name": "row-7", "status": "partially-available", "version": "1.0"}, {"name": "row-8", "status": "unavailable", "version": "1.0"}, {"name": "row-9", "status": "remote", "version": "1.0"}]}';
+  await writeFile(cachePath, bytes);
+  const cache = createCompletionCache();
 
-  test("publishes plugin index schema version 6 with every status", () => {
-    // arrange
-    const expectedSchema = {
-      type: "object",
-      required: ["schemaVersion", "lastRefreshedAt", "plugins"],
-      properties: {
-        schemaVersion: { type: "number", const: 6 },
-        lastRefreshedAt: { type: "string" },
-        manifestRef: { type: "string" },
-        plugins: {
-          type: "array",
-          items: {
-            type: "object",
-            required: ["name", "status"],
-            properties: {
-              name: { type: "string" },
-              status: {
-                anyOf: [
-                  { type: "string", const: "installed" },
-                  { type: "string", const: "upgradable" },
-                  { type: "string", const: "partially-installed" },
-                  { type: "string", const: "partially-installed-upgradable" },
-                  { type: "string", const: "partially-upgradable" },
-                  { type: "string", const: "available" },
-                  { type: "string", const: "partially-available" },
-                  { type: "string", const: "unavailable" },
-                  { type: "string", const: "remote" },
-                ],
-              },
-              version: { type: "string" },
-            },
-          },
-        },
-        _loadError: { type: "string" },
-      },
-    };
+  // act
+  const rows = await cache.getPluginIndex(
+    cachePath,
+    "user",
+    "catalog",
+    () => Promise.reject(new Error("valid status rebuilt")),
+    { now: () => Date.parse("2026-08-29T12:00:00.000Z") },
+  );
 
-    // act
-    const schema = JSON.parse(JSON.stringify(PLUGIN_INDEX_CACHE_SCHEMA)) as unknown;
-
-    // assert
-    assert.deepStrictEqual(schema, expectedSchema);
-  });
+  // assert
+  assert.deepStrictEqual(rows, [
+    { name: "row-1", status: "installed", version: "1.0" },
+    { name: "row-2", status: "upgradable", version: "1.0" },
+    { name: "row-3", status: "partially-installed", version: "1.0" },
+    { name: "row-4", status: "partially-installed-upgradable", version: "1.0" },
+    { name: "row-5", status: "partially-upgradable", version: "1.0" },
+    { name: "row-6", status: "available", version: "1.0" },
+    { name: "row-7", status: "partially-available", version: "1.0" },
+    { name: "row-8", status: "unavailable", version: "1.0" },
+    { name: "row-9", status: "remote", version: "1.0" },
+  ]);
+  assert.strictEqual(await readFile(cachePath, "utf8"), bytes);
 });
+
+for (const { name, bytes } of [
+  {
+    name: "missing schemaVersion",
+    bytes:
+      '{"lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": "error"}',
+  },
+  {
+    name: "missing lastRefreshedAt",
+    bytes:
+      '{"schemaVersion": 6, "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": "error"}',
+  },
+  {
+    name: "missing plugins",
+    bytes:
+      '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "_loadError": "error"}',
+  },
+  {
+    name: "invalid lastRefreshedAt",
+    bytes:
+      '{"schemaVersion": 6, "lastRefreshedAt": 5, "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": "error"}',
+  },
+  {
+    name: "invalid manifestRef",
+    bytes:
+      '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": 5, "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": "error"}',
+  },
+  {
+    name: "invalid _loadError",
+    bytes:
+      '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": 5}',
+  },
+  {
+    name: "invalid plugins",
+    bytes:
+      '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": {}, "_loadError": "error"}',
+  },
+  {
+    name: "missing row name",
+    bytes:
+      '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"status": "installed", "version": "1"}], "_loadError": "error"}',
+  },
+  {
+    name: "missing row status",
+    bytes:
+      '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "valid", "version": "1"}], "_loadError": "error"}',
+  },
+  {
+    name: "invalid row name",
+    bytes:
+      '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": 7, "status": "installed", "version": "1"}], "_loadError": "error"}',
+  },
+  {
+    name: "invalid row version",
+    bytes:
+      '{"schemaVersion": 6, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": 7}], "_loadError": "error"}',
+  },
+]) {
+  test(`rebuilds a cache with ${name} into complete current bytes`, async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-invalid-fields-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const cachePath = path.join(directory, "plugin-index.json");
+    await writeFile(cachePath, bytes);
+    const cache = createCompletionCache();
+    const clock = Date.parse("2026-08-29T12:00:00.000Z");
+    t.mock.timers.enable({ apis: ["Date"], now: clock });
+
+    // act
+    const rows = await cache.getPluginIndex(
+      cachePath,
+      "user",
+      "catalog",
+      () => Promise.resolve([{ name: "rebuilt", status: "available" }]),
+      { now: () => clock },
+    );
+
+    // assert
+    assert.deepStrictEqual(rows, [{ name: "rebuilt", status: "available" }]);
+    assert.strictEqual(
+      await readFile(cachePath, "utf8"),
+      `{
+  "schemaVersion": 6,
+  "lastRefreshedAt": "2026-08-29T12:00:00.000Z",
+  "plugins": [
+    {
+      "name": "rebuilt",
+      "status": "available"
+    }
+  ]
+}
+`,
+    );
+  });
+}
 
 test("omits the unused marketplace-name reader from the public module", async () => {
   // arrange
@@ -712,13 +795,19 @@ describe("cache invalidation", () => {
     const scope = "user";
     const cache = createCompletionCache();
     t.after(() => rm(directory, { recursive: true, force: true }));
+    // A directory cannot be unlinked; the platform-specific errno this raises
+    // (independent of the module under test) is the exact code expected to propagate.
+    const expectedCode = await unlink(directory).then(
+      () => undefined,
+      (error: unknown) => (error as NodeJS.ErrnoException).code,
+    );
 
     // act & assert
     await assert.rejects(
       () => cache.invalidateMarketplaceNames(directory, scope),
       (error: unknown) => {
         assert.ok(error instanceof Error);
-        assert.notStrictEqual((error as NodeJS.ErrnoException).code, "ENOENT");
+        assert.strictEqual((error as NodeJS.ErrnoException).code, expectedCode);
         return true;
       },
     );
@@ -753,13 +842,19 @@ describe("cache invalidation", () => {
       cache.invalidateMarketplaceCache(scope, marketplace);
       await rm(directory, { recursive: true, force: true });
     });
+    // A directory cannot be unlinked; the platform-specific errno this raises
+    // (independent of the module under test) is the exact code expected to propagate.
+    const expectedCode = await unlink(directory).then(
+      () => undefined,
+      (error: unknown) => (error as NodeJS.ErrnoException).code,
+    );
 
     // act & assert
     await assert.rejects(
       () => cache.dropMarketplaceCache(directory, scope, marketplace),
       (error: unknown) => {
         assert.ok(error instanceof Error);
-        assert.notStrictEqual((error as NodeJS.ErrnoException).code, "ENOENT");
+        assert.strictEqual((error as NodeJS.ErrnoException).code, expectedCode);
         return true;
       },
     );

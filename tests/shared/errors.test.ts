@@ -11,7 +11,6 @@ import {
   cleanupFailuresFromError,
   composeErrorWithCauseChain,
   ConcurrentInstallError,
-  ConcurrentUninstallError,
   CrossPluginConflictError,
   errorMessage,
   errorWithCleanupFailures,
@@ -40,25 +39,16 @@ import type {
   ResourcesDiscoverFailure,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
-void ({
-  phase: "skills",
-  msg: "skills failed",
-  cause: new Error("skills"),
-} satisfies Phase3Failure);
-void ({
-  phase: "commands",
-  msg: "commands failed",
-  cause: new Error("commands"),
-} satisfies Phase3Failure);
-void ({
-  phase: "agents",
-  msg: "agents failed",
-  cause: new Error("agents"),
-} satisfies Phase3Failure);
-void ({ phase: "hooks", msg: "hooks failed", cause: new Error("hooks") } satisfies Phase3Failure);
-void ({ phase: "mcp", msg: "mcp failed", cause: new Error("mcp") } satisfies Phase3Failure);
+void ({ phase: "skills", msg: "skills failed" } satisfies Phase3Failure);
+void ({ phase: "commands", msg: "commands failed" } satisfies Phase3Failure);
+void ({ phase: "agents", msg: "agents failed" } satisfies Phase3Failure);
+void ({ phase: "hooks", msg: "hooks failed" } satisfies Phase3Failure);
+void ({ phase: "mcp", msg: "mcp failed" } satisfies Phase3Failure);
 // @ts-expect-error phase 3 failures use the closed bridge phase union
-void ({ phase: "files", msg: "files failed", cause: new Error("files") } satisfies Phase3Failure);
+void ({ phase: "files", msg: "files failed" } satisfies Phase3Failure);
+// @ts-expect-error the shared entry shape declares no per-entry cause; the
+// update family restates one as a required Error in UpdatePhase3Failure
+void ({ phase: "skills", msg: "skills failed", cause: new Error("x") } satisfies Phase3Failure);
 
 void ({
   kind: "not-in-manifest",
@@ -186,13 +176,47 @@ describe("isErrnoException", () => {
 describe("assertNever", () => {
   test("throws the complete unexpected-value error", () => {
     // arrange
-    const unexpected = "future-arm" as never;
+    const unexpected = "future-arm";
 
     // act & assert
-    assert.throws(() => assertNever(unexpected), {
-      name: "Error",
-      message: "Unexpected value: future-arm",
-    });
+    assert.throws(
+      // @ts-expect-error runtime misuse must retain the unexpected-value diagnostic
+      () => assertNever(unexpected),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.deepStrictEqual(
+          { name: error.name, message: error.message, cause: error.cause },
+          { name: "Error", message: "Unexpected value: future-arm", cause: undefined },
+        );
+        return true;
+      },
+    );
+  });
+
+  test("throws the caller's complete serialized hook error", () => {
+    // arrange
+    const unexpected = { kind: "future" };
+    const message = `unreachable HookExecResult arm: ${JSON.stringify(unexpected)}`;
+
+    // act & assert
+    assert.throws(
+      // @ts-expect-error runtime misuse must retain the caller's established diagnostic
+      () => assertNever(unexpected, message),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.deepStrictEqual(
+          { name: error.name, message: error.message, cause: error.cause },
+          {
+            name: "Error",
+            message: 'unreachable HookExecResult arm: {"kind":"future"}',
+            cause: undefined,
+          },
+        );
+        return true;
+      },
+    );
   });
 });
 
@@ -769,34 +793,6 @@ describe("ConcurrentInstallError", () => {
   });
 });
 
-describe("ConcurrentUninstallError", () => {
-  test("exposes the complete concurrent-uninstall sentinel", () => {
-    // arrange
-    const plugin = "acme";
-
-    // act
-    const error = new ConcurrentUninstallError(plugin);
-
-    // assert
-    assert.ok(error instanceof ConcurrentUninstallError);
-    assert.ok(error instanceof Error);
-    assert.deepStrictEqual(
-      {
-        name: error.name,
-        message: error.message,
-        plugin: error.plugin,
-        cause: error.cause,
-      },
-      {
-        name: "ConcurrentUninstallError",
-        message: 'Plugin "acme" already uninstalled.',
-        plugin: "acme",
-        cause: undefined,
-      },
-    );
-  });
-});
-
 describe("StateLockHeldError", () => {
   test("exposes the complete state-lock failure and cause", () => {
     // arrange
@@ -889,6 +885,7 @@ describe("PluginUpdateConcurrencyError", () => {
 
 describe("CleanupContextError", () => {
   test("keeps the primary error as cause and freezes exact cleanup records", () => {
+    // arrange
     const primary = new Error("state save failed");
     const cleanupCause = new Error("permission denied");
     const failures = [
@@ -900,25 +897,30 @@ describe("CleanupContextError", () => {
       },
     ] satisfies CleanupFailure[];
 
+    // act
     const error = new CleanupContextError(primary, failures);
 
-    assert.equal(error.cause, primary);
-    assert.equal(error.primary, primary);
+    // assert
+    assert.strictEqual(error.cause, primary);
+    assert.strictEqual(error.primary, primary);
     assert.deepStrictEqual(error.cleanupFailures, failures);
-    assert.equal(Object.isFrozen(error.cleanupFailures), true);
-    assert.equal(Object.isFrozen(error.cleanupFailures[0]), true);
+    assert.strictEqual(Object.isFrozen(error.cleanupFailures), true);
+    assert.strictEqual(Object.isFrozen(error.cleanupFailures[0]), true);
     assert.match(causeChainTrailer(error), /abort commands uuid/);
     assert.ok(!causeChainTrailer(error).includes("/scope/commands-staging"));
   });
 
   test("returns the primary error unchanged when cleanup succeeds", () => {
+    // arrange
     const primary = new Error("state save failed");
 
-    assert.equal(errorWithCleanupFailures(primary, []), primary);
+    // act & assert
+    assert.strictEqual(errorWithCleanupFailures(primary, []), primary);
     assert.deepStrictEqual(cleanupFailuresFromError(primary), []);
   });
 
   test("merges cleanup records while preserving the original primary cause", () => {
+    // arrange
     const primary = new Error("state save failed");
     const first = errorWithCleanupFailures(primary, [
       {
@@ -928,6 +930,8 @@ describe("CleanupContextError", () => {
         cause: new Error("first cleanup failed"),
       },
     ]);
+
+    // act
     const second = errorWithCleanupFailures(first, [
       {
         phase: "rollback",
@@ -937,9 +941,10 @@ describe("CleanupContextError", () => {
       },
     ]);
 
+    // assert
     assert.ok(second instanceof CleanupContextError);
-    assert.equal(second.primary, primary);
-    assert.equal(second.cause, primary);
+    assert.strictEqual(second.primary, primary);
+    assert.strictEqual(second.cause, primary);
     assert.deepStrictEqual(
       second.cleanupFailures.map(({ phase, artifact, path }) => ({ phase, artifact, path })),
       [
@@ -953,7 +958,10 @@ describe("CleanupContextError", () => {
   });
 
   test("normalizes a non-Error primary without adding successful cleanup diagnostics", () => {
+    // arrange
     const cleanupCause = new Error("cleanup failed");
+
+    // act
     const error = errorWithCleanupFailures("operation failed", [
       {
         phase: "commit",
@@ -963,20 +971,18 @@ describe("CleanupContextError", () => {
       },
     ]);
 
+    // assert
     assert.ok(error instanceof CleanupContextError);
-    assert.equal(error.primary.message, "operation failed");
-    assert.equal(error.cleanupFailures[0]?.cause, cleanupCause);
+    assert.strictEqual(error.primary.message, "operation failed");
+    assert.strictEqual(error.cleanupFailures[0]?.cause, cleanupCause);
   });
 });
 
 describe("PluginUpdatePhase3Error", () => {
   test("exposes the complete aggregate failure and cause", () => {
     // arrange
-    const bridgeCause = new Error("skills failed");
     const outerCause = new Error("commit failed");
-    const failures = [
-      { phase: "skills", msg: "skills rollback failed", cause: bridgeCause },
-    ] satisfies Phase3Failure[];
+    const failures = [{ phase: "skills", msg: "skills rollback failed" }] satisfies Phase3Failure[];
 
     // act
     const error = new PluginUpdatePhase3Error("phase 3 failed", failures, {
@@ -996,7 +1002,7 @@ describe("PluginUpdatePhase3Error", () => {
       {
         name: "PluginUpdatePhase3Error",
         message: "phase 3 failed",
-        failures: [{ phase: "skills", msg: "skills rollback failed", cause: bridgeCause }],
+        failures: [{ phase: "skills", msg: "skills rollback failed" }],
         cause: outerCause,
       },
     );
@@ -1030,13 +1036,12 @@ describe("PluginUpdatePhase3Error", () => {
 
   test("preserves every bridge phase and repeated failure text in caller order", () => {
     // arrange
-    const repeatedCause = new Error("repeated");
     const failures = [
-      { phase: "skills", msg: "same", cause: repeatedCause },
-      { phase: "commands", msg: "same", cause: repeatedCause },
-      { phase: "agents", msg: "agents", cause: new Error("agents") },
-      { phase: "hooks", msg: "hooks", cause: new Error("hooks") },
-      { phase: "mcp", msg: "mcp", cause: new Error("mcp") },
+      { phase: "skills", msg: "same" },
+      { phase: "commands", msg: "same" },
+      { phase: "agents", msg: "agents" },
+      { phase: "hooks", msg: "hooks" },
+      { phase: "mcp", msg: "mcp" },
     ] satisfies Phase3Failure[];
 
     // act
@@ -1044,11 +1049,11 @@ describe("PluginUpdatePhase3Error", () => {
 
     // assert
     assert.deepStrictEqual(error.failures, [
-      { phase: "skills", msg: "same", cause: repeatedCause },
-      { phase: "commands", msg: "same", cause: repeatedCause },
-      { phase: "agents", msg: "agents", cause: failures[2]?.cause },
-      { phase: "hooks", msg: "hooks", cause: failures[3]?.cause },
-      { phase: "mcp", msg: "mcp", cause: failures[4]?.cause },
+      { phase: "skills", msg: "same" },
+      { phase: "commands", msg: "same" },
+      { phase: "agents", msg: "agents" },
+      { phase: "hooks", msg: "hooks" },
+      { phase: "mcp", msg: "mcp" },
     ]);
     assert.strictEqual(error.failures, failures);
   });

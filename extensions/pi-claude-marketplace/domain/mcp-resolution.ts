@@ -16,7 +16,7 @@ interface McpResolutionDependencies {
   readonly readFileText: (path: string) => Promise<string>;
 }
 
-function applyMcpValue(resolution: McpResolution, mcp: unknown, detail = true): boolean {
+function applyMcpValue(resolution: McpResolution, mcp: unknown): boolean {
   if (mcp === undefined) {
     return false;
   }
@@ -26,15 +26,11 @@ function applyMcpValue(resolution: McpResolution, mcp: unknown, detail = true): 
     return false;
   }
 
-  if (detail) {
-    const errorDetail = MCP_SERVERS_VALIDATOR.Errors(mcp)
-      .slice(0, 1)
-      .map((error) => error.message)
-      .join("");
-    resolution.notes.push(`malformed mcpServers: ${errorDetail}`);
-  } else {
-    resolution.notes.push("malformed mcpServers");
-  }
+  const errorDetail = MCP_SERVERS_VALIDATOR.Errors(mcp)
+    .slice(0, 1)
+    .map((error) => error.message)
+    .join("");
+  resolution.notes.push(`malformed mcpServers: ${errorDetail}`);
 
   return true;
 }
@@ -107,7 +103,7 @@ async function readReferencedMcp(
   } catch (error: unknown) {
     return {
       ok: false,
-      reason: `malformed mcp reference: invalid JSON in "${raw}": ${(error as SyntaxError).message}`,
+      reason: `malformed mcp reference: invalid JSON in "${raw}": ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }
@@ -145,40 +141,4 @@ export async function resolveStrictMcp(
   }
 
   return applyMcpValue(input.resolution, declaredMcp ?? standalone?.value);
-}
-
-/** Resolves entry-only MCP and reports manifest or standalone conflicts. */
-export async function resolveLooseMcp(
-  input: {
-    readonly entry: { readonly mcpServers?: unknown };
-    readonly manifest: { readonly mcpServers?: unknown } | null;
-    readonly pluginRoot: string;
-    readonly resolution: McpResolution;
-  },
-  statKind: StatKindReader,
-): Promise<boolean> {
-  const entryMcp = input.entry.mcpServers;
-
-  if (entryMcp === undefined) {
-    const manifestMcp = input.manifest?.mcpServers;
-    const standaloneExists = (await statKind(path.join(input.pluginRoot, ".mcp.json"))) === "file";
-
-    if (manifestMcp === undefined && !standaloneExists) {
-      return false;
-    }
-
-    input.resolution.notes.push(
-      "component declarations conflict: manifest/standalone mcpServers without entry-level declaration",
-    );
-    return true;
-  }
-
-  if (typeof entryMcp === "string") {
-    input.resolution.notes.push(
-      `unsupported mcpServers string reference in loose mode: "${entryMcp}"`,
-    );
-    return true;
-  }
-
-  return applyMcpValue(input.resolution, entryMcp, false);
 }

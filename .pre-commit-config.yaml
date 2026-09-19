@@ -141,3 +141,59 @@ repos:
         language: system
         pass_filenames: false
         files: '^(extensions/pi-claude-marketplace/.*\.ts|tests/.*\.ts|scripts/test-coverage-direct\.pin\.json)$'
+      # MEMBER-01. The whole-project unread-member gate. `pass_filenames` is
+      # false because the gate analyses the entire program in one pass: the
+      # change it exists to catch is the removal of the sole reader of a member
+      # declared in a DIFFERENT file, which a per-file invocation cannot see.
+      # Cost: one whole-program analysis, roughly 85 seconds.
+      - id: npm-type-members
+        name: npm type members
+        entry: npm run lint:type-members
+        language: system
+        pass_filenames: false
+        files: '^(scripts/check-unused-type-members(\.[a-z]+)?\.(mjs|json)|(extensions|tests)/.*\.ts|tsconfig\.json|package(-lock)?\.json|\.pre-commit-config\.yaml)$'
+      # MEMBER-02. The sensitivity controls around that gate, which plant a real
+      # offender into a real declaration and require the gate to report it.
+      #
+      # The trigger is deliberately NARROWER than the gate's own: these controls
+      # measure whether the GATE can still see an offender, and that question is
+      # settled by the analyzer, its decision and contract records, the compiler
+      # inputs, and the declaration the plant goes into -- never by an ordinary
+      # edit under extensions/. Cost: five whole-program analyses, roughly seven
+      # minutes and 2.1 GiB, which is why it does not ride on every `.ts` commit.
+      # It still runs in full on every `npm run check`, local and CI alike.
+      - id: npm-type-members-negative
+        name: npm type members (negative controls)
+        entry: npm run lint:type-members:negative
+        language: system
+        pass_filenames: false
+        files: '^(scripts/check-unused-type-members(\.[a-z]+)?\.(mjs|json)|extensions/pi-claude-marketplace/edge/types\.ts|tests/edge/types\.test\.ts|tsconfig\.json|package(-lock)?\.json|\.pre-commit-config\.yaml)$'
+      # METRIC-01 / D-10. The verified unit capture: one native unit run whose
+      # LCOV, Istanbul map and accepted manifest are bound to the tree by
+      # content. This hook is the producer. It reuses the published bundle when
+      # `coverage:validate` accepts it against the staged tree now (a bundle
+      # that `npm run check` or an earlier commit made of these exact bytes);
+      # otherwise it runs the unit suite once, about eight minutes. The trigger
+      # is the inventory an accepted bundle binds: production sources and their
+      # resources, the unit test tree, the tooling, the vendored producer and
+      # the configuration files. A change none of them carries cannot stale the
+      # bundle, so it runs nothing here. Workflows are not bundle inputs; the
+      # `workflow-install-scripts` hook is their gate.
+      - id: npm-coverage-unit
+        name: npm unit coverage (verified bundle)
+        entry: npm run coverage:unit:current
+        language: system
+        pass_filenames: false
+        files: '^(extensions/.*|tests/(?!e2e/|integration/|live-uat/).*|scripts/.*|vendor/coverage/.*|\.fallowrc\.json|\.pre-commit-config\.yaml|\.prettierignore|\.prettierrc\.json|eslint\.config\.js|package(-lock)?\.json|sonar-project\.properties|tsconfig\.json)$'
+      # METRIC-02 / D-06. The CRAP policy of 30 over every production function,
+      # read from the bundle the hook above produced. The consumer validates the
+      # bundle again and refuses a missing or stale one; it never captures. The
+      # negative runners of both tools ride inside the unit suite itself
+      # (`tests/scripts/*.negative.test.ts`), so a fresh capture has already
+      # exercised them on this tree.
+      - id: npm-coverage-risk
+        name: npm coverage risk
+        entry: npm run coverage:risk
+        language: system
+        pass_filenames: false
+        files: '^(extensions/.*|tests/(?!e2e/|integration/|live-uat/).*|scripts/.*|vendor/coverage/.*|\.fallowrc\.json|\.pre-commit-config\.yaml|\.prettierignore|\.prettierrc\.json|eslint\.config\.js|package(-lock)?\.json|sonar-project\.properties|tsconfig\.json)$'

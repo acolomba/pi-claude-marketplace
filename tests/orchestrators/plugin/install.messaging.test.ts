@@ -7,7 +7,6 @@ import {
   classifyInstallFailure,
   composeInstallFailureMessage,
   formatOrchestratedCause,
-  narrowResolverReasons,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
@@ -17,6 +16,7 @@ import type {
   InstallMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ContentReason } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 describe("INSTALL_CONTEXT", () => {
   test("exposes the install label and all six render arms", () => {
@@ -729,7 +729,33 @@ describe("classifyEntityShapeError", () => {
   });
 });
 
-describe("narrowResolverReasons", () => {
+/**
+ * Resolver-note narrowing is install-private. The public projection that
+ * carries its result is the `unavailable` row `classifyEntityShapeError`
+ * composes from a thrown `not-installable` shape, so every case below reads
+ * the narrowed reasons off that row rather than calling the narrowing helper.
+ */
+function installFailureReasons(
+  reasons: readonly string[],
+  unsupportedKinds: readonly string[] = [],
+  partialable = false,
+): readonly ContentReason[] {
+  const entityErrorRow = classifyEntityShapeError(
+    new PluginShapeError({
+      kind: "not-installable",
+      plugin: "thrown-name",
+      reasons,
+      partialable,
+      unsupportedKinds,
+    }),
+    { plugin: "helper", marketplace: "official", scope: "user" },
+  );
+  assert.ok(entityErrorRow, "a not-installable shape must classify to an entity error row");
+
+  return entityErrorRow.reasons;
+}
+
+describe("resolver reason narrowing through the install failure row", () => {
   for (const { note, reason } of [
     {
       note: "hooks.json is not valid JSON: Unexpected token ]",
@@ -753,7 +779,7 @@ describe("narrowResolverReasons", () => {
       const reasons = [note];
 
       // act
-      const narrowedReasons = narrowResolverReasons(reasons);
+      const narrowedReasons = installFailureReasons(reasons);
 
       // assert
       assert.deepStrictEqual(narrowedReasons, [reason]);
@@ -765,7 +791,7 @@ describe("narrowResolverReasons", () => {
     const reasons = ["contains lspServers"];
 
     // act
-    const narrowedReasons = narrowResolverReasons(reasons);
+    const narrowedReasons = installFailureReasons(reasons);
 
     // assert
     assert.deepStrictEqual(narrowedReasons, ["lsp"]);
@@ -777,7 +803,7 @@ describe("narrowResolverReasons", () => {
     const unsupportedKinds = ["monitors"];
 
     // act
-    const narrowedReasons = narrowResolverReasons(reasons, unsupportedKinds, true);
+    const narrowedReasons = installFailureReasons(reasons, unsupportedKinds, true);
 
     // assert
     assert.deepStrictEqual(narrowedReasons, ["unsupported component"]);
@@ -788,7 +814,7 @@ describe("narrowResolverReasons", () => {
     const reasons = ["contains monitors"];
 
     // act
-    const narrowedReasons = narrowResolverReasons(reasons, [], false);
+    const narrowedReasons = installFailureReasons(reasons, [], false);
 
     // assert
     assert.deepStrictEqual(narrowedReasons, ["unsupported source"]);
@@ -799,7 +825,7 @@ describe("narrowResolverReasons", () => {
     const reasons = ['malformed mcp reference: invalid JSON in "x.mcp.json": Unexpected token n'];
 
     // act
-    const narrowedReasons = narrowResolverReasons(reasons);
+    const narrowedReasons = installFailureReasons(reasons);
 
     // assert
     assert.deepStrictEqual(narrowedReasons, ["malformed mcp"]);
@@ -810,7 +836,7 @@ describe("narrowResolverReasons", () => {
     const reasons = ["source directory does not exist"];
 
     // act
-    const narrowedReasons = narrowResolverReasons(reasons);
+    const narrowedReasons = installFailureReasons(reasons);
 
     // assert
     assert.deepStrictEqual(narrowedReasons, ["unsupported source"]);
@@ -821,7 +847,7 @@ describe("narrowResolverReasons", () => {
     const reasons = [""];
 
     // act
-    const narrowedReasons = narrowResolverReasons(reasons);
+    const narrowedReasons = installFailureReasons(reasons);
 
     // assert
     assert.deepStrictEqual(narrowedReasons, ["unsupported source"]);
@@ -832,7 +858,7 @@ describe("narrowResolverReasons", () => {
     const reasons: string[] = [];
 
     // act
-    const narrowedReasons = narrowResolverReasons(reasons);
+    const narrowedReasons = installFailureReasons(reasons);
 
     // assert
     assert.deepStrictEqual(narrowedReasons, ["unsupported source"]);
@@ -843,7 +869,7 @@ describe("narrowResolverReasons", () => {
     const reasons = ["unclassified resolver detail"];
 
     // act
-    const narrowedReasons = narrowResolverReasons(reasons);
+    const narrowedReasons = installFailureReasons(reasons);
 
     // assert
     assert.deepStrictEqual(narrowedReasons, ["unsupported source"]);
@@ -855,7 +881,7 @@ describe("narrowResolverReasons", () => {
     const unsupportedKinds = ["themes", "lspServers", "themes"];
 
     // act
-    const narrowedReasons = narrowResolverReasons(reasons, unsupportedKinds, true);
+    const narrowedReasons = installFailureReasons(reasons, unsupportedKinds, true);
 
     // assert
     assert.deepStrictEqual(narrowedReasons, ["unsupported component", "lsp"]);

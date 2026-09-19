@@ -18,7 +18,10 @@ export interface UserPromptSubmitStdin {
   readonly prompt: string;
 }
 
-export function translate(event: InputEvent, ctx: TranslationContext): UserPromptSubmitStdin {
+export function translateUserPromptSubmit(
+  event: InputEvent,
+  ctx: TranslationContext,
+): UserPromptSubmitStdin {
   return {
     session_id: ctx.sessionId,
     transcript_path: ctx.transcriptPath,

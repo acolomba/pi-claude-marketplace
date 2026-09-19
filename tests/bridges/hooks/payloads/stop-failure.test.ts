@@ -6,7 +6,7 @@ import test from "node:test";
 
 import {
   classifyStopFailure,
-  translate,
+  translateStopFailure,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts";
 import { NON_TOOL_EVENT_CLOSED_SETS } from "../../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 
@@ -80,7 +80,7 @@ test("emits the complete StopFailure envelope with error details", () => {
   } satisfies StopFailureStdin;
 
   // act
-  const stopFailurePayload = translate(event, context);
+  const stopFailurePayload = translateStopFailure(event, context);
 
   // assert
   assert.deepStrictEqual(stopFailurePayload, expectedPayload);
@@ -108,7 +108,7 @@ test("omits error_details from the complete envelope when the event omits it", (
   } satisfies StopFailureStdin;
 
   // act
-  const stopFailurePayload = translate(event, context);
+  const stopFailurePayload = translateStopFailure(event, context);
 
   // assert
   assert.deepStrictEqual(stopFailurePayload, expectedPayload);
@@ -136,7 +136,7 @@ test("preserves an empty transcript path in the complete envelope", () => {
   } satisfies StopFailureStdin;
 
   // act
-  const stopFailurePayload = translate(event, context);
+  const stopFailurePayload = translateStopFailure(event, context);
 
   // assert
   assert.deepStrictEqual(stopFailurePayload, expectedPayload);

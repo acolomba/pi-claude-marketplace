@@ -1,51 +1,46 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "refine-unit-tests — Refine Unit Tests",
+  "milestone": "test-backlog",
   "phases": [
     {
       "number": "1",
-      "name": "Live Evidence Revalidation",
+      "name": "Reliable Negative Controls",
       "status": "complete"
     },
     {
       "number": "2",
-      "name": "Containment and Input Safety",
+      "name": "Sonar Rules for Tests",
       "status": "complete"
     },
     {
       "number": "3",
-      "name": "Production Defect Corrections",
+      "name": "Reachable Agent Collision Contract",
       "status": "complete"
     },
     {
       "number": "4",
-      "name": "Hermetic Test Infrastructure",
+      "name": "Strict Command Arguments",
       "status": "complete"
     },
     {
       "number": "5",
-      "name": "Injection and Ownership Design",
+      "name": "Production Export Ownership",
       "status": "complete"
     },
     {
       "number": "6",
-      "name": "Assertion and Module Refinement",
+      "name": "Unused Type Member Gate",
       "status": "complete"
     },
     {
       "number": "7",
-      "name": "Gate Integrity",
+      "name": "Reliable Coverage Metrics",
       "status": "complete"
     },
     {
       "number": "8",
-      "name": "Direct Coverage",
-      "status": "complete"
-    },
-    {
-      "number": "9",
-      "name": "Final Quality and Backlog Closure",
+      "name": "Final Verification and Reconciliation",
       "status": "complete"
     }
   ],
@@ -54,5 +49,5 @@
     "label": "Show progress",
     "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-09-13T12:02:02.148Z"
+  "updated_at": "2026-09-19T01:53:29.180Z"
 }

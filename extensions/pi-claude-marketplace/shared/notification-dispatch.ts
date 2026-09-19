@@ -62,10 +62,10 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
  *  `${message.message}\n\n${message.usage}` at "error" severity
  *  (SNM-13).
  *
- * Closed-set source of truth: the `REASONS`, `STATUS_TOKENS`,
- * `PLUGIN_STATUSES` and `MARKETPLACE_STATUSES` const tuples and their derived
- * literal-union types live in `notification-types.ts`. No `MARKERS` / `PATTERN_CLASSES`
- * tuples sit alongside them: the `<autoupdate>` / `<no autoupdate>` chevron
+ * Closed-set source of truth: the `Reason`, `StatusToken`, `PluginStatus` and
+ * `MarketplaceStatus` literal-union vocabularies live in
+ * `notification-types.ts`. No `MARKERS` / `PATTERN_CLASSES`
+ * vocabularies sit alongside them: the `<autoupdate>` / `<no autoupdate>` chevron
  * tokens are written as literals at their render sites in `renderMpHeader`,
  * and the pattern-class labels only ever named message shapes in prose. The
  * `compare-name-scope.ts` owns the single per-scope row-order policy across
@@ -75,8 +75,14 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
  * dispatch behavior directly from this file. No barrel re-exports.
  */
 
-/** Emit one summary-composed payload at the sole Pi notification boundary. */
-export function emitWithSummary(
+/**
+ * Emit one summary-composed payload at the sole Pi notification boundary.
+ *
+ * Module-private: every public delivery path in this file routes through it, so
+ * each of those paths' emitted bytes and one-call-per-invocation discipline is
+ * this seam's contract.
+ */
+function emitWithSummary(
   ctx: NotificationContext,
   message: NotificationMessage,
   body: string,

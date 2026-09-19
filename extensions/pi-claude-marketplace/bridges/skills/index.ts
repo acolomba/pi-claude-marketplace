@@ -8,6 +8,12 @@
 // `kind` and pass the value to commitPreparedSkills / abortPreparedSkills
 // rather than reading the internal fields.
 
+import { rm } from "node:fs/promises";
+
+import { createUnstagePluginSkills } from "./unstage.ts";
+
+import type { SkillsUnstageRemover } from "./unstage.ts";
+
 export {
   abortPreparedSkills,
   commitPreparedSkills,
@@ -16,7 +22,15 @@ export {
   replacePreparedSkills,
   rollbackSkillsReplacement,
 } from "./stage.ts";
-export { unstagePluginSkills } from "./unstage.ts";
 export { discoverPluginSkills } from "./discover.ts";
 
 export type { PreparedSkillsStaging, SkillsReplacement } from "./types.ts";
+
+const NODE_SKILLS_UNSTAGE_REMOVER: SkillsUnstageRemover = {
+  async removeTree(target: string): Promise<void> {
+    await rm(target, { recursive: true, force: true });
+  },
+};
+
+/** Removes recorded skill trees through the Node filesystem adapter. */
+export const unstagePluginSkills = createUnstagePluginSkills(NODE_SKILLS_UNSTAGE_REMOVER);

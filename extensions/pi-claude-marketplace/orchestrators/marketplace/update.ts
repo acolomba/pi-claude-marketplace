@@ -98,7 +98,6 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { DEFAULT_CREDENTIAL_OPS } from "../../platform/git-credential.ts";
 import {
   InvalidMarketplaceManifestError,
   MarketplaceUpdateError,
@@ -115,7 +114,12 @@ import {
   type Single,
 } from "../../shared/notify-context.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
-import { NO_PROVIDER_CAUSE, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import {
+  DEFAULT_CREDENTIAL_OPS,
+  NO_PROVIDER_CAUSE,
+  buildAuthForHost,
+  hostFromCloneUrl,
+} from "../auth-host.ts";
 // WR-12 / WR-03: the `(updated)` row composer, imported from the LEAF module
 // that holds it rather than from the plugin-update ledger. The ledger stays
 // behind the injected `pluginUpdate` seam -- and now stays out of this module's

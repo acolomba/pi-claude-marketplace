@@ -288,9 +288,9 @@ describe("parseRequiredPluginMarketplaceRef", () => {
     });
   }
 
-  test("splits the first ref and ignores a second positional the schema does not declare", () => {
+  test("rejects a second positional without returning a partial ref", () => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
 
     // act
     const parsed = parseRequiredPluginMarketplaceRef(
@@ -300,11 +300,14 @@ describe("parseRequiredPluginMarketplaceRef", () => {
     );
 
     // assert
-    assert.deepStrictEqual(parsed, {
-      marketplace: "official",
-      plugin: "alpha",
-    } satisfies ParsedPluginMarketplaceRef);
-    assert.deepStrictEqual(notifications, []);
+    assert.strictEqual(parsed, undefined);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Too many arguments.\n\nUsage: /claude:plugin uninstall <plugin>@<marketplace> [--scope user|project] [--local]",
+        severity: "error",
+      },
+    ]);
     verifyBoundary();
   });
 

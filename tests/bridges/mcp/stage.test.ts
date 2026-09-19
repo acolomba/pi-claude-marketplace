@@ -7,7 +7,6 @@ import {
   abortPreparedMcp,
   commitPreparedMcp,
   finalizeMcpReplacement,
-  MalformedMcpServersError,
   prepareStageMcpServers,
   replacePreparedMcp,
   rollbackMcpReplacement,
@@ -255,21 +254,20 @@ describe("prepareStageMcpServers", () => {
             servers: { server: { url: "https://mcp.example.test" } },
           }),
         (error: unknown) => {
-          assert.strictEqual(error instanceof MalformedMcpServersError, true);
-          if (!(error instanceof MalformedMcpServersError)) {
-            return false;
-          }
+          assert.ok(error instanceof Error);
+          assert.ok("mcpJsonPath" in error);
+          assert.ok("valueKind" in error);
 
           assert.deepStrictEqual(
             {
-              constructor: error.constructor,
+              constructorName: error.constructor.name,
               name: error.name,
               message: error.message,
               mcpJsonPath: error.mcpJsonPath,
               valueKind: error.valueKind,
             },
             {
-              constructor: MalformedMcpServersError,
+              constructorName: "MalformedMcpServersError",
               name: "MalformedMcpServersError",
               message: `mcpServers at ${locations.mcpJsonPath} must be an object; received ${valueKind}.`,
               mcpJsonPath: locations.mcpJsonPath,

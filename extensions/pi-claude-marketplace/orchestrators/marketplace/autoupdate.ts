@@ -303,8 +303,8 @@ function buildAutoupdatePatch(
   state: { marketplaces: Record<string, unknown> },
   name: string,
   enable: boolean,
-): { source?: string; autoupdate: boolean } {
-  const patch: { source?: string; autoupdate: boolean } = { autoupdate: enable };
+): Partial<MarketplaceConfigEntry> {
+  const patch: Partial<MarketplaceConfigEntry> = { autoupdate: enable };
   if (current.marketplaces?.[name]?.source !== undefined) {
     return patch;
   }
@@ -497,7 +497,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   const flipContext = flipContextFor(opts.enable);
 
   const rows: AutoupdateFlipRow[] = [];
-  const errors: { scope: Scope; cause: unknown }[] = [];
+  const errors: { scope: Scope }[] = [];
 
   for (const scope of scopes) {
     try {
@@ -516,7 +516,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
         return;
       }
 
-      errors.push({ scope, cause: err });
+      errors.push({ scope });
     }
   }
 

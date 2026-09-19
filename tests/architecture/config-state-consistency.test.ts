@@ -31,7 +31,7 @@ import {
 import { addMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import { setMarketplaceAutoupdate } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts";
 import { removeMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
-import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
+import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { planReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
 import { emptyReconcilePlan } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import {
@@ -46,12 +46,6 @@ import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
-
-// The addMarketplace path is wired so write-back lands the marketplace
-// entry into claude-plugins.json under the locked transaction. `saveConfig`
-// is exercised transitively through the write-back helper; the direct
-// import is retained for symmetry with sibling tests.
-void saveConfig;
 
 const OFFICIAL_MARKETPLACE_REMOTE = "https://github.com/anthropics/claude-plugins-official.git";
 
@@ -81,21 +75,21 @@ async function tmpScopeRoot(): Promise<{ scopeRoot: string; cleanup: () => Promi
   const dir = await mkdtemp(path.join(tmpdir(), "pi-cm-consistency-test-"));
   const scopeRoot = path.join(dir, ".pi");
   await mkdir(scopeRoot, { recursive: true });
-  const cleanup = async (): Promise<void> => {
+  async function cleanup(): Promise<void> {
     for (let attempt = 0; attempt < 10; attempt++) {
       try {
         await rm(dir, { recursive: true, force: true });
         return;
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === "ENOTEMPTY" && attempt < 9) {
+      } catch (error: unknown) {
+        if ((error as NodeJS.ErrnoException).code === "ENOTEMPTY" && attempt < 9) {
           await new Promise<void>((resolve) => setTimeout(resolve, 25));
           continue;
         }
 
-        throw err;
+        throw error;
       }
     }
-  };
+  }
 
   return { scopeRoot, cleanup };
 }
@@ -120,7 +114,7 @@ test("config-state-consistency: writeMarketplaceConfigEntry + planReconcile read
 
     // 3. Read it back -- prove the file is on-disk and parses cleanly.
     const cfg = await loadConfig(filePath);
-    assert.equal(cfg.status, "valid");
+    assert.strictEqual(cfg.status, "valid");
     if (cfg.status !== "valid") {
       return;
     }
@@ -131,21 +125,21 @@ test("config-state-consistency: writeMarketplaceConfigEntry + planReconcile read
     const merged = mergeScopeConfigs(cfg.config, {});
     const plan = planReconcile(merged, DEFAULT_STATE, "user");
 
-    assert.equal(plan.marketplacesToAdd.length, 1);
-    assert.equal(plan.marketplacesToAdd[0]!.marketplace, "mp1");
-    assert.equal(plan.marketplacesToAdd[0]!.source, "owner/repo");
-    assert.equal(plan.marketplacesToRemove.length, 0);
-    assert.equal(plan.pluginsToInstall.length, 0);
-    assert.equal(plan.pluginsToUninstall.length, 0);
-    assert.equal(plan.pluginsToEnable.length, 0);
-    assert.equal(plan.pluginsToDisable.length, 0);
-    assert.equal(plan.sourceMismatches.length, 0);
-    assert.equal(plan.scope, "user");
+    assert.strictEqual(plan.marketplacesToAdd.length, 1);
+    assert.strictEqual(plan.marketplacesToAdd[0]!.marketplace, "mp1");
+    assert.strictEqual(plan.marketplacesToAdd[0]!.source, "owner/repo");
+    assert.strictEqual(plan.marketplacesToRemove.length, 0);
+    assert.strictEqual(plan.pluginsToInstall.length, 0);
+    assert.strictEqual(plan.pluginsToUninstall.length, 0);
+    assert.strictEqual(plan.pluginsToEnable.length, 0);
+    assert.strictEqual(plan.pluginsToDisable.length, 0);
+    assert.strictEqual(plan.sourceMismatches.length, 0);
+    assert.strictEqual(plan.scope, "user");
 
     // Sanity check: a freshly emptyReconcilePlan and our 1-bucket plan are
     // not deepEqual (the asymmetry is the point -- the FULL no-op proof
     // requires orchestrator-level state mutation, exercised by sibling tests).
-    assert.notDeepEqual(plan, emptyReconcilePlan("user"));
+    assert.notDeepStrictEqual(plan, emptyReconcilePlan("user"));
   } finally {
     await cleanup();
   }
@@ -188,7 +182,7 @@ test("WB-01 SC#4 (add path): after addMarketplace, reconcile is a no-op AND stat
 
     // 1. The config file was written under the locked transaction.
     const cfg = await loadConfig(locations.configJsonPath);
-    assert.equal(cfg.status, "valid");
+    assert.strictEqual(cfg.status, "valid");
     if (cfg.status !== "valid") {
       return;
     }
@@ -201,7 +195,7 @@ test("WB-01 SC#4 (add path): after addMarketplace, reconcile is a no-op AND stat
     //    NO-OP -- every bucket empty (WB-01 SC#4 round-trip integrity).
     const merged = mergeScopeConfigs(cfg.config, {});
     const plan = planReconcile(merged, state, "project");
-    assert.deepEqual(plan, emptyReconcilePlan("project"));
+    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
   } finally {
     await cleanup();
   }
@@ -269,17 +263,17 @@ test("WB-01 SC#4 (add + autoupdate enable): post-flip reconcile is a no-op AND u
     // 3. Read back the config; unknown keys at BOTH entry and top level
     //    survived every write-back (add, then autoupdate flip).
     const cfg = await loadConfig(locations.configJsonPath);
-    assert.equal(cfg.status, "valid");
+    assert.strictEqual(cfg.status, "valid");
     if (cfg.status !== "valid") {
       return;
     }
 
     const cfgRecord = cfg.config as unknown as Record<string, unknown>;
     const legacyEntry = (cfg.config.marketplaces?.legacy ?? {}) as Record<string, unknown>;
-    assert.equal(legacyEntry.futureField, "preserve me");
-    assert.equal(cfgRecord.futureTopLevel, "preserve me too");
+    assert.strictEqual(legacyEntry.futureField, "preserve me");
+    assert.strictEqual(cfgRecord.futureTopLevel, "preserve me too");
     // The new marketplace's autoupdate flip landed.
-    assert.equal(cfg.config.marketplaces?.["valid-marketplace"]?.autoupdate, true);
+    assert.strictEqual(cfg.config.marketplaces?.["valid-marketplace"]?.autoupdate, true);
 
     // 4. Post-mutation reconcile is a no-op (the legacy entry is recorded
     //    in config but not in state, so reconcile would plan it as
@@ -294,7 +288,7 @@ test("WB-01 SC#4 (add + autoupdate enable): post-flip reconcile is a no-op AND u
     };
     const merged = mergeScopeConfigs(cfgForReconcile, {});
     const plan = planReconcile(merged, stateAfter, "project");
-    assert.deepEqual(plan, emptyReconcilePlan("project"));
+    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
   } finally {
     await cleanup();
   }
@@ -346,17 +340,17 @@ test("WB-01 SC#4 (add + autoupdate disable): post-flip reconcile is a no-op", as
     });
 
     const cfg = await loadConfig(locations.configJsonPath);
-    assert.equal(cfg.status, "valid");
+    assert.strictEqual(cfg.status, "valid");
     if (cfg.status !== "valid") {
       return;
     }
 
-    assert.equal(cfg.config.marketplaces?.["valid-marketplace"]?.autoupdate, false);
+    assert.strictEqual(cfg.config.marketplaces?.["valid-marketplace"]?.autoupdate, false);
 
     const stateAfter = await loadState(locations.extensionRoot);
     const merged = mergeScopeConfigs(cfg.config, {});
     const plan = planReconcile(merged, stateAfter, "project");
-    assert.deepEqual(plan, emptyReconcilePlan("project"));
+    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
   } finally {
     await cleanup();
   }
@@ -402,20 +396,20 @@ test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and co
     });
 
     const cfg = await loadConfig(locations.configJsonPath);
-    assert.equal(cfg.status, "valid");
+    assert.strictEqual(cfg.status, "valid");
     if (cfg.status !== "valid") {
       return;
     }
 
     // remove cleared the entry (cascade: no orphaned plugin keys).
-    assert.equal("valid-marketplace" in (cfg.config.marketplaces ?? {}), false);
+    assert.strictEqual("valid-marketplace" in (cfg.config.marketplaces ?? {}), false);
 
     const stateAfter = await loadState(locations.extensionRoot);
-    assert.equal("valid-marketplace" in stateAfter.marketplaces, false);
+    assert.strictEqual("valid-marketplace" in stateAfter.marketplaces, false);
 
     const merged = mergeScopeConfigs(cfg.config, {});
     const plan = planReconcile(merged, stateAfter, "project");
-    assert.deepEqual(plan, emptyReconcilePlan("project"));
+    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
   } finally {
     await cleanup();
   }
@@ -442,15 +436,18 @@ test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entrie
     const ctx = { ui: { notify: (): void => undefined } } as never;
     const pi = { getAllTools: (): unknown[] => [] } as never;
 
-    const mpRecord = (name: string): Record<string, unknown> => ({
-      name,
-      scope: "project",
-      source: pathSource(`./${name}-src`),
-      addedFromCwd: cwd,
-      manifestPath: path.join(cwd, `${name}-src`, ".claude-plugin", "marketplace.json"),
-      marketplaceRoot: path.join(cwd, `${name}-src`),
-      plugins: {},
-    });
+    function mpRecord(name: string): Record<string, unknown> {
+      return {
+        name,
+        scope: "project",
+        source: pathSource(`./${name}-src`),
+        addedFromCwd: cwd,
+        manifestPath: path.join(cwd, `${name}-src`, ".claude-plugin", "marketplace.json"),
+        marketplaceRoot: path.join(cwd, `${name}-src`),
+        plugins: {},
+      };
+    }
+
     await saveState(locations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: { mp1: mpRecord("mp1"), mp2: mpRecord("mp2") },
@@ -466,17 +463,17 @@ test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entrie
     });
 
     const cfg = await loadConfig(locations.configJsonPath);
-    assert.equal(cfg.status, "valid");
+    assert.strictEqual(cfg.status, "valid");
     if (cfg.status !== "valid") {
       return;
     }
 
     // BOTH entries carry the flip + the synthesized verbatim source -- the
     // last-write-wins clobber would have dropped mp1.
-    assert.equal(cfg.config.marketplaces?.mp1?.autoupdate, true);
-    assert.equal(cfg.config.marketplaces?.mp1?.source, "./mp1-src");
-    assert.equal(cfg.config.marketplaces?.mp2?.autoupdate, true);
-    assert.equal(cfg.config.marketplaces?.mp2?.source, "./mp2-src");
+    assert.strictEqual(cfg.config.marketplaces?.mp1?.autoupdate, true);
+    assert.strictEqual(cfg.config.marketplaces?.mp1?.source, "./mp1-src");
+    assert.strictEqual(cfg.config.marketplaces?.mp2?.autoupdate, true);
+    assert.strictEqual(cfg.config.marketplaces?.mp2?.source, "./mp2-src");
   } finally {
     await cleanup();
   }
@@ -541,7 +538,7 @@ test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-sco
 
     const ctx = { ui: { notify: (): void => undefined } } as never;
     const pi = { getAllTools: (): unknown[] => [] } as never;
-    const installPlugin = createNodeInstallPlugin(
+    const installPlugin = createInstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
     );
@@ -559,14 +556,14 @@ test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-sco
     });
 
     const cfg = await loadConfig(projectLocations.configJsonPath);
-    assert.equal(cfg.status, "valid");
+    assert.strictEqual(cfg.status, "valid");
     if (cfg.status !== "valid") {
       return;
     }
 
     // The adopted marketplace is DECLARED alongside the plugin key, with the
     // cloned record's verbatim source.raw.
-    assert.equal(cfg.config.marketplaces?.mp?.source, marketplaceRoot);
+    assert.strictEqual(cfg.config.marketplaces?.mp?.source, marketplaceRoot);
     assert.ok(cfg.config.plugins?.["tool@mp"] !== undefined);
 
     // Post-command reconcile against (merged project config, project state)
@@ -574,7 +571,7 @@ test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-sco
     const stateAfter = await loadState(projectLocations.extensionRoot);
     const merged = mergeScopeConfigs(cfg.config, {});
     const plan = planReconcile(merged, stateAfter, "project");
-    assert.deepEqual(plan, emptyReconcilePlan("project"));
+    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
   } finally {
     await cleanup();
   }
@@ -619,8 +616,8 @@ test("WR-09 orchestrated-mode SKIP: addMarketplace with notifications.mode 'orch
     // the marketplace in state.json); only the config side is asserted here.
     const afterBytes = await readFile(locations.configJsonPath, "utf8");
     const afterStat = await stat(locations.configJsonPath);
-    assert.equal(afterBytes, initialBytes);
-    assert.equal(afterStat.mtimeMs, beforeStat.mtimeMs);
+    assert.strictEqual(afterBytes, initialBytes);
+    assert.strictEqual(afterStat.mtimeMs, beforeStat.mtimeMs);
   } finally {
     await cleanup();
   }

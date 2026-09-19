@@ -51,8 +51,8 @@ import {
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { addMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
-import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { listPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
+import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { enterHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
@@ -171,7 +171,7 @@ test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope ma
     const installCtx = makeCtx(env.cwd);
     const listCtx = makeCtx(env.cwd);
     const completionCache = createCompletionCache();
-    const installPlugin = createNodeInstallPlugin(
+    const installPlugin = createInstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       completionCache,
     );
@@ -260,7 +260,7 @@ test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is 
     const projectAdd = makeCtx(env.cwd);
     const afterListCtx = makeCtx(env.cwd);
     const completionCache = createCompletionCache();
-    const installPlugin = createNodeInstallPlugin(
+    const installPlugin = createInstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       completionCache,
     );

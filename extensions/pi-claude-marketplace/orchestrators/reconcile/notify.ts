@@ -87,7 +87,6 @@ import type { Scope } from "../../shared/types.ts";
 type ReconcileBlockStatus = Extract<MarketplaceStatus, "added" | "removed" | "failed">;
 
 interface MarketplaceBlock<Msg extends PluginNotificationMessage = PluginNotificationMessage> {
-  readonly key: string;
   readonly name: string;
   readonly scope: Scope;
   status?: ReconcileBlockStatus;
@@ -107,7 +106,6 @@ function ensureMarketplaceBlock<Msg extends PluginNotificationMessage>(
   }
 
   const block: MarketplaceBlock<Msg> = {
-    key,
     name: marketplaceName,
     scope,
     plugins: [],

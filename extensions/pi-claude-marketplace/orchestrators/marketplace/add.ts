@@ -55,7 +55,6 @@ import { ensureGitSuffix, parsePluginSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { DEFAULT_CREDENTIAL_OPS } from "../../platform/git-credential.ts";
 import {
   InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
@@ -79,7 +78,7 @@ import {
   type Single,
 } from "../../shared/notify-context.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
-import { buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
 import { seedSameRepoPluginMirrors } from "../plugin/clone-cache.ts";
 
 import { ADD_CONTEXT } from "./add.messaging.ts";
@@ -692,7 +691,7 @@ async function addGitClonedInGuard(args: {
     const manifestPath = path.join(stagingDir, ".claude-plugin", "marketplace.json");
     const parsed = await loadMarketplaceManifest(manifestPath);
 
-    const derivedName = (parsed as { name: string }).name;
+    const derivedName = parsed.name;
 
     // 3. MA-8: duplicate name in this scope.
     if (derivedName in state.marketplaces) {
@@ -878,7 +877,7 @@ async function addPathInGuard(args: {
   // Read + validate manifest.
   const parsed = await loadMarketplaceManifest(manifestPath);
 
-  const derivedName = (parsed as { name: string }).name;
+  const derivedName = parsed.name;
 
   // MA-8: duplicate name in scope.
   if (derivedName in state.marketplaces) {

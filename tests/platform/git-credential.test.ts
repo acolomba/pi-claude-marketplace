@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { describe, test } from "node:test";
 
 import {
+  NODE_CREDENTIAL_SPAWN,
   createCredentialOps,
   type CredentialOps,
 } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
@@ -9,7 +11,20 @@ import {
 import { registerCredentialOpsContract } from "./credential-ops-contract.ts";
 import { createCredentialProcessFake } from "./credential-process-fake.ts";
 
+import type { CredentialSpawn } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
+import type * as GitCredentialPlatform from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
 import type { GitCredentials } from "../../extensions/pi-claude-marketplace/platform/git.ts";
+
+/** The timeout `orchestrators/auth-host.ts` binds into the production ops. */
+const DEFAULT_TIMEOUT_MS = 5_000;
+
+// The one concrete binding of this protocol lives in
+// `orchestrators/auth-host.ts`, which supplies the launcher and the timeout
+// explicitly; this module publishes the protocol and its collaborators only.
+// Restoring the export makes the `satisfies` resolve and turns the directive
+// below into an unused one (TS2578).
+// @ts-expect-error platform/git-credential.ts does not expose a composed default
+void ({} satisfies { readonly retired?: typeof GitCredentialPlatform.DEFAULT_CREDENTIAL_OPS });
 
 void ({
   fill: () => Promise.resolve(null),
@@ -76,16 +91,49 @@ function createProductionCredentialOps(): CredentialOps {
     },
   });
 
-  return createCredentialOps({ spawn: processes.spawn });
+  return createCredentialOps({ spawn: processes.spawn, timeoutMs: DEFAULT_TIMEOUT_MS });
 }
 
 describe("createCredentialOps", () => {
   registerCredentialOpsContract(createProductionCredentialOps);
 
+  test("runs the real Node launcher for the production credential subprocess", () => {
+    // arrange
+    const nodeLauncher: unknown = spawn;
+
+    // act
+    const productionLauncher: unknown = NODE_CREDENTIAL_SPAWN;
+
+    // assert
+    assert.strictEqual(productionLauncher, nodeLauncher);
+  });
+
+  test("binds the collaborators without launching a process", () => {
+    // arrange
+    const launches: Array<readonly [string, readonly string[]]> = [];
+    const recordingLauncher: CredentialSpawn = (command, args) => {
+      launches.push([command, args]);
+      throw new Error("construction must not launch a credential subprocess");
+    };
+
+    // act
+    const credentialOps = createCredentialOps({
+      spawn: recordingLauncher,
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+    });
+
+    // assert
+    assert.deepStrictEqual(Object.keys(credentialOps), ["fill", "approve", "reject"]);
+    assert.deepStrictEqual(launches, []);
+  });
+
   test("fills a credential from the complete git wire response", async () => {
     // arrange
     const processes = manualCredentialProcess();
-    const credentialOps = createCredentialOps({ spawn: processes.spawn });
+    const credentialOps = createCredentialOps({
+      spawn: processes.spawn,
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+    });
 
     // act
     const pendingCredential = credentialOps.fill("github.com");
@@ -117,7 +165,10 @@ describe("createCredentialOps", () => {
     test(behavior, async () => {
       // arrange
       const processes = manualCredentialProcess();
-      const credentialOps = createCredentialOps({ spawn: processes.spawn });
+      const credentialOps = createCredentialOps({
+        spawn: processes.spawn,
+        timeoutMs: DEFAULT_TIMEOUT_MS,
+      });
 
       // act
       const pendingCredential = credentialOps.fill("github.com");
@@ -136,7 +187,10 @@ describe("createCredentialOps", () => {
     test(behavior, async () => {
       // arrange
       const processes = manualCredentialProcess();
-      const credentialOps = createCredentialOps({ spawn: processes.spawn });
+      const credentialOps = createCredentialOps({
+        spawn: processes.spawn,
+        timeoutMs: DEFAULT_TIMEOUT_MS,
+      });
 
       // act
       const pendingCredential = credentialOps.fill("github.com");
@@ -209,7 +263,10 @@ describe("createCredentialOps", () => {
   test("approves a complete credential with the complete wire request", async () => {
     // arrange
     const processes = manualCredentialProcess();
-    const credentialOps = createCredentialOps({ spawn: processes.spawn });
+    const credentialOps = createCredentialOps({
+      spawn: processes.spawn,
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+    });
 
     // act
     const approved = credentialOps.approve("github.com", {
@@ -232,7 +289,10 @@ describe("createCredentialOps", () => {
   test("omits absent credential fields from an approve request", async () => {
     // arrange
     const processes = manualCredentialProcess();
-    const credentialOps = createCredentialOps({ spawn: processes.spawn });
+    const credentialOps = createCredentialOps({
+      spawn: processes.spawn,
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+    });
 
     // act
     const approved = credentialOps.approve("github.com", {});
@@ -247,7 +307,10 @@ describe("createCredentialOps", () => {
   test("rejects a credential with the complete wire request", async () => {
     // arrange
     const processes = manualCredentialProcess();
-    const credentialOps = createCredentialOps({ spawn: processes.spawn });
+    const credentialOps = createCredentialOps({
+      spawn: processes.spawn,
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+    });
 
     // act
     const rejected = credentialOps.reject("github.com", {

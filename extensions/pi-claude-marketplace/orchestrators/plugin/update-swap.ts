@@ -174,22 +174,29 @@ interface PrepHandles {
   mcp: PreparedMcpStaging;
 }
 
-export interface UpdatePhase3Failure extends Omit<Phase3Failure, "cause"> {
+export interface UpdatePhase3Failure extends Phase3Failure {
   readonly cause: Error;
 }
 
 export type NonFailedUpdateOutcome = Exclude<PluginUpdateOutcome, PluginUpdateFailedOutcome>;
 
-export interface DirectRenderableFailedOutcome extends Omit<
-  PluginUpdateFailedOutcome,
-  "cause" | "fromVersion" | "phaseFailures" | "reasons" | "toVersion"
-> {
+/**
+ * A failed update outcome the caller can render directly -- one that carries its
+ * own reasons and none of the phase-3 rollback payload.
+ *
+ * Stated as an intersection rather than as an interface extending an `Omit` of
+ * the same five keys. Both admit exactly the same values, because every one of
+ * those five slots is optional on the source; the intersection additionally
+ * keeps each absence marker beside the slot it closes, so what the marker
+ * narrows is readable from the declaration itself.
+ */
+export type DirectRenderableFailedOutcome = PluginUpdateFailedOutcome & {
   readonly reasons: readonly ContentReason[];
   readonly cause?: never;
   readonly fromVersion?: never;
   readonly phaseFailures?: never;
   readonly toVersion?: never;
-}
+};
 
 export interface UpdatePhase3FailedOutcome extends Omit<
   PluginUpdateFailedOutcome,
@@ -231,7 +238,6 @@ async function prepareUpdateHandles(
   try {
     handles.skills = await prepareStageSkills(ops, {
       locations,
-      marketplaceName: marketplace,
       pluginName: plugin,
       pluginRoot: installable.pluginRoot,
       pluginDataDir,
@@ -242,7 +248,6 @@ async function prepareUpdateHandles(
     });
     handles.commands = await prepareStageCommands(ops, {
       locations,
-      marketplaceName: marketplace,
       pluginName: plugin,
       pluginRoot: installable.pluginRoot,
       pluginDataDir,
@@ -257,7 +262,6 @@ async function prepareUpdateHandles(
       pluginName: plugin,
       pluginRoot: installable.pluginRoot,
       pluginDataDir,
-      resolved: installable,
       agentsDirs,
       knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
       // AG-7 opt-in: forward the direct-path `--map-model` setting. The

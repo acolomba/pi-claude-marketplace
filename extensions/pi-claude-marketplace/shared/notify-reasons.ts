@@ -4,13 +4,12 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
- * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 44-entry
- * membership AND order must stay byte-identical for catalog stability); this
- * module reorganizes that closed set into shared topic-grouped enums + a
- * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
- * would risk reordering). The topic groups below are typed views over the same
- * closed `Reason` literals, so a command module can reference an
+ * reasons set (D-09). `notification-types.ts` declares `Reason` as the SINGLE
+ * source of catalog truth (OUT-08: the 44-entry membership AND order must stay
+ * byte-identical for catalog stability); this module reorganizes that closed set
+ * into shared topic-grouped unions + a structural completeness proof WITHOUT
+ * restating the vocabulary's order. The topic groups below are typed views over
+ * the same closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
  * 44-entry set.
  *
@@ -21,8 +20,8 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * disabled because the plugin's own `defaultEnabled` declaration said so, and
  * brought the fourth topic group with it (D-102-06). `COMPAT-01` pins the
  * membership by enumeration and `notify-closed-set-locks.test.ts` pins the
- * length, so the two sentences above cannot drift from the tuple again without
- * a red test. CMP-4 / SCOPE-01 added two structural scope reasons (39 to 41).
+ * length, so the two sentences above cannot drift from the vocabulary again
+ * without a red test. CMP-4 / SCOPE-01 added two structural scope reasons (39 to 41).
  * SCOPE-01 / D-01 added two content scope reasons (41 to 43). WDET-04 /
  * D-106-04 appended the dedicated `workflows` reason (43 to 44).
  *
@@ -31,10 +30,10 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * declared straight as literal unions, since nothing ever iterated their
  * tuples. Membership of every literal is checked at compile time against the
  * closed `Reason` set (each group's element type extends `Reason`), and the
- * `_ReasonsCoverageProof` at the bottom asserts the union of all groups + the
- * command-private reasons + the structural `"marketplace not added"` marker is EXACTLY the
- * closed set -- a literal added to `REASONS` without a home here, or a typo,
- * becomes a compile error.
+ * coverage proof beside the per-kind reason map asserts the union of all groups
+ * + the command-private reasons + the structural `"marketplace not added"`
+ * marker is EXACTLY the closed set -- a literal added to `Reason` without a home
+ * here, or a typo, becomes a compile error.
  */
 
 /**
@@ -184,16 +183,41 @@ type DeclaredStateReason =
 export type DegradeKind = "skill" | "command";
 
 /**
+ * OUT-08 completeness proof: the union of the four shared topic groups + the
+ * command-private reasons + the structural marker must be EXACTLY the closed
+ * `Reason` set. The two `Exclude` expressions resolve to `never` only when the
+ * partition is total (no shared literal missing a home, no stray literal that is
+ * not a `Reason`). `_AssertNever` pins each to `never` through a default-type
+ * constraint, so a non-`never` result is a TS2344 compile error where the proof
+ * is declared.
+ *
+ * `Proven<T>` is how the proof reaches the contract it protects: it resolves to
+ * `T` only while the partition is total, and to `never` otherwise, which is what
+ * the per-kind reason map below is annotated against. The proof is therefore
+ * consumed by the mapping it guards rather than exported for a caller who has no
+ * use for it. Both are type-only, with no runtime footprint.
+ */
+type _AssertNever<T extends never> = T;
+type _UncoveredReason = Exclude<Reason, SharedTopicReason | CommandPrivateReason>;
+type _ExtraReason = Exclude<SharedTopicReason | CommandPrivateReason, Reason>;
+type ReasonsCoverageProof = [_AssertNever<_UncoveredReason>, _AssertNever<_ExtraReason>];
+type Proven<T> = ReasonsCoverageProof extends [never, never] ? T : never;
+
+/**
  * The closed map from a degraded component kind to its one failure-class token.
  * A `Record<DegradeKind, FailureReason>` (via `satisfies`) so a new kind added to
  * `DegradeKind` fails to compile here until it is given a token -- the single
  * exhaustiveness guard that keeps the install and reconcile surfaces from
  * drifting out of per-kind sync.
+ *
+ * The value type is `FailureReason` gated on the OUT-08 completeness proof, so
+ * this one annotation carries both obligations: a kind without a token, and a
+ * reason without a home.
  */
 const MALFORMED_REASON_BY_KIND = {
   skill: "malformed skill",
   command: "malformed command",
-} as const satisfies Record<DegradeKind, FailureReason>;
+} as const satisfies Record<DegradeKind, Proven<FailureReason>>;
 
 /** Canonical emit order for the per-kind tokens: skill before command. */
 const DEGRADE_KIND_ORDER = ["skill", "command"] as const satisfies readonly DegradeKind[];
@@ -231,7 +255,7 @@ type SharedTopicReason = IdempotentReason | UnsupportedReason | FailureReason | 
 
 /**
  * D-09: the command-private reasons, named here ONLY for the completeness
- * proof below -- they are owned by their command modules, not exported as a
+ * proof -- they are owned by their command modules, not exported as a
  * shared group. `"marketplace not added"` and its two scope-qualified siblings are the three
  * structural marketplace-absent markers (all excluded from `ContentReason` in
  * `notify.ts`); they are included here solely so the coverage proof sees the
@@ -254,18 +278,3 @@ type CommandPrivateReason =
   | "marketplace not added to user scope"
   | "marketplace not added to project scope"
   | "orphan rewake";
-
-/**
- * OUT-08 completeness proof: the union of the four shared topic groups + the
- * command-private reasons + the structural marker must be EXACTLY the closed
- * `Reason` set. The two `Exclude` expressions resolve to `never` only when the
- * partition is total (no shared literal missing a home, no stray literal that
- * is not in `REASONS`). `_ReasonsCoverageProof` pins each to `never` via a
- * default-type constraint -- a non-`never` result is a TS2344 compile error.
- * It is a type-only check with no runtime footprint.
- */
-type _AssertNever<T extends never> = T;
-type _UncoveredReason = Exclude<Reason, SharedTopicReason | CommandPrivateReason>;
-type _ExtraReason = Exclude<SharedTopicReason | CommandPrivateReason, Reason>;
-// fallow-ignore-next-line private-type-leak -- OUT-08 completeness proof; a non-never result is a TS2344 build failure, and the export is what keeps `noUnusedLocals` quiet. `_AssertNever` / `_UncoveredReason` / `_ExtraReason` are the proof's own internals, meaningless to a caller.
-export type _ReasonsCoverageProof = [_AssertNever<_UncoveredReason>, _AssertNever<_ExtraReason>];

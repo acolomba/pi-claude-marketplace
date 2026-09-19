@@ -86,7 +86,7 @@ export const GITHUB_PROVIDER: GitAuthProvider = {
  *    `marketplace update`/`install`/etc. invocation re-runs Device Flow.
  *    There is no refresh or expiry-tracking logic here by design.
  */
-export const GITLAB_PROVIDER: GitAuthProvider = {
+const GITLAB_PROVIDER: GitAuthProvider = {
   id: "gitlab",
   hostMatch: (host) => host === "gitlab.com",
   deviceCodeUrl: "https://gitlab.com/oauth/authorize_device",

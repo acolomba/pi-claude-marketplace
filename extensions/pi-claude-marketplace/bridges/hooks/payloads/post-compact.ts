@@ -23,7 +23,10 @@ function compactTrigger(reason: SessionCompactEvent["reason"]): PostCompactStdin
   return reason === "manual" ? "manual" : "auto";
 }
 
-export function translate(event: SessionCompactEvent, ctx: TranslationContext): PostCompactStdin {
+export function translatePostCompact(
+  event: SessionCompactEvent,
+  ctx: TranslationContext,
+): PostCompactStdin {
   return {
     session_id: ctx.sessionId,
     transcript_path: ctx.transcriptPath,

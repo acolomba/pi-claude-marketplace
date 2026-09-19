@@ -128,8 +128,7 @@ export type UpdatePreflightOutcome =
   PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome | PreflightFailedOutcome;
 
 type PartialableUpdateShapeError = PluginShapeError & {
-  readonly shape: PluginShapeError["shape"] & {
-    readonly kind: "no-longer-installable";
+  readonly shape: Extract<PluginShapeError["shape"], { kind: "no-longer-installable" }> & {
     readonly partialable: true;
     readonly unsupportedKinds: readonly string[];
   };
@@ -300,6 +299,22 @@ function skippedCandidate(
 }
 
 /**
+ * The slots every static preflight verdict carries, including the version slot
+ * only the `skipped` partition ever fills.
+ *
+ * The version sits here rather than on each arm so the `failed` arm has
+ * something to narrow: an absence marker closes a slot the rest of the
+ * intersection already declares, while a slot spelled only inside a union arm
+ * would be an addition instead.
+ */
+interface StaticPreflightRowBase {
+  readonly plugin: string;
+  readonly notes: readonly string[];
+  readonly reason: ContentReason;
+  readonly fromVersion?: string;
+}
+
+/**
  * A static preflight verdict -- one the update reaches without resolving a
  * candidate.
  *
@@ -308,14 +323,9 @@ function skippedCandidate(
  * to read a version from; pinning the field `never` there keeps a version arrow
  * off a row for a plugin that was never installed.
  */
-type StaticPreflightRowOptions = {
-  readonly plugin: string;
-  readonly notes: readonly string[];
-  readonly reason: ContentReason;
-} & (
-  | { readonly partition: "failed"; readonly fromVersion?: never }
-  | { readonly partition: "skipped"; readonly fromVersion?: string }
-);
+type StaticPreflightRowOptions =
+  | (StaticPreflightRowBase & { readonly partition: "failed"; readonly fromVersion?: never })
+  | (StaticPreflightRowBase & { readonly partition: "skipped" });
 
 function staticPreflightRow(
   options: StaticPreflightRowOptions,

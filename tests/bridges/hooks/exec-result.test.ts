@@ -1,8 +1,3 @@
-import assert from "node:assert/strict";
-import { test } from "node:test";
-
-import { assertNever } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
-
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 
 void ({ kind: "noop" } satisfies HookExecResult);
@@ -35,26 +30,3 @@ void ({ updatedInput: { command: "check" } } satisfies HookExecResult);
 void ({ kind: "block", suppressOutput: true } satisfies HookExecResult);
 // @ts-expect-error permission decisions use the closed allow, deny, and ask vocabulary
 void ({ kind: "mutate", permissionDecision: "prompt" } satisfies HookExecResult);
-
-test("throws the serialized impossible hook result", () => {
-  // arrange
-  const impossibleHookExecResult = { kind: "future" } as never;
-
-  // act & assert
-  assert.throws(
-    () => assertNever(impossibleHookExecResult),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.strictEqual(error.constructor, Error);
-      assert.deepStrictEqual(
-        { name: error.name, message: error.message, cause: error.cause },
-        {
-          name: "Error",
-          message: 'unreachable HookExecResult arm: {"kind":"future"}',
-          cause: undefined,
-        },
-      );
-      return true;
-    },
-  );
-});

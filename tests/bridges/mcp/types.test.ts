@@ -2,24 +2,16 @@ import type {
   McpReplacement,
   McpReplacementNoop,
   McpReplacementReplaced,
-  McpServersSource,
   PreparedMcpNoop,
   PreparedMcpStaged,
   PreparedMcpStaging,
   RawMcpDoc,
-  ResolvedMcpServers,
-  ResolvePluginMcpServersInput,
   StageMcpCommitResult,
   StageMcpInput,
   StagedMcpRecord,
   UnstageMcpInput,
   UnstageMcpResult,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/types.ts";
-
-void ("marketplace-entry" satisfies McpServersSource);
-void ("plugin-manifest" satisfies McpServersSource);
-void ("standalone" satisfies McpServersSource);
-void ("none" satisfies McpServersSource);
 
 const wrappedMcpDoc: RawMcpDoc = {
   mcpServers: {
@@ -39,21 +31,6 @@ const unwrappedMcpDoc: RawMcpDoc = {
   search: { command: "search-server" },
 } satisfies RawMcpDoc;
 void unwrappedMcpDoc;
-
-const resolvedMcpServers: ResolvedMcpServers = {
-  source: "plugin-manifest",
-  servers: {
-    search: { command: "search-server", args: ["--stdio"] },
-  },
-} satisfies ResolvedMcpServers;
-void resolvedMcpServers;
-
-const resolvePluginMcpServersInput: ResolvePluginMcpServersInput = {
-  entry: { mcpServers: { entry: { command: "entry-server" } } },
-  manifest: { mcpServers: { manifest: { command: "manifest-server" } } },
-  pluginRoot: "/plugins/acme",
-} satisfies ResolvePluginMcpServersInput;
-void resolvePluginMcpServersInput;
 
 const stageMcpInput: StageMcpInput = {
   locations: undefined!,
@@ -141,21 +118,8 @@ void unstageMcpResult;
 
 type IsMutableArray<T extends readonly unknown[]> = T extends unknown[] ? true : false;
 
-// @ts-expect-error MCP sources have a closed precedence vocabulary
-void ("plugin-entry" satisfies McpServersSource);
 // @ts-expect-error validated stage inputs require a server record
 void ({ ...stageMcpInput, servers: ["search"] } satisfies StageMcpInput);
-// @ts-expect-error resolved MCP servers always identify their source
-const resolvedMcpServersWithoutSource: ResolvedMcpServers = {
-  servers: {},
-};
-void resolvedMcpServersWithoutSource;
-// @ts-expect-error resolution input always identifies the plugin root
-const resolvePluginMcpServersInputWithoutRoot: ResolvePluginMcpServersInput = {
-  entry: {},
-  manifest: {},
-};
-void resolvePluginMcpServersInputWithoutRoot;
 // @ts-expect-error stage input always carries the plugin data path
 const stageMcpInputWithoutPluginData: StageMcpInput = {
   locations: undefined!,
@@ -234,10 +198,6 @@ void unstageMcpResultWithoutWarnings;
 
 // @ts-expect-error raw MCP document fields are readonly
 wrappedMcpDoc.mcpServers = {};
-// @ts-expect-error resolved MCP sources are readonly
-resolvedMcpServers.source = "none";
-// @ts-expect-error resolution inputs are readonly
-resolvePluginMcpServersInput.pluginRoot = "/changed";
 // @ts-expect-error stage inputs are readonly
 stageMcpInput.cwd = "/changed";
 // @ts-expect-error staged record provenance is readonly

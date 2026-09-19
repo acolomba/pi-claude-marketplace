@@ -12,7 +12,7 @@
 // `assertSafeName` guard on the plugin name. `removeHookConfig` is a single
 // `fs.rm(..., { recursive: true, force: true })` and is idempotent (NFR-3).
 
-import { lstat, readFile, readdir, readlink, realpath, rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
@@ -46,7 +46,7 @@ export interface HooksTreeInspector {
  * function joins. NFR-10 containment is carried by each caller's
  * `assertPathInside` chokepoint, not by the composer.
  */
-export function hookConfigPathFor(locations: ScopedLocations, plugin: string): string {
+function hookConfigPathFor(locations: ScopedLocations, plugin: string): string {
   return path.join(locations.hooksDir, plugin, "hooks.json");
 }
 
@@ -257,17 +257,6 @@ export function createWriteHookConfig(
     return { written: true, path: target };
   };
 }
-
-const NODE_HOOKS_TREE_INSPECTOR: HooksTreeInspector = {
-  lstat: async (target: string): Promise<Stats> => lstat(target),
-  readdir: async (directory: string): Promise<Dirent[]> =>
-    readdir(directory, { withFileTypes: true }),
-  readlink: async (target: string): Promise<string> => readlink(target),
-  realpath: async (target: string): Promise<string> => realpath(target),
-};
-
-/** Writes a hooks config through the Node-backed tree inspector. */
-export const writeHookConfig = createWriteHookConfig(NODE_HOOKS_TREE_INSPECTOR);
 
 export interface RemoveHookConfigInput {
   readonly locations: ScopedLocations;

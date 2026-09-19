@@ -952,7 +952,6 @@ function compareNames(a: string, b: string): number {
  */
 interface NameOwner {
   readonly plugin: string;
-  readonly marketplace: string;
   readonly disabled: boolean;
 }
 
@@ -978,11 +977,10 @@ function collectOwners(state: ExtensionState): {
   const commandOwners = new Map<string, NameOwner>();
   const agentOwners = new Map<string, NameOwner>();
 
-  for (const [mpName, mp] of Object.entries(state.marketplaces)) {
+  for (const mp of Object.values(state.marketplaces)) {
     for (const [pluginName, plugin] of Object.entries(mp.plugins)) {
       const owner: NameOwner = {
         plugin: pluginName,
-        marketplace: mpName,
         disabled: isRecordedButDisabled(plugin),
       };
       for (const n of plugin.resources.skills) {

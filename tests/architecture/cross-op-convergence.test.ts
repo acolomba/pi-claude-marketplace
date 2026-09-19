@@ -50,10 +50,12 @@ import {
 import { setMarketplaceAutoupdate } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts";
 import { removeMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
 import { updateMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
-import { getPluginInfo } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
-import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
+import {
+  createInstallOperation,
+  createUninstallOperation,
+  getPluginInfo,
+} from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { createNodeReinstallPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
-import { createNodeUninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
@@ -71,8 +73,8 @@ import type {
 // ---------------------------------------------------------------------------
 
 interface NotifyRecord {
-  message: string;
-  severity?: string;
+  readonly message: string;
+  readonly severity?: string;
 }
 
 function createGitOps() {
@@ -122,9 +124,9 @@ const CANONICAL_BARE =
   "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {marketplace not added}";
 
 interface Emission {
-  body: string;
-  severity: string | undefined;
-  callCount: number;
+  readonly body: string;
+  readonly severity: string | undefined;
+  readonly callCount: number;
 }
 
 /**
@@ -154,14 +156,14 @@ const INVOKERS: Record<string, Invoker> = {
   },
   // install ALWAYS carries a resolved scope -> explicit only. install-flow.test.ts M1.
   install: async ({ ctx, pi, cwd }) => {
-    await createNodeInstallPlugin(
+    await createInstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
     )({ ctx, pi, scope: "project", cwd, marketplace: NAME, plugin: "anything" });
   },
   // uninstall. uninstall.test.ts ATTR-04 / D-03.
   uninstall: async ({ ctx, pi, cwd, mode }) => {
-    await createNodeUninstallPlugin(
+    await createUninstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
     )({
@@ -287,18 +289,18 @@ test("SC#1 cross-op convergence: explicit-scope {marketplace not added} is byte-
   let canonicalBody: string | undefined;
   for (const op of OPS_EXPLICIT_SCOPE) {
     const emission = await captureOp(op, "explicit");
-    assert.equal(
+    assert.strictEqual(
       emission.body,
       CANONICAL_EXPLICIT,
       `op "${op}" must emit the byte-identical explicit-scope canonical row (Class-C regression)`,
     );
-    assert.equal(emission.severity, "error", `op "${op}" must emit at severity error`);
-    assert.equal(emission.callCount, 1, `op "${op}" must emit exactly once (IL-2)`);
+    assert.strictEqual(emission.severity, "error", `op "${op}" must emit at severity error`);
+    assert.strictEqual(emission.callCount, 1, `op "${op}" must emit exactly once (IL-2)`);
     // Direct cross-op byte-identity: op-A bytes === op-B bytes.
     if (canonicalBody === undefined) {
       canonicalBody = emission.body;
     } else {
-      assert.equal(
+      assert.strictEqual(
         emission.body,
         canonicalBody,
         `op "${op}" bytes must equal every other op's bytes (the convergence invariant)`,
@@ -306,24 +308,24 @@ test("SC#1 cross-op convergence: explicit-scope {marketplace not added} is byte-
     }
   }
 
-  assert.equal(canonicalBody, CANONICAL_EXPLICIT);
+  assert.strictEqual(canonicalBody, CANONICAL_EXPLICIT);
 });
 
 test("SC#1 cross-op convergence: bare/bracketless {marketplace not added} is byte-identical across every bare-capable REAL orchestrator (install excluded)", async () => {
   let canonicalBody: string | undefined;
   for (const op of OPS_BARE) {
     const emission = await captureOp(op, "bare");
-    assert.equal(
+    assert.strictEqual(
       emission.body,
       CANONICAL_BARE,
       `op "${op}" must emit the byte-identical bare canonical row (Class-C regression)`,
     );
-    assert.equal(emission.severity, "error", `op "${op}" must emit at severity error`);
-    assert.equal(emission.callCount, 1, `op "${op}" must emit exactly once (IL-2)`);
+    assert.strictEqual(emission.severity, "error", `op "${op}" must emit at severity error`);
+    assert.strictEqual(emission.callCount, 1, `op "${op}" must emit exactly once (IL-2)`);
     if (canonicalBody === undefined) {
       canonicalBody = emission.body;
     } else {
-      assert.equal(
+      assert.strictEqual(
         emission.body,
         canonicalBody,
         `op "${op}" bare bytes must equal every other bare-capable op's bytes (the convergence invariant)`,
@@ -331,7 +333,7 @@ test("SC#1 cross-op convergence: bare/bracketless {marketplace not added} is byt
     }
   }
 
-  assert.equal(canonicalBody, CANONICAL_BARE);
+  assert.strictEqual(canonicalBody, CANONICAL_BARE);
 
   // Asymmetry guard: the explicit-scope and bare rows are DISTINCT (one carries
   // the [project] bracket, one does not) -- a regression collapsing them would

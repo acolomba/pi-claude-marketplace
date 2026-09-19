@@ -39,11 +39,7 @@ import { sourceLogical } from "../../domain/source.ts";
 import { loadVisibleMarketplaces } from "../../orchestrators/marketplace/shared.ts";
 import { loadPluginListPayload } from "../../orchestrators/plugin/list-flow.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import {
-  pluginScopeOrFallback,
-  pluginVersion,
-  type PluginNotificationMessage,
-} from "../../shared/notification-types.ts";
+import { pluginScopeOrFallback, pluginVersion } from "../../shared/notification-types.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -137,7 +133,7 @@ export function registerListMarketplacesTool(pi: ExtensionAPI): void {
  * plugin IS installed; the upgrade status is internal to the slash-command
  * surface per MSG-PL-4).
  */
-export type ToolPluginStatus = "installed" | "available" | "unavailable";
+type ToolPluginStatus = "installed" | "available" | "unavailable";
 
 interface PluginRow {
   marketplace: string;
@@ -148,34 +144,8 @@ interface PluginRow {
   reasons?: readonly string[];
 }
 
-/**
- * Project the PluginNotificationMessage status set onto the tool's
- * three-bucket projection.
- *
- * NINE list-surface variants are reachable here: the five installed-inventory
- * ones (`installed` / `upgradable` / `partially-installed` /
- * `partially-upgradable` / `disabled`) and the four not-installed candidate
- * ones (`available` / `remote` / `partially-available` / `unavailable`). The
- * last two of those are reachable only because `loadToolPluginPayload` carries
- * `remote` with `available` and `partial` with `unavailable` -- the tool
- * exposes no parameter of its own for either, and the list orchestrator gates
- * both behind one (`orchestrators/plugin/list-flow.ts::shouldShow`). Fold a
- * fine-grained bucket into a coarse one here without carrying its filter over
- * there and the arm goes dead on the execute path.
- *
- * `failed` is the tenth member of the row union and is NOT reachable: the
- * synthetic `(list)` failure row is built in `listPlugins`'s own catch, never
- * inside `loadPluginListPayload`, so no payload this tool loads carries one.
- * `ToolPluginRow` admits it because that alias is derived from the producer's
- * declared type, not because the producer emits it on this path.
- *
- * The throw is the `assertNever`-style guard for `failed` and for every
- * non-list variant (`updated` / `reinstalled` / `uninstalled` / `skipped` /
- * `manual recovery` and the four pending rows). `execute` calls the render
- * loop INSIDE its try, so the throw lands on the tool's `isError: true`
- * surface rather than escaping as an unhandled rejection.
- */
-export function projectRowStatus(status: PluginNotificationMessage["status"]): ToolPluginStatus {
+/** Projects the producer's nine list-row variants into the tool's three buckets. */
+function projectRowStatus(status: ToolPluginRow["status"]): ToolPluginStatus {
   switch (status) {
     // The list orchestrator emits the steady-state inventory row as
     // `installed`; it projects to the same `installed` tool surface as the
@@ -208,19 +178,6 @@ export function projectRowStatus(status: PluginNotificationMessage["status"]): T
       // are not materialized -- the LLM-tool projection treats it as not
       // currently usable, mirroring `unavailable`.
       return "unavailable";
-    case "updated":
-    case "reinstalled":
-    case "uninstalled":
-    case "failed":
-    case "skipped":
-    case "manual recovery":
-    case "will install":
-    case "will uninstall":
-    case "will enable":
-    case "will disable":
-      throw new Error(
-        `pi_claude_marketplace_plugin_list: unexpected plugin status "${status}" on list payload`,
-      );
   }
 }
 
@@ -323,9 +280,6 @@ async function loadToolPluginPayload(
   params: {
     marketplace?: string;
     scope?: "user" | "project";
-    installed?: boolean;
-    available?: boolean;
-    unavailable?: boolean;
   },
   ctx: ExtensionContext,
   buckets: ToolFilterBuckets,
@@ -369,8 +323,7 @@ async function loadToolPluginPayload(
  * reason `pluginVersion` carries one. The groups are total over that union, so
  * there is no trailing fall-through -- a status added to the producer's union
  * is a compile error here rather than a row that silently loses its reasons.
- * `failed` is named for the gate's sake and never arrives: the render loop runs
- * `projectRowStatus` first, and that refuses it.
+ * Failed notification rows are excluded by the payload producer's return type.
  */
 function pluginReasons(p: ToolPluginRow): readonly string[] | undefined {
   switch (p.status) {
@@ -387,7 +340,6 @@ function pluginReasons(p: ToolPluginRow): readonly string[] | undefined {
     case "upgradable":
     case "partially-installed":
     case "partially-upgradable":
-    case "failed":
       // USTAT-01: the `partially-available` row carries the same per-kind reason
       // braces as the `unavailable` row, so surface them on the tool details too.
       return p.reasons.length > 0 ? p.reasons : undefined;
@@ -487,10 +439,6 @@ export function registerListPluginsTool(pi: ExtensionAPI): void {
       let rendered;
       try {
         payload = await loadToolPluginPayload(pi, params, ctx, buckets);
-        // The projection runs INSIDE the guard. `projectRowStatus` throws on a
-        // status the list payload must never carry, and that diagnostic belongs
-        // on the `isError: true` surface below rather than escaping `execute`
-        // as an unhandled rejection.
         rendered = renderPluginPayload(payload, buckets);
       } catch (err) {
         // TC-9: state.json error propagates as a tool error surface (the

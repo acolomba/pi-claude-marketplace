@@ -4,7 +4,6 @@
 // is silently treated as already-removed. Skills have no on-disk index and
 // no foreign-content marker (D-06: skills dir is owned end-to-end by name).
 
-import { rm } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
@@ -66,12 +65,3 @@ export function createUnstagePluginSkills(
     };
   };
 }
-
-const NODE_SKILLS_UNSTAGE_REMOVER: SkillsUnstageRemover = {
-  async removeTree(target: string): Promise<void> {
-    await rm(target, { recursive: true, force: true });
-  },
-};
-
-/** Removes recorded skill trees through the Node filesystem adapter. */
-export const unstagePluginSkills = createUnstagePluginSkills(NODE_SKILLS_UNSTAGE_REMOVER);

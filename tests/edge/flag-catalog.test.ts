@@ -27,27 +27,26 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  CATALOG_VERBS,
   completionFlagEntries,
   isCatalogVerb,
   parseFlagNames,
   passThroughFlagNames,
   SCOPE_TARGET_FLAG,
+  type CatalogVerb,
 } from "../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 
 /**
  * The verbs the catalog indexes, hand-authored so this owner never reads the
- * key set out of the object it is checking. `CATALOG_VERBS` is
- * `Object.keys(CATALOG)` and `isCatalogVerb` is `Object.hasOwn(CATALOG, ...)`,
- * so driving either from the other proves nothing.
+ * key set out of the object it is checking. `isCatalogVerb` uses
+ * `Object.hasOwn(CATALOG, ...)`; the expected inventory stays independent.
  *
  * `tests/architecture/flag-catalog-drift.test.ts` reconciles the same set
  * against its own `Record<CatalogVerb, ...>` pin, but the compiler forces that
  * Record total over the union, so a verb dropped from the catalog AND the union
  * in one change leaves it green. This list is what stays behind to catch that,
- * and it carries the declaration order the Record's sorted comparison does not.
+ * while the public entry tests retain each verb's completion flag order.
  */
-const EXPECTED_CATALOG_VERBS: readonly string[] = [
+const EXPECTED_CATALOG_VERBS = [
   "install",
   "update",
   "list",
@@ -60,7 +59,17 @@ const EXPECTED_CATALOG_VERBS: readonly string[] = [
   "pending",
   "import",
   "bootstrap",
-];
+  "browse",
+  "help",
+  "marketplace help",
+  "marketplace add",
+  "marketplace remove",
+  "marketplace info",
+  "marketplace list",
+  "marketplace update",
+  "marketplace autoupdate",
+  "marketplace noautoupdate",
+] as const;
 
 test("completionFlagEntries returns the completable entries in catalog declaration order", () => {
   // arrange
@@ -193,13 +202,27 @@ for (const { candidate, situation } of [
   });
 }
 
-test("CATALOG_VERBS lists exactly the catalog's verbs, in declaration order", () => {
-  // arrange
-  const expectedVerbs = [...EXPECTED_CATALOG_VERBS];
+// A new catalog type member must join this independently written inventory.
+void (true satisfies [Exclude<CatalogVerb, (typeof EXPECTED_CATALOG_VERBS)[number]>] extends [never]
+  ? true
+  : false);
 
-  // act
-  const catalogVerbs = [...CATALOG_VERBS];
+for (const verb of ["marketplace info", "marketplace list", "marketplace update"] as const) {
+  test(`${verb} describes local as retaining merged reads without configuration writes`, () => {
+    // arrange
+    const expectedEntries = [
+      {
+        name: "--local",
+        description: "Keep merged configuration reads; this command does not write configuration",
+      },
+    ];
 
-  // assert
-  assert.deepStrictEqual(catalogVerbs, expectedVerbs);
-});
+    // act
+    const entries = completionFlagEntries(verb);
+
+    // assert
+    assert.deepStrictEqual(entries, expectedEntries);
+    assert.deepStrictEqual(parseFlagNames(verb), new Set(["--local"]));
+    assert.deepStrictEqual(passThroughFlagNames(verb), []);
+  });
+}

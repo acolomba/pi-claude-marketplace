@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { translate } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts";
+import { translateStop } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts";
 
 import type {
   StopEvent,
@@ -50,7 +50,7 @@ test("emits the complete active Stop envelope", () => {
   } satisfies StopStdin;
 
   // act
-  const stopPayload = translate(event, context);
+  const stopPayload = translateStop(event, context);
 
   // assert
   assert.deepStrictEqual(stopPayload, expectedPayload);
@@ -86,7 +86,7 @@ test("emits the complete inactive Stop envelope", () => {
   } satisfies StopStdin;
 
   // act
-  const stopPayload = translate(event, context);
+  const stopPayload = translateStop(event, context);
 
   // assert
   assert.deepStrictEqual(stopPayload, expectedPayload);
@@ -126,7 +126,7 @@ test("preserves accepted empty Stop text and transcript path", () => {
   } satisfies StopStdin;
 
   // act
-  const stopPayload = translate(event, context);
+  const stopPayload = translateStop(event, context);
 
   // assert
   assert.deepStrictEqual(stopPayload, expectedPayload);

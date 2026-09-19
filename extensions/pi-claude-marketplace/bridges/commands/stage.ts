@@ -67,7 +67,7 @@ import type { RemovalOps } from "../../shared/fs-utils.ts";
 type CommandsReplacementInternals = Readonly<{
   backupRoot: string;
   backups: readonly { name: string; from: string; to: string }[];
-  renamed: readonly { from: string; to: string }[];
+  renamed: readonly { to: string }[];
 }>;
 
 const commandsReplacementInternals = new WeakMap<
@@ -397,7 +397,7 @@ export async function replacePreparedCommands(
   await assertPathInside(prepared.locations.commandsStagingDir, backupRoot, "commands backup root");
 
   const backups: { name: string; from: string; to: string }[] = [];
-  const renamed: { from: string; to: string }[] = [];
+  const renamed: { to: string }[] = [];
 
   try {
     for (const name of prepared._previousNames) {
@@ -432,7 +432,7 @@ export async function replacePreparedCommands(
       }
 
       await rename(pair.from, pair.to);
-      renamed.push(pair);
+      renamed.push({ to: pair.to });
     }
   } catch (err) {
     const leaks = await rollbackCommandsReplacementInternal(
@@ -509,7 +509,7 @@ function requireCommandsReplacementInternals(
 async function rollbackCommandsReplacementInternal(
   ops: RemovalOps,
   prepared: Extract<PreparedCommandsStaging, { kind: "staged" }>,
-  renamed: readonly { from: string; to: string }[],
+  renamed: readonly { to: string }[],
   backups: readonly { name: string; from: string; to: string }[],
   backupRoot: string,
 ): Promise<readonly string[]> {

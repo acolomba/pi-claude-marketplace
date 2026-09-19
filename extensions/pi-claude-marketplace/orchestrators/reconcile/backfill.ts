@@ -20,7 +20,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import { EXTENSION_VERSION } from "../../shared/extension-version.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
-import { createNodeReinstallPlugin } from "../plugin/reinstall-flow.ts";
+import { createReinstallOperation } from "../plugin/operations.ts";
 
 import {
   classifyOrchestratorThrow,
@@ -121,8 +121,8 @@ async function applyBackfillForScope(
  * into a structured `invalid-block` row (subject `state.json`, closed-set
  * reason) so a transient failure NEVER aborts the single cascade for both
  * scopes. The gate stays open and the scan self-heals on the next load --
- * retry-safe (NFR-3); NFR-1 atomicity is unaffected (the failed write simply
- * did not commit).
+ * retry-safe (NFR-3); NFR-1 atomicity is unaffected (the failed write did not
+ * commit).
  */
 export async function applyBackfillForScopeIsolated(
   opts: ApplyReconcileOptions,
@@ -205,13 +205,13 @@ function hasForceInstalledPlugin(state: ExtensionState): boolean {
  * wrapper's single generic `state.json (failed)` row and block every still-
  * unscanned sibling on every load.
  */
-export async function scanForceInstalledBackfills(
+async function scanForceInstalledBackfills(
   opts: ApplyReconcileOptions,
   scope: Scope,
   state: ExtensionState,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
-  const reinstallPlugin = createNodeReinstallPlugin(opts.hooksRouting, opts.completionCache);
+  const reinstallPlugin = createReinstallOperation(opts.hooksRouting, opts.completionCache);
   const alreadyTouched = new Set<string>();
   for (const o of outcomes) {
     if (o.scope === scope && "plugin" in o) {

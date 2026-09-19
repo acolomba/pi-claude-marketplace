@@ -1,9 +1,7 @@
 import { parsePluginSource, samePlannedSource, sourceLogical } from "../../domain/source.ts";
 import { addMarketplace as defaultAddMarketplace } from "../../orchestrators/marketplace/add.ts";
-import {
-  createNodeInstallPlugin,
-  type InstallPluginOptions,
-} from "../../orchestrators/plugin/install-flow.ts";
+import { type InstallPluginOptions } from "../../orchestrators/plugin/install-flow.ts";
+import { createInstallOperation } from "../../orchestrators/plugin/operations.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import {
   writeBatchedConfigEntries,
@@ -33,6 +31,7 @@ import { buildClaudeImportPlan } from "./marketplaces.ts";
 import { loadMergedClaudeSettingsForScope as defaultLoadSettings } from "./settings.ts";
 
 import type {
+  ClaudeSettingsReadOptions,
   ImportDiagnostic,
   ImportDiagnosticCode,
   MergedClaudeSettingsResult,
@@ -160,7 +159,7 @@ interface MutableImportResult {
 export interface ImportDeps {
   readonly loadSettings?: (
     scope: Scope,
-    opts: { cwd: string },
+    opts: ClaudeSettingsReadOptions,
   ) => Promise<MergedClaudeSettingsResult>;
   readonly loadState?: (scope: Scope, cwd: string) => Promise<ExtensionState>;
   readonly addMarketplace?: (
@@ -215,7 +214,7 @@ function stateLoader(
 
 function settingsLoader(
   deps: ImportDeps | undefined,
-): (scope: Scope, opts: { cwd: string }) => Promise<MergedClaudeSettingsResult> {
+): (scope: Scope, opts: ClaudeSettingsReadOptions) => Promise<MergedClaudeSettingsResult> {
   return deps?.loadSettings ?? defaultLoadSettings;
 }
 
@@ -230,7 +229,7 @@ function installPluginFn(
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
 ): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
-  return deps?.installPlugin ?? createNodeInstallPlugin(hooksRouting, completionCache);
+  return deps?.installPlugin ?? createInstallOperation(hooksRouting, completionCache);
 }
 
 function pluginsForMarketplace(
@@ -1004,7 +1003,7 @@ function buildBatchedPatchForScope(
     rawSourceByName.set(mp.marketplace, mp.source);
   }
 
-  const marketplaces: Record<string, { source: string }> = {};
+  const marketplaces: ImportConfigPatch["marketplaces"] = {};
   for (const added of result.addedMarketplaces) {
     if (added.scope !== scopePlan.scope) {
       continue;
@@ -1048,7 +1047,7 @@ function buildRepairPatchForScope(
   scopePlan: ScopedImportPlan,
   rawSourceByName: ReadonlyMap<string, string>,
 ): ImportConfigPatch {
-  const marketplaces: Record<string, { source: string }> = {};
+  const marketplaces: ImportConfigPatch["marketplaces"] = {};
   for (const skipped of result.skippedExistingMarketplaces) {
     if (skipped.scope !== scopePlan.scope) {
       continue;
@@ -1167,6 +1166,12 @@ function dispatchFailedOutcome(
   });
 }
 
+/**
+ * Imports enabled plugins and their marketplaces from Claude settings into
+ * every selected scope: merges each scope's settings, plans the marketplaces
+ * to ensure and plugins to install, runs that plan per scope, and emits one
+ * notification cascade for the whole run.
+ */
 export async function importClaudeSettings(
   opts: ImportClaudeSettingsOptions,
 ): Promise<ClaudeImportExecutionResult> {

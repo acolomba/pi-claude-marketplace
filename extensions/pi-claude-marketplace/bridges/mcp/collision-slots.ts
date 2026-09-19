@@ -2,8 +2,7 @@
 //
 // Enumerate the four pi-mcp-adapter file slots (RN-5/MC-4 user contract)
 // and return Map<serverName, owningPath> with first-declarer-wins
-// precedence. The slot constant is hoisted to a named export so snapshot
-// tests can lock the user-contract order.
+// precedence.
 //
 // The bridge's job is collision DETECTION across slots. Slot validation
 // (per-field semantics, schema correctness) is owned by pi-mcp-adapter --
@@ -25,10 +24,9 @@ import { getAgentDir } from "../../platform/pi-api.ts";
  *   [2] shared-project -- <cwd>/.mcp.json
  *   [3] pi-project-scope -- <cwd>/.pi/mcp.json
  *
- * Returned array is frozen so test snapshots and runtime code cannot
- * accidentally mutate the contract.
+ * The private slot order is frozen to prevent accidental mutation.
  */
-export function MCP_COLLISION_SLOTS(cwd: string): readonly string[] {
+function mcpCollisionSlots(cwd: string): readonly string[] {
   return Object.freeze([
     path.join(homedir(), ".config", "mcp", "mcp.json"),
     path.join(getAgentDir(), "mcp.json"),
@@ -49,7 +47,7 @@ export function MCP_COLLISION_SLOTS(cwd: string): readonly string[] {
 export async function loadEffectiveServerNames(cwd: string): Promise<Map<string, string>> {
   const map = new Map<string, string>();
 
-  for (const slotPath of MCP_COLLISION_SLOTS(cwd)) {
+  for (const slotPath of mcpCollisionSlots(cwd)) {
     let text: string;
 
     try {

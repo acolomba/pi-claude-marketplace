@@ -48,9 +48,9 @@
 // has a single call site between iterations.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
+import { assertNever } from "../../shared/errors.ts";
 
-import { assertNever, type HookExecResult } from "./exec-result.ts";
-
+import type { HookExecResult } from "./exec-result.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type {
@@ -128,13 +128,13 @@ function applyToolResultPatch(event: ToolResultEvent, updatedToolOutput: unknown
     return;
   }
 
-  const patch = updatedToolOutput as { content?: unknown; isError?: unknown };
+  const patch = updatedToolOutput as Partial<Pick<ToolResultEvent, "content" | "isError">>;
   if (Array.isArray(patch.content)) {
-    (event as { content: unknown }).content = patch.content;
+    event.content = patch.content;
   }
 
   if (typeof patch.isError === "boolean") {
-    (event as { isError: boolean }).isError = patch.isError;
+    event.isError = patch.isError;
   }
 }
 
@@ -172,7 +172,7 @@ export function adaptToolCallResult(
       return undefined;
 
     default:
-      return assertNever(result);
+      return assertNever(result, `unreachable HookExecResult arm: ${JSON.stringify(result)}`);
   }
 }
 
@@ -224,7 +224,7 @@ export function adaptToolResultResult(
       return undefined;
 
     default:
-      return assertNever(result);
+      return assertNever(result, `unreachable HookExecResult arm: ${JSON.stringify(result)}`);
   }
 }
 
@@ -264,7 +264,7 @@ export function adaptInputResult(
       return undefined;
 
     default:
-      return assertNever(result);
+      return assertNever(result, `unreachable HookExecResult arm: ${JSON.stringify(result)}`);
   }
 }
 
@@ -348,6 +348,6 @@ export function adaptObservationResultForEvent(
       return undefined;
 
     default:
-      return assertNever(result);
+      return assertNever(result, `unreachable HookExecResult arm: ${JSON.stringify(result)}`);
   }
 }

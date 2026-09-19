@@ -6,11 +6,8 @@
 // Idempotent end-to-end -- both composed orchestrators are idempotent.
 //
 // The bootstrap subcommand takes NO positional arguments and rejects
-// `--scope` explicitly: bootstrap always targets user scope. The token
-// schema in `args-schema.ts` validates positionals against a declared
-// list but does not currently reject extra positionals when the schema
-// is empty, so we parse `args` directly with `parseArgs` and assert
-// `positional.length === 0` ourselves.
+// `--scope` explicitly: bootstrap always targets user scope. Its direct
+// parser retains the command-specific diagnostics for forbidden arguments.
 //
 // IL-2: all user-visible output flows through `shared/notification-dispatch.ts`. The
 // success path is emitted by the composed orchestrators. `addMarketplace`

@@ -2,20 +2,20 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { test } from "node:test";
+import test from "node:test";
 
-import { resolvePluginMcpServers } from "../../extensions/pi-claude-marketplace/bridges/mcp/parse.ts";
 import {
   commitPreparedMcp,
   prepareStageMcpServers,
 } from "../../extensions/pi-claude-marketplace/bridges/mcp/stage.ts";
+import { resolveStrict } from "../../extensions/pi-claude-marketplace/domain/plugin-resolver.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 async function pathExists(filePath: string): Promise<boolean> {
   try {
     await stat(filePath);
     return true;
-  } catch (error) {
+  } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return false;
     }
@@ -50,8 +50,16 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
     "---\nname: dormant\ndescription: Dormant skill\n---\n",
   );
   const expectedResolution = {
-    source: "standalone",
-    servers: {
+    state: "installable",
+    installable: true,
+    name: "acme",
+    pluginRoot,
+    supported: ["skills", "commands", "agents"],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: ["skills"], commands: ["commands"], agents: ["agents"] },
+    defaultEnabled: true,
+    mcpServers: {
       local: {
         command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
         args: ["--data", "${CLAUDE_PLUGIN_DATA}"],
@@ -81,11 +89,11 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
 `;
 
   // act
-  const resolution = await resolvePluginMcpServers({
-    entry: {},
-    manifest: {},
-    pluginRoot,
-  });
+  const resolution = await resolveStrict(
+    { name: "acme", source: "./plugin-source" },
+    { marketplaceRoot: scopeRoot },
+  );
+  assert.ok(resolution.installable);
   const prepared = await prepareStageMcpServers({
     locations,
     cwd: scopeRoot,
@@ -94,7 +102,7 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
     pluginRoot,
     pluginData,
     sourcePath: path.join(pluginRoot, ".mcp.json"),
-    servers: resolution.servers,
+    servers: resolution.mcpServers,
   });
   const commit = await commitPreparedMcp(prepared);
   const storedBytes = await readFile(locations.mcpJsonPath, "utf8");

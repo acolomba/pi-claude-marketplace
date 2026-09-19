@@ -11,17 +11,23 @@
 import { listMarketplaces } from "../../../orchestrators/marketplace/list.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
+import { extractLocalFlag } from "../shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
-const USAGE = "Usage: /claude:plugin marketplace <list|ls> [--scope user|project]";
+const USAGE = "Usage: /claude:plugin marketplace <list|ls> [--scope user|project] [--local]";
 
 export function makeMarketplaceListHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
+    const localFlag = extractLocalFlag(args, ctx, USAGE);
+    if (localFlag === undefined) {
+      return;
+    }
+
     const parsed = parseCommandArgs(
-      args,
+      localFlag.residualArgs,
       {
         positional: [] as const,
         usage: USAGE,

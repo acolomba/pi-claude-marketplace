@@ -5,7 +5,6 @@ import {
   CLAUDE_MARKETPLACE_MARKER_KEY,
   buildMarker,
   isOwnedBy,
-  readMarker,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/marker.ts";
 
 describe("CLAUDE_MARKETPLACE_MARKER_KEY", () => {
@@ -39,8 +38,8 @@ describe("buildMarker", () => {
   });
 });
 
-describe("readMarker", () => {
-  test("returns the complete marker from an owned per-server entry", () => {
+describe("isOwnedBy", () => {
+  test("recognizes only the complete identity of an owned per-server entry", () => {
     // arrange
     const server = {
       command: "node",
@@ -50,16 +49,21 @@ describe("readMarker", () => {
         marketplace: "official-marketplace",
       },
     };
-    const expectedMarker = {
-      plugin: "search-tools",
-      marketplace: "official-marketplace",
+    // act
+    const ownership = {
+      exact: isOwnedBy(server, "search-tools", "official-marketplace"),
+      differentPlugin: isOwnedBy(server, "deploy-tools", "official-marketplace"),
+      differentMarketplace: isOwnedBy(server, "search-tools", "team-marketplace"),
+      reversed: isOwnedBy(server, "official-marketplace", "search-tools"),
     };
 
-    // act
-    const marker = readMarker(server);
-
     // assert
-    assert.deepStrictEqual(marker, expectedMarker);
+    assert.deepStrictEqual(ownership, {
+      exact: true,
+      differentPlugin: false,
+      differentMarketplace: false,
+      reversed: false,
+    });
   });
 
   for (const { description, server } of [
@@ -91,19 +95,19 @@ describe("readMarker", () => {
       },
     },
   ] satisfies ReadonlyArray<{ description: string; server: unknown }>) {
-    test(`returns null for ${description}`, () => {
+    test(`refuses ownership for ${description}`, () => {
       // arrange
-      const expectedMarker = null;
+      const expectedOwnership = false;
 
       // act
-      const marker = readMarker(server);
+      const owned = isOwnedBy(server, "search-tools", "official-marketplace");
 
       // assert
-      assert.strictEqual(marker, expectedMarker);
+      assert.strictEqual(owned, expectedOwnership);
     });
   }
 
-  test("returns null when the marker key is inherited", () => {
+  test("refuses ownership when the marker key is inherited", () => {
     // arrange
     const server: unknown = Object.create({
       _piClaudeMarketplace: {
@@ -111,13 +115,13 @@ describe("readMarker", () => {
         marketplace: "official-marketplace",
       },
     });
-    const expectedMarker = null;
+    const expectedOwnership = false;
 
     // act
-    const marker = readMarker(server);
+    const owned = isOwnedBy(server, "search-tools", "official-marketplace");
 
     // assert
-    assert.strictEqual(marker, expectedMarker);
+    assert.strictEqual(owned, expectedOwnership);
   });
 
   for (const { description, marker } of [
@@ -134,21 +138,19 @@ describe("readMarker", () => {
       }) as unknown,
     },
   ] satisfies ReadonlyArray<{ description: string; marker: unknown }>) {
-    test(`returns null when the marker ${description} field is inherited`, () => {
+    test(`refuses ownership when the marker ${description} field is inherited`, () => {
       // arrange
       const server = { _piClaudeMarketplace: marker };
-      const expectedMarker = null;
+      const expectedOwnership = false;
 
       // act
-      const parsedMarker = readMarker(server);
+      const owned = isOwnedBy(server, "search-tools", "official-marketplace");
 
       // assert
-      assert.strictEqual(parsedMarker, expectedMarker);
+      assert.strictEqual(owned, expectedOwnership);
     });
   }
-});
 
-describe("isOwnedBy", () => {
   test("returns true for the exact plugin and marketplace owner", () => {
     // arrange
     const server = {

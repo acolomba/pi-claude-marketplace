@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { translate } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts";
+import { translateSessionStart } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts";
 
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { SessionStartEvent } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -21,7 +21,7 @@ test("emits the complete SessionStart envelope with the startup source", () => {
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translateSessionStart(event, context);
 
   // assert
   assert.deepStrictEqual(payload, {
@@ -49,7 +49,7 @@ test("propagates the resume source in the complete SessionStart envelope", () =>
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translateSessionStart(event, context);
 
   // assert
   assert.deepStrictEqual(payload, {
@@ -74,7 +74,7 @@ test("propagates the reload source in the complete SessionStart envelope", () =>
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translateSessionStart(event, context);
 
   // assert
   assert.deepStrictEqual(payload, {
@@ -99,7 +99,7 @@ test("propagates the new source in the complete SessionStart envelope", () => {
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translateSessionStart(event, context);
 
   // assert
   assert.deepStrictEqual(payload, {
@@ -124,7 +124,7 @@ test("propagates the fork source in the complete SessionStart envelope", () => {
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translateSessionStart(event, context);
 
   // assert
   assert.deepStrictEqual(payload, {
@@ -149,7 +149,7 @@ test("accepts empty session, transcript, and working-directory values", () => {
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translateSessionStart(event, context);
 
   // assert
   assert.deepStrictEqual(payload, {

@@ -63,10 +63,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import {
-  applyReconcile as applyReconcileWithRouting,
-  createApplyReconcile,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import { createApplyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -79,11 +76,10 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
-import type {
-  HooksRouting,
-  HooksRuntime,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type * as ApplyOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import type { ReconcileStateReader } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import type { ApplyReconcileOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -92,6 +88,22 @@ import type { TestContext } from "node:test";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 type PluginRecord = MarketplaceRecord["plugins"][string];
+
+// apply.ts publishes the factory and its selected-state reader contract; the
+// single production composition of them lives in the extension entry point.
+// Re-adding a composed value here would give the reconcile two production
+// bindings. Restoring the export makes the `satisfies` resolve and turns the
+// directive below into an unused one (TS2578).
+// @ts-expect-error apply.ts does not expose a composed applyReconcile value
+void ({} satisfies { readonly retired?: typeof ApplyOrchestrator.applyReconcile });
+
+/**
+ * The composition every case below drives: this module's own factory bound to
+ * the real selected-state reader, stated at one site so each case reads as the
+ * reconcile rather than as its assembly. It is the same reader the production
+ * composition in the extension entry point binds.
+ */
+const applyReconcileWithRouting = createApplyReconcile({ loadState });
 
 const RECORDED_AT = "2026-01-01T00:00:00.000Z";
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -538,6 +550,7 @@ function withoutTempSuffix(message: string): string {
 }
 
 test("D-05-02: the source and owner-test census contains exactly the two approved behavioral-composition exceptions", async () => {
+  // act & assert
   assert.deepStrictEqual(await compositionExceptionCensus(), [
     {
       kind: "production",
@@ -560,6 +573,18 @@ test("D-05-02: the source and owner-test census contains exactly the two approve
       symbol: "applyReconcile",
     },
   ]);
+});
+
+test("apply.ts exposes the reconcile factory and no composed value", async () => {
+  // arrange
+  const applyModule =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+
+  // act
+  const exportNames = Object.keys(applyModule);
+
+  // assert
+  assert.deepStrictEqual(exportNames, ["createApplyReconcile"]);
 });
 
 describe("applyReconcile", () => {

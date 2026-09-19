@@ -10,25 +10,31 @@
  *
  * Clause by clause:
  *
- *   Closed sets (COMPAT-01 / D-98-08) -- `REASONS`, `STATUS_TOKENS`,
- *   `PLUGIN_STATUSES`, and `MARKETPLACE_STATUSES` each equal a hand-written
- *   literal member list, in the tuple's own declared order. ENUMERATION
- *   equality, not a count: a count pin catches a member ADDED, but not a member
- *   renamed or swapped for another. Adding, removing, or renaming any member
- *   fails here and forces a deliberate amendment.
+ *   Closed sets (COMPAT-01 / D-98-08) -- `Reason`, `StatusToken`,
+ *   `PluginStatus`, and `MarketplaceStatus` each equal a hand-written literal
+ *   member list, in the vocabulary's own declared order. ENUMERATION equality,
+ *   not a count: a count pin catches a member ADDED, but not a member renamed or
+ *   swapped for another. Adding, removing, or renaming any member fails here and
+ *   forces a deliberate amendment. Each set is stated twice, because the two
+ *   halves see different things: the order comes from the declaration read as
+ *   data, and the membership from a bidirectional proof against the union the
+ *   renderer is actually written against.
  *
- *   Glyphs (COMPAT-01) -- each of the seven exported glyph constants equals its
- *   exact code point, written as an escape so the pin states the code point
- *   rather than relying on the reader to identify a character by eye. There is
- *   no exported COLLECTION of glyphs, so an EIGHTH glyph export cannot be caught
- *   by comparing a tuple; the notification grammar owner's export-declaration
- *   count is the only way to catch one, and it is the one clause here that
- *   scans source.
+ *   Glyphs (COMPAT-01) -- each of the seven glyphs equals its exact code point,
+ *   written as an escape so the pin states the code point rather than relying on
+ *   the reader to identify a character by eye. Five are exported and pinned
+ *   directly; the two that are module-private are pinned through the three rows
+ *   that carry them -- their own row renderer each, plus the `info` plugin row,
+ *   which reaches both through `pluginInfoStatusGlyph`. There is no COLLECTION
+ *   of glyphs, so an EIGHTH glyph cannot be
+ *   caught by comparing a tuple; the notification grammar owner's
+ *   declaration count is the only way to catch one, and it is one of the two
+ *   clauses here that scan source.
  *
  *   Persistence (COMPAT-01) -- the persisted install record's key set is exactly
- *   the eight fields it already had, and neither a manifest-snapshot-shaped key
- *   nor an orphan-shaped key appears. The state schema's version property still
- *   enumerates exactly the two versions it already enumerated and the frozen
+ *   the nine fields it already had, and neither a manifest-snapshot-shaped key
+ *   nor an orphan-shaped key appears. The public state's version type still
+ *   admits exactly the two versions it already admitted and the frozen
  *   default state still declares the current one, which together prove no
  *   migration and no version bump was introduced.
  *
@@ -74,32 +80,38 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  DEFAULT_STATE,
-  PLUGIN_INSTALL_RECORD_SCHEMA,
-  STATE_SCHEMA,
-} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { DEFAULT_STATE } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   ICON_AVAILABLE,
   ICON_DISABLED,
   ICON_INSTALLED,
-  ICON_PARTIALLY_AVAILABLE,
   ICON_PARTIALLY_INSTALLED,
-  ICON_REMOTE,
   ICON_UNINSTALLABLE,
+  renderPartiallyAvailableRow,
+  renderPluginInfo,
+  renderRemoteRow,
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
-import {
-  MARKETPLACE_STATUSES,
-  PLUGIN_STATUSES,
-  REASONS,
-  STATUS_TOKENS,
-} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
-import { COMPAT_NO_EXPANSION_TARGETS, NETWORK_FREE_TARGETS } from "./gate-targets.ts";
+import {
+  COMPAT_NO_EXPANSION_TARGETS,
+  NETWORK_FREE_TARGETS,
+  SCOPE_FENCE_TARGETS,
+} from "./gate-targets.ts";
 import { REPO_ROOT, stripComments } from "./source-scan.ts";
 
 import type { LedgerDegradationSignals } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import type { InstallPluginOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
+import type {
+  ExtensionState,
+  PluginInstallRecord,
+} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type {
+  MarketplaceStatus,
+  PluginInfoMessage,
+  PluginStatus,
+  Reason,
+  StatusToken,
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 /**
  * The two files this gate reads as data, taken from the registry (D-07-05) so
@@ -117,19 +129,193 @@ const OUTPUT_CATALOG_REL = COMPAT_NO_EXPANSION_TARGETS[1];
 const NETWORK_GATE_REL = "tests/architecture/gate-targets.ts";
 
 /**
+ * The vocabulary owner the closed-set clauses read as data.
+ *
+ * D-07-05: the annotation is the membership check -- the literal has to be a
+ * member of a registry group or it stops compiling, so this reference cannot
+ * drift away from the registry even though the group it belongs to was declared
+ * for the scope fence.
+ */
+const NOTIFICATION_TYPES_REL: (typeof SCOPE_FENCE_TARGETS)[number] =
+  "extensions/pi-claude-marketplace/shared/notification-types.ts";
+
+/**
+ * The two glyphs whose constants are module-private, written as escapes for the
+ * reason the code-point clause gives. Each has two public carriers -- its own
+ * row renderer, and the `info` plugin row via `pluginInfoStatusGlyph` -- and the
+ * row clause below pins the exact bytes all three emit.
+ */
+const REMOTE_GLYPH = "\u25CC";
+const PARTIALLY_AVAILABLE_GLYPH = "\u2296";
+
+/** A soft-dep probe with both companions loaded, so no marker joins a row. */
+const BOTH_COMPANIONS_LOADED = { piSubagentsLoaded: true, piMcpAdapterLoaded: true };
+
+/**
+ * The members one closed vocabulary declares, in declaration order.
+ *
+ * A union carries membership and not order, so the declaration is the only place
+ * the ORDER exists. Reading the owner as data is what keeps the order clause
+ * below a real assertion rather than a claim about something no caller can
+ * obtain.
+ *
+ * Anchored on the `export type <NAME> =` ... `;` declaration so a mention of the
+ * name anywhere else in the module cannot be mistaken for it, and both anchors
+ * are asserted present so a renamed or reshaped declaration fails here instead
+ * of yielding an empty list that would compare equal to nothing.
+ */
+function declaredVocabulary(src: string, name: string): readonly string[] {
+  const opening = `export type ${name} =`;
+  const start = src.indexOf(opening);
+  assert.notStrictEqual(
+    start,
+    -1,
+    `COMPAT-01: ${NOTIFICATION_TYPES_REL} declares no ${name} vocabulary, so this clause inspected nothing.`,
+  );
+
+  const end = src.indexOf(";", start);
+  assert.notStrictEqual(
+    end,
+    -1,
+    `COMPAT-01: the ${name} declaration in ${NOTIFICATION_TYPES_REL} is unterminated, so its members could not be read.`,
+  );
+
+  return [...src.slice(start + opening.length, end).matchAll(/"([^"]*)"/g)].map(
+    (match) => match[1]!,
+  );
+}
+
+/** Read the vocabulary owner once per clause, comments stripped. */
+async function readVocabulary(name: string): Promise<readonly string[]> {
+  return declaredVocabulary(await readStrippedSource(NOTIFICATION_TYPES_REL), name);
+}
+
+/**
  * WR-07: one glyph-declaration pattern in two flavours -- `GLYPH_DECLARATIONS`
  * counts them across the module, `GLYPH_DECLARATION` tests a single spelling.
  * Built from ONE source string so the counting clause and the clause that pins
  * what the pattern must see can never drift apart, and split by flag because a
  * `/g/` regex carries `lastIndex` across `.test()` calls.
  */
-const GLYPH_DECLARATION_SOURCE = String.raw`\bexport const ICON_[A-Z_]+\b`;
+const GLYPH_DECLARATION_SOURCE = String.raw`\bconst ICON_[A-Z_]+\b`;
 const GLYPH_DECLARATIONS = new RegExp(GLYPH_DECLARATION_SOURCE, "g");
 const GLYPH_DECLARATION = new RegExp(GLYPH_DECLARATION_SOURCE);
 
 async function readStrippedSource(rel: string): Promise<string> {
   return stripComments(await readFile(path.join(REPO_ROOT, rel), "utf8"));
 }
+
+/**
+ * The four closed vocabularies, hand-written here, in the tuple's own declared
+ * order. Independent literals: nothing below derives them from the owner, which
+ * is what lets both the declaration scan and the union proof compare against
+ * them and mean something.
+ */
+const EXPECTED_REASONS = [
+  "up-to-date",
+  "not found",
+  "already installed",
+  "not installed",
+  "not in manifest",
+  "invalid manifest",
+  "no longer installable",
+  "unsupported source",
+  "unsupported component",
+  "unsupported hooks",
+  "lsp",
+  "requires pi-subagents",
+  "requires pi-mcp",
+  "rollback partial",
+  "unreadable",
+  "unparseable",
+  "unreadable manifest",
+  "source mismatch",
+  "plugins remain",
+  "concurrently uninstalled",
+  "concurrently updated",
+  "stale clone",
+  "duplicate name",
+  "lock held",
+  "already autoupdate",
+  "already no autoupdate",
+  "already enabled",
+  "already disabled",
+  "permission denied",
+  "source missing",
+  "network unreachable",
+  "marketplace not added",
+  "marketplace not added to user scope",
+  "marketplace not added to project scope",
+  "orphan rewake",
+  "authentication required",
+  "dangling reference",
+  "malformed mcp",
+  "malformed skill",
+  "malformed command",
+  "installs disabled",
+  "marketplace in user scope",
+  "marketplace in project scope",
+  "workflows",
+] as const;
+
+const EXPECTED_STATUS_TOKENS = [
+  "installed",
+  "updated",
+  "reinstalled",
+  "uninstalled",
+  "added",
+  "removed",
+  "available",
+  "unavailable",
+  "upgradable",
+  "skipped",
+  "failed",
+  "rollback failed",
+  "manual recovery",
+  "no marketplaces",
+  "no plugins",
+  "will install",
+  "will uninstall",
+  "will enable",
+  "will disable",
+  "disabled",
+  "partially-installed",
+  "partially-upgradable",
+  "partially-available",
+  "remote",
+] as const;
+
+const EXPECTED_PLUGIN_STATUSES = [
+  "installed",
+  "updated",
+  "reinstalled",
+  "uninstalled",
+  "available",
+  "unavailable",
+  "upgradable",
+  "failed",
+  "skipped",
+  "manual recovery",
+  "will install",
+  "will uninstall",
+  "will enable",
+  "will disable",
+  "disabled",
+  "partially-installed",
+  "partially-upgradable",
+  "partially-available",
+  "remote",
+] as const;
+
+const EXPECTED_MARKETPLACE_STATUSES = [
+  "added",
+  "removed",
+  "updated",
+  "failed",
+  "autoupdate enabled",
+  "autoupdate disabled",
+  "skipped",
+] as const;
 
 /**
  * WR-11: the ledger degradation signals the `installed` outcome arm actually
@@ -140,165 +326,79 @@ async function readStrippedSource(rel: string): Promise<string> {
 type InstalledOutcome = Extract<InstallPluginOutcome, { status: "installed" }>;
 type InstallSignalKey = keyof InstalledOutcome & keyof LedgerDegradationSignals;
 
-test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
+test("COMPAT-01: the reason vocabulary holds exactly its inherited members, in order", async () => {
   // arrange
-  const expected = [
-    "up-to-date",
-    "not found",
-    "already installed",
-    "not installed",
-    "not in manifest",
-    "invalid manifest",
-    "no longer installable",
-    "unsupported source",
-    "unsupported component",
-    "unsupported hooks",
-    "lsp",
-    "requires pi-subagents",
-    "requires pi-mcp",
-    "rollback partial",
-    "unreadable",
-    "unparseable",
-    "unreadable manifest",
-    "source mismatch",
-    "plugins remain",
-    "concurrently uninstalled",
-    "concurrently updated",
-    "stale clone",
-    "duplicate name",
-    "lock held",
-    "already autoupdate",
-    "already no autoupdate",
-    "already enabled",
-    "already disabled",
-    "permission denied",
-    "source missing",
-    "network unreachable",
-    "marketplace not added",
-    "marketplace not added to user scope",
-    "marketplace not added to project scope",
-    "orphan rewake",
-    "authentication required",
-    "dangling reference",
-    "malformed mcp",
-    "malformed skill",
-    "malformed command",
-    "installs disabled",
-    "marketplace in user scope",
-    "marketplace in project scope",
-    "workflows",
-  ];
+  const expected = [...EXPECTED_REASONS];
 
   // act
-  const actual = [...REASONS];
+  const declaredReasons = await readVocabulary("Reason");
 
   // assert
-  assert.deepEqual(
-    actual,
+  assert.deepStrictEqual(
+    declaredReasons,
     expected,
     "COMPAT-01: no reason token may be added, removed, or renamed. The order is catalog-stable: a new token appends at the tail and arrives with its catalog row, renderer arm, and fixture in the same change.",
   );
 });
 
-test("COMPAT-01: STATUS_TOKENS holds exactly its inherited members, in order", () => {
+// The clause above states the declared order; this one states that the public
+// union the renderer is written against holds exactly the same members. Both
+// halves are needed: the scan cannot see a union that stopped deriving from the
+// tuple, and the union cannot see order.
+void (true satisfies IsExact<Reason, (typeof EXPECTED_REASONS)[number]>);
+
+test("COMPAT-01: the status-token vocabulary holds exactly its inherited members, in order", async () => {
   // arrange
-  const expected = [
-    "installed",
-    "updated",
-    "reinstalled",
-    "uninstalled",
-    "added",
-    "removed",
-    "available",
-    "unavailable",
-    "upgradable",
-    "skipped",
-    "failed",
-    "rollback failed",
-    "manual recovery",
-    "no marketplaces",
-    "no plugins",
-    "will install",
-    "will uninstall",
-    "will enable",
-    "will disable",
-    "disabled",
-    "partially-installed",
-    "partially-upgradable",
-    "partially-available",
-    "remote",
-  ];
+  const expected = [...EXPECTED_STATUS_TOKENS];
 
   // act
-  const actual = [...STATUS_TOKENS];
+  const declaredStatusTokens = await readVocabulary("StatusToken");
 
   // assert
-  assert.deepEqual(
-    actual,
+  assert.deepStrictEqual(
+    declaredStatusTokens,
     expected,
     "COMPAT-01: no status token may be added, removed, or renamed. The four head-of-tuple state-change tokens drive the reload hint, so their positions are contractual.",
   );
 });
 
-test("COMPAT-01: PLUGIN_STATUSES holds exactly its inherited members, in order", () => {
+void (true satisfies IsExact<StatusToken, (typeof EXPECTED_STATUS_TOKENS)[number]>);
+
+test("COMPAT-01: the plugin-status vocabulary holds exactly its inherited members, in order", async () => {
   // arrange
-  const expected = [
-    "installed",
-    "updated",
-    "reinstalled",
-    "uninstalled",
-    "available",
-    "unavailable",
-    "upgradable",
-    "failed",
-    "skipped",
-    "manual recovery",
-    "will install",
-    "will uninstall",
-    "will enable",
-    "will disable",
-    "disabled",
-    "partially-installed",
-    "partially-upgradable",
-    "partially-available",
-    "remote",
-  ];
+  const expected = [...EXPECTED_PLUGIN_STATUSES];
 
   // act
-  const actual = [...PLUGIN_STATUSES];
+  const declaredPluginStatuses = await readVocabulary("PluginStatus");
 
   // assert
-  assert.deepEqual(
-    actual,
+  assert.deepStrictEqual(
+    declaredPluginStatuses,
     expected,
     "COMPAT-01: no plugin status may be added, removed, or renamed. Row composers derive their status field from this tuple via Extract<PluginStatus, ...>.",
   );
 });
 
-test("COMPAT-01: MARKETPLACE_STATUSES holds exactly its inherited members, in order", () => {
+void (true satisfies IsExact<PluginStatus, (typeof EXPECTED_PLUGIN_STATUSES)[number]>);
+
+test("COMPAT-01: the marketplace-status vocabulary holds exactly its inherited members, in order", async () => {
   // arrange
-  const expected = [
-    "added",
-    "removed",
-    "updated",
-    "failed",
-    "autoupdate enabled",
-    "autoupdate disabled",
-    "skipped",
-  ];
+  const expected = [...EXPECTED_MARKETPLACE_STATUSES];
 
   // act
-  const actual = [...MARKETPLACE_STATUSES];
+  const declaredMarketplaceStatuses = await readVocabulary("MarketplaceStatus");
 
   // assert
-  assert.deepEqual(
-    actual,
+  assert.deepStrictEqual(
+    declaredMarketplaceStatuses,
     expected,
     "COMPAT-01: no marketplace status may be added, removed, or renamed.",
   );
 });
 
-test("COMPAT-01: every glyph constant holds its inherited code point", () => {
+void (true satisfies IsExact<MarketplaceStatus, (typeof EXPECTED_MARKETPLACE_STATUSES)[number]>);
+
+test("COMPAT-01: every exported glyph constant holds its inherited code point", () => {
   // arrange
   // Escapes rather than the characters themselves: the pin IS the code point,
   // and several of these render near-identically at a glance.
@@ -306,25 +406,93 @@ test("COMPAT-01: every glyph constant holds its inherited code point", () => {
     ICON_AVAILABLE: "\u25CB",
     ICON_DISABLED: "\u25CD",
     ICON_INSTALLED: "\u25CF",
-    ICON_PARTIALLY_AVAILABLE: "\u2296",
     ICON_PARTIALLY_INSTALLED: "\u25C9",
-    ICON_REMOTE: "\u25CC",
     ICON_UNINSTALLABLE: "\u2298",
   };
 
   // act
-  const actual = {
+  const glyphs = {
     ICON_AVAILABLE,
     ICON_DISABLED,
     ICON_INSTALLED,
-    ICON_PARTIALLY_AVAILABLE,
     ICON_PARTIALLY_INSTALLED,
-    ICON_REMOTE,
     ICON_UNINSTALLABLE,
   };
 
   // assert
-  assert.deepEqual(actual, expected, "COMPAT-01: every exported glyph keeps its named code point");
+  assert.deepStrictEqual(
+    glyphs,
+    expected,
+    "COMPAT-01: every exported glyph keeps its named code point",
+  );
+});
+
+/** The unresolved `info` message one status renders, with no optional field set. */
+function infoMessageFor(status: "remote" | "partially-available"): PluginInfoMessage {
+  return {
+    kind: "plugin-info",
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: { status, name: "alpha", componentsResolved: false },
+  };
+}
+
+test("COMPAT-01: the two module-private glyphs reach the output on their own rows", () => {
+  // arrange
+  // `◌` and `⊖` are each carried by one dedicated row renderer, so the rendered
+  // row IS the pin: the glyph is the row's first token, and the whole line is
+  // stated so a glyph swap and a spacing change both fail here.
+  const expected = [
+    `${REMOTE_GLYPH} alpha v1.0.0 (remote)`,
+    `${PARTIALLY_AVAILABLE_GLYPH} alpha v1.0.0 (partially-available) {lsp}`,
+  ];
+
+  // act
+  const rows = [
+    renderRemoteRow(
+      { status: "remote", name: "alpha", version: "1.0.0" },
+      BOTH_COMPANIONS_LOADED,
+      "user",
+      undefined,
+    ),
+    renderPartiallyAvailableRow(
+      { status: "partially-available", name: "alpha", version: "1.0.0", reasons: ["lsp"] },
+      BOTH_COMPANIONS_LOADED,
+      "user",
+    ),
+  ];
+
+  // assert
+  assert.deepStrictEqual(
+    rows,
+    expected,
+    "COMPAT-01: the remote and partially-available rows keep their named code points and their spacing.",
+  );
+});
+
+test("COMPAT-01: the two module-private glyphs reach the info row through their second carrier", () => {
+  // arrange
+  // `pluginInfoStatusGlyph` carries both glyphs to the `info` plugin row, so
+  // the rows above are not the whole public contract. This pins that carrier in
+  // its own right: an edit that gives the info arm its own literal leaves the
+  // two row renderers green and fails here.
+  const expected = [
+    `  ${REMOTE_GLYPH} alpha (remote)`,
+    `  ${PARTIALLY_AVAILABLE_GLYPH} alpha (partially-available)`,
+  ];
+
+  // act
+  const infoRows = (["remote", "partially-available"] as const).map(
+    (status) => renderPluginInfo(infoMessageFor(status), BOTH_COMPANIONS_LOADED).split("\n")[1],
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    infoRows,
+    expected,
+    "COMPAT-01: the info plugin row keeps the named code points of the two module-private glyphs.",
+  );
 });
 
 test("COMPAT-01: the catalog names each glyph the way the code-point pins above name it", async () => {
@@ -338,9 +506,9 @@ test("COMPAT-01: the catalog names each glyph the way the code-point pins above 
     [ICON_INSTALLED, "filled circle"],
     [ICON_AVAILABLE, "empty circle"],
     [ICON_UNINSTALLABLE, "prohibited symbol"],
-    [ICON_PARTIALLY_AVAILABLE, "circled minus"],
+    [PARTIALLY_AVAILABLE_GLYPH, "circled minus"],
     [ICON_PARTIALLY_INSTALLED, "fisheye"],
-    [ICON_REMOTE, "dotted circle"],
+    [REMOTE_GLYPH, "dotted circle"],
     [ICON_DISABLED, "circle with vertical fill"],
   ];
 
@@ -351,23 +519,27 @@ test("COMPAT-01: the catalog names each glyph the way the code-point pins above 
     .map(([glyph, name]) => `${glyph} is not named "${name}" in the catalog's Glyphs section`);
 
   // assert
-  assert.deepEqual(
+  assert.deepStrictEqual(
     mismatches,
     [],
     "COMPAT-01: the catalog's glyph names must agree with the code-point pins. Renaming one is a documentation change that belongs in the same commit as the pin it describes.",
   );
 });
 
-test("COMPAT-01: the notification grammar owner declares no eighth glyph export", async () => {
+test("COMPAT-01: the notification grammar owner declares no eighth glyph", async () => {
   // arrange
-  // The one clause here that scans source: an eighth glyph export cannot be
-  // caught by comparing runtime constants, because the glyphs are seven
-  // separate exports with no collection to compare against.
+  // An eighth glyph cannot be caught by comparing runtime constants, because the
+  // glyphs are seven separate declarations with no collection to compare
+  // against, and two of them are module-private.
   //
-  // WR-07: the pattern anchors on the DECLARATION, not on the spelling that
+  // The pattern counts the DECLARATION regardless of visibility, so a private
+  // eighth glyph is caught exactly like an exported one -- which is what keeps
+  // the vocabulary closed at seven rather than closed at "seven exports".
+  //
+  // WR-07: the pattern anchors on the declaration, not on the spelling that
   // follows the name. Requiring ` = ` immediately after the name and a line
   // start would let an eighth glyph written
-  // `export const ICON_EIGHTH: string = "..."` -- or pushed off the line start
+  // `const ICON_EIGHTH: string = "..."` -- or pushed off the line start
   // by comment stripping -- slip past the one clause this file calls
   // load-bearing.
   const expectedCount = 7;
@@ -382,7 +554,7 @@ test("COMPAT-01: the notification grammar owner declares no eighth glyph export"
     COMPAT_NO_EXPANSION_TARGETS.length > 0,
     "D-07-03: an empty target group leaves this clause and the catalog clause reading nothing and reporting success over zero files.",
   );
-  assert.equal(
+  assert.strictEqual(
     declarations?.length,
     expectedCount,
     "COMPAT-01: the glyph vocabulary is closed at seven. A new glyph is a rendered-vocabulary expansion and needs its catalog row and renderer arm in the same change.",
@@ -398,6 +570,8 @@ test("COMPAT-01: the glyph-declaration pattern recognises every spelling a glyph
     'export const ICON_EIGHTH = "◎";',
     'export const ICON_EIGHTH: string = "◎";',
     '/** doc */ export const ICON_EIGHTH = "◎";',
+    'const ICON_EIGHTH = "◎";',
+    'const ICON_EIGHTH: string = "◎";',
   ];
   // And what it must NOT see: a reference is not a declaration.
   const reference = "return `${ICON_EIGHTH} ${name}`;";
@@ -407,36 +581,57 @@ test("COMPAT-01: the glyph-declaration pattern recognises every spelling a glyph
   const referenceMatches = GLYPH_DECLARATION.test(reference);
 
   // assert
-  assert.deepEqual(declarationMatches, [true, true, true]);
-  assert.equal(referenceMatches, false, "a glyph USE must not count as a declaration");
+  assert.deepStrictEqual(declarationMatches, [true, true, true, true, true]);
+  assert.strictEqual(referenceMatches, false, "a glyph USE must not count as a declaration");
 });
 
-test("COMPAT-01: the persisted install record holds exactly its inherited key set", () => {
+test("COMPAT-01: the vocabulary reader sees a declared tuple's members and nothing else", () => {
   // arrange
-  const expected = [
-    "compatibility",
-    "enabled",
-    "hookEntries",
-    "installedAt",
-    "resolvedSha",
-    "resolvedSource",
-    "resources",
-    "updatedAt",
-    "version",
-  ];
+  // The four order clauses assert an EQUALITY against a reader, so a reader that
+  // returned the wrong slice would fail them loudly -- but one that matched a
+  // DIFFERENT declaration of the same shape would not. Plant both confusions: a
+  // same-prefixed neighbour declared first, and a mention of the real name after
+  // the declaration terminates.
+  const planted = [
+    'export type ReasonGroup = "decoy one" | "decoy two";',
+    "",
+    "export type Reason =",
+    '  | "first"',
+    '  | "second";',
+    "",
+    'export type ContentReason = Exclude<Reason, "not a member">;',
+  ].join("\n");
+  const expected = ["first", "second"];
 
   // act
-  const actual = Object.keys(PLUGIN_INSTALL_RECORD_SCHEMA.properties).sort((a, b) =>
-    a.localeCompare(b),
-  );
+  const parsedMembers = declaredVocabulary(planted, "Reason");
 
   // assert
-  assert.deepEqual(
-    actual,
+  assert.deepStrictEqual(
+    parsedMembers,
     expected,
-    "COMPAT-01: this is the pinned key set of the persisted install record. A key may join it only as an OPTIONAL additive field that needs no schemaVersion bump and no migrate fill (the resolvedSha / hookEntries precedent); removing one is a migration. Either way the change lands here deliberately, alongside the sibling clause that forbids manifest-snapshot and orphan fields outright.",
+    "COMPAT-01: the reader must anchor on the named vocabulary's own declaration.",
   );
 });
+
+type IsExact<Actual, Expected> = [Actual] extends [Expected]
+  ? [Expected] extends [Actual]
+    ? true
+    : false
+  : false;
+
+void (true satisfies IsExact<
+  keyof PluginInstallRecord,
+  | "compatibility"
+  | "enabled"
+  | "hookEntries"
+  | "installedAt"
+  | "resolvedSha"
+  | "resolvedSource"
+  | "resources"
+  | "updatedAt"
+  | "version"
+>);
 
 test("COMPAT-01: the install outcome inherits exactly the signals installPlugin populates", () => {
   // arrange
@@ -466,66 +661,39 @@ test("COMPAT-01: the install outcome inherits exactly the signals installPlugin 
   const actualCount = Object.keys(populated).length;
 
   // assert
-  assert.equal(
+  assert.strictEqual(
     actualCount,
     expectedCount,
     "COMPAT-01 / WR-11: the install outcome carries exactly the three ledger signals installPlugin writes.",
   );
 });
 
-test("COMPAT-01: no manifest-snapshot or orphan field reached the install record", () => {
-  // arrange
-  // Named explicitly rather than left to the key-set clause: these are the two
-  // shapes the manifest-independent work could plausibly have persisted, and a
-  // reader looking for that promise should find it stated, not inferred.
-  const shapes = [
-    "manifestSnapshot",
-    "manifest",
-    "manifestEntry",
-    "entry",
-    "orphan",
-    "orphanRewake",
-    "orphaned",
-  ];
+void (true satisfies IsExact<
+  Extract<
+    keyof PluginInstallRecord,
+    | "manifestSnapshot"
+    | "manifest"
+    | "manifestEntry"
+    | "entry"
+    | "orphan"
+    | "orphanRewake"
+    | "orphaned"
+  >,
+  never
+>);
 
-  // act
-  const present = shapes.filter((key) =>
-    Object.hasOwn(PLUGIN_INSTALL_RECORD_SCHEMA.properties, key),
-  );
-
-  // assert
-  assert.deepEqual(
-    present,
-    [],
-    "COMPAT-01: the install record caches no manifest material and records no orphan marker. Plugin lifecycle reads the manifest live or does not read it at all.",
-  );
-});
-
-test("COMPAT-01: the state schema version union is unchanged", () => {
-  // arrange
-  const expected = [1, 2];
-
-  // act
-  const actual = STATE_SCHEMA.properties.schemaVersion.anyOf.map((member) => member.const);
-
-  // assert
-  assert.deepEqual(
-    actual,
-    expected,
-    "COMPAT-01: no state-schema migration was introduced. A third version means an on-disk migration, which this work promised not to require.",
-  );
-});
+void (true satisfies IsExact<ExtensionState["schemaVersion"], 1 | 2>);
 
 test("COMPAT-01: the default state still declares the current schema version", () => {
   // arrange
   const expected = 2;
 
   // act
-  const actual = DEFAULT_STATE.schemaVersion;
+  const declaredSchemaVersion = DEFAULT_STATE.schemaVersion;
 
   // assert
-  assert.equal(
-    actual,
+  assert.strictEqual(
+    declaredSchemaVersion,
     expected,
     "COMPAT-01: a first-load state.json is written at the version this work inherited -- no bump.",
   );
@@ -555,7 +723,7 @@ test("COMPAT-01: the network clause is covered by the orchestrator-network gate"
   const missing = requiredTargets.filter((rel) => !src.includes(`"${rel}"`));
 
   // assert
-  assert.deepEqual(
+  assert.deepStrictEqual(
     missing,
     [],
     `COMPAT-01: the info surfaces must stay gated for zero gitOps surface by ${NETWORK_GATE_REL}. Removing a target there would silently drop this clause.`,

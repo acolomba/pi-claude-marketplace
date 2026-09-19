@@ -57,7 +57,7 @@ type ReinstallStatus = "reinstalled" | "skipped" | "failed" | "manual recovery";
  * `reinstalled` arm so the soft-dep marker injection fires for exactly that arm
  * (D-06 / TYPE-04).
  */
-export type ReinstallMsg =
+type ReinstallMsg =
   | PluginReinstalledMessage
   | PluginSkippedMessage
   | PluginFailedMessage
@@ -187,9 +187,7 @@ export function renderReinstallPartitionAndNotify(
   // annotation holds without a cast -- a status drift between the producer and
   // the render map is a compile error here.
   const marketplaces: Plural<MarketplaceRows<ReinstallMsg>> = sortedBlocks.map((block) => {
-    const plugins: ReinstallMsg[] = block.outcomes.map((o) =>
-      outcomeToPluginMessage(o, block.scope),
-    );
+    const plugins: ReinstallMsg[] = block.outcomes.map((o) => outcomeToPluginMessage(o));
     return { name: block.name, scope: block.scope, plugins };
   });
 
@@ -265,19 +263,16 @@ export function reinstalledRowFromOutcome(
  *  `reasonsFromTypedError(err)`) -> verbatim
  *  (3) substring parse on `notes` via `narrowReasons` -> legacy fallback
  *
- * Orphan-fold scope-bracket suppression: per-row `scope?` is
- * OMITTED when it matches the marketplace's scope. The renderer's
- * `renderScopeBracket` contract in `shared/notification-grammar.ts` suppresses
- * `[<scope>]` brackets when the row's scope is absent.
+ * Orphan-fold scope-bracket suppression: the row carries no `scope?`. The sole
+ * caller groups outcomes by `(scope, marketplace)`, so a row's scope always
+ * equals its marketplace block's scope, and `renderScopeBracket` in
+ * `shared/notification-grammar.ts` suppresses the `[<scope>]` bracket for a row
+ * whose scope is absent.
  */
-export function outcomeToPluginMessage(
-  outcome: ReinstallPluginOutcome,
-  marketplaceScope: Scope,
-): ReinstallMsg {
-  const rowScope = outcome.scope === marketplaceScope ? undefined : outcome.scope;
+function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
   switch (outcome.partition) {
     case "reinstalled":
-      return reinstalledRowFromOutcome(outcome, rowScope);
+      return reinstalledRowFromOutcome(outcome, undefined);
 
     case "skipped": {
       const reasons = narrowReasons(outcome.notes);
@@ -285,7 +280,6 @@ export function outcomeToPluginMessage(
         status: "skipped",
         name: outcome.name,
         reasons,
-        ...(rowScope !== undefined && { scope: rowScope }),
         // D-01: an absent-target reinstall (the named plugin is not installed)
         // cannot be carried out -> error (severity-only flip; the `(skipped)
         // {not installed}` per-row grammar is preserved). Otherwise benign
@@ -324,7 +318,6 @@ export function outcomeToPluginMessage(
           status: "manual recovery",
           name: outcome.name,
           reasons,
-          ...(rowScope !== undefined && { scope: rowScope }),
           // D-03/D-06: manual-recovery anchor is always actionable -> warning,
           // no reload.
           severity: "warning",
@@ -337,7 +330,6 @@ export function outcomeToPluginMessage(
         status: "failed",
         name: outcome.name,
         reasons,
-        ...(rowScope !== undefined && { scope: rowScope }),
         // D-03/D-06: a failed reinstall -> error, no reload.
         severity: "error",
         needsReload: false,

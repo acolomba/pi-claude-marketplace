@@ -13,7 +13,10 @@
 //
 // Architecture seam: data.ts MUST NOT import from `persistence/` (ESLint
 // BLOCK C: edge/ -> persistence/ forbidden). The `LocationsResolver`
-// interface is the indirection. `register.ts` constructs the resolver from
+// injection surface is the indirection, and it is declared once in
+// `orchestrators/edge-deps.ts` and republished below under the spelling
+// this module's consumers read (the import is type-only, so edge/ gains no
+// runtime dependency). `register.ts` constructs the resolver from
 // `persistence/locations.ts` + `persistence/state-io.ts` +
 // `domain/manifest.ts` and threads it through `getArgumentCompletions`.
 // Tests construct mock resolvers inline.
@@ -38,6 +41,7 @@
 import { ManifestSoftFailError } from "../../shared/completion-cache.ts";
 import { SCOPES } from "../../shared/types.ts";
 
+import type { LocationsResolverLike } from "../../orchestrators/edge-deps.ts";
 import type { CompletionCache, PluginIndexRow } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
@@ -109,6 +113,7 @@ const FETCH_STATUSES: ReadonlySet<PluginIndexRow["status"]> = new Set([
   "unavailable",
 ]);
 
+/** The modes `getPluginRefCompletions` accepts, one per plugin-targeting verb it serves. */
 export type PluginRefCompletionMode =
   "install" | "uninstall" | "update" | "fetch" | "reinstall" | "info" | "enable" | "disable";
 
@@ -126,25 +131,14 @@ export type PluginRefCompletionMode =
  * loadManifestForMarketplace) MUST throw to signal failure -- the cache layer
  * uses ManifestSoftFailError as the soft-fail discriminator (TC-8); any
  * other thrown error propagates verbatim (TC-9: state.json errors surface).
+ *
+ * Declared once in `orchestrators/edge-deps.ts` as `LocationsResolverLike`,
+ * which is what `makeLocationsResolver` returns. BLOCK C forbids
+ * orchestrators/ from importing edge/, so the surviving declaration sits on
+ * that side and this module republishes it under the spelling its consumers
+ * read. There is no second declaration left to keep in sync.
  */
-export interface LocationsResolver {
-  /** Cache file path for the marketplace-names cache of a scope. */
-  marketplaceNamesCachePath(scope: Scope): string;
-  /** Cache file path for a scoped marketplace's plugin index. */
-  pluginCachePath(scope: Scope, marketplace: string): Promise<string>;
-  /** Loads state.json for a scope (cache-miss rebuild path). */
-  loadStateForScope(scope: Scope): Promise<{
-    marketplaces: Record<string, MarketplaceStateRecord>;
-  }>;
-  /** Loads + bucketizes a marketplace's manifest into PluginIndexRow shape. */
-  loadManifestForMarketplace(scope: Scope, marketplace: string): Promise<readonly PluginIndexRow[]>;
-}
-
-/** Minimal shape consumed by `rebuildNamesForScope`; full state record lives in persistence. */
-export interface MarketplaceStateRecord {
-  readonly manifestPath?: string;
-  readonly plugins?: Record<string, unknown>;
-}
+export type LocationsResolver = LocationsResolverLike;
 
 // ---------------------------------------------------------------------------
 // Pure helpers.
@@ -158,7 +152,7 @@ export interface MarketplaceStateRecord {
  * (for non-terminal completions) append a space so the next argument can be
  * typed without the user adding one.
  */
-export function buildItem(
+function buildItem(
   argumentTextPrefix: string,
   itemText: string,
   appendSpace: boolean,
@@ -222,6 +216,7 @@ export function extractPositionals(
   return positionals;
 }
 
+/** Reads the `--scope` flag's value out of a token list, if present and valid. */
 export function extractScope(tokens: readonly string[]): Scope | undefined {
   for (let i = 0; i < tokens.length; i++) {
     if (tokens[i] !== "--scope") {
@@ -298,7 +293,7 @@ export async function getMarketplaceNamesAcrossScopes(
   return Array.from(new Set(perScope.flat()));
 }
 
-export interface PluginMapOptions {
+interface PluginMapOptions {
   /** Install target scope, or explicit uninstall/update scope. */
   readonly targetScope?: Scope;
   /**
@@ -492,7 +487,7 @@ async function getInfoPluginToMarketplacesMap(
  * reinstall flows through the installed-only path; info is the union
  * of every status across both scopes.
  */
-export async function getPluginToMarketplacesMap(
+async function getPluginToMarketplacesMap(
   mode: PluginRefCompletionMode,
   resolver: LocationsResolver,
   completionCache: CompletionCache,

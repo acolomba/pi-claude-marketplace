@@ -51,7 +51,6 @@ import path from "node:path";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
-import { loadState } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 import { notifyDiagnostic } from "../../shared/notification-dispatch.ts";
@@ -61,9 +60,11 @@ import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { removeMarketplace } from "../marketplace/remove.ts";
-import { createNodeSetPluginEnabled } from "../plugin/enable-disable.ts";
-import { createNodeInstallPlugin } from "../plugin/install-flow.ts";
-import { createNodeUninstallPlugin } from "../plugin/uninstall.ts";
+import {
+  createEnableOperation,
+  createInstallOperation,
+  createUninstallOperation,
+} from "../plugin/operations.ts";
 
 import {
   classifyOrchestratorThrow,
@@ -78,6 +79,7 @@ import { RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ApplyReconcileOptions, ReconcilePlan, ScopeReadResult } from "./types.ts";
+import type { loadState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   EnableDegradationSignals,
@@ -122,7 +124,7 @@ async function readPassForScope(
   if (!stateExists && !configExists) {
     // Pristine scope: nothing recorded, nothing declared -- no-op without
     // touching the disk.
-    return { scope, plan: undefined, invalidOutcomes: [], stateExisted: false };
+    return { plan: undefined, invalidOutcomes: [], stateExisted: false };
   }
 
   return withLockedStateTransaction(
@@ -184,7 +186,7 @@ async function readPassForScope(
       }
 
       if (invalidOutcomes.length > 0) {
-        return { scope, plan: undefined, invalidOutcomes, stateExisted: stateExists };
+        return { plan: undefined, invalidOutcomes, stateExisted: stateExists };
       }
 
       // (4) Plan against the merged config + current state. Pure -- no I/O.
@@ -192,7 +194,7 @@ async function readPassForScope(
       // BFILL-02: carry the loaded state snapshot out so applyBackfillForScope can
       // read its stamp + scan its partially-installed plugins. planReconcile is pure,
       // so the snapshot is the unmutated read-pass state.
-      return { scope, plan, invalidOutcomes: [], state, stateExisted: stateExists };
+      return { plan, invalidOutcomes: [], state, stateExisted: stateExists };
     },
     { loadState: reader.loadState },
   );
@@ -344,7 +346,7 @@ async function applyPluginUninstalls(
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
-  const uninstallPlugin = createNodeUninstallPlugin(opts.hooksRouting, opts.completionCache);
+  const uninstallPlugin = createUninstallOperation(opts.hooksRouting, opts.completionCache);
   for (const op of plan.pluginsToUninstall) {
     try {
       const result = await uninstallPlugin({
@@ -406,7 +408,7 @@ async function applyPluginInstalls(
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
-  const installPlugin = createNodeInstallPlugin(opts.hooksRouting, opts.completionCache);
+  const installPlugin = createInstallOperation(opts.hooksRouting, opts.completionCache);
   for (const op of plan.pluginsToInstall) {
     const result = await installPlugin({
       ctx: opts.ctx,
@@ -572,7 +574,7 @@ async function applyPluginToggles(
   outcomes: PerEntryOutcome[],
   axes: PluginToggleAxes,
 ): Promise<void> {
-  const setPluginEnabled = createNodeSetPluginEnabled(opts.hooksRouting);
+  const setPluginEnabled = createEnableOperation(opts.hooksRouting);
   // Y6: successStatus is derivable from `enable` -- enable=true => "enabled",
   // enable=false => "disabled". Deriving it here closes a redundant-axis
   // footgun where a caller could pass an inconsistent (enable, successStatus)
@@ -857,7 +859,12 @@ async function applyReconcileWithReader(
   surfacePostCommitWarnings(opts, outcomes);
 }
 
-/** Creates a reconcile apply operation with one required selected-state reader. */
+/**
+ * Creates a reconcile apply operation with one required selected-state reader.
+ * The single production composition of it lives in the extension entry point,
+ * which binds `loadState` once per extension load and hands the operation to
+ * its `resources_discover` handler.
+ */
 export function createApplyReconcile(
   reader: ReconcileStateReader,
 ): (opts: ApplyReconcileOptions) => Promise<void> {
@@ -865,11 +872,6 @@ export function createApplyReconcile(
     await applyReconcileWithReader(reader, opts);
   };
 }
-
-const NODE_RECONCILE_STATE_READER: ReconcileStateReader = { loadState };
-
-/** Applies reconcile through the production state reader and real child orchestrators. */
-export const applyReconcile = createApplyReconcile(NODE_RECONCILE_STATE_READER);
 
 /**
  * DISP-02: rebuild the per-scope routing tables under a brief read-only
