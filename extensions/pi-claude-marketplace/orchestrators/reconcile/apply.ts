@@ -201,12 +201,19 @@ async function readPassForScope(
       // snapshot and the `ScopedLocations` bundle it walks are both produced
       // inside this locked closure: computing it outside would mean a second
       // unlocked state read that could disagree with the snapshot the planner
-      // sees, which is the race this lock exists to close. The closure is
-      // already async and already reads the filesystem through
-      // `migrateFirstRunConfig` and `loadMergedScopeConfig`, so the walk
-      // introduces no new kind of work at this seam. It takes NO lock of its
-      // own: this closure already holds the scope lock, and the guard is
+      // sees, which is the race this lock exists to close. It takes NO lock of
+      // its own: this closure already holds the scope lock, and the guard is
       // configured with no retries and is not re-entrant.
+      //
+      // WR-08: the walk costs one memoized manifest lookup plus one
+      // own-manifest probe per RECORDED plugin, so this critical section
+      // scales with the scope's install count rather than being the bounded
+      // config+state read the surrounding steps are. `proper-lockfile` has no
+      // retries, so two Pi processes starting against one scope have a window
+      // proportional to that count in which the second takes `ELOCKED` and
+      // skips its whole reconcile pass. A scope recording no plugins pays
+      // nothing: `buildScopeDeclarationDetail` reads a manifest per record and
+      // there are none.
       const verdict = await buildScopeSatisfactionVerdict({ state, locations: loc });
 
       // (5) Plan against the merged config + current state + the verdict.
