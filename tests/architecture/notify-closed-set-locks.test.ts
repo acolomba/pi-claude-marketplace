@@ -26,7 +26,7 @@ import {
   STATUS_TOKENS,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
-test("OUT-08: REASONS is the closed 57-entry reason set", () => {
+test("OUT-08: REASONS is the closed 58-entry reason set", () => {
   // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
   // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
   // MCPR-03 / D-02: +1 for the malformed mcp failure-class member (34 -> 35).
@@ -78,7 +78,12 @@ test("OUT-08: REASONS is the closed 57-entry reason set", () => {
   // satisfied in the scope. It names the CONDITION; the remedy naming both
   // parties rides the row's cause line, which no closed-set token could carry
   // (56 -> 57).
-  assert.equal(REASONS.length, 57);
+  // LOAD-01: +1 for `dependency version unsatisfied` -- the same check's marker
+  // for a dependency that IS recorded and enabled at a version outside the
+  // declared range. It mirrors upstream's second error code, and the split is
+  // what keeps the two remedies apart: one says install or enable the missing
+  // thing, the other says move an existing thing's version (57 -> 58).
+  assert.equal(REASONS.length, 58);
 });
 
 test("SNM-02: STATUS_TOKENS is the closed 24-entry token set", () => {

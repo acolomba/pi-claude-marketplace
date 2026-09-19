@@ -371,6 +371,10 @@ export const DISABLED_STATE_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts",
+  // LOAD-01: the load-time satisfaction verdict classifies a declared
+  // dependency as unsatisfied when its own record is disabled, so it consumes
+  // the predicate exactly as the planner beside it does.
+  "extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts",
 ] as const;
 
 /**

@@ -877,9 +877,13 @@ describe("dependencyDisabledOutcome", () => {
     const outcome = dependencyDisabledOutcome(held, "1.0.0");
 
     // assert
-    assert.strictEqual(
-      outcome.cause.message,
-      'Update "secrets-vault@official" to satisfy ^2.0.0, or uninstall "deploy-kit@official"',
+    assert.deepStrictEqual(
+      { cause: outcome.cause.message, reasons: outcome.reasons },
+      {
+        cause:
+          'Update "secrets-vault@official" to satisfy ^2.0.0, or uninstall "deploy-kit@official"',
+        reasons: ["dependency version unsatisfied"],
+      },
     );
   });
 

@@ -161,6 +161,200 @@ test("reports nothing when every declared dependency is recorded in the same sco
   assert.deepStrictEqual(unsatisfiedOf(verdict), []);
 });
 
+test("reports a declared dependency whose own record is disabled as disabled", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", { app: {}, vault: { enabled: false } });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["vault"] }, vault: {} }),
+  });
+
+  // act
+  const verdict = await buildScopeSatisfactionVerdict({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), [
+    { dependent: "app@mp", dependency: "vault@mp", kind: "disabled" },
+  ]);
+});
+
+test("reports a recorded version outside its declared range as out-of-range", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", { app: {}, vault: { version: "1.0.0" } });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: { dependencies: [{ name: "vault", version: "^2.0.0" }] },
+      vault: {},
+    }),
+  });
+
+  // act
+  const verdict = await buildScopeSatisfactionVerdict({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), [
+    { dependent: "app@mp", dependency: "vault@mp", kind: "out-of-range", range: "^2.0.0" },
+  ]);
+});
+
+test("reports nothing when the recorded version satisfies the declared range", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", { app: {}, vault: { version: "2.3.4" } });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: { dependencies: [{ name: "vault", version: "^2.0.0" }] },
+      vault: {},
+    }),
+  });
+
+  // act
+  const verdict = await buildScopeSatisfactionVerdict({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), []);
+});
+
+test("reports nothing for a declaration whose constraints are all unconstrained", async () => {
+  // arrange -- two spellings of "any version"; the fold is not the literal
+  // wildcard, so only a canonicalizing test reads it as no constraint.
+  const mp = marketplaceRecord("mp", { app: {}, vault: { version: "1.0.0" } });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: {
+        dependencies: [
+          { name: "vault", version: "*" },
+          { name: "vault", version: "x" },
+        ],
+      },
+      vault: {},
+    }),
+  });
+
+  // act
+  const verdict = await buildScopeSatisfactionVerdict({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), []);
+});
+
+test("folds two declarations of one dependency into a single intersected range", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", { app: {}, vault: { version: "2.0.0" } });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: {
+        dependencies: [
+          { name: "vault", version: ">=1.0.0" },
+          { name: "vault", version: "<1.5.0" },
+        ],
+      },
+      vault: {},
+    }),
+  });
+
+  // act
+  const verdict = await buildScopeSatisfactionVerdict({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), [
+    {
+      dependent: "app@mp",
+      dependency: "vault@mp",
+      kind: "out-of-range",
+      range: ">=1.0.0 <1.5.0",
+    },
+  ]);
+});
+
+test("reports out-of-range rather than throwing when the declared ranges intersect to nothing", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", { app: {}, vault: { version: "2.0.0" } });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: {
+        dependencies: [
+          { name: "vault", version: ">=2.0.0" },
+          { name: "vault", version: "<1.0.0" },
+        ],
+      },
+      vault: {},
+    }),
+  });
+
+  // act
+  const verdict = await buildScopeSatisfactionVerdict({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), [
+    {
+      dependent: "app@mp",
+      dependency: "vault@mp",
+      kind: "out-of-range",
+      range: ">=2.0.0 <1.0.0",
+    },
+  ]);
+});
+
+test("reports out-of-range rather than unconstrained when the fold trips an input cap", async () => {
+  // arrange -- 70 declarations of 59 characters pass the 4096-character total
+  // input cap, which the fold refuses BEFORE parsing anything.
+  const declared = ">=1.0.0 <9.9.9 >=1.0.1 <9.9.8 >=1.0.2 <9.9.7 >=1.0.3 <9.9.6";
+  const mp = marketplaceRecord("mp", { app: {}, vault: { version: "1.0.5" } });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: {
+        dependencies: Array.from({ length: 70 }, () => ({ name: "vault", version: declared })),
+      },
+      vault: {},
+    }),
+  });
+
+  // act
+  const verdict = await buildScopeSatisfactionVerdict({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  // assert -- a cap trip must never read as "no constraint" (T-06-10).
+  const entries = unsatisfiedOf(verdict);
+  assert.deepStrictEqual(
+    entries.map(({ dependent, dependency, kind }) => ({ dependent, dependency, kind })),
+    [{ dependent: "app@mp", dependency: "vault@mp", kind: "out-of-range" }],
+  );
+  assert.equal(entries[0]?.range, Array.from({ length: 70 }, () => declared).join(" "));
+});
+
 test("reports nothing for a scope with no recorded marketplace", async () => {
   // arrange
   const state = stateOf();
