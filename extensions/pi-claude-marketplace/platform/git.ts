@@ -427,16 +427,20 @@ const MAX_TAG_PEEL_HOPS = 10;
  *   - `tag.type === "tag"` is a tag pointing at another tag; the peel repeats
  *     on that tag's own object, bounded by `MAX_TAG_PEEL_HOPS` so a
  *     tag-of-tag chain cannot loop;
- *   - any other tagged type (`blob` / `tree`) is not a commit at all; the
- *     current oid is returned and the caller is responsible for dropping a
- *     candidate that does not resolve to a commit.
+ *   - any other tagged type (`blob` / `tree`) is not a commit at all and
+ *     cannot be checked out as one; `undefined` is returned, and the caller
+ *     is responsible for dropping a candidate that does not resolve to a
+ *     commit.
+ *   - exhausting `MAX_TAG_PEEL_HOPS` without reaching a commit means the
+ *     chain never terminated within the bound; `undefined` is returned for
+ *     the same reason -- there is no commit oid to hand back.
  *
  * Source: node_modules/isomorphic-git/index.d.ts -- resolveRef({ fs, dir, ref
  * }) => Promise<string>; readTag({ fs, dir, gitdir, oid }) => Promise<{ oid,
  * tag: TagObject, payload }>, where TagObject.type is "blob" | "tree" |
  * "commit" | "tag" and TagObject.object is the oid of the tagged object.
  */
-export async function resolveTagOid(opts: ResolveTagOidOptions): Promise<string> {
+export async function resolveTagOid(opts: ResolveTagOidOptions): Promise<string | undefined> {
   let oid = await git.resolveRef({ fs, dir: opts.dir, ref: `refs/tags/${opts.name}` });
 
   for (let hop = 0; hop < MAX_TAG_PEEL_HOPS; hop++) {
@@ -452,13 +456,13 @@ export async function resolveTagOid(opts: ResolveTagOidOptions): Promise<string>
     }
 
     if (read.tag.type !== "tag") {
-      return oid;
+      return undefined;
     }
 
     oid = read.tag.object;
   }
 
-  return oid;
+  return undefined;
 }
 
 /**

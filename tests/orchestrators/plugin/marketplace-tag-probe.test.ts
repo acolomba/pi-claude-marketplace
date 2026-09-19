@@ -111,6 +111,30 @@ describe("probeMarketplaceTags", () => {
     ]);
   });
 
+  test("WR-06: a tag whose oid resolves to undefined (a non-commit peel) is dropped, not offered as a candidate", async () => {
+    // arrange: `formatter--v1.5.0` peels to a non-commit object (a blob/tree
+    // tag, or a chain that exhausted MAX_TAG_PEEL_HOPS) -- resolveTagOid
+    // reports that with `undefined` (WR-06). It also satisfies `^1.0.0` and
+    // outranks `v1.0.0`, so without the drop it would win selection and hand
+    // a non-commit oid to a checkout.
+    const seam: MarketplaceTagListingSeam = {
+      listTags: () => Promise.resolve(["formatter--v1.0.0", "formatter--v1.5.0"]),
+      resolveTagOid: (opts) =>
+        Promise.resolve(opts.name === "formatter--v1.5.0" ? undefined : "oid-1"),
+    };
+
+    // act
+    const result = await probeMarketplaceTags(options({ seam, range: "^1.0.0" }));
+
+    // assert: the surviving candidate is the one that actually resolved.
+    assert.deepStrictEqual(result, {
+      kind: "pinned",
+      tag: "formatter--v1.0.0",
+      oid: "oid-1",
+      version: "1.0.0",
+    });
+  });
+
   test("a listing throw returns the tag-listing-failed arm and asks the seam nothing else", async () => {
     const err = new Error("read failed");
     const fake = createFakeSeam({ listTagsThrows: err });

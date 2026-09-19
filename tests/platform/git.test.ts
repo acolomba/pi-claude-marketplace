@@ -1297,7 +1297,7 @@ describe("resolveTagOid", () => {
     assert.strictEqual(oid, repository.initialOid);
   });
 
-  test("a tag pointing at neither a commit nor another tag returns its own oid so the caller can drop it", async (t) => {
+  test("WR-06: a tag pointing at neither a commit nor another tag resolves to undefined so the caller can drop it", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
     const blobOid = await git.writeBlob({
@@ -1318,20 +1318,17 @@ describe("resolveTagOid", () => {
         timezoneOffset: 0,
       },
     });
-    const tagObjectOid = await git.resolveRef({
-      fs,
-      dir: repository.dir,
-      ref: "refs/tags/blob-tag",
-    });
 
     // act
     const oid = await resolveTagOid({ dir: repository.dir, name: "blob-tag" });
 
-    // assert
-    assert.strictEqual(oid, tagObjectOid);
+    // assert: WR-06 -- a non-commit tagged type is not a checkout-able
+    // candidate, so `undefined` signals it rather than handing back an oid
+    // that would break a later checkout.
+    assert.strictEqual(oid, undefined);
   });
 
-  test("a tag-of-tag chain longer than the peel bound stops instead of looping forever", async (t) => {
+  test("WR-06: a tag-of-tag chain longer than the peel bound resolves to undefined instead of looping forever", async (t) => {
     // arrange: MAX_TAG_PEEL_HOPS + 1 nested annotated tags, each pointing at
     // the previous tag's own object oid; only the innermost points at a
     // commit. Fully resolving needs one more hop than the bound allows.
@@ -1362,9 +1359,10 @@ describe("resolveTagOid", () => {
     // act
     const oid = await resolveTagOid({ dir: repository.dir, name: outermostName });
 
-    // assert: the bound stopped the peel before it fully unwound to the
-    // commit -- proof the loop terminated rather than looping forever.
-    assert.notStrictEqual(oid, repository.initialOid);
+    // assert: WR-06 -- hop exhaustion never reached a commit, so `undefined`
+    // signals that rather than handing back an intermediate tag-object oid a
+    // caller could mistake for a commit.
+    assert.strictEqual(oid, undefined);
   });
 });
 

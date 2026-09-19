@@ -101,7 +101,13 @@ async function listMarketplaceCandidateTags(
       // Each peel is an independent local read; isomorphic-git has no batched
       // API to resolve every tag oid in one call.
       const oid = await seam.resolveTagOid({ dir: marketplaceRoot, name });
-      candidates.push({ name, oid });
+      // WR-06: `undefined` means the tag peeled to a non-commit object (a
+      // blob/tree tag) or a peel chain that never terminated -- neither is a
+      // candidate `selectHighestSatisfyingTag` can check out, so it is
+      // dropped rather than handed a checkout-breaking oid.
+      if (oid !== undefined) {
+        candidates.push({ name, oid });
+      }
     }
 
     memo?.set(marketplaceRoot, candidates);
