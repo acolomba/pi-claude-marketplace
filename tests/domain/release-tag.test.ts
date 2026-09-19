@@ -3,7 +3,6 @@ import { describe, test } from "node:test";
 
 import {
   RELEASE_TAG_SEPARATOR,
-  readPinCandidate,
   selectHighestSatisfyingTag,
 } from "../../extensions/pi-claude-marketplace/domain/release-tag.ts";
 
@@ -107,39 +106,43 @@ describe("selectHighestSatisfyingTag", () => {
   });
 });
 
-describe("readPinCandidate", () => {
+describe("WR-09: candidate-reading cases, through the one function a caller observes", () => {
+  // `readPinCandidate` (the per-candidate reader `selectHighestSatisfyingTag`
+  // calls internally) is unexported -- these cases are expressed through
+  // `selectHighestSatisfyingTag` with a one-element candidate list, which is
+  // what a caller actually gets back.
   test("a candidate whose name does not carry the plugin's own prefix is not a candidate", () => {
-    assert.strictEqual(
-      readPinCandidate(
-        { name: "other--v1.0.0", oid: "x" },
+    assert.deepStrictEqual(
+      selectHighestSatisfyingTag(
+        [{ name: "other--v1.0.0", oid: "x" }],
         `formatter${RELEASE_TAG_SEPARATOR}`,
         "*",
       ),
-      undefined,
+      { kind: "no-matching-tag", range: "*" },
     );
   });
 
   test("a candidate whose version does not satisfy the range is not a candidate", () => {
-    assert.strictEqual(
-      readPinCandidate(
-        { name: "formatter--v1.0.0", oid: "x" },
+    assert.deepStrictEqual(
+      selectHighestSatisfyingTag(
+        [{ name: "formatter--v1.0.0", oid: "x" }],
         `formatter${RELEASE_TAG_SEPARATOR}`,
         "^2.0.0",
       ),
-      undefined,
+      { kind: "no-matching-tag", range: "^2.0.0" },
     );
   });
 
   test("prefix matching is case-sensitive with no Unicode normalization", () => {
     // A name differing only by case is not the same prefix -- the identical
     // comparison the remote probe performs (String.prototype.startsWith).
-    assert.strictEqual(
-      readPinCandidate(
-        { name: "Formatter--v1.0.0", oid: "x" },
+    assert.deepStrictEqual(
+      selectHighestSatisfyingTag(
+        [{ name: "Formatter--v1.0.0", oid: "x" }],
         `formatter${RELEASE_TAG_SEPARATOR}`,
         "*",
       ),
-      undefined,
+      { kind: "no-matching-tag", range: "*" },
     );
   });
 });

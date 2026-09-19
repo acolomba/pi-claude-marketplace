@@ -54,7 +54,7 @@ export type SelectedReleaseTag =
   | { readonly kind: "no-matching-tag"; readonly range: string };
 
 /** The pinned arm alone, so candidate selection can carry one around. */
-export type PinnedReleaseTag = Extract<SelectedReleaseTag, { kind: "pinned" }>;
+type PinnedReleaseTag = Extract<SelectedReleaseTag, { kind: "pinned" }>;
 
 /**
  * Reads one candidate as a pin for this plugin, or as nothing.
@@ -71,7 +71,7 @@ export type PinnedReleaseTag = Extract<SelectedReleaseTag, { kind: "pinned" }>;
  * performs, so a name differing only by normalization form is not a
  * candidate.
  */
-export function readPinCandidate(
+function readPinCandidate(
   candidate: ReleaseTagCandidate,
   prefix: string,
   range: string,

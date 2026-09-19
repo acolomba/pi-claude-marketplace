@@ -648,12 +648,6 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
   ],
   "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts": ["HOOKS_CONFIG_SCHEMA"],
   "extensions/pi-claude-marketplace/domain/plugin-resolver.ts": ["resolveLoose"],
-  // D-07-05 (07-marketplace-repo-tag-resolution): moved out of
-  // dependency-tag-probe.ts so ONE evaluator serves both the network probe
-  // and the local marketplace-clone probe. `readPinCandidate` is exported
-  // for parity with the moved shape (`selectHighestSatisfyingTag` calls it
-  // internally, in the SAME file); no production caller reaches it directly.
-  "extensions/pi-claude-marketplace/domain/release-tag.ts": ["readPinCandidate"],
   "extensions/pi-claude-marketplace/domain/resolver-types.ts": ["ResolvedPluginSchema"],
   "extensions/pi-claude-marketplace/domain/unsupported-components.ts": [
     "SUPPORTED_COMPONENT_KINDS",
