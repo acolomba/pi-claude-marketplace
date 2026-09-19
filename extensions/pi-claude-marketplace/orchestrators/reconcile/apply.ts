@@ -798,6 +798,17 @@ async function stampDependencyDisabled(
  * An already-disabled record answers idempotently and is neither stamped nor
  * reported -- a row for it would break the load-time silence contract on every
  * reload of an unchanged tree (RECON-05).
+ *
+ * CR-01: each row lands in `outcomes` as its disable commits, BEFORE the stamp
+ * write. The stamp takes its own lock and can throw, and the `runScopeIsolated`
+ * wrapper at the call site converts that throw into one `state.json` row --
+ * so a row this loop still held would be dropped for a disable that already
+ * happened, leaving the user with plugins gone from the session and no names,
+ * no `{dependency unsatisfied}` brace and no remedy. The next pass re-derives
+ * the same verdict, reaches the idempotent already-disabled arm and reports
+ * nothing, so a row lost here is lost permanently. Emitting inside the loop
+ * also matches every sibling apply step; no other producer appends to
+ * `outcomes` between here and the stamp, so the ordering is unchanged.
  */
 async function applyDependencyDisables(
   opts: ApplyReconcileOptions,
@@ -806,7 +817,6 @@ async function applyDependencyDisables(
 ): Promise<void> {
   const setPluginEnabled = createNodeSetPluginEnabled(opts.hooksRouting);
   const transitioned: PlannedDependencyDisable[] = [];
-  const rows: PerEntryOutcome[] = [];
   for (const op of plan.pluginsToDependencyDisable) {
     const result = await setPluginEnabled({
       ctx: opts.ctx,
@@ -821,9 +831,9 @@ async function applyDependencyDisables(
 
     if (result.status === "disabled") {
       transitioned.push(op);
-      rows.push(dependencyDisabledOutcome(op, result.version));
+      outcomes.push(dependencyDisabledOutcome(op, result.version));
     } else if (result.status === "failed") {
-      rows.push({
+      outcomes.push({
         kind: "plugin-disable-failed",
         scope: op.scope,
         marketplace: op.marketplace,
@@ -836,8 +846,6 @@ async function applyDependencyDisables(
   if (transitioned.length > 0) {
     await stampDependencyDisabled(opts, plan.scope, transitioned);
   }
-
-  outcomes.push(...rows);
 }
 
 /**
