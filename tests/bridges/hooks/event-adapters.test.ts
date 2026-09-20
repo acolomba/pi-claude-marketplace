@@ -179,6 +179,37 @@ describe("adaptToolCallResult", () => {
     });
   });
 
+  test("drops a __proto__ key from the patch without polluting the input's prototype", () => {
+    // arrange
+    const input = { command: "inspect", keep: "original" };
+    const event = {
+      type: "tool_call",
+      toolCallId: "call-mutate-proto",
+      toolName: "owner-tool",
+      input,
+    } satisfies ToolCallEvent;
+    const updatedInput = JSON.parse(
+      '{"__proto__":{"polluted":true},"command":"replacement"}',
+    ) as Record<string, unknown>;
+    const hookOutcome = { kind: "mutate", updatedInput } satisfies HookExecResult;
+
+    // act
+    const adaptation = adaptToolCallResult(hookOutcome, event);
+
+    // assert
+    assert.strictEqual(adaptation, undefined);
+    assert.deepStrictEqual(event, {
+      type: "tool_call",
+      toolCallId: "call-mutate-proto",
+      toolName: "owner-tool",
+      input: { command: "replacement", keep: "original" },
+    });
+    assert.strictEqual(event.input, input);
+    assert.strictEqual(Object.getPrototypeOf(event.input), Object.prototype);
+    assert.strictEqual(Object.hasOwn(event.input, "__proto__"), false);
+    assert.strictEqual((Object.prototype as Record<string, unknown>).polluted, undefined);
+  });
+
   test("leaves input unchanged when updated input is absent", () => {
     // arrange
     const input = { command: "inspect", keep: "original" };

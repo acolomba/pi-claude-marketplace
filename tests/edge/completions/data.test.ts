@@ -26,7 +26,7 @@
 // the classification it is checking. Likewise every expected candidate list is
 // hand-authored, compared unsorted, and compared whole.
 //
-// This pair reads COMPLETE: `branches 109/109, functions 36/36, lines 631/631`.
+// This pair reads COMPLETE: `branches 114/114, functions 36/36, lines 630/630`.
 // It used to carry one uncovered branch, the right-hand side of a
 // `allTokens.at(-1) ?? ""` fallback. That expression is gone from the source --
 // `data.ts:188` now reads `const [current] = allTokens.slice(-1) as [string]`,
@@ -42,7 +42,7 @@
 // no target here.
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -56,7 +56,10 @@ import {
   getPluginRefCompletions,
   splitCompletionInput,
 } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
-import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import {
+  createCompletionCache,
+  ManifestSoftFailError,
+} from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type {
   LocationsResolver,
@@ -74,6 +77,8 @@ interface ResolverSeed {
   readonly manifests?: Partial<Record<Scope, Record<string, readonly PluginIndexRow[]>>>;
   /** Scopes whose state read rejects, so a propagation case can seed one side. */
   readonly stateFailures?: Partial<Record<Scope, Error>>;
+  /** Scoped marketplaces whose manifest read rejects with a specific error. */
+  readonly manifestFailures?: Partial<Record<Scope, Record<string, Error>>>;
 }
 
 interface SeededResolver {
@@ -151,6 +156,11 @@ async function seedResolver(
       scope: Scope,
       marketplace: string,
     ): Promise<readonly PluginIndexRow[]> => {
+      const failure = seed.manifestFailures?.[scope]?.[marketplace];
+      if (failure !== undefined) {
+        return Promise.reject(failure);
+      }
+
       const rows = seed.manifests?.[scope]?.[marketplace];
       if (rows === undefined) {
         return Promise.reject(new Error(`no manifest seeded for ${scope}/${marketplace}`));
@@ -914,6 +924,37 @@ describe("getPluginRefCompletions candidate policy", () => {
     assert.deepStrictEqual(candidatesByPlugin, [
       { label: "held@official", value: "held@official " },
     ]);
+  });
+
+  test("passes an already-classified ManifestSoftFailError through without re-wrapping it", async (t) => {
+    // arrange
+    const { completionCache, resolver } = await seedResolver(t, "map-manifest-already-soft-fail", {
+      marketplaces: { user: { official: {}, "unreadable-mp": {} } },
+      manifests: { user: { official: [{ name: "held", status: "installed" }] } },
+      manifestFailures: {
+        user: {
+          "unreadable-mp": new ManifestSoftFailError(new Error("upstream soft fail detail")),
+        },
+      },
+    });
+    const cachePath = await resolver.pluginCachePath("user", "unreadable-mp");
+
+    // act
+    const candidatesByPlugin = await getPluginRefCompletions(
+      "uninstall",
+      "",
+      "",
+      resolver,
+      completionCache,
+      { allowMarketplaceOnly: true },
+    );
+    const persisted = JSON.parse(await readFile(cachePath, "utf8")) as Record<string, unknown>;
+
+    // assert
+    assert.deepStrictEqual(candidatesByPlugin, [
+      { label: "held@official", value: "held@official " },
+    ]);
+    assert.strictEqual(persisted._loadError, "upstream soft fail detail");
   });
 
   test("a state read failure during the candidate sweep propagates (TC-9)", async (t) => {

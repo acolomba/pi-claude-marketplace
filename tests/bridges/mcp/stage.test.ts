@@ -243,6 +243,41 @@ describe("prepareStageMcpServers", () => {
     });
   });
 
+  test("reports a malformed stored JSON on the AS-8 noop path without touching it", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-malformed-noop-");
+    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+    await writeFile(locations.mcpJsonPath, "{");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: {},
+    });
+
+    // assert
+    assert.strictEqual(prepared.kind, "noop");
+    if (prepared.kind !== "noop") {
+      return;
+    }
+
+    assert.deepStrictEqual(prepared.result, {
+      stagedNames: [],
+      recorded: [],
+      warnings: [
+        `existing mcp.json at ${locations.mcpJsonPath} is malformed; it was left untouched`,
+      ],
+    });
+    assert.strictEqual(Object.isFrozen(prepared.result.warnings), true);
+    await commitPreparedMcp(prepared);
+    assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), "{");
+  });
+
   for (const { description, storedValue, valueKind } of [
     { description: "a null", storedValue: "null", valueKind: "null" },
     { description: "a string", storedValue: '"foreign"', valueKind: "string" },

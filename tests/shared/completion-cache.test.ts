@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
@@ -280,6 +280,47 @@ describe("getPluginIndex", () => {
       String(persisted.lastRefreshedAt),
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
     );
+  });
+
+  test("logs a non-ENOENT plugin-index read failure and falls through to rebuild", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-plugin-read-error-"));
+    const cachePath = path.join(directory, "plugin-index.json");
+    const scope = "user";
+    const marketplace = "unreadable-index";
+    const cache = createCompletionCache();
+    const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    t.after(() => {
+      if (previousDebug === undefined) {
+        delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      } else {
+        process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+      }
+    });
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+    const diagnostics: string[] = [];
+    t.mock.method(console, "error", (...parts: unknown[]) => {
+      diagnostics.push(parts.map(String).join(" "));
+    });
+    const expectedRows = [{ name: "rebuilt-row", status: "installed" }] satisfies PluginIndexRow[];
+    await writeFile(cachePath, "unreadable");
+    await chmod(cachePath, 0o000);
+    t.after(async () => {
+      await chmod(cachePath, 0o600).catch(() => undefined);
+      cache.invalidateMarketplaceCache(scope, marketplace);
+      await rm(directory, { recursive: true, force: true });
+    });
+
+    // act
+    const rows = await cache.getPluginIndex(cachePath, scope, marketplace, () =>
+      Promise.resolve(expectedRows),
+    );
+
+    // assert
+    assert.deepStrictEqual(rows, expectedRows);
+    assert.strictEqual(diagnostics.length, 1);
+    assert.match(diagnostics[0] ?? "", /plugin-index cache read failed for/);
+    assert.match(diagnostics[0] ?? "", /EACCES/);
   });
 
   test("serves a warm plugin index within the injected TTL", async (t) => {
