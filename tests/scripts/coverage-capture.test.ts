@@ -229,7 +229,7 @@ function runCapture(root: string, options: CaptureOptions = {}): ProcessRun {
   const completed = spawnSync(
     process.execPath,
     [...(options.nodeArgs ?? []), cliPath, "--root", root, ...(options.args ?? [])],
-    { encoding: "utf8", env: { ...process.env, ...options.env } },
+    { encoding: "utf8", env: { ...process.env, PI_CM_NESTED_TEST: "1", ...options.env } },
   );
   return { status: completed.status ?? -1, stdout: completed.stdout, stderr: completed.stderr };
 }
@@ -354,6 +354,10 @@ test("captures LCOV, raw V8 and executed sources from one native unit run that m
   const capture = runCapture(root);
 
   // assert
+  process.stderr.write(
+    `[spec-relay diagnostic] captures-LCOV test: status=${capture.status} ` +
+      `stdout.length=${capture.stdout.length} stderr=${JSON.stringify(capture.stderr)}\n`,
+  );
   assert.strictEqual(capture.status, 0, capture.stderr);
   assert.deepStrictEqual(specSummary(capture.stdout), { pass: 3, fail: 0 });
   assert.deepStrictEqual(specSummary(capture.stdout), specSummary(native.run.stdout));

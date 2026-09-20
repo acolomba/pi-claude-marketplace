@@ -162,14 +162,18 @@ export function fixtureFiles(fixture: ProducerFixture): Record<string, string> {
 /**
  * Runs a script under this Node with the outer runner's worker markers shed
  * and no inherited coverage destination, so a nested run never reports into
- * the run that hosts this test.
+ * the run that hosts this test. `PI_CM_NESTED_TEST=1` is the explicit signal
+ * `coverage-capture.mjs` reads to relay a further-nested `node --test`'s
+ * spec-reporter summary through a file instead of inherited stdout -- kept
+ * separate from the NODE_TEST_CONTEXT mark this function sheds above, since
+ * that mark is unrelated and this function's whole point is to remove it.
  */
 export function run(args: readonly string[], cwd?: string): ProcessRun {
   const { NODE_TEST_CONTEXT: _context, NODE_TEST_WORKER_ID: _worker, ...env } = process.env;
   const completed = spawnSync(process.execPath, args, {
     cwd,
     encoding: "utf8",
-    env: { ...env, NODE_V8_COVERAGE: "" },
+    env: { ...env, NODE_V8_COVERAGE: "", PI_CM_NESTED_TEST: "1" },
   });
   return { status: completed.status ?? -1, stdout: completed.stdout, stderr: completed.stderr };
 }

@@ -215,23 +215,28 @@ function concurrencyArguments() {
     : [`--test-concurrency=${concurrency}`];
 }
 
-// A nested invocation -- this CLI itself launched from inside an outer `node
-// --test` worker, the same NODE_TEST_CONTEXT mark `runnerEnvironment` sheds
-// below -- relays the runner's spec-reporter summary through a real file
-// instead of the runner's own stdout. `stdio: "inherit"` chained through two
-// synchronous spawnSync layers (this process's own stdout is itself a pipe
-// back to whatever spawned it, in that position) has been observed to lose
-// the reporter's trailing summary text entirely on GitHub's small runners,
-// while the exit status stays correct; not reproducible locally, and capping
-// the nested runner's own concurrency did not change it either. The lcov
-// reporter already writes to a real file for the identical reason; giving the
-// spec reporter the same treatment only when nested keeps the top-level real
-// capture's live stdout streaming intact, since that path has never shown the
-// symptom. `executeRunner` reads the file back and relays it onto this
-// process's own stdout, so a caller inspecting this process's stdout sees the
-// same text either way.
+// A nested invocation -- this CLI itself launched from inside a test's own
+// `node --test` worker -- relays the runner's spec-reporter summary through a
+// real file instead of the runner's own stdout. `stdio: "inherit"` chained
+// through two synchronous spawnSync layers (this process's own stdout is
+// itself a pipe back to whatever spawned it, in that position) has been
+// observed to lose the reporter's trailing summary text entirely on GitHub's
+// small runners, while the exit status stays correct; not reproducible
+// locally. The lcov reporter already writes to a real file for the identical
+// reason; giving the spec reporter the same treatment only when nested keeps
+// the top-level real capture's live stdout streaming intact, since that path
+// has never shown the symptom. `executeRunner` reads the file back and relays
+// it onto this process's own stdout, so a caller inspecting this process's
+// stdout sees the same text either way.
+//
+// Nesting is signaled by an explicit `PI_CM_NESTED_TEST=1` the test helpers
+// set, not by NODE_TEST_CONTEXT: `tests/scripts/coverage-run-support.ts`'s
+// shared `run()` deliberately sheds that mark for an unrelated reason (so a
+// nested run's own coverage never reports into the run that hosts the test),
+// so it reads as "not nested" for every one of its callers regardless of
+// where they actually run.
 function nestedSpecLogPath(run) {
-  return process.env.NODE_TEST_CONTEXT === undefined ? undefined : `${run.runPrefix}/spec.log`;
+  return process.env.PI_CM_NESTED_TEST === "1" ? `${run.runPrefix}/spec.log` : undefined;
 }
 
 function runnerArguments(run) {
@@ -277,7 +282,14 @@ function executeRunner(run, invocation) {
   const specLogPath = nestedSpecLogPath(run);
   if (specLogPath !== undefined) {
     const absoluteSpecLogPath = path.join(run.root, specLogPath);
-    if (existsSync(absoluteSpecLogPath)) {
+    const exists = existsSync(absoluteSpecLogPath);
+    const size = exists ? readFileSync(absoluteSpecLogPath).length : undefined;
+    process.stderr.write(
+      `[spec-relay diagnostic] executeRunner: path=${absoluteSpecLogPath} exists=${exists} ` +
+        `size=${size} runnerStatus=${runner.status} runnerSignal=${runner.signal} ` +
+        `runnerError=${runner.error?.message}\n`,
+    );
+    if (exists) {
       process.stdout.write(readFileSync(absoluteSpecLogPath));
       rmSync(absoluteSpecLogPath, { force: true });
     }
@@ -724,9 +736,9 @@ function verifyRun(root) {
 // reason `executeRunner` does the same for the capture runner.
 function plainRun(root, forwarded) {
   const specLogPath =
-    process.env.NODE_TEST_CONTEXT === undefined
-      ? undefined
-      : path.join(root, `.coverage-capture-plain-${randomBytes(4).toString("hex")}.log`);
+    process.env.PI_CM_NESTED_TEST === "1"
+      ? path.join(root, `.coverage-capture-plain-${randomBytes(4).toString("hex")}.log`)
+      : undefined;
   const reporterArguments =
     specLogPath === undefined
       ? []
@@ -744,9 +756,18 @@ function plainRun(root, forwarded) {
     { cwd: root, stdio: "inherit" },
   );
 
-  if (specLogPath !== undefined && existsSync(specLogPath)) {
-    process.stdout.write(readFileSync(specLogPath));
-    rmSync(specLogPath, { force: true });
+  if (specLogPath !== undefined) {
+    const exists = existsSync(specLogPath);
+    const size = exists ? readFileSync(specLogPath).length : undefined;
+    process.stderr.write(
+      `[spec-relay diagnostic] plainRun: path=${specLogPath} exists=${exists} ` +
+        `size=${size} runnerStatus=${runner.status} runnerSignal=${runner.signal} ` +
+        `runnerError=${runner.error?.message}\n`,
+    );
+    if (exists) {
+      process.stdout.write(readFileSync(specLogPath));
+      rmSync(specLogPath, { force: true });
+    }
   }
 
   if (runner.error !== undefined) {
