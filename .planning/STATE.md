@@ -5,11 +5,11 @@ milestone_name: transitive-dependencies
 current_phase: 08
 current_phase_name: Enablement parity for dependencies
 status: planning
-stopped_at: Phase 07 complete, ready to plan Phase 08
-last_updated: "2026-09-19T23:47:26.290Z"
+stopped_at: Phase 8 context gathered
+last_updated: "2026-09-20T00:30:17.694Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 07 complete, transitioned to Phase 08
-state_head: f2a96f94542472f33627a7116880b507c3869f3e
+state_head: 4dc302ced7ad8b9c24b4bfaf510cadb397ae8f82
 progress:
   total_phases: 12
   completed_phases: 7
@@ -926,9 +926,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 07 complete, ready to plan Phase 08
+**Stopped at:** Phase 8 context gathered
 
-**Resume file:** .planning/phases/07-marketplace-repo-tag-resolution/07-CONTEXT.md
+**Resume file:** .planning/phases/08-enablement-parity-for-dependencies/08-CONTEXT.md
 `HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
 content was folded into `04-CONTEXT.md`: the supersession warning and the
 ordering constraint into `<decisions>`, and the operational anti-patterns
@@ -938,7 +938,7 @@ carried-notes block under `<specifics>`.
 
 **Read beside it:** `.planning/phases/04-install-provenance/04-CONTEXT.md`
 
-Last session: 2026-09-19T15:00:11.774Z
+Last session: 2026-09-20T00:30:17.460Z
 resumed a paused Phase 4 discussion, answered its two open questions (the
 config-write reversal lands entirely in Phase 4 in a fixed order; reconcile
 keeps sweeping genuine orphans with one exemption), wrote `04-CONTEXT.md` and
