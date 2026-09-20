@@ -93,7 +93,6 @@ import {
   unstagePluginSkills,
 } from "../../bridges/skills/index.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
-import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import {
   requirePartialInstallable,
@@ -417,21 +416,12 @@ async function preflightInstallResolve(
   // exist in the manifest plugins[] array.
   const sourceMp = source.sourceRecord;
   const manifest = await loadCachedMarketplaceManifest(sourceMp.manifestPath);
-  const entryRaw = manifest.plugins.find((p) => p.name === plugin);
-  if (entryRaw === undefined) {
+  // The loader validated every entry against PLUGIN_ENTRY_SCHEMA as part of
+  // MARKETPLACE_SCHEMA, so the chosen entry needs no second check.
+  const entry = manifest.plugins.find((p) => p.name === plugin);
+  if (entry === undefined) {
     throw new PluginShapeError({ kind: "not-in-manifest", plugin, marketplace });
   }
-
-  // Defense-in-depth: re-run the per-entry validator on the chosen entry so
-  // a corrupted manifest cannot smuggle a malformed entry past the top-level
-  // marketplace check.
-  if (!PLUGIN_ENTRY_VALIDATOR.Check(entryRaw)) {
-    throw new Error(
-      `Plugin entry for "${plugin}" in marketplace "${marketplace}" failed schema validation.`,
-    );
-  }
-
-  const entry: PluginEntry = entryRaw;
 
   // PURL-01..04 / PURL-09 / D-77-01..06: the clone-materializing
   // resolveGitPluginRoot callback plus its captured resolved sha. The

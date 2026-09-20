@@ -25,7 +25,6 @@ import {
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
-import { PLUGIN_ENTRY_VALIDATOR } from "../../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -7671,48 +7670,6 @@ test("install cleans up each bridge staging root inside its own phase and a repe
           skills: ["complete:audit"],
         },
       );
-    } finally {
-      await rm(cwd, { force: true, recursive: true });
-    }
-  });
-});
-
-test("install rejects the selected entry when its defense-in-depth validator fails", async (t) => {
-  await withHermeticHome(async ({ installPlugin }) => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-entry-revalidation-"));
-    try {
-      // arrange
-      await seedPathMarketplaceWithPlugin({
-        cwd,
-        marketplaceName: "mp",
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        pluginName: "invalid",
-      });
-      const validation = t.mock.method(PLUGIN_ENTRY_VALIDATOR, "Check", () => false);
-      const { ctx, notifications, pi } = makeCtx();
-
-      // act
-      const outcome = await installPlugin({
-        ctx,
-        cwd,
-        marketplace: "mp",
-        notifications: { mode: "orchestrated" },
-        pi,
-        plugin: "invalid",
-        scope: "project",
-      });
-
-      // assert
-      assert.deepStrictEqual(outcome, {
-        cause:
-          'Plugin entry for "invalid" in marketplace "mp" failed schema validation.\n\ncause: Plugin entry for "invalid" in marketplace "mp" failed schema validation.',
-        error: new Error(
-          'Plugin entry for "invalid" in marketplace "mp" failed schema validation.',
-        ),
-        status: "failed",
-      });
-      assert.strictEqual(validation.mock.callCount(), 1);
-      assert.deepStrictEqual(notifications, []);
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }

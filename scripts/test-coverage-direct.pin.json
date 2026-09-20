@@ -1,33 +1,4 @@
 {
   "version": 1,
-  "rows": [
-    {
-      "sourcePath": "extensions/pi-claude-marketplace/bridges/commands/discover.ts",
-      "reading": "branches 55/56, lines 412/414",
-      "findingIds": ["BC-019"],
-      "reasons": [
-        "288-290 (branch 288): the `if (!(err instanceof CommandNameError)) { throw err; }` narrowing arm around `nameCommandInDir`. BC-019 records the measured disposition: the arm is unreachable -- only a `Symbol.hasInstance` patch reaches its throw -- but the check still narrows the `unknown` catch binding for `badNameWarning(err)`, so deleting it without a restructure breaks typing."
-      ]
-    },
-    {
-      "sourcePath": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
-      "reading": "branches 109/111, lines 1046/1052",
-      "findingIds": ["D-08-A14"],
-      "reasons": [
-        "422-425 (branch at 421): re-validation of a manifest entry that the identical compiled schema already accepted in the same pass. MARKETPLACE_SCHEMA.plugins is Type.Array(PLUGIN_ENTRY_SCHEMA) and PLUGIN_ENTRY_VALIDATOR is Compile(PLUGIN_ENTRY_SCHEMA), so an entry reaching the re-check was already validated by that exact schema, in this process, from this parse. ARCHITECTURE.md records the re-check as deliberate defense-in-depth.",
-        "824-825 (branch at 823): the hooks re-parse guard, over bytes on which the resolver already ran both of parseHooksConfig's {ok:false} arms at install-entry under D-57-04. The only difference between the two calls is skipIfMap, and D-61-02 records that every compileIfPredicate failure collapses to MATCH_ALL_IF, so no if-field issue can produce a refusal. The guard fires only on a mutation between the resolve and the phase.",
-        "Line numbers shifted +7 from a type-members-gate fix that extracted FrontmatterDegradationRow/AgentForeignFailureRow as shared interfaces (dedup so the analyzer's witness-tracing resolves both InstallLedgerContext and InstallLedgerSummary array-element reads to the same symbol); no behavior change, same two branches."
-      ]
-    },
-    {
-      "sourcePath": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
-      "reading": "branches 119/122, lines 990/1014",
-      "findingIds": ["PR202-COV-01"],
-      "reasons": [
-        "354-360 (catch in applyMarketplaceAdds): wraps addMarketplace(...) (orchestrators/marketplace/add.ts:546). This call site always passes notifications:{mode:'orchestrated'} and never sets rethrowPreconditionErrors, so per add.ts:570-592 every error runAddInGuard can produce is caught and converted by handleAddFailure into a typed {status:'failed'} outcome; the two steps before that guard (locationsFor, parsePluginSource) are total over the typed options built here. addMarketplace is a hardcoded import, not one of ApplyReconcileOptions' injectable seams, so forcing a throw would require module replacement, which this project's testing rules forbid.",
-        "546-553 (catch in applyPluginInstalls): wraps installPlugin = createInstallOperation(opts.hooksRouting, opts.completionCache). install-flow.ts's own post-save hooksRouting mutation already sits inside its own try/catch that only hookDebugLogs and never rethrows (WR-02, install-flow.ts:905-926), so opts.hooksRouting -- the only injectable seam this call site exposes -- cannot force a throw past installPlugin; every other step of its body is inside install-flow's own catch that returns a typed failed outcome in orchestrated mode.",
-        "670-679 (catch in applyPluginToggles): wraps setPluginEnabled = createEnableOperation(opts.hooksRouting). enable-disable.ts's dropCachedHooks/addCachedHooks independently swallow every hooksRouting failure through their own try/catch + hookDebugLog (enable-disable.ts:506-525, 543-564), so the same injectable-seam argument applies: opts.hooksRouting cannot force a throw past setPluginEnabled."
-      ]
-    }
-  ]
+  "rows": []
 }

@@ -878,6 +878,61 @@ test("an mcp phase that cannot even prepare unwinds the hooks config the phase b
   assert.deepStrictEqual(capture.rollbackPartials, []);
 });
 
+test("a hooks.json that turns malformed after resolution unwinds the ledger", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-hooks-reparse-");
+  const seeded = await seedPlugin(environment.cwd, {
+    components: { skills: ["alpha"] },
+    hooksJson: SESSION_START_HOOKS,
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const hooksJsonPath = path.join(seeded.pluginRoot, "hooks", "hooks.json");
+  const realRemovalOps = createRemovalOps();
+  // The resolver validated hooks.json at install entry. The skills phase's
+  // staging cleanup runs between that validation and the hooks phase's
+  // re-read, so a plugin tree rewritten in that window is what the guard
+  // exists for.
+  const removalOps = {
+    ...realRemovalOps,
+    rm: async (target: string, options: { recursive?: boolean; force?: boolean }) => {
+      await writeFile(hooksJsonPath, "{");
+      await realRemovalOps.rm(target, options);
+    },
+  };
+  const capture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps,
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /^hooks\.json re-parse failed: /);
+    return true;
+  });
+  const survives = async (candidate: string): Promise<boolean> =>
+    stat(candidate).then(
+      () => true,
+      () => false,
+    );
+  assert.equal(await survives(path.join(locations.hooksDir, "empty", "hooks.json")), false);
+  assert.equal(await survives(path.join(locations.skillsTargetDir, "empty:alpha")), false);
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
+  assert.deepStrictEqual(capture.rollbackPartials, []);
+});
+
 /**
  * A bridge whose prepare throws never reaches its `c.<kind>Prep` assignment,
  * so the undo the ledger still invokes for the FAILING phase has nothing to
