@@ -207,20 +207,12 @@ function runnerEnvironment(run) {
   return { actual, recorded };
 }
 
-// `TEST_CONCURRENCY` reaches the runner the way the npm scripts pass it. A
-// nested invocation -- this CLI itself launched from inside an outer `node
-// --test` worker, the same NODE_TEST_CONTEXT mark `runnerEnvironment` sheds
-// below -- defaults to a single worker instead of Node's own
-// availableParallelism-sized default, so it does not compete with the outer
-// run's own workers for the same cores on a small runner; an explicit
-// TEST_CONCURRENCY still wins either way.
+// `TEST_CONCURRENCY` reaches the runner the way the npm scripts pass it.
 function concurrencyArguments() {
   const concurrency = process.env.TEST_CONCURRENCY;
-  if (concurrency !== undefined && concurrency !== "") {
-    return [`--test-concurrency=${concurrency}`];
-  }
-
-  return process.env.NODE_TEST_CONTEXT === undefined ? [] : ["--test-concurrency=1"];
+  return concurrency === undefined || concurrency === ""
+    ? []
+    : [`--test-concurrency=${concurrency}`];
 }
 
 function runnerArguments(run) {

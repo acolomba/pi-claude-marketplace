@@ -573,13 +573,9 @@ test("inventories every production, test and resource input with its digest befo
   );
 });
 
-// Every call here runs nested under this file's own `node --test` worker, so
-// an unset/empty TEST_CONCURRENCY falls to the nested default of one worker
-// (NODE_TEST_CONTEXT is always set in that position), not Node's own
-// availableParallelism-sized default.
 for (const { concurrency, flags } of [
   { concurrency: "2", flags: ["--test-concurrency=2"] },
-  { concurrency: "", flags: ["--test-concurrency=1"] },
+  { concurrency: "", flags: [] },
 ]) {
   test(`records the native runner invocation with TEST_CONCURRENCY=${JSON.stringify(concurrency)}`, async (t) => {
     // arrange
