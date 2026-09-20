@@ -215,11 +215,40 @@ function concurrencyArguments() {
     : [`--test-concurrency=${concurrency}`];
 }
 
+// A nested invocation -- this CLI itself launched from inside an outer `node
+// --test` worker, the same NODE_TEST_CONTEXT mark `runnerEnvironment` sheds
+// below -- relays the runner's spec-reporter summary through a real file
+// instead of the runner's own stdout. `stdio: "inherit"` chained through two
+// synchronous spawnSync layers (this process's own stdout is itself a pipe
+// back to whatever spawned it, in that position) has been observed to lose
+// the reporter's trailing summary text entirely on GitHub's small runners,
+// while the exit status stays correct; not reproducible locally, and capping
+// the nested runner's own concurrency did not change it either. The lcov
+// reporter already writes to a real file for the identical reason; giving the
+// spec reporter the same treatment only when nested keeps the top-level real
+// capture's live stdout streaming intact, since that path has never shown the
+// symptom. `executeRunner` reads the file back and relays it onto this
+// process's own stdout, so a caller inspecting this process's stdout sees the
+// same text either way.
+function nestedSpecLogPath(run) {
+  return process.env.NODE_TEST_CONTEXT === undefined ? undefined : `${run.runPrefix}/spec.log`;
+}
+
 function runnerArguments(run) {
+  const specLogPath = nestedSpecLogPath(run);
+  const coverageFlags =
+    specLogPath === undefined
+      ? NATIVE_COVERAGE_FLAGS
+      : NATIVE_COVERAGE_FLAGS.map((flag) =>
+          flag === "--test-reporter-destination=stdout"
+            ? `--test-reporter-destination=${specLogPath}`
+            : flag,
+        );
+
   return [
     "--test",
     ...concurrencyArguments(),
-    ...NATIVE_COVERAGE_FLAGS,
+    ...coverageFlags,
     `--test-reporter-destination=${run.runPrefix}/unit.lcov`,
     ...UNIT_TEST_PATTERNS,
   ];
@@ -244,6 +273,15 @@ function executeRunner(run, invocation) {
     env: invocation.actualEnvironment,
     stdio: ["ignore", "inherit", "inherit"],
   });
+
+  const specLogPath = nestedSpecLogPath(run);
+  if (specLogPath !== undefined) {
+    const absoluteSpecLogPath = path.join(run.root, specLogPath);
+    if (existsSync(absoluteSpecLogPath)) {
+      process.stdout.write(readFileSync(absoluteSpecLogPath));
+      rmSync(absoluteSpecLogPath, { force: true });
+    }
+  }
 
   return { pid: runner.pid, status: runner.status, signal: runner.signal, error: runner.error };
 }
@@ -680,13 +718,36 @@ function verifyRun(root) {
 }
 
 // The ordinary unit run: the authoritative selection under the runner alone,
-// its output inherited and its exit status returned. Nothing is written.
+// its output inherited and its exit status returned. Nothing is written --
+// except, when nested (see `nestedSpecLogPath`), a scratch file that relays
+// the spec reporter's summary onto this process's own stdout for the same
+// reason `executeRunner` does the same for the capture runner.
 function plainRun(root, forwarded) {
+  const specLogPath =
+    process.env.NODE_TEST_CONTEXT === undefined
+      ? undefined
+      : path.join(root, `.coverage-capture-plain-${randomBytes(4).toString("hex")}.log`);
+  const reporterArguments =
+    specLogPath === undefined
+      ? []
+      : ["--test-reporter=spec", `--test-reporter-destination=${specLogPath}`];
+
   const runner = spawnSync(
     process.execPath,
-    ["--test", ...concurrencyArguments(), ...forwarded, ...UNIT_TEST_PATTERNS],
+    [
+      "--test",
+      ...concurrencyArguments(),
+      ...reporterArguments,
+      ...forwarded,
+      ...UNIT_TEST_PATTERNS,
+    ],
     { cwd: root, stdio: "inherit" },
   );
+
+  if (specLogPath !== undefined && existsSync(specLogPath)) {
+    process.stdout.write(readFileSync(specLogPath));
+    rmSync(specLogPath, { force: true });
+  }
 
   if (runner.error !== undefined) {
     throw runner.error;

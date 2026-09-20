@@ -587,13 +587,16 @@ for (const { concurrency, flags } of [
     // assert
     assert.strictEqual(capture.status, 0, capture.stderr);
     const manifest = await readManifest(path.join(root, "coverage", "unit.manifest.json"));
+    // This test always runs nested under this file's own `node --test`
+    // worker, so the spec reporter's destination is the relay file
+    // `nestedSpecLogPath` builds, never the literal "stdout".
     assert.deepStrictEqual(manifest.invocation.argv, [
       "--test",
       ...flags,
       "--experimental-test-coverage",
       "--test-coverage-include=extensions/**",
       "--test-reporter=spec",
-      "--test-reporter-destination=stdout",
+      `--test-reporter-destination=coverage/runs/${manifest.runId}/spec.log`,
       "--test-reporter=lcov",
       `--test-reporter-destination=coverage/runs/${manifest.runId}/unit.lcov`,
       ...unitTestPatterns,
