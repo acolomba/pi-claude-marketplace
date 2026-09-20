@@ -7763,6 +7763,59 @@ test("retry proof: reinstall: a post-save hook-cache read failure stays silent a
   });
 });
 
+test("WR-03: a post-save routing-table rebuild failure leaves the committed reinstall successful", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-post-save-rebuild-fault-"));
+    try {
+      // arrange
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: {
+          hooksJson: {
+            hooks: {
+              PreToolUse: [{ hooks: [{ command: "echo ok", type: "command" }], matcher: "Bash" }],
+            },
+          },
+        },
+        install: true,
+      });
+      const locations = locationsFor("project", cwd);
+      const stateBefore = await loadState(locations.extensionRoot);
+      const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+      t.mock.method(hooksRouting, "rebuildRoutingTables", () => {
+        throw new Error("routing rebuild denied");
+      });
+      const reinstall = createReinstallPlugin(
+        REAL_REINSTALL_TRANSACTION,
+        hooksRouting,
+        createCompletionCache(),
+      );
+      const { ctx, notifications, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstall({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        render: "none",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      const stateAfter = await loadState(locations.extensionRoot);
+      assert.equal(stateAfter.marketplaces["mp"]?.plugins["hello"]?.version, "1.0.0");
+      assert.notDeepEqual(stateAfter, stateBefore);
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("retry proof: reinstall: a completion-cache maintenance failure notes the deferral and the retry clears it", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-cache-maintenance-"));

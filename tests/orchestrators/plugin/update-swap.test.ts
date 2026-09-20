@@ -359,6 +359,61 @@ test("atomically replaces staged resources and finalizes the update ledger", asy
   });
 });
 
+test("finalizes the update ledger even when the post-finalize hooks-cache refresh fails", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-hooks-cache-fault-"));
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "2.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const locations = locationsFor("project", cwd);
+      const preflight = await preparePluginUpdate({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        locations,
+        cleanupClones: () => Promise.resolve(),
+      });
+      assert.ok(!("partition" in preflight));
+      const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+      t.mock.method(hooksRouting, "rebuildRoutingTables", () => {
+        throw new Error("routing rebuild denied");
+      });
+
+      // act
+      const outcome = await swapPluginUpdate(
+        {
+          plugin: "hello",
+          marketplace: "mp",
+          scope: "project",
+          cwd,
+          locations,
+          hooksRouting,
+          completionCache: createCompletionCache(),
+          cascade: true,
+          cleanupClones: () => Promise.resolve(),
+        },
+        preflight,
+      );
+
+      // assert
+      assert.strictEqual(outcome.partition, "updated");
+      assert.strictEqual(outcome.fromVersion, "1.0.0");
+      assert.strictEqual(outcome.toVersion, "2.0.0");
+      const state = await loadState(locations.extensionRoot);
+      const record = state.marketplaces.mp?.plugins.hello;
+      assert.strictEqual(record?.version, "2.0.0");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("retains the intent ledger and old resource tree after a replacement failure", async () => {
   await withHermeticHome(async () => {
     // arrange

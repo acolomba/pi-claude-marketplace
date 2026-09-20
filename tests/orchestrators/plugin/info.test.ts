@@ -4849,6 +4849,69 @@ test("INFO-05: invalid-JSON `hooks/hooks.json` suppresses the `hooks:` block on 
   });
 });
 
+test("PHOOK-05: a hooks.json that mutates between resolve and the strict re-read still renders `(installed)` with no `hooks:` block", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "raced", source: "./raced", version: "1.0.0" }],
+      },
+      installed: { raced: { version: "1.0.0" } },
+      installablePluginDirs: ["raced"],
+    });
+
+    // `resolveStrict` always reads real fs (it takes no reader capability),
+    // so it sees this VALID content and records `hooksConfigPath`. The
+    // injected reader below then answers the SEPARATE strict re-read
+    // (`readHookSummaryEntries`) with malformed JSON for that same path --
+    // the only way the bytes seen by resolve and by the re-read can differ
+    // is a mutation in between (a TOCTOU race); this reader simulates that.
+    const pluginDir = path.join(mpRoot, "raced");
+    const hooksConfigFile = path.join(pluginDir, "hooks", "hooks.json");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(
+      hooksConfigFile,
+      JSON.stringify({
+        PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo pre-bash" }] }],
+      }),
+      "utf8",
+    );
+    const reader: PluginInfoReader = {
+      readTextFile: (filePath) =>
+        filePath === hooksConfigFile
+          ? Promise.resolve("{ not valid json")
+          : NODE_READER.readTextFile(filePath),
+      listDirectory: (directoryPath) => NODE_READER.listDirectory(directoryPath),
+    };
+
+    const { ctx, pi, notifications } = makeCtx();
+    // act
+    await createGetPluginInfo(reader)({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "raced",
+      scope: "user",
+      cwd,
+    });
+    // assert
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    // The resolver already recorded the plugin as fully supported from its
+    // own (valid) read, so the row stays a plain `(installed)` -- the
+    // re-parse failure is a display-only defensive fallback, not a
+    // resolution failure.
+    assert.match(msg, /● raced v1\.0\.0 \(installed\)$/m);
+    assert.doesNotMatch(msg, /hooks:/);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // RSTA-01 / RSTA-04 / RSTA-05 / RSTA-06 / D-80-04 / NFR-5: git-source plugins
 // on the info surface. A NOT-installed git plugin (url / github / git-subdir)

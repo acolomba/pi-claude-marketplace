@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -305,6 +305,32 @@ test("keeps an unsupported candidate skipped with and without partial permission
     assert.strictEqual(outcome.partition, "skipped");
     assert.deepStrictEqual(outcome.reasons, ["no longer installable"]);
   }
+});
+
+test("keeps an unexpected resolve failure skipped as no-longer-installable, carrying the raw error", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  const manifestPath = path.join(seed.pluginRoot, ".claude-plugin", "plugin.json");
+  t.after(async () => {
+    await chmod(manifestPath, 0o644).catch(() => undefined);
+    await rm(seed.cwd, { force: true, recursive: true });
+  });
+  // Neither a classified git-transport failure nor the resolver's typed
+  // `PluginShapeError` -- a raw EACCES reading the marketplace-side
+  // plugin.json, which `readManifest` deliberately leaves unwrapped so it
+  // keeps its identity. Exercises `resolveUpdateCandidate`'s unclassified
+  // fallback (still "no longer installable" to the caller, but logged for
+  // diagnosis rather than silently folded into the typed shape).
+  await chmod(manifestPath, 0o000);
+
+  // act
+  const outcome = await prepare(seed);
+
+  // assert
+  assert.ok("partition" in outcome);
+  assert.strictEqual(outcome.partition, "skipped");
+  assert.deepStrictEqual(outcome.reasons, ["no longer installable"]);
+  assert.match(outcome.notes[0] ?? "", /EACCES/);
 });
 
 test("refreshes a disabled pin without materializing its recorded resources", async (t) => {
