@@ -6,10 +6,10 @@ current_phase: 08
 current_phase_name: Enablement parity for dependencies
 status: executing
 stopped_at: Phase 8 context gathered
-last_updated: "2026-09-20T01:07:59.294Z"
+last_updated: "2026-09-20T01:10:28.498Z"
 last_activity: 2026-09-19
-last_activity_desc: Phase 07 complete, transitioned to Phase 08
-state_head: 19adae0383a6b6305fd127c51c2de10856b336c0
+last_activity_desc: Phase 08 execution started
+state_head: 235a812b293ae32189f37adbf6f478004504b429
 progress:
   total_phases: 12
   completed_phases: 7
@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-09-17 after Phase 5 prune-on-uninstall
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 07 — Marketplace-repository tag resolution for path-source dependencies
+**Current focus:** Phase 08 — Enablement parity for dependencies
 shipped dependency feature with the Claude Code dependency docs.
 Installing a plugin that declares dependencies should install what it needs.
 44 requirements across 12 phases (25 shipped in Phases 1-5 as PR #198, 19
@@ -36,9 +36,9 @@ under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 08 (Enablement parity for dependencies) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
+Phase: 08 (Enablement parity for dependencies) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 08
 
 All four plans are executed. LOAD-01, LOAD-02 and LOAD-03 are closed in
 `REQUIREMENTS.md`. PRUNE-05 stays in the record with a pointer naming LOAD-03,
@@ -335,7 +335,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-19 — Phase 07 complete, transitioned to Phase 08
+Last activity: 2026-09-19 — Phase 08 execution started
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 5 of 5 phases complete (100%).
