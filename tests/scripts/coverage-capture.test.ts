@@ -356,7 +356,7 @@ test("captures LCOV, raw V8 and executed sources from one native unit run that m
   // assert
   process.stderr.write(
     `[spec-relay diagnostic] captures-LCOV test: status=${capture.status} ` +
-      `stdout.length=${capture.stdout.length} stderr=${JSON.stringify(capture.stderr)}\n`,
+      `stdout=${JSON.stringify(capture.stdout)}\n`,
   );
   assert.strictEqual(capture.status, 0, capture.stderr);
   assert.deepStrictEqual(specSummary(capture.stdout), { pass: 3, fail: 0 });

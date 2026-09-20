@@ -360,7 +360,7 @@ test("the plain mode runs the whole unit selection without capturing anything", 
   // assert
   process.stderr.write(
     `[spec-relay diagnostic] plain-mode test: status=${tested.status} ` +
-      `stdout.length=${tested.stdout.length} stderr=${JSON.stringify(tested.stderr)}\n`,
+      `stdout=${JSON.stringify(tested.stdout)} stderr=${JSON.stringify(tested.stderr)}\n`,
   );
   assert.deepStrictEqual(
     { ...specSummary(tested), captured: existsSync(path.join(root, "coverage")) },
