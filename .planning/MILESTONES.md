@@ -85,9 +85,28 @@ on a prose-only injected contract). None is read by a gate.
 `origin/main` with `origin/main` fully merged in. Every gate was measured
 locally; the first CI run is on the pull request.
 
+**Post-close (2026-09-20):** PR #202 is pushed and every check is green. Sonar
+read 99.1% new-code coverage on the first run: 21 lines and 9 conditions that
+no test executes, all defensive code the late review passes added
+(`default: assertNever(...)` arms on switches that already list every union
+member, `: String(error)` arms behind a `JSON.parse`-only `try`, a dead
+`cause` assignment, two unreachable `else` logs) and then pinned in
+`test-coverage-direct.pin.json`. A pin silences only the per-pair direct gate;
+no local gate measures whole-suite coverage, and the "whole-suite hits" the
+close counted at pinned lines were V8 stamping a lightly executed function's
+count on every line in it. `@typescript-eslint/switch-exhaustiveness-check`
+(`allowDefaultCaseForExhaustiveSwitch: false`) now guards exhaustiveness in
+place of `assertNever`, which is gone with its 27 arms and 27 tripwire tests;
+the three surviving pins closed by restructure, a direct TOCTOU test, and
+removal of a tautological re-check and three unreachable catches. The pin file
+is empty, the unit suite reads 100% lines, branches and functions, and Sonar
+reads 100.0% (`cd2ac331`, `fd7d6bdd`). The changelog entry and the notify ADR
+amendment landed in `a0015aa3`. The eleventh quick task (`260919-c5m`, merged
+from main via PR #201) is archived here as well.
+
 **Archive:** `.planning/milestones/test-backlog-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`,
-phase directories under `test-backlog-phases/` and the ten quick tasks done in
-this window under `test-backlog-quick/`.
+phase directories under `test-backlog-phases/` and the eleven quick tasks under
+`test-backlog-quick/`.
 
 ---
 

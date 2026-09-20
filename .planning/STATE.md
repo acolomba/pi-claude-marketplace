@@ -2,11 +2,11 @@
 gsd_state_version: "1.0"
 milestone: test-backlog
 status: "test-backlog milestone shipped — PR #202"
-stopped_at: context exhaustion at 75% (2026-09-19)
-last_updated: "2026-09-19T22:51:22.220Z"
-last_activity: 2026-09-19
-last_activity_desc: test-backlog milestone shipped as PR
-state_head: dea91ef67fee69d009cded922688b1026f62714e
+stopped_at: PR #202 green at 100% Sonar coverage (2026-09-20)
+last_updated: "2026-09-20T23:12:43.440Z"
+last_activity: 2026-09-20
+last_activity_desc: post-close coverage fix landed on PR #202; pin file empty
+state_head: a0015aa3a2991a143e9dd3ed9dcfa25df91c35f4
 milestone_name: test-backlog
 progress:
   total_phases: 8
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 Phase: Milestone test-backlog complete
 Plan: —
 Status: test-backlog milestone shipped — PR #202
-Last activity: 2026-09-19 — test-backlog milestone shipped as PR #202 (retroactive per-phase security audits added first)
+Last activity: 2026-09-20 — PR #202 pushed and green; Sonar's 99.1% new-code reading fixed to 100.0% (see the MILESTONES.md post-close note)
 
 ### test-backlog closeout: `override_closeout`
 
@@ -125,17 +125,16 @@ hit the same wall; convert it rather than re-disclosing it.
 
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
-| 260919-c5m | Standardize on AGENTS.md instead of CLAUDE.md as the canonical project-instructions file | 2026-09-19 | 8f87272a | Complete | [260919-c5m-standardize-on-agents-md-instead-of-clau](./quick/260919-c5m-standardize-on-agents-md-instead-of-clau/) |
 
 ## Session Continuity
 
-**Last session:** 2026-09-19T22:51:22.194Z
-**Stopped at:** context exhaustion at 75% (2026-09-19)
+**Last session:** 2026-09-20
+**Stopped at:** PR #202 green at 100% Sonar coverage (2026-09-20)
 **Resume file:** None
 
 **Current work:** none. test-backlog shipped 2026-09-18 on `features/test-backlog`;
-the branch has never been pushed, so the next steps are `/gsd-ship` (pull request)
-and `/gsd-new-milestone`.
+PR #202 is pushed with every check green, so the next steps are the merge and
+`/gsd-new-milestone`.
 Earlier milestone continuity is preserved in
 `inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 

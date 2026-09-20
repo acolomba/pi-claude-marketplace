@@ -10,3 +10,4 @@
 - [260913-uwq-issue-179-agent-tools-and-mcpservers-con](260913-uwq-issue-179-agent-tools-and-mcpservers-con/260913-uwq-SUMMARY.md)
 - [260914-pbr-interactive-plugin-browser](260914-pbr-interactive-plugin-browser/260914-pbr-SUMMARY.md)
 - [260917-bh3-condense-the-181-unreleased-changelog-en](260917-bh3-condense-the-181-unreleased-changelog-en/260917-bh3-SUMMARY.md)
+- [260919-c5m-standardize-on-agents-md-instead-of-clau](260919-c5m-standardize-on-agents-md-instead-of-clau/260919-c5m-SUMMARY.md)
