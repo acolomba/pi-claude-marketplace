@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Every `/claude:plugin` verb now rejects an unknown flag or an extra argument before it does any work. (#202)
+  - Marketplace `info`, `list`, and `update` accept `--local` and read both configuration files. They change neither file.
+  - Agent names now keep the complete source name. Update and reinstall migrate agents that an earlier version named with a shortened form.
+  - A plugin with two agent files of the same name keeps the first one and reports a warning instead of failing to install.
+  - Internal: new gates check direct test coverage, dead exports, unused type members, and per-function risk. Sonar rules now cover the tests.
 - Internal: `scripts/init.sh` now fetches the humanizer and simple-english skills by name instead of vendoring them in the repository. (#203)
 - Internal: tuned GSD's agent model tiers and effort, and pinned babysit-pr's fallback model for Codex. (#199)
 - The changelog now lists one entry per pull request, ending in its number, and thanks every issue reporter and contributor. (#197)
