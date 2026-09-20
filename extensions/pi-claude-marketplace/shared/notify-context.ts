@@ -57,7 +57,7 @@ export type RenderFn<M> = (row: M, probe: SoftDepStatus, mpScope: Scope) => stri
  * D-10 exhaustiveness anchor: the mapped `render` member requires one arm per
  * declared status. A command whose const omits an arm for one of its own
  * statuses is a TS2741 compile error at the `satisfies` site -- the localized
- * replacement for the central `renderPluginRow` `assertNever` default. The
+ * counterpart of the central `renderPluginRow` exhaustive switch. The
  * `Extract<Msg, { status: K }>` narrows each arm to exactly the message shape
  * that carries status `K`.
  */

@@ -27,7 +27,7 @@ import {
 
 import { DynamicBorder, type Theme } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { assertNever, errorMessage } from "../../shared/errors.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import {
   pluginScopeOrFallback,
   pluginVersion,
@@ -206,8 +206,6 @@ function availableActions(status: PluginNotificationMessage["status"]): readonly
     case "will enable":
     case "will disable":
       break;
-    default:
-      return assertNever(status);
   }
 
   return actions;
@@ -309,8 +307,6 @@ export class PluginBrowser {
       const mp = this.marketplaces.find((m) => `${m.scope}:${m.name}` === item.value);
       if (mp !== undefined) {
         this.showPlugins(mp);
-      } else {
-        hookDebugLog(`marketplace selection had no match for value "${item.value}"`, "browser");
       }
     };
 
@@ -398,11 +394,6 @@ export class PluginBrowser {
       const plugin = this.pluginsByName.get(item.value);
       if (plugin !== undefined) {
         this.showActions(mp, plugin);
-      } else {
-        hookDebugLog(
-          `plugin selection had no match for value "${item.value}" in ${mp.name}`,
-          "browser",
-        );
       }
     };
 

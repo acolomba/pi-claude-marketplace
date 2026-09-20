@@ -37,9 +37,9 @@
 //     `stop` debug-log the dropped reason and return `undefined`. NEVER
 //     notify. NEVER throw.
 //
-// Exhaustiveness gate: each adapter exhaustively switches on `result.kind`
-// and calls `assertNever` on the impossible default arm (NFR-7). Adding a
-// fifth `HookExecResult` arm would fail `tsc` at the call site.
+// Exhaustiveness gate: each adapter switches on every `result.kind` with no
+// default arm (NFR-7). Adding a fifth `HookExecResult` arm fails `tsc` and
+// the `switch-exhaustiveness-check` lint rule at each switch.
 //
 // Mutation surface: tool_call mutates `event.input` (Record<string,
 // unknown>), tool_result mutates `event.content` (the Pi-side
@@ -48,7 +48,6 @@
 // has a single call site between iterations.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { assertNever } from "../../shared/errors.ts";
 
 import type { HookExecResult } from "./exec-result.ts";
 import type { HooksRuntime } from "./runtime.ts";
@@ -182,9 +181,6 @@ export function adaptToolCallResult(
 
     case "noop":
       return undefined;
-
-    default:
-      return assertNever(result, `unreachable HookExecResult arm: ${JSON.stringify(result)}`);
   }
 }
 
@@ -234,9 +230,6 @@ export function adaptToolResultResult(
 
     case "noop":
       return undefined;
-
-    default:
-      return assertNever(result, `unreachable HookExecResult arm: ${JSON.stringify(result)}`);
   }
 }
 
@@ -274,9 +267,6 @@ export function adaptInputResult(
 
     case "noop":
       return undefined;
-
-    default:
-      return assertNever(result, `unreachable HookExecResult arm: ${JSON.stringify(result)}`);
   }
 }
 
@@ -313,9 +303,8 @@ export function adaptInputResult(
  *       prompt. Deferred per D-60-03. `block` / `stop` are still
  *       debug-logged for observability.
  *
- * The adapter NEVER notifies and NEVER throws. `assertNever` only fires
- * when `HookExecResult` grows a new arm, which is a compile-time failure
- * at this call site (NFR-7).
+ * The adapter NEVER notifies and NEVER throws. A new `HookExecResult` arm
+ * is a compile-time failure at this switch (NFR-7).
  */
 export function adaptObservationResultForEvent(
   runtime: HooksRuntime,
@@ -358,8 +347,5 @@ export function adaptObservationResultForEvent(
 
     case "noop":
       return undefined;
-
-    default:
-      return assertNever(result, `unreachable HookExecResult arm: ${JSON.stringify(result)}`);
   }
 }

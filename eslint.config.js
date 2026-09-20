@@ -47,6 +47,18 @@ export default tseslint.config(
       ],
       "@typescript-eslint/no-empty-function": ["error", { allow: ["arrowFunctions"] }],
       "@typescript-eslint/explicit-module-boundary-types": "error",
+      // A switch over a union either lists every member and has no `default`,
+      // or lists some and has one. The `default` never counts as covering the
+      // union, so a member added later is a lint error at every switch that
+      // omits it; a `default: assertNever(...)` arm on a complete switch is
+      // unreachable and is an error too.
+      "@typescript-eslint/switch-exhaustiveness-check": [
+        "error",
+        {
+          allowDefaultCaseForExhaustiveSwitch: false,
+          considerDefaultExhaustiveForUnions: false,
+        },
+      ],
       // Pure-style rules I do not want to enforce: `Array<T>` vs `T[]` is
       // either-or, and template-literal expressions on numbers are normal.
       "@typescript-eslint/array-type": "off",

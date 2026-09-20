@@ -28,8 +28,9 @@
 //                 stop-shaped Pi return for v1.13 events (debug-logged).
 //
 // The union is a pure leaf -- no imports, no module-level state. NFR-7
-// (discriminated unions + assertNever exhaustiveness gate) drives the
-// shape: any future arm requires updating every `kind`-switch consumer.
+// (discriminated unions + exhaustive `kind` switches with no default arm)
+// drives the shape: any future arm requires updating every `kind`-switch
+// consumer.
 
 /**
  * D-60-01: four-arm discriminated outcome type. Every wire-protocol parse

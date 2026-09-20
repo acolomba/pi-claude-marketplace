@@ -321,28 +321,6 @@ for (const { row, line, actions } of STATUS_CASES) {
   });
 }
 
-test("PluginBrowser :: refuses a row whose status no action rule names", async () => {
-  // arrange
-  const browser = browserOverRows([{ status: "invented", name: "invented-row" } as never]);
-  const expectedMessage = "Unexpected value: invented";
-
-  // act
-  browser.handleInput(ENTER);
-  await flush();
-
-  // assert
-  assert.throws(
-    () => {
-      browser.handleInput(ENTER);
-    },
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.strictEqual(error.message, expectedMessage);
-      return true;
-    },
-  );
-});
-
 test("PluginBrowser :: reports an empty marketplace list rather than an empty frame", () => {
   // arrange
   const browser = new PluginBrowser({

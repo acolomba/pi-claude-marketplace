@@ -1,6 +1,5 @@
 import { softDepStatus } from "../platform/pi-api.ts";
 
-import { assertNever } from "./errors.ts";
 import {
   composeMarketplaceBlock,
   composePluginLinesWith,
@@ -258,9 +257,6 @@ function dispatchInfoMessage(
         "",
       );
       break;
-    default:
-      assertNever(message);
-      return;
   }
 
   emitWithSummary(ctx, message, body);
@@ -298,9 +294,9 @@ export function notify(
 
   // Exhaustiveness gate. After the standalone-arm return above, the only
   // legal residual `message.kind` values are `undefined` (back-compat)
-  // or the explicit `"cascade"`. The switch + `assertNever` ensures a
+  // or the explicit `"cascade"`. The switch has no default arm, so a
   // future standalone `kind` literal added without extending `isInfoKind`
-  // becomes a compile error here.
+  // becomes a type and lint error here.
   switch (message.kind) {
     case undefined:
     case "cascade":
@@ -309,9 +305,6 @@ export function notify(
       // reload-hint is driven by the per-row stamp, not by a distinguishing
       // kind.
       break;
-    default:
-      assertNever(message);
-      return;
   }
 
   // Cascade body. Caller-supplied order honored end-to-end (no internal

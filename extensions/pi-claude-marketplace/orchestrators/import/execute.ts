@@ -339,10 +339,6 @@ function setMarketplaceStatus(
     return;
   }
 
-  if (cause !== undefined) {
-    existing.cause = cause;
-  }
-
   existing.status = status;
 }
 
@@ -780,9 +776,9 @@ async function installOnePlannedPlugin(
   // so this same switch inside a `void` function would let a third arm fall
   // through, record the plugin in no bucket, render no cascade row, and
   // under-count the `Import: N successes` tally with every gate green. D-05:
-  // the union has exactly the two arms below, so a
-  // `default: assertNever(outcome)` arm would be unreachable dead code; TS2366
-  // on a missing arm enforces exhaustiveness instead.
+  // the union has exactly the two arms below, so a default arm would be
+  // unreachable dead code; TS2366 and the `switch-exhaustiveness-check` lint
+  // rule on a missing arm enforce exhaustiveness instead.
   switch (outcome.status) {
     case "failed":
       // The collapsed `failed` status carries the typed Error directly. Narrow

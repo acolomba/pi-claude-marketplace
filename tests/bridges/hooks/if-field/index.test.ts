@@ -28,7 +28,7 @@ interface ExpectedCompileIfPredicateContext {
   readonly projectRoot: string;
 }
 type ExpectedIfPredicate =
-  | { readonly kind: "match-all"; readonly reason?: string }
+  | { readonly kind: "match-all" }
   | {
       readonly kind: "bash";
       readonly piEvents: ReadonlySet<PiToolName>;
@@ -71,7 +71,7 @@ const typeEvidencePathGlob = {
   testAbsolute: (_absolutePath: string): boolean => true,
 } satisfies CompiledPathGlob;
 
-void ({ kind: "match-all", reason: "fall open" } satisfies IfPredicate);
+void ({ kind: "match-all" } satisfies IfPredicate);
 void ({
   kind: "bash",
   piEvents: new Set<PiToolName>(["bash"]),
@@ -880,17 +880,4 @@ test("dispatches all six predicate arms in stable row order", () => {
 
   // assert
   assert.deepStrictEqual(outcomes, expected);
-});
-
-test("rejects a predicate outside the exhaustive dispatch vocabulary", () => {
-  // arrange
-  const invalidPredicate = { kind: "unknown" } as unknown as IfPredicate;
-  const extensionContext = { cwd: "/workspace/plugin" } as ExtensionContext;
-
-  // act & assert
-  assert.throws(
-    () =>
-      ifFires(invalidPredicate, { toolName: "read", input: {} }, extensionContext, "PreToolUse"),
-    { name: "Error", message: /unreachable IfPredicate arm/ },
-  );
 });

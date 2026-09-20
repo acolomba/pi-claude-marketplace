@@ -23,16 +23,6 @@ export function isErrnoException(err: unknown): err is NodeJS.ErrnoException & {
 }
 
 /**
- * Exhaustiveness check helper for discriminated unions.
- * Call in the `default` case of a switch to get a compile-time error if a new
- * variant is added without updating the switch.
- * A caller may supply its established error message.
- */
-export function assertNever(x: never, message = `Unexpected value: ${String(x)}`): never {
-  throw new Error(message);
-}
-
-/**
  * Depth bound shared by every `Error.cause` walk in the codebase (T-13-04 DoS
  * mitigation). One constant rather than a literal per walker, so a change to
  * the bound cannot drift out of sync across walkers.
@@ -721,8 +711,6 @@ function buildPluginShapeMessage(shape: PluginShapeErrorShape): string {
       return `Plugin "${shape.plugin}" is not installable: ${shape.reasons.join("; ")}`;
     case "no-longer-installable":
       return `Plugin "${shape.plugin}" is no longer installable: ${shape.reasons.join("; ")}`;
-    default:
-      return assertNever(shape);
   }
 }
 

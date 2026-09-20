@@ -1,6 +1,6 @@
 import { appendHooksBlock } from "./concerns/hooks.ts";
 import { softDepMarkers } from "./concerns/soft-dep.ts";
-import { assertNever, causeChainTrailer, manualRecoveryLeaks } from "./errors.ts";
+import { causeChainTrailer, manualRecoveryLeaks } from "./errors.ts";
 
 import type { SoftDepStatus } from "../platform/pi-api.ts";
 import type { Dependency } from "./concerns/soft-dep.ts";
@@ -310,14 +310,6 @@ export function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDe
         .filter((t) => t !== "")
         .join(" ");
     }
-
-    default: {
-      // Per-status discriminated union (TYPE-04): every arm is handled above,
-      // so `mp` narrows to `never` here -- pass the value itself rather than
-      // `mp.status` (which would be an access on `never`).
-      assertNever(mp);
-      return "";
-    }
   }
 }
 
@@ -343,11 +335,9 @@ export function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDe
 //
 // SNM-16: soft-dep markers are injected at render time from the per-row
 // `dependencies?` declaration + the threaded `SoftDepStatus` probe. The
-// switch ends with the hardened shape `default: { assertNever(p);
-// return ""; }` so a future `PluginNotificationMessage` variant becomes a
-// compile error at this switch (the typecheck relies on `assertNever`'s
-// throw at runtime, not on its `never` return type via a value-returning
-// expression).
+// switch lists every status and has no default arm, so a future
+// `PluginNotificationMessage` variant becomes a type and lint error at this
+// switch.
 // ---------------------------------------------------------------------------
 
 /**
@@ -858,8 +848,8 @@ function renderPendingRow(
 
 /**
  * Renders the plugin row (no leading indent -- caller adds it). SOLE
- * site for plugin-row grammar (SNM-17). assertNever default arm is the
- * compile-time exhaustiveness gate.
+ * site for plugin-row grammar (SNM-17). The switch lists every status and
+ * has no default arm, which is the compile-time exhaustiveness gate.
  *
  * Token order follows the grammar `icon name [scope] versionToken
  * (status) {reasons}` (MSG-GR-1). Scope bracket is emitted via the
@@ -1006,10 +996,6 @@ function renderPluginRow(
       return renderPendingRow(p, mpScope);
     case "disabled":
       return renderDisabledRow(p, probe, mpScope);
-    default: {
-      assertNever(p);
-      return "";
-    }
   }
 }
 
@@ -1178,9 +1164,6 @@ export function renderMarketplaceInfo(
     case "path":
       lines.push(`path: ${message.source.absPath}`);
       break;
-
-    default:
-      assertNever(message.source);
   }
 
   // D-76-10: `last_updated:` renders for all git-backed kinds (github + url),
@@ -1255,7 +1238,7 @@ export function renderPluginInfoCascade(
 /**
  * Map a `PluginInfoRow` status literal to its rendering glyph.
  * `installed` -> `●`, `available` -> `○`,
- * `unavailable | failed` -> `⊘`. Exhaustive switch + `assertNever`
+ * `unavailable | failed` -> `⊘`. Exhaustive switch with no default arm,
  * so a 5th status member in `PluginInfoRowBase` would be a compile-
  * time error here rather than silently defaulting to the uninstallable
  * glyph.
@@ -1286,9 +1269,6 @@ function pluginInfoStatusGlyph(status: PluginInfoRow["status"]): string {
     case "failed":
       // Both use the prohibited-symbol glyph.
       return ICON_UNINSTALLABLE;
-    default:
-      assertNever(status);
-      return "";
   }
 }
 
@@ -1454,9 +1434,6 @@ export function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatu
     case false:
       lines.push("    components: not resolved");
       break;
-
-    default:
-      assertNever(plugin);
   }
 
   return lines.join("\n");

@@ -12,13 +12,12 @@
 // observes a uniformly-shaped predicate on every routing entry; absent
 // or malformed `if` fields are normalized to `MATCH_ALL_IF` at parse
 // time. The always-present-with-sentinel stance keeps the dispatch
-// switch total and lets `assertNever` enforce NFR-7 exhaustiveness
-// without an `undefined` arm.
+// switch total without an `undefined` arm (NFR-7).
 //
-// NFR-7: the `IfPredicate` union has six arms; any switch over
-// `predicate.kind` must either cover every arm or terminate with
-// `assertNever(predicate)`. Adding a seventh arm without updating the
-// dispatch switch red-fails `npm run typecheck`.
+// NFR-7: the `IfPredicate` union has six arms; the dispatch switch over
+// `predicate.kind` lists every arm and carries no default. Adding a seventh
+// arm without updating the switch red-fails `npm run typecheck` and
+// `npm run lint`.
 //
 // Fail-open contract recap (D-61-02):
 //   - Unknown rule prefix (`Cd(...)`, typos)                -> MATCH_ALL_IF
@@ -49,7 +48,7 @@ import path from "node:path";
 import { TOOL_EVENTS, type BucketAEvent } from "../../../domain/components/hook-events.ts";
 import { IF_PREFIX_TARGETS } from "../../../domain/components/hook-if-targets.ts";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
-import { assertNever, errorMessage } from "../../../shared/errors.ts";
+import { errorMessage } from "../../../shared/errors.ts";
 
 import { bashSubcommandFires, parseBashSubcommands } from "./bash.ts";
 import { compileBashGlob, compilePathGlob } from "./glob.ts";
@@ -75,9 +74,7 @@ import type { ExtensionContext } from "../../../platform/pi-api.ts";
  * for absent or malformed `if` strings). The dispatch consult switches
  * on `predicate.kind`:
  *
- *   - `match-all`         -- fire unconditionally. The `reason` field
- *                            captures fall-open context for
- *                            `hookDebugLog`.
+ *   - `match-all`         -- fire unconditionally.
  *   - `bash`              -- check whether `event.toolName` is in the
  *                            `piEvents` set, then consult
  *                            `bashGlob.test(subcmd)` against every parsed
@@ -98,7 +95,7 @@ import type { ExtensionContext } from "../../../platform/pi-api.ts";
  *                            `"__"` (e.g. `"mcp__puppeteer__"`).
  */
 export type IfPredicate =
-  | { readonly kind: "match-all"; readonly reason?: string }
+  | { readonly kind: "match-all" }
   | {
       readonly kind: "bash";
       readonly piEvents: ReadonlySet<PiToolName>;
@@ -441,7 +438,7 @@ function resolveTarget(p: string, ctx: ExtensionContext): string {
 /**
  * MATCH-03 dispatch-time consult. Returns true iff the routing entry's
  * `if` field permits dispatch for the current event. Total switch over
- * `IfPredicate.kind` with `assertNever` exhaustiveness (NFR-7).
+ * `IfPredicate.kind` with no default arm (NFR-7).
  *
  * Per-arm contract:
  *
@@ -523,8 +520,5 @@ export function ifFires(
 
     case "mcp-server-prefix":
       return extractToolName(event).startsWith(predicate.serverPrefix);
-
-    default:
-      return assertNever(predicate, `unreachable IfPredicate arm: ${JSON.stringify(predicate)}`);
   }
 }

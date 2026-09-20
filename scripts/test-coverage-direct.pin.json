@@ -20,53 +20,6 @@
       ]
     },
     {
-      "sourcePath": "extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts",
-      "reading": "branches 68/71, lines 515/524",
-      "findingIds": ["BABYSIT-01"],
-      "reasons": [
-        "123-124: matcherFiresOnToolEvent's new `default: return assertNever(matcher, ...)` arm (google-style exhaustive-switch requirement, NFR-7). ParsedMatcher's variants are all listed in the preceding cases, so this arm is unreachable by any value the type system admits.",
-        "445-448: adaptForEvent's new `default: return assertNever(claudeEvent, ...)` arm over CompositeDispatchEvent's kind union, same NFR-7 exhaustiveness pattern; unreachable for the same reason.",
-        "519-522: entryFires' new `default: return assertNever(claudeEvent, ...)` arm over the same CompositeDispatchEvent union; unreachable for the same reason."
-      ]
-    },
-    {
-      "sourcePath": "extensions/pi-claude-marketplace/domain/mcp-resolution.ts",
-      "reading": "branches 43/45",
-      "findingIds": ["BABYSIT-01", "domain-silentfailure"],
-      "reasons": [
-        "109: readReferencedMcp's catch replaced an unjustified `(error as SyntaxError).message` cast with `error instanceof Error ? error.message : String(error)` (google-style: runtime check preferred over an unchecked assertion). The `: String(error)` arm is unreachable in practice -- `JSON.parse` only ever throws a genuine `SyntaxError` (an `Error` subclass) on malformed input -- but the guard is kept for defense-in-depth rather than re-introducing the unchecked cast.",
-        "57: readStandaloneMcp's catch now guards only `JSON.parse` (the fs read moved above the `try` so an EACCES-class failure propagates instead of being mislabeled `malformed mcpServers`). Same `error instanceof Error ? error.message : String(error)` shape as line 109's, and the `: String(error)` arm is unreachable for the same reason -- `JSON.parse` never throws a non-Error value."
-      ]
-    },
-    {
-      "sourcePath": "extensions/pi-claude-marketplace/domain/plugin-resolver.ts",
-      "reading": "branches 106/109, lines 635/640",
-      "findingIds": ["BABYSIT-01"],
-      "reasons": [
-        "201-204: classifySourceSupport's new `default: return assertNever(parsedSource, ...)` arm over ParsedSource.kind (google-style exhaustive-switch requirement, NFR-7); unreachable because every kind is already listed in the preceding cases.",
-        "360: deriveSourcePluginRoot's new `default: return assertNever(r, ...)` arm over GitPluginRootResult.kind, same NFR-7 pattern; unreachable for the same reason.",
-        "readManifest's fs read now sits above its `try` (domain-silentfailure fix: an EACCES-class failure propagates instead of being mislabeled `malformed plugin.json`), which drops the function's total branch count by one and shifts every line reference below it by +3."
-      ]
-    },
-    {
-      "sourcePath": "extensions/pi-claude-marketplace/edge/browser/plugin-browser.ts",
-      "reading": "branches 123/125, lines 530/537",
-      "findingIds": ["PR202-COV-01"],
-      "reasons": [
-        "313-314: showMarketplaces' list.onSelect 'no match' else arm. The installed @earendil-works/pi-tui SelectList.handleInput/handleMouse (node_modules/@earendil-works/pi-tui/dist/components/select-list.js) always calls onSelect with an item drawn from this.filteredItems, itself always a member of the items array passed at construction -- here built directly from this.marketplaces. this.marketplaces is assigned once in the constructor and never reassigned (no other `this.marketplaces =` site), so item.value always matches an entry and the .find() miss is unreachable through PluginBrowser's public handleInput/render/invalidate surface.",
-        "402-406: buildPluginsList's list.onSelect 'no match' else arm, same SelectList mechanism. this.plugins and this.pluginsByName are populated atomically from the same `rows` in loadPlugins (lines 343-353), synchronously after the pluginLoader await, with buildPluginsList's items built from that same this.plugins immediately after -- no interleaving window where the two could diverge, so pluginsByName.get(item.value) can never miss.",
-        "PluginBrowser exposes no mouse-handling entry point (grepped the extension tree for handleMouse: zero call sites), so SelectList's handleMouse path -- which could otherwise pick an index outside the built items -- is never wired in and cannot reach either branch."
-      ]
-    },
-    {
-      "sourcePath": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts",
-      "reading": "branches 159/160, lines 1302/1304",
-      "findingIds": ["PR202-COV-01"],
-      "reasons": [
-        "342-344 (branch at 342, `if (cause !== undefined) { existing.cause = cause; }` inside setMarketplaceStatus's already-exists arm): the only call site passing a defined `cause` is the result.marketplaceFailures loop (execute.ts:432-434). Each (scope, marketplace) key can appear in result.marketplaceFailures at most once per run: marketplacesToEnsure is deduplicated by marketplace name per scope (marketplaces.ts's `seen` Set, marketplaces.ts:106-113), and the ensure-loop's if/else (execute.ts:898-911) routes each entry to EXACTLY ONE of addMarketplace-success, addMarketplace-failure, reconcile-same, reconcile-different, or reconcile-unknown-stored -- mutually exclusive outcomes recorded to disjoint result arrays. By the time the marketplaceFailures loop reaches a given key, byMp cannot already hold an entry for it from the addedMarketplaces/skippedExistingMarketplaces loops (mutually exclusive outcome for that marketplace) or from an earlier marketplaceFailures iteration (no duplicate keys). The single production caller (edge/handlers/plugin/import.ts:54) only ever passes selectedScopes of two DISTINCT scopes or a single scope, never a duplicate -- the only input shape that could defeat this invariant."
-      ]
-    },
-    {
       "sourcePath": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
       "reading": "branches 119/122, lines 990/1014",
       "findingIds": ["PR202-COV-01"],

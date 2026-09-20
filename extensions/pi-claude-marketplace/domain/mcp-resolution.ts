@@ -1,5 +1,7 @@
 import path from "node:path";
 
+import { errorMessage } from "../shared/errors.ts";
+
 import { resolveContainedComponentPath } from "./component-paths.ts";
 import { MCP_SERVERS_VALIDATOR } from "./components/mcp.ts";
 
@@ -54,7 +56,7 @@ async function readStandaloneMcp(
   } catch (error: unknown) {
     return {
       ok: false,
-      reason: `malformed mcpServers (.mcp.json): ${error instanceof Error ? error.message : String(error)}`,
+      reason: `malformed mcpServers (.mcp.json): ${errorMessage(error)}`,
     };
   }
 }
@@ -106,7 +108,7 @@ async function readReferencedMcp(
   } catch (error: unknown) {
     return {
       ok: false,
-      reason: `malformed mcp reference: invalid JSON in "${raw}": ${error instanceof Error ? error.message : String(error)}`,
+      reason: `malformed mcp reference: invalid JSON in "${raw}": ${errorMessage(error)}`,
     };
   }
 }

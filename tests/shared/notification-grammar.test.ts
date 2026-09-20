@@ -578,7 +578,7 @@ test("reconcile applied body preserves empty and caller-ordered blocks", () => {
   assert.equal(many, "● official [user]\n\n● second [project]");
 });
 
-test("empty descriptions and invalid closed-set members take their exact boundary paths", () => {
+test("a whitespace-only description renders no description line", () => {
   // arrange
   const infoBase = {
     marketplaceName: "official",
@@ -602,44 +602,6 @@ test("empty descriptions and invalid closed-set members take their exact boundar
 
   // assert
   assert.equal(whitespace.includes("\n     "), false);
-  assert.throws(() =>
-    renderMpHeader({ ...MARKETPLACE_BASE, status: "future" } as never, bothLoadedProbe()),
-  );
-  assert.throws(() =>
-    composeMarketplaceBlock(
-      { ...MARKETPLACE_BASE, plugins: [{ status: "future", name: "alpha" }] } as never,
-      bothLoadedProbe(),
-    ),
-  );
-  assert.throws(() =>
-    renderMarketplaceInfo(
-      {
-        name: "official",
-        scope: "user",
-        details: { autoupdate: false },
-        source: { sourceKind: "future" },
-      } as never,
-      bothLoadedProbe(),
-    ),
-  );
-  assert.throws(() =>
-    renderPluginInfo(
-      {
-        ...infoBase,
-        plugin: { status: "future", name: "alpha", componentsResolved: false },
-      } as never,
-      bothLoadedProbe(),
-    ),
-  );
-  assert.throws(() =>
-    renderPluginInfo(
-      {
-        ...infoBase,
-        plugin: { status: "available", name: "alpha", componentsResolved: "future" },
-      } as never,
-      bothLoadedProbe(),
-    ),
-  );
 });
 
 test("covers the unavailable install hint and long single-word wrap boundaries", () => {

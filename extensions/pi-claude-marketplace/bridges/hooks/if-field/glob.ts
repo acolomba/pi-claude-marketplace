@@ -20,8 +20,8 @@
 //
 // NFR-7: the `GlobToken` union and `PathAnchor` union are both
 // discriminated by `kind`; the `matchTokens` switch and the `resolveAnchor`
-// switch both terminate with `assertNever`. Adding a new arm without
-// updating the switch red-fails `npm run typecheck`.
+// switch list every arm and carry no default. Adding a new arm without
+// updating the switch red-fails `npm run typecheck` and `npm run lint`.
 //
 // Pure-and-total contract: `compileBashGlob` and `compilePathGlob` MUST
 // never throw. Malformed input compiles to a literal token run (which
@@ -50,8 +50,6 @@
 // in a future plan) passes `ctx.cwd` as the `projectRoot` fallback.
 
 import path from "node:path";
-
-import { assertNever } from "../../../shared/errors.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Token + anchor discriminated unions
@@ -286,8 +284,6 @@ function matchTokens(
       return matchStar(tokens, text, ti, xi, crossSegment);
     case "globstar":
       return matchGlobstar(tokens, text, ti, xi, crossSegment);
-    default:
-      return assertNever(tok, `unreachable GlobToken arm: ${JSON.stringify(tok)}`);
   }
 }
 
@@ -530,9 +526,6 @@ function matchPathGlob(
 
       return false;
     }
-
-    default:
-      return assertNever(anchor, `unreachable PathAnchor arm: ${JSON.stringify(anchor)}`);
   }
 }
 

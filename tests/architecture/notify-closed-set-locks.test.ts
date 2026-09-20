@@ -5,7 +5,7 @@
  * `Reason`, `StatusToken`, `PluginStatus`, and `MarketplaceStatus` are the
  * closed sets the renderer, the catalog, and the per-command
  * `satisfies CommandContext` checks are written against. The compile-time proofs
- * (`notify-reasons.ts`'s partition gate, the `assertNever` renderer tails) catch
+ * (`notify-reasons.ts`'s partition gate, the renderer's exhaustive switches) catch
  * a member that is REMOVED or RENAMED, but an ADDITIVE drift -- a new literal
  * appended to a set and given a home everywhere the type system looks -- is
  * silently absorbed.

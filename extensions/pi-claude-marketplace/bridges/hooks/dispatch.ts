@@ -30,7 +30,8 @@
 //     re-translates) sees the post-mutation state. finalResult stays at
 //     the prior noop / mutate.
 //   - noop: continue to the next entry without changing finalResult.
-//   - assertNever default arm pins exhaustiveness (NFR-7).
+//   - the switch lists every HookExecResult kind and has no default arm, so
+//     a kind added later is a lint and type error here (NFR-7).
 //
 // All handlers short-circuit when capturedEpoch != currentEpoch() so a
 // stale closure from a prior load cannot fire against the live routing
@@ -40,7 +41,6 @@
 // every-entry-must-run.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { assertNever } from "../../shared/errors.ts";
 
 import { dispatchHookExec } from "./dispatch-exec.ts";
 import {
@@ -120,8 +120,6 @@ function matcherFiresOnToolEvent(matcher: ParsedMatcher, toolName: string): bool
     case "regex":
     case "unmapped":
       return false;
-    default:
-      return assertNever(matcher, `unreachable ParsedMatcher arm: ${JSON.stringify(matcher)}`);
   }
 }
 
@@ -222,8 +220,6 @@ async function reduceBucket(
         continue;
       case "noop":
         continue;
-      default:
-        return assertNever(r, `unreachable HookExecResult arm: ${JSON.stringify(r)}`);
     }
   }
 
@@ -440,12 +436,6 @@ function adaptForEvent(
       adaptObservationResultForEvent(runtime, reduced.result, claudeEvent, provenance);
       return undefined;
     }
-
-    default:
-      return assertNever(
-        claudeEvent,
-        `unreachable CompositeDispatchEvent arm: ${JSON.stringify(claudeEvent)}`,
-      );
   }
 }
 
@@ -514,11 +504,5 @@ function entryFires(
     case "PostCompact":
     case "UserPromptSubmit":
       return true;
-
-    default:
-      return assertNever(
-        claudeEvent,
-        `unreachable CompositeDispatchEvent arm: ${JSON.stringify(claudeEvent)}`,
-      );
   }
 }

@@ -643,58 +643,6 @@ test("summary preserves its available-plugin empty fallback after narrowing", ()
   assert.deepStrictEqual(composed, ["\n\nbody", "error"]);
 });
 
-test("severity rejects a discriminator changed after narrowing", () => {
-  // arrange
-  const message = messageWithKindSequence({}, [
-    ...Array<string>(5).fill("marketplace-not-added"),
-    "corrupted",
-  ]);
-
-  // act & assert
-  assert.throws(
-    () => {
-      composeWithSummary(message as never, "body");
-    },
-    {
-      name: "Error",
-      message: "Unexpected value: [object Object]",
-    },
-  );
-});
-
-test("summary rejects a discriminator changed after narrowing", () => {
-  // arrange
-  const message = messageWithKindSequence({}, [
-    ...Array<string>(11).fill("marketplace-not-added"),
-    "corrupted",
-  ]);
-
-  // act & assert
-  assert.throws(
-    () => {
-      composeWithSummary(message as never, "body");
-    },
-    {
-      name: "Error",
-      message: "Unexpected value: [object Object]",
-    },
-  );
-});
-
-test("reload decision rejects a discriminator changed after narrowing", () => {
-  // arrange
-  const message = messageWithKindSequence({}, [
-    ...Array<string>(5).fill("marketplace-not-added"),
-    "corrupted",
-  ]);
-
-  // act & assert
-  assert.throws(() => shouldEmitReloadHint(message as never), {
-    name: "Error",
-    message: "Unexpected value: [object Object]",
-  });
-});
-
 test("update no-op fold preserves empty and non-empty bodies", (t) => {
   // arrange
   const emptyContext = createContext(t);

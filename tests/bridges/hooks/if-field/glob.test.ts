@@ -261,16 +261,6 @@ describe("compileBashGlob", () => {
     // assert
     assert.strictEqual(matches, expectedMatch);
   });
-
-  test("rejects an unknown exported token discriminant at runtime", () => {
-    // arrange
-    const bashGlob = compileBashGlob("git");
-    Reflect.set(bashGlob.tokens, 0, { kind: "unknown" });
-    const testCorruptedTokens = () => bashGlob.test("git");
-
-    // act & assert
-    assert.throws(testCorruptedTokens, new Error('unreachable GlobToken arm: {"kind":"unknown"}'));
-  });
 });
 
 describe("compilePowerShellGlob", () => {
@@ -822,19 +812,5 @@ describe("compilePathGlob", () => {
     // assert
     assert.deepStrictEqual(metadata, expectedMetadata);
     assert.deepStrictEqual(matches, expectedMatches);
-  });
-
-  test("rejects an unknown exported anchor discriminant at runtime", () => {
-    // arrange
-    const pathGlob = compilePathGlob("file.txt", {
-      homedir: "/home/reader",
-      cwd: "/workspace/project",
-      projectRoot: "/workspace/root",
-    });
-    Reflect.set(pathGlob.anchor, "kind", "unknown");
-    const testCorruptedAnchor = () => pathGlob.testAbsolute("/workspace/project/file.txt");
-
-    // act & assert
-    assert.throws(testCorruptedAnchor, new Error('unreachable PathAnchor arm: {"kind":"unknown"}'));
   });
 });

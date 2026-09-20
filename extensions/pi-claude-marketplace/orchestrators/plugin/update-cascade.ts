@@ -126,8 +126,6 @@ function outcomeToCascadePluginMessage(
         severity: "error",
         needsReload: false,
       };
-    default:
-      throw new Error("Unknown plugin update partition.");
   }
 }
 

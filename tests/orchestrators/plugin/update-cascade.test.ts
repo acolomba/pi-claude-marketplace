@@ -335,27 +335,3 @@ test("preserves caller order for rows in one marketplace", () => {
   assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
   boundary.verifyBoundary();
 });
-
-test("rejects an update result outside the closed partition set", () => {
-  // arrange
-  const boundary = createNotificationBoundary(0, 2);
-  const invalidOutcome = {
-    target: { marketplace: "mp", scope: "project" as const },
-    outcome: {
-      partition: "unknown",
-      name: "hello",
-      declaresAgents: false,
-      declaresMcp: false,
-    },
-  };
-
-  // act & assert
-  assert.throws(
-    () => {
-      // @ts-expect-error -- the runtime guard protects JavaScript callers from an invalid partition.
-      composeUpdateCascade(boundary.ctx, boundary.pi, [invalidOutcome], "single");
-    },
-    { message: "Unknown plugin update partition." },
-  );
-  boundary.verifyBoundary();
-});
