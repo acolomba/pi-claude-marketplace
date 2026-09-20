@@ -372,11 +372,13 @@ Plans:
 3. Installing or enabling a plugin whose already-installed dependency is disabled enables that dependency through its record — the config never names it (D-04-02) — and reports it on the row with a new closed-set token; RESV-05's `{already installed, dependency disabled}` warning skip is removed from the catalog (fixture, both contract constants, length lock, both enumeration pins), and `docs/plugin-enablement.md` §"Dependencies" is rewritten, not appended, since it argues the divergence this phase reverses. (EDEP-03)
 4. BACKLOG `ENBL-DEP-01` is closed by this phase; `DEPS-STATUS-01` (partial dependency degrades the dependent) stays open — it is not upstream parity and is not pulled in here.
 
-**Plans**: 0 plans
+**Plans**: 3 plans
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 8 to break down)
+- [ ] 08-01-PLAN.md — `enable` cascades to its declared dependency closure and reports every member (EDEP-01, EDEP-03 enable arm)
+- [ ] 08-02-PLAN.md — `disable` is refused while an installed, enabled plugin in the scope declares it (EDEP-02)
+- [ ] 08-03-PLAN.md — the install cascade enables a disabled already-installed dependency and the old skip leaves the catalog (EDEP-03 install arm)
 
 **Notes.** `orchestrators/plugin/enable-disable.ts`'s existing "dependencies" are the soft-dep companion extensions (pi-subagents, pi-mcp-adapter), not plugin dependencies — the naming collision is the first thing the planner should disambiguate. The enable branch already reuses `runInstallLedger` for materialization; the cascade order comes from `domain/dependency-closure.ts`'s post-order. The disable refusal text upstream: `X is still required by A, B. Disable those plugins first, or disable everything together: <chained command>`.
 
