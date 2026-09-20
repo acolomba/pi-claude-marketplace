@@ -263,6 +263,12 @@ async function runNative(t: TestContext, root: string): Promise<{ run: ProcessRu
         ...outerEnvironment(),
         NODE_DISABLE_COMPILE_CACHE: "1",
         NODE_V8_COVERAGE: path.join(scratch, "raw"),
+        // FORCE_COLOR (set ambiently on GitHub Actions) makes the spec
+        // reporter emit ANSI codes even for this piped, non-TTY destination,
+        // corrupting specSummary's plain-text parse; force it off for this
+        // oracle run the same way the capture side is forced off.
+        FORCE_COLOR: "0",
+        NO_COLOR: "1",
       },
     },
   );
@@ -354,10 +360,6 @@ test("captures LCOV, raw V8 and executed sources from one native unit run that m
   const capture = runCapture(root);
 
   // assert
-  process.stderr.write(
-    `[spec-relay diagnostic] captures-LCOV test: status=${capture.status} ` +
-      `stdout=${JSON.stringify(capture.stdout)}\n`,
-  );
   assert.strictEqual(capture.status, 0, capture.stderr);
   assert.deepStrictEqual(specSummary(capture.stdout), { pass: 3, fail: 0 });
   assert.deepStrictEqual(specSummary(capture.stdout), specSummary(native.run.stdout));

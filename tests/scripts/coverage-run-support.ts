@@ -167,13 +167,23 @@ export function fixtureFiles(fixture: ProducerFixture): Record<string, string> {
  * spec-reporter summary through a file instead of inherited stdout -- kept
  * separate from the NODE_TEST_CONTEXT mark this function sheds above, since
  * that mark is unrelated and this function's whole point is to remove it.
+ * FORCE_COLOR is forced off for the same reason: this helper's whole point is
+ * a caller parsing the child's stdout/stderr as plain text, and GitHub
+ * Actions sets FORCE_COLOR ambiently, which corrupts that parse with ANSI
+ * escape codes a caller's regex does not expect.
  */
 export function run(args: readonly string[], cwd?: string): ProcessRun {
   const { NODE_TEST_CONTEXT: _context, NODE_TEST_WORKER_ID: _worker, ...env } = process.env;
   const completed = spawnSync(process.execPath, args, {
     cwd,
     encoding: "utf8",
-    env: { ...env, NODE_V8_COVERAGE: "", PI_CM_NESTED_TEST: "1" },
+    env: {
+      ...env,
+      NODE_V8_COVERAGE: "",
+      PI_CM_NESTED_TEST: "1",
+      FORCE_COLOR: "0",
+      NO_COLOR: "1",
+    },
   });
   return { status: completed.status ?? -1, stdout: completed.stdout, stderr: completed.stderr };
 }

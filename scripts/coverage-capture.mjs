@@ -273,23 +273,28 @@ function buildInvocation(run) {
 }
 
 function executeRunner(run, invocation) {
+  const specLogPath = nestedSpecLogPath(run);
+  // The spec reporter colorizes its output whenever FORCE_COLOR is set in its
+  // environment, even when its destination is a real file rather than a TTY
+  // (confirmed: GitHub Actions sets FORCE_COLOR, and the runner's escape
+  // codes -- e.g. `\u001b[34mℹ pass 3\u001b[39m` -- broke every regex here
+  // that expects a plain `^ℹ pass \d+$` line; not reproducible locally
+  // without setting FORCE_COLOR by hand). Force it off only for the nested,
+  // machine-parsed relay; the top-level real capture keeps its colored
+  // stdout for human eyes in a terminal or CI log.
+  const env =
+    specLogPath === undefined
+      ? invocation.actualEnvironment
+      : { ...invocation.actualEnvironment, FORCE_COLOR: "0", NO_COLOR: "1" };
   const runner = spawnSync(process.execPath, invocation.argv, {
     cwd: run.root,
-    env: invocation.actualEnvironment,
+    env,
     stdio: ["ignore", "inherit", "inherit"],
   });
 
-  const specLogPath = nestedSpecLogPath(run);
   if (specLogPath !== undefined) {
     const absoluteSpecLogPath = path.join(run.root, specLogPath);
-    const exists = existsSync(absoluteSpecLogPath);
-    const size = exists ? readFileSync(absoluteSpecLogPath).length : undefined;
-    process.stderr.write(
-      `[spec-relay diagnostic] executeRunner: path=${absoluteSpecLogPath} exists=${exists} ` +
-        `size=${size} runnerStatus=${runner.status} runnerSignal=${runner.signal} ` +
-        `runnerError=${runner.error?.message}\n`,
-    );
-    if (exists) {
+    if (existsSync(absoluteSpecLogPath)) {
       process.stdout.write(readFileSync(absoluteSpecLogPath));
       rmSync(absoluteSpecLogPath, { force: true });
     }
@@ -753,18 +758,22 @@ function plainRun(root, forwarded) {
       ...forwarded,
       ...UNIT_TEST_PATTERNS,
     ],
-    { cwd: root, stdio: "inherit" },
+    {
+      cwd: root,
+      stdio: "inherit",
+      // See `executeRunner`'s identical override: FORCE_COLOR corrupts the
+      // nested, machine-parsed relay with ANSI escape codes on GitHub
+      // Actions specifically. The top-level real `npm test` is never nested
+      // (PI_CM_NESTED_TEST unset), so its colored terminal output is unaffected.
+      env:
+        specLogPath === undefined
+          ? process.env
+          : { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+    },
   );
 
   if (specLogPath !== undefined) {
-    const exists = existsSync(specLogPath);
-    const size = exists ? readFileSync(specLogPath).length : undefined;
-    process.stderr.write(
-      `[spec-relay diagnostic] plainRun: path=${specLogPath} exists=${exists} ` +
-        `size=${size} runnerStatus=${runner.status} runnerSignal=${runner.signal} ` +
-        `runnerError=${runner.error?.message}\n`,
-    );
-    if (exists) {
+    if (existsSync(specLogPath)) {
       process.stdout.write(readFileSync(specLogPath));
       rmSync(specLogPath, { force: true });
     }
