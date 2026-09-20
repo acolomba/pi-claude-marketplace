@@ -375,9 +375,16 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 08-01-PLAN.md — `enable` cascades to its declared dependency closure and reports every member (EDEP-01, EDEP-03 enable arm)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 08-02-PLAN.md — `disable` is refused while an installed, enabled plugin in the scope declares it (EDEP-02)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 08-03-PLAN.md — the install cascade enables a disabled already-installed dependency and the old skip leaves the catalog (EDEP-03 install arm)
 
 **Notes.** `orchestrators/plugin/enable-disable.ts`'s existing "dependencies" are the soft-dep companion extensions (pi-subagents, pi-mcp-adapter), not plugin dependencies — the naming collision is the first thing the planner should disambiguate. The enable branch already reuses `runInstallLedger` for materialization; the cascade order comes from `domain/dependency-closure.ts`'s post-order. The disable refusal text upstream: `X is still required by A, B. Disable those plugins first, or disable everything together: <chained command>`.
