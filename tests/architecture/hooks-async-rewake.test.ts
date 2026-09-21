@@ -254,8 +254,12 @@ async function waitForPidTable(
   loc: ReturnType<typeof locationsFor>,
   expected: readonly PidTableEntry[],
 ): Promise<void> {
+  // The registry persists the table after `close` through async file
+  // operations it does not await, so the test reads the file until it
+  // settles. Wall-clock time is the only bound: a count of attempts is not,
+  // because a fast runner exhausts it in a fraction of the deadline.
   const deadline = process.hrtime.bigint() + 2_000_000_000n;
-  for (let attempt = 0; attempt < 1_000 && process.hrtime.bigint() < deadline; attempt += 1) {
+  while (process.hrtime.bigint() < deadline) {
     const entries = await readPidTable(loc);
     if (isDeepStrictEqual(entries, expected)) {
       return;
