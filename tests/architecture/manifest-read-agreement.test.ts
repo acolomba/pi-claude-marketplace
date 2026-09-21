@@ -39,7 +39,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/domain/plugin-resolver.ts";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import { readDependencyDeclaration } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-declaration-read.ts";
-import { getPluginInfo } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
+import { getPluginInfo } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { resolvePluginVersion } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -159,13 +159,17 @@ function declares(name: string): ClosureLookupResult {
   return { kind: "found", dependencies: [{ name, marketplace: "mp" }] };
 }
 
-for (const { label, prepare } of [
+for (const { label, prepare, resolution, notification } of [
   {
     label: "malformed JSON",
     prepare: async (root: string) => {
       await mkdir(path.join(root, ".claude-plugin"));
       await writeFile(path.join(root, ".claude-plugin", "plugin.json"), "{ invalid");
     },
+    // The parse failure is the resolver's own `unavailable` verdict.
+    resolution: { state: "unavailable" },
+    notification:
+      "● mp [user] <no autoupdate>\n  ⊘ alpha v1.0.0 (unavailable) {unsupported source}",
   },
   {
     label: "a symlink loop preventing stat and read",
@@ -173,6 +177,12 @@ for (const { label, prepare } of [
       const wrapper = path.join(root, ".claude-plugin");
       await symlink(wrapper, wrapper, "junction");
     },
+    // A probe failure propagates out of the resolver with its identity intact,
+    // so the caller's probe classifier names it (the hooks.json EACCES
+    // precedent); no reader falls through to the bare sibling.
+    resolution: { rejected: "ELOOP" },
+    notification:
+      "● mp [user] <no autoupdate>\n  ⊘ alpha v1.0.0 (unavailable) {unreadable}\n    components: not resolved",
   },
 ]) {
   test(`all four readers stop at ${label} instead of using the bare sibling`, async (t) => {
@@ -191,7 +201,12 @@ for (const { label, prepare } of [
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
+    const resolved = await resolveStrict(ENTRY, { marketplaceRoot }).then(
+      (resolution) => ({ state: resolution.state }),
+      (error: unknown) => ({
+        rejected: error instanceof Error && "code" in error ? error.code : error,
+      }),
+    );
     const version = await resolvePluginVersion(ENTRY, previousResolution);
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
     const declaration = await readCascadeDeclaration(marketplaceRoot, cwd);
@@ -199,13 +214,11 @@ for (const { label, prepare } of [
     // assert -- the fourth reader falls back to the ENTRY, so the bare
     // sibling's rejected `[42]` list cannot reach it either.
     assert.deepStrictEqual(
-      { state: resolved.state, version, notifications, declaration },
+      { resolved, version, notifications, declaration },
       {
-        state: "unavailable",
+        resolved: resolution,
         version: "1.0.0",
-        notifications: [
-          "● mp [user] <no autoupdate>\n  ⊘ alpha v1.0.0 (unavailable) {unsupported source}",
-        ],
+        notifications: [notification],
         declaration: declares("stale-dep"),
       },
     );

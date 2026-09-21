@@ -24,6 +24,7 @@ void ("malformed-plugin-ref" satisfies ImportDiagnosticCode);
 void ("non-boolean-enabled-plugin" satisfies ImportDiagnosticCode);
 void ("post-install-warning" satisfies ImportDiagnosticCode);
 void ("settings-read-error" satisfies ImportDiagnosticCode);
+void ("settings-write-error" satisfies ImportDiagnosticCode);
 void ("unmappable-marketplace-source" satisfies ImportDiagnosticCode);
 void ("unrecognized-stored-source" satisfies ImportDiagnosticCode);
 

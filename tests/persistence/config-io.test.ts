@@ -5,7 +5,6 @@ import path from "node:path";
 import { describe, test } from "node:test";
 
 import {
-  CONFIG_VALIDATOR,
   type PluginConfigEntry,
   type ScopeConfig,
   isDeclaredEnabled,
@@ -56,8 +55,8 @@ describe("isDeclaredEnabled", () => {
   });
 });
 
-describe("CONFIG_VALIDATOR", () => {
-  test("accepts a complete version-1 config", () => {
+describe("loadConfig", () => {
+  test("accepts a complete version-1 config", async (t) => {
     // arrange
     const config = {
       schemaVersion: 1,
@@ -65,15 +64,25 @@ describe("CONFIG_VALIDATOR", () => {
       plugins: { "reviewer@tools": { enabled: true } },
     } as const;
 
+    const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-complete-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+    const filePath = path.join(scopeRoot, "claude-plugins.json");
+    await writeFile(filePath, JSON.stringify(config));
+
     // act
-    const accepted = CONFIG_VALIDATOR.Check(config);
+    const loadedConfig = await loadConfig(filePath);
 
     // assert
-    assert.strictEqual(accepted, true);
+    assert.deepStrictEqual(loadedConfig, {
+      status: "valid",
+      filePath,
+      config: {
+        schemaVersion: 1,
+        marketplaces: { tools: { source: "acme/tools", autoupdate: true } },
+        plugins: { "reviewer@tools": { enabled: true } },
+      },
+    });
   });
-});
-
-describe("loadConfig", () => {
   test("returns the complete absent result for a missing file", async (t) => {
     // arrange
     const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-absent-"));
@@ -257,25 +266,6 @@ describe("loadConfig", () => {
       status: "invalid",
       filePath,
       error: "schema validation failed: /schemaVersion: must be equal to constant",
-    });
-  });
-
-  test("uses the no-detail fallback when validation exposes no errors", async (t) => {
-    // arrange
-    const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-no-detail-"));
-    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
-    const filePath = path.join(scopeRoot, "claude-plugins.json");
-    await writeFile(filePath, "null");
-    t.mock.method(CONFIG_VALIDATOR, "Errors", () => []);
-
-    // act
-    const loadedConfig = await loadConfig(filePath);
-
-    // assert
-    assert.deepStrictEqual(loadedConfig, {
-      status: "invalid",
-      filePath,
-      error: "schema validation failed: (no detail available)",
     });
   });
 

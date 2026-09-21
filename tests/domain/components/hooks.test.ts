@@ -8,13 +8,19 @@ import {
   hookSummaryEntriesFromPersisted,
   parseHooksConfig,
   projectHookSummaryEntries,
+  type ResolveHookIfContext,
 } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 
 const TEST_IF_CTX = {
   homedir: "/home/u",
   cwd: "/projects/p",
   projectRoot: "/projects/p",
-} as const;
+} as const satisfies ResolveHookIfContext;
+
+// @ts-expect-error the resolver anchor requires its project root.
+void ({ homedir: "/home/u", cwd: "/projects/p" } satisfies ResolveHookIfContext);
+// @ts-expect-error resolver anchors are paths, not numeric identifiers.
+void ({ ...TEST_IF_CTX, cwd: 1 } satisfies ResolveHookIfContext);
 
 const FIXTURE_DIR = path.dirname(fileURLToPath(import.meta.url));
 

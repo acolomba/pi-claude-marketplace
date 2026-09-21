@@ -25,7 +25,7 @@ export interface PostToolUseFailureStdin {
   readonly tool_response: unknown;
 }
 
-export function translate(
+export function translatePostToolUseFailure(
   event: ToolResultEvent,
   ctx: TranslationContext,
 ): PostToolUseFailureStdin {

@@ -194,6 +194,8 @@ export async function routeClaudePlugin(
   }
 }
 
+const MARKETPLACE_HELP_USAGE = "Usage: /claude:plugin marketplace help";
+
 async function routeMarketplace(
   args: string,
   handlers: SubcommandHandlers,
@@ -227,6 +229,18 @@ async function routeMarketplace(
     case "noautoupdate":
       return handlers.marketplaceNoautoupdate(rest, ctx);
     case "help":
+      // The topic is fixed by the spelling, so there is nothing left to
+      // consume. Every sibling verb rejects what it cannot use; silently
+      // discarding `rest` here would make this the one spelling where a
+      // mistyped argument reads as success.
+      if (rest.trim() !== "") {
+        notifyUsageError(ctx, {
+          message: "marketplace help takes no arguments.",
+          usage: MARKETPLACE_HELP_USAGE,
+        });
+        return;
+      }
+
       return handlers.help("marketplace", ctx);
     default:
       notifyUsageError(ctx, {

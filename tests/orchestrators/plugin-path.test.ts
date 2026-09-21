@@ -3,10 +3,7 @@ import { access, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 
-import {
-  collectBinDirs,
-  recomputePluginPath,
-} from "../../extensions/pi-claude-marketplace/orchestrators/plugin-path.ts";
+import { recomputePluginPath } from "../../extensions/pi-claude-marketplace/orchestrators/plugin-path.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type {
@@ -119,13 +116,16 @@ function pathEnvironmentShape(): {
   };
 }
 
-describe("collectBinDirs", () => {
-  test("collects enabled bins in marketplace and plugin insertion order", () => {
+describe("recomputePluginPath", () => {
+  test("applies enabled bins in marketplace and plugin insertion order", async (t) => {
     // arrange
+    const environmentBefore = snapshotPathEnvironment();
+    const { cwd: projectRoot } = await createHermeticEnvironment(t, "plugin-path-order-");
+    const baseline = path.join(projectRoot, "system-bin");
     const state: ExtensionState = {
       schemaVersion: 2,
       marketplaces: {
-        zeta: marketplaceRecord("zeta", "user", "/marketplaces/zeta", {
+        zeta: marketplaceRecord("zeta", "project", "/marketplaces/zeta", {
           second: pluginRecord("/plugins/second", true),
           disabled: pluginRecord("/plugins/disabled", false),
           first: pluginRecord("/plugins/first", true),
@@ -135,35 +135,67 @@ describe("collectBinDirs", () => {
         }),
       },
     };
-
-    // act
-    const binDirs = collectBinDirs(state);
-
-    // assert
-    assert.deepStrictEqual(binDirs, [
+    const appended = [
       path.join("/plugins/second", "bin"),
       path.join("/plugins/first", "bin"),
       path.join("/plugins/last", "bin"),
-    ]);
+    ];
+
+    try {
+      process.env.PATH = baseline;
+      delete process.env.PI_CLAUDE_MARKETPLACE_PATH;
+      await seedState(path.join(projectRoot, ".pi", "pi-claude-marketplace"), state);
+
+      // act
+      const pathUpdate = await recomputePluginPath(projectRoot);
+
+      // assert
+      assert.deepStrictEqual(pathUpdate, { skipped: [] });
+      assert.deepStrictEqual(pathEnvironmentShape(), {
+        ledger: { present: true, value: appended.join(path.delimiter) },
+        path: { present: true, value: [baseline, ...appended].join(path.delimiter) },
+      });
+    } finally {
+      restorePathEnvironment(environmentBefore);
+    }
   });
 
-  test("returns no bins for an empty state", () => {
+  test("leaves an existing PATH untouched when a seeded state declares no marketplace", async (t) => {
     // arrange
-    const state: ExtensionState = { schemaVersion: 2, marketplaces: {} };
+    const environmentBefore = snapshotPathEnvironment();
+    const { cwd: projectRoot } = await createHermeticEnvironment(t, "plugin-path-bare-");
+    const baseline = path.join(projectRoot, "system-bin");
 
-    // act
-    const binDirs = collectBinDirs(state);
+    try {
+      process.env.PATH = baseline;
+      delete process.env.PI_CLAUDE_MARKETPLACE_PATH;
+      await seedState(path.join(projectRoot, ".pi", "pi-claude-marketplace"), {
+        schemaVersion: 2,
+        marketplaces: {},
+      });
 
-    // assert
-    assert.deepStrictEqual(binDirs, []);
+      // act
+      const pathUpdate = await recomputePluginPath(projectRoot);
+
+      // assert
+      assert.deepStrictEqual(pathUpdate, { skipped: [] });
+      assert.deepStrictEqual(pathEnvironmentShape(), {
+        ledger: { present: false },
+        path: { present: true, value: baseline },
+      });
+    } finally {
+      restorePathEnvironment(environmentBefore);
+    }
   });
 
-  test("drops every invalid root with an ordered complete diagnostic", (t) => {
+  test("drops every invalid root with an ordered complete diagnostic", async (t) => {
     // arrange
     const environmentBefore = snapshotPathEnvironment();
     const consoleError = t.mock.method(console, "error", () => undefined);
+    const { cwd: projectRoot } = await createHermeticEnvironment(t, "plugin-path-invalid-");
+    const baseline = path.join(projectRoot, "system-bin");
     const poisonedRoot = `/plugins${path.delimiter}poison`;
-    const state = stateFor("user", "/marketplaces/catalog", {
+    const state = stateFor("project", "/marketplaces/catalog", {
       empty: pluginRecord("", true),
       relative: pluginRecord("plugins/relative", true),
       poisoned: pluginRecord(poisonedRoot, true),
@@ -172,13 +204,23 @@ describe("collectBinDirs", () => {
     });
 
     try {
+      process.env.PATH = baseline;
       process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+      delete process.env.PI_CLAUDE_MARKETPLACE_PATH;
+      await seedState(path.join(projectRoot, ".pi", "pi-claude-marketplace"), state);
 
       // act
-      const binDirs = collectBinDirs(state);
+      const pathUpdate = await recomputePluginPath(projectRoot);
 
       // assert
-      assert.deepStrictEqual(binDirs, [path.join("/plugins/valid", "bin")]);
+      assert.deepStrictEqual(pathUpdate, { skipped: [] });
+      assert.deepStrictEqual(pathEnvironmentShape(), {
+        ledger: { present: true, value: path.join("/plugins/valid", "bin") },
+        path: {
+          present: true,
+          value: [baseline, path.join("/plugins/valid", "bin")].join(path.delimiter),
+        },
+      });
       assert.deepStrictEqual(
         consoleError.mock.calls.map(({ arguments: consoleArguments }) => consoleArguments),
         [
@@ -197,9 +239,7 @@ describe("collectBinDirs", () => {
       restorePathEnvironment(environmentBefore);
     }
   });
-});
 
-describe("recomputePluginPath", () => {
   test("applies user then project bins, removes stale ownership, and deduplicates", async (t) => {
     // arrange
     const environmentBefore = snapshotPathEnvironment();

@@ -9,10 +9,7 @@ import * as git from "isomorphic-git";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { probeDependencyTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts";
-import {
-  resolveMemberConstraints,
-  runInstallCascade,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts";
+import { runInstallCascade } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { probeMarketplaceTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -1199,25 +1196,46 @@ test("TAGS-02 / D-07-03 a path-source member with no satisfying tag resolves any
   const environment = await createHermeticEnvironment(t, "install-cascade-path-fallback-");
   const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
   await tagMarketplaceRoot(state, "bar--v1.0.0");
-  const bar = closureMember("bar", ["^9.0.0"]);
-  const foo = closureMember("foo");
+  const locations = locationsFor("project", environment.cwd);
+  const materialized: InstallLedgerOptions[] = [];
 
   // act
-  const resolution = await resolveMemberConstraints({
+  const cascade = await runInstallCascade({
     state,
-    closure: [bar, foo],
-    alreadyInstalled: [],
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^9.0.0" }],
+      [`bar@${MARKETPLACE}`]: [],
+    }),
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, materialized),
     tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, []),
-    tagMemo: new Map(),
-    marketplaceTagMemo: new Map(),
   });
 
-  // assert: ok, both members, the fallback member carries no pin.
-  assert.deepStrictEqual(resolution, {
-    ok: true,
-    members: [{ ...bar, fellBackToCurrentCopy: true }, foo],
-  });
+  // assert: installed, both members, the fallback member carries no pin.
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(
+    cascade.kind === "installed" &&
+      cascade.members.map((member) => [member.key, member.fellBackToCurrentCopy]),
+    [
+      [`bar@${MARKETPLACE}`, true],
+      [`foo@${MARKETPLACE}`, false],
+    ],
+  );
+  assert.deepStrictEqual(
+    materialized.map((options) => [
+      options.plugin,
+      options.sourcePinOverride,
+      options.pinVersionOverride,
+    ]),
+    [
+      ["bar", undefined, undefined],
+      ["foo", undefined, undefined],
+    ],
+  );
 });
 
 test("TAGS-02 / D-07-07 a path-source member whose local listing THROWS resolves anyway, identically", async (t) => {
@@ -1227,28 +1245,42 @@ test("TAGS-02 / D-07-07 a path-source member whose local listing THROWS resolves
   // empty one are the same user-visible fact.
   const environment = await createHermeticEnvironment(t, "install-cascade-path-throw-");
   const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
-  const bar = closureMember("bar", ["^1.0.0"]);
-  const foo = closureMember("foo");
+  const locations = locationsFor("project", environment.cwd);
+  const materialized: InstallLedgerOptions[] = [];
   const cause = new Error("cannot read refs/tags");
 
   // act
-  const resolution = await resolveMemberConstraints({
+  const cascade = await runInstallCascade({
     state,
-    closure: [bar, foo],
-    alreadyInstalled: [],
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^1.0.0" }],
+      [`bar@${MARKETPLACE}`]: [],
+    }),
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, materialized),
     tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, []),
-    tagMemo: new Map(),
-    marketplaceTagMemo: new Map(),
     marketplaceTagProbe: () => Promise.resolve({ kind: "tag-listing-failed", cause }),
   });
 
   // assert: identical to the no-matching-tag case -- no pin, no failure, no
   // transport classification riding a success row.
-  assert.deepStrictEqual(resolution, {
-    ok: true,
-    members: [{ ...bar, fellBackToCurrentCopy: true }, foo],
-  });
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(
+    cascade.kind === "installed" &&
+      cascade.members.map((member) => [member.key, member.fellBackToCurrentCopy]),
+    [
+      [`bar@${MARKETPLACE}`, true],
+      [`foo@${MARKETPLACE}`, false],
+    ],
+  );
+  assert.deepStrictEqual(
+    materialized.map((options) => options.sourcePinOverride),
+    [undefined, undefined],
+  );
 });
 
 test("TAGS-02 / D-07-07 a path-source member whose marketplace root is not a git repository resolves anyway", async (t) => {
@@ -1259,17 +1291,26 @@ test("TAGS-02 / D-07-07 a path-source member whose marketplace root is not a git
   const environment = await createHermeticEnvironment(t, "install-cascade-path-no-repo-");
   const marketplaceRoot = path.join(environment.cwd, "not-a-repo");
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
-  await mkdir(path.join(marketplaceRoot, "plugins", "bar", ".claude-plugin"), {
-    recursive: true,
-  });
-  await writeFile(
-    path.join(marketplaceRoot, "plugins", "bar", ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: "bar", version: "0.0.1" }),
-  );
+  for (const plugin of ["bar", "foo"]) {
+    await mkdir(path.join(marketplaceRoot, "plugins", plugin, ".claude-plugin"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(marketplaceRoot, "plugins", plugin, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: plugin, version: "0.0.1" }),
+    );
+  }
+
   await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(
     manifestPath,
-    JSON.stringify({ name: MARKETPLACE, plugins: [{ name: "bar", source: "./plugins/bar" }] }),
+    JSON.stringify({
+      name: MARKETPLACE,
+      plugins: [
+        { name: "bar", source: "./plugins/bar" },
+        { name: "foo", source: "./plugins/foo" },
+      ],
+    }),
   );
   const locations = locationsFor("project", environment.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
@@ -1288,24 +1329,38 @@ test("TAGS-02 / D-07-07 a path-source member whose marketplace root is not a git
     },
   });
   const state = await loadState(locations.extensionRoot);
-  const bar = closureMember("bar", ["^1.0.0"]);
+  const materialized: InstallLedgerOptions[] = [];
 
   // act
-  const resolution = await resolveMemberConstraints({
+  const cascade = await runInstallCascade({
     state,
-    closure: [bar],
-    alreadyInstalled: [],
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^1.0.0" }],
+      [`bar@${MARKETPLACE}`]: [],
+    }),
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, materialized),
     tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, []),
-    tagMemo: new Map(),
-    marketplaceTagMemo: new Map(),
   });
 
   // assert
-  assert.deepStrictEqual(resolution, {
-    ok: true,
-    members: [{ ...bar, fellBackToCurrentCopy: true }],
-  });
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(
+    cascade.kind === "installed" &&
+      cascade.members.map((member) => [member.key, member.fellBackToCurrentCopy]),
+    [
+      [`bar@${MARKETPLACE}`, true],
+      [`foo@${MARKETPLACE}`, false],
+    ],
+  );
+  assert.deepStrictEqual(
+    materialized.map((options) => options.sourcePinOverride),
+    [undefined, undefined],
+  );
 });
 
 test("TAGS-02 a path-source member WITH a satisfying tag is unaffected: no fallback, pin present", async (t) => {
@@ -1314,25 +1369,46 @@ test("TAGS-02 a path-source member WITH a satisfying tag is unaffected: no fallb
   const environment = await createHermeticEnvironment(t, "install-cascade-path-pinned-still-");
   const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
   const oid = await tagMarketplaceRoot(state, "bar--v1.0.0");
-  const bar = closureMember("bar", ["^1.0.0"]);
-  const foo = closureMember("foo");
+  const locations = locationsFor("project", environment.cwd);
+  const materialized: InstallLedgerOptions[] = [];
 
   // act
-  const resolution = await resolveMemberConstraints({
+  const cascade = await runInstallCascade({
     state,
-    closure: [bar, foo],
-    alreadyInstalled: [],
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^1.0.0" }],
+      [`bar@${MARKETPLACE}`]: [],
+    }),
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, materialized),
     tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, []),
-    tagMemo: new Map(),
-    marketplaceTagMemo: new Map(),
   });
 
   // assert
-  assert.deepStrictEqual(resolution, {
-    ok: true,
-    members: [{ ...bar, pin: { oid, version: "1.0.0" } }, foo],
-  });
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(
+    cascade.kind === "installed" &&
+      cascade.members.map((member) => [member.key, member.fellBackToCurrentCopy]),
+    [
+      [`bar@${MARKETPLACE}`, false],
+      [`foo@${MARKETPLACE}`, false],
+    ],
+  );
+  assert.deepStrictEqual(
+    materialized.map((options) => [
+      options.plugin,
+      options.sourcePinOverride,
+      options.pinVersionOverride,
+    ]),
+    [
+      ["bar", oid, "1.0.0"],
+      ["foo", undefined, undefined],
+    ],
+  );
 });
 
 test("RESV-03 a path-source dependency declared with no version makes no local tag listing", async (t) => {
@@ -1554,7 +1630,7 @@ test("RESV-03 a no-matching-tag answer fails the cascade with the constraint nam
   assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
 });
 
-test("RESV-03 a listing failure surfaces as its own arm carrying the classified cause", async (t) => {
+test("RESV-03 a listing failure surfaces as its own arm carrying the transport classification", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-cascade-listing-fail-");
   const state = await seedMarketplace(environment.cwd, ["bar", "foo"], { gitSourced: ["bar"] });
@@ -1586,7 +1662,6 @@ test("RESV-03 a listing failure surfaces as its own arm carrying the classified 
       kind: "tag-listing-failed",
       key: `bar@${MARKETPLACE}`,
       range: ">=1.0.0 <2.0.0-0",
-      cause,
       classification: "network unreachable",
     },
   });
@@ -1868,33 +1943,46 @@ test("D-03-10 a constraint declared outside this install's graph never reaches a
 });
 
 test("RESV-03 the constraint step answers every member, pinning only the constrained one", async (t) => {
-  // arrange: the step driven directly, so its own contract -- one answer per
-  // member, in closure order -- is observed without the ledger in the way.
+  // arrange: one answer per member, in closure order, observed through the
+  // ledger options each member's phase receives.
   const environment = await createHermeticEnvironment(t, "resolve-constraints-");
   const state = await seedMarketplace(environment.cwd, ["bar", "foo"], { gitSourced: ["bar"] });
+  const locations = locationsFor("project", environment.cwd);
+  const materialized: InstallLedgerOptions[] = [];
   const seen: DependencyTagProbeOptions[] = [];
-  const bar = closureMember("bar", ["^1.0.0"]);
-  const foo = closureMember("foo");
 
   // act
-  const resolution = await resolveMemberConstraints({
+  const cascade = await runInstallCascade({
     state,
-    closure: [bar, foo],
-    alreadyInstalled: [],
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^1.0.0" }],
+      [`bar@${MARKETPLACE}`]: [],
+    }),
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, materialized),
     tagProbe: tagProbeAnswering(
       { kind: "pinned", tag: "bar--v1.4.0", oid: PINNED_OID, version: "1.4.0" },
       seen,
     ),
-    tagMemo: new Map(),
-    marketplaceTagMemo: new Map(),
   });
 
   // assert
-  assert.deepStrictEqual(resolution, {
-    ok: true,
-    members: [{ ...bar, pin: { oid: PINNED_OID, version: "1.4.0" } }, foo],
-  });
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(
+    materialized.map((options) => [
+      options.plugin,
+      options.sourcePinOverride,
+      options.pinVersionOverride,
+    ]),
+    [
+      ["bar", PINNED_OID, "1.4.0"],
+      ["foo", undefined, undefined],
+    ],
+  );
   assert.deepStrictEqual(
     seen.map((query) => query.pluginName),
     ["bar"],

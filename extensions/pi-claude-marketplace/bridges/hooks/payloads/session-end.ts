@@ -21,7 +21,10 @@ export interface SessionEndStdin {
   readonly reason: string;
 }
 
-export function translate(event: SessionShutdownEvent, ctx: TranslationContext): SessionEndStdin {
+export function translateSessionEnd(
+  event: SessionShutdownEvent,
+  ctx: TranslationContext,
+): SessionEndStdin {
   return {
     session_id: ctx.sessionId,
     transcript_path: ctx.transcriptPath,

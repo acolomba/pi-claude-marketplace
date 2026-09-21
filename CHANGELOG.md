@@ -9,6 +9,12 @@
   - `uninstall --keep-data` keeps the plugin's data directory. Without the flag, `uninstall` deletes the directory and does not prompt.
   - A bare `<pluginRoot>/plugin.json` is now read, and a plugin that declares `"./skills/"` next to a `skills/` directory no longer warns about duplicate skills.
   - `info` lists every declared dependency, including object-shaped entries with a version constraint, and does so on a git-source plugin that is not yet fetched.
+- Every `/claude:plugin` verb now rejects an unknown flag or an extra argument before it does any work. (#202)
+  - `--local` is accepted only by the verbs that write configuration. Marketplace `info`, `list`, and `update` read both configuration files and write neither, so they now reject it.
+  - Agent names now keep the complete source name. Update and reinstall migrate agents that an earlier version named with a shortened form.
+  - A plugin with two agent files of the same name keeps the first one and reports a warning instead of failing to install.
+  - Internal: the unit suite now fails below 100% line, function, and branch coverage. New gates fail when a module's own test does not cover it completely, or when an export or a type member has no reader. Sonar assertion rules now cover the tests.
+- Internal: `scripts/init.sh` now fetches the humanizer and simple-english skills by name instead of vendoring them in the repository. (#203)
 - Internal: tuned GSD's agent model tiers and effort, and pinned babysit-pr's fallback model for Codex. (#199)
 - The changelog now lists one entry per pull request, ending in its number, and thanks every issue reporter and contributor. (#197)
 - Internal: every test suite now runs in a hermetic environment that owns `HOME` and the Pi agent directory. (#196)

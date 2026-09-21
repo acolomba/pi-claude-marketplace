@@ -54,7 +54,12 @@ import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { clonePluginRecord, isRecordedButDisabled } from "../../persistence/state-io.ts";
-import { composeErrorWithCauseChain, errorWithManualRecovery } from "../../shared/errors.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
+import {
+  composeErrorWithCauseChain,
+  errorMessage,
+  errorWithManualRecovery,
+} from "../../shared/errors.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type PluginFailedMessage,
@@ -212,8 +217,13 @@ export function createReinstallPlugin(
     );
 }
 
-/** Binds one production reinstall to the real transaction and supplied routing owner. */
-export function createNodeReinstallPlugin(
+/**
+ * Binds one production reinstall to the real transaction and supplied routing
+ * owner. Module-private: `createNodeReinstallPlugins` below is its only
+ * consumer, and a caller outside this module composes the same operation
+ * through `orchestrators/plugin/operations.ts` (D-03).
+ */
+function createNodeReinstallPlugin(
   hooksRouting: ReinstallHooksRouting,
   completionCache: CompletionCache,
 ): ReinstallPluginFn {
@@ -348,9 +358,11 @@ async function reinstallPluginWithTransaction(
 
   // Single-plugin reinstall success is a 1-row cascade carrying a
   // PluginReinstalledMessage variant; this branch and the bulk-cascade branch
-  // both emit one notify() call with structured payloads. The `/reload to pick
-  // up changes` trailer is computed by notify() -- the `reinstalled` status is
-  // in the state-changing variant set, so the reload-hint always fires here.
+  // both emit one notify() call with structured payloads.
+  // `reinstalledRowFromOutcome` sets this row's `needsReload: true`
+  // explicitly (a realized reinstall always reloads); notify() aggregates
+  // per-row severity/needsReload into the cascade's overall `/reload to pick
+  // up changes` trailer.
   //
   // WR-09: the ONE row composer, shared with the bulk cascade mapper. Two
   // reinstall surfaces disagreeing about a degrade the same ledger produced is
@@ -610,7 +622,8 @@ function surfaceReinstallDiscoveryWarnings(
  *     marketplace name derived from the target (or `"(reinstall)"` for the
  *     bare-all form). A synthetic `PluginFailedMessage` carries the cause-chain
  *     trailer (marketplace-level rows carry no cause per SNM-10). Severity
- *     (`error`) + no reload-hint are computed by notify().
+ *     (`error`) + no reload-hint are set explicitly on the row (D-03/D-06);
+ *     notify() aggregates them into the cascade's overall trailer.
  */
 async function handleEnumerationFailure(
   owners: ReinstallFlowOwners,
@@ -657,22 +670,6 @@ async function handleEnumerationFailure(
   );
 }
 
-/**
- * Typed-dispatch narrow for thrown errors captured by the reinstall catch
- * sites. Mirrors the
- * `orchestrators/marketplace/remove.ts::narrowCascadeFailure` pattern:
- * check the typed `PluginShapeError` / `ManualRecoveryError` shape first, then errno codes
- * (`EACCES`/`EPERM` -> permission denied; `ENOENT`/`ENOTDIR` ->
- * source missing), and only at the bottom fall through to `undefined`
- * (NOT a misleading closed-set member). When `undefined` is returned,
- * the consumer (`outcomeToPluginMessage`) falls back to the
- * `narrowReasons(notes)` substring parse.
- *
- * Returning `undefined` for unknown shapes is deliberate: the consumer
- * has more context (the full `notes` array) and may extract a better
- * Reason via substring matching. Forcing a default Reason here would
- * shadow that fallback.
- */
 async function runLockedReinstall(
   owners: ReinstallFlowOwners,
   transaction: ReinstallTransaction,
@@ -803,32 +800,39 @@ async function runLockedReinstall(
     invalidConfigWriteBack = writeResult.invalidConfig;
 
     await tx.save();
+  } catch (err) {
+    throw errorWithManualRecovery(err, await transaction.rollbackReinstalledPlugin(replacement));
+  }
 
-    // WR-06 + WR-03 + D-60-05: reinstall does NOT delegate to install/
-    // uninstall, so the parsed-config cache + routing table would
-    // otherwise stay pinned to the OLD plugin's hooks config (or be
-    // entirely absent if the previous install pre-dated the bridge).
-    // Mirror the install / uninstall pattern explicitly inside the
-    // per-plugin lock: drop the old cache entry, re-populate from the
-    // just-installed `hooks.json` (when present), then rebuild the
-    // routing table once.
-    //
-    // Moved AFTER `tx.save()` so a write-back throw or a tx.save throw
-    // aborts BEFORE the cache mutates -- otherwise a phantom routing
-    // entry survives a closure throw and the next dispatch fires against
-    // a record state.json never wrote.  Post-save semantics are safe:
-    // state.json now matches in-memory state, and the next `/reload`'s
-    // factory-time hydrate (D-59-03) rebuilds the cache from disk.
-    // Synchronous + zero disk I/O per DISP-02; the readFile/parse path
-    // is the same defensive shape `install-outcome.ts` uses (failures route
-    // through the hooks helper's debug log and the next `/reload` rehydrates).
-    //
-    // WR-03: post-`tx.save()` cache+routing mutations are non-fatal --
-    // mirrors install-flow.ts's WR-02. A throw here would surface as
-    // `(manual recovery)` while state.json already persisted the new
-    // record (state divergence). `/reload`'s factory-time hydrate
-    // (D-59-03) rebuilds the cache from state.json. Failures route
-    // through the hooks helper's debug log.
+  // WR-06 + WR-03 + D-60-05: reinstall does NOT delegate to install/
+  // uninstall, so the parsed-config cache + routing table would
+  // otherwise stay pinned to the OLD plugin's hooks config (or be
+  // entirely absent if the previous install pre-dated the bridge).
+  // Mirror the install / uninstall pattern explicitly inside the
+  // per-plugin lock: drop the old cache entry, re-populate from the
+  // just-installed `hooks.json` (when present), then rebuild the
+  // routing table once.
+  //
+  // Moved AFTER `tx.save()` so a write-back throw or a tx.save throw
+  // aborts BEFORE the cache mutates -- otherwise a phantom routing
+  // entry survives a closure throw and the next dispatch fires against
+  // a record state.json never wrote.  Post-save semantics are safe:
+  // state.json now matches in-memory state, and the next `/reload`'s
+  // factory-time hydrate (D-59-03) rebuilds the cache from disk.
+  // Synchronous + zero disk I/O per DISP-02; the readFile/parse path
+  // is the same defensive shape `install-outcome.ts` uses (failures route
+  // through the hooks helper's debug log and the next `/reload` rehydrates).
+  //
+  // WR-03: post-`tx.save()` cache+routing mutations are non-fatal --
+  // mirrors install-flow.ts's WR-02. Own try/catch (NOT the tx.save try/catch
+  // above), so a throw here can never reach `rollbackReinstalledPlugin`: that
+  // rollback physically reverts the already-replaced files back to the OLD
+  // content while state.json already durably records the NEW version, which
+  // would be a genuine content/state mismatch. Mirrors
+  // `uninstall.ts::dropCachedHooks`. `/reload`'s factory-time hydrate
+  // (D-59-03) rebuilds the cache from state.json. Failures route through the
+  // hooks helper's debug log.
+  try {
     hooksRouting.removePluginConfigFromCache(scope, marketplace, plugin);
     if (installable.hooksConfigPath !== undefined) {
       await hooksRouting.readAndCachePluginHooks({
@@ -843,8 +847,10 @@ async function runLockedReinstall(
     }
 
     hooksRouting.rebuildRoutingTables();
-  } catch (err) {
-    throw errorWithManualRecovery(err, await transaction.rollbackReinstalledPlugin(replacement));
+  } catch (cacheErr) {
+    hookDebugLog(
+      `reinstall: post-save cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)} -- hooks for this plugin remain stale until /reload rebuilds routing from state.json`,
+    );
   }
 
   const bridgeWarnings = [

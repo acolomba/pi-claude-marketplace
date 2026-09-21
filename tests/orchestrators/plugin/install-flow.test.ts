@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   chmod,
   mkdir,
@@ -14,10 +15,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  GENERATED_AGENT_MARKER,
-  GENERATED_AGENT_PREFIX,
-} from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import { GENERATED_AGENT_MARKER } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import {
   createHooksRouting,
   createHooksRuntime,
@@ -27,7 +25,6 @@ import {
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
-import { PLUGIN_ENTRY_VALIDATOR } from "../../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -36,15 +33,14 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
   createInstallPlugin,
-  createNodeInstallPlugin,
   type InstallTransaction,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
+import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   clonePluginRecord,
   loadState,
   saveState,
-  STATE_VALIDATOR,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
@@ -80,7 +76,7 @@ import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { TestContext } from "node:test";
 
-type InstallOperation = ReturnType<typeof createNodeInstallPlugin>;
+type InstallOperation = ReturnType<typeof createInstallPlugin>;
 
 const REAL_INSTALL_TRANSACTION: InstallTransaction = {
   runPhases: (...args) => runPhases(...args),
@@ -1061,6 +1057,106 @@ test("PI-6: generated skill name collides with another plugin's existing skill -
   });
 });
 
+test("AGENT-01: fresh install preserves prefixed and unprefixed agent identities", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-agent-identities-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        agents: [
+          {
+            sourceName: "hello-reviewer",
+            description: "Prefixed reviewer",
+            body: "Prefixed body.\n",
+          },
+          { sourceName: "reviewer", description: "Reviewer", body: "Short body.\n" },
+        ],
+      });
+      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+      const expectedAgents = [
+        {
+          sourceName: "hello-reviewer",
+          generatedName: "pi-claude-marketplace-hello-hello-reviewer",
+          description: "Prefixed reviewer",
+          body: "Prefixed body.\n",
+        },
+        {
+          sourceName: "reviewer",
+          generatedName: "pi-claude-marketplace-hello-reviewer",
+          description: "Reviewer",
+          body: "Short body.\n",
+        },
+      ];
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "installed",
+        version: "0.0.1",
+        resourcesChanged: true,
+        declaresAgents: true,
+        declaresMcp: false,
+      });
+      assert.deepStrictEqual(notifications, []);
+      const state = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources, {
+        skills: [],
+        prompts: [],
+        agents: [
+          "pi-claude-marketplace-hello-hello-reviewer",
+          "pi-claude-marketplace-hello-reviewer",
+        ],
+        mcpServers: [],
+        hooks: [],
+      });
+      const expectedEntries = [];
+      for (const agent of expectedAgents) {
+        const sourcePath = path.join(pluginRoot, "agents", agent.sourceName + ".md");
+        const targetPath = path.join(locations.agentsDir, agent.generatedName + ".md");
+        const sourceBytes = `---\nname: ${agent.sourceName}\ndescription: ${agent.description}\ntools: Read,Grep\n---\n\n${agent.body}`;
+        expectedEntries.push({
+          plugin: "hello",
+          marketplace: "mp",
+          sourceAgent: agent.sourceName,
+          generatedName: agent.generatedName,
+          sourcePath,
+          targetPath,
+          sourceHash: createHash("sha256").update(sourceBytes).digest("hex"),
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        });
+        assert.strictEqual(
+          await readFile(targetPath, "utf8"),
+          `---\nname: ${agent.generatedName}\ndescription: ${agent.description}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
+        );
+      }
+
+      assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
+        schemaVersion: 1,
+        agents: expectedEntries,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("PDEF-01: install preview detects an agent conflict from a later resolved directory", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-agent-dir-preview-"));
@@ -1079,7 +1175,7 @@ test("PDEF-01: install preview detects an agent conflict from a later resolved d
         conflictingPriorPlugin: {
           marketplace: "other-mp",
           plugin: "world",
-          agentName: `${GENERATED_AGENT_PREFIX}hello-later`,
+          agentName: "pi-claude-marketplace-hello-later",
         },
       });
 
@@ -1103,7 +1199,7 @@ test("PDEF-01: install preview detects an agent conflict from a later resolved d
       const state = await loadState(locations.extensionRoot);
       assert.strictEqual(state.marketplaces.mp?.plugins.hello, undefined);
       await assert.rejects(
-        () => readFile(path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-first.md`)),
+        () => readFile(path.join(locations.agentsDir, "pi-claude-marketplace-hello-first.md")),
         { code: "ENOENT" },
       );
     } finally {
@@ -1142,9 +1238,9 @@ test("PDEF-01: install stages every agent directory and warns on a later duplica
       });
       const conventionalAgentsDir = path.join(pluginRoot, "agents");
       const expectedWarning =
-        `agent source "shared" in "${conventionalAgentsDir}" elides to generated name ` +
-        `"${GENERATED_AGENT_PREFIX}hello-shared" already produced by an earlier ` +
-        "componentPaths.agents entry; ignoring duplicate.";
+        `agent source "shared" at "${path.join(conventionalAgentsDir, "shared-later.md")}" duplicates generated name ` +
+        '"pi-claude-marketplace-hello-shared" already produced by agent source "shared" at ' +
+        `"${path.join(conventionalAgentsDir, "..", "declared-agents", "shared-first.md")}"; keeping first discovered source.`;
       const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
 
       // act
@@ -1167,19 +1263,19 @@ test("PDEF-01: install stages every agent directory and warns on a later duplica
       );
       const state = await loadState(locations.extensionRoot);
       assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.agents, [
-        `${GENERATED_AGENT_PREFIX}hello-shared`,
-        `${GENERATED_AGENT_PREFIX}hello-later`,
+        "pi-claude-marketplace-hello-shared",
+        "pi-claude-marketplace-hello-later",
       ]);
       assert.match(
         await readFile(
-          path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-shared.md`),
+          path.join(locations.agentsDir, "pi-claude-marketplace-hello-shared.md"),
           "utf8",
         ),
         /First shared agent\./,
       );
       assert.match(
         await readFile(
-          path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-later.md`),
+          path.join(locations.agentsDir, "pi-claude-marketplace-hello-later.md"),
           "utf8",
         ),
         /Later agent\./,
@@ -1505,7 +1601,7 @@ test("OUT-04 / D-102-07 / ENBL-15: the install-disabled row is ONE info emission
       const record = after.marketplaces["mp"]?.plugins["hello"];
       assert.ok(record !== undefined);
       assert.equal(record.enabled, false);
-      assert.deepEqual([...record.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
+      assert.deepEqual([...record.resources.agents], ["pi-claude-marketplace-hello-bot"]);
       assert.deepEqual([...record.resources.mcpServers], ["server1"]);
       assert.ok(
         !note.message.includes("requires pi-"),
@@ -1954,8 +2050,9 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
             await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
           const { planReconcile } =
             await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
-          const { applyReconcile } =
+          const { createApplyReconcile } =
             await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+          const applyReconcile = createApplyReconcile({ loadState });
 
           // Two fixture preconditions, asserted rather than assumed, because
           // either one silently turns the pass below into a no-op that would
@@ -2277,8 +2374,9 @@ test("D-103-16 / DFEN-06 / CFG-02: the reload after a locally-declared install p
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       const { loadMergedScopeConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
-      const { applyReconcile } =
+      const { createApplyReconcile } =
         await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+      const applyReconcile = createApplyReconcile({ loadState });
       const { planReconcile } =
         await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
       const { emptyReconcilePlan } =
@@ -2556,7 +2654,7 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
         // never reaches, so it has something to retain. The plugin declares NO
         // agents: the foreign row seeded below must survive the ledger's agents
         // phase, and a declared agent under the same generated name would
-        // replace the foreign file on the way in and defuse the fault.
+        // block the install before the cascade can exercise this fault.
         skills: [{ sourceName: "tool" }],
         commands: [{ sourceName: "deploy" }],
         mcpServers: { server1: { command: "node", args: ["server.js"] } },
@@ -2571,7 +2669,7 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
       // skills -> commands -> agents -> hooks -> mcp order, so the two bridges
       // ahead of it drop cleanly and the two behind it never run.
       await mkdir(locations.agentsDir, { recursive: true });
-      const foreignAgentName = `${GENERATED_AGENT_PREFIX}hello-bot`;
+      const foreignAgentName = "pi-claude-marketplace-hello-bot";
       const foreignAgentPath = path.join(locations.agentsDir, `${foreignAgentName}.md`);
       await writeFile(foreignAgentPath, "---\nname: foreign\n---\n\nNo marker.\n");
       await writeFile(
@@ -2722,7 +2820,7 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
       const commandTarget = path.join(locations.promptsTargetDir, "hello:deploy.md");
       assert.ok((await readFile(commandTarget, "utf8")).length > 0, "command .md must exist");
 
-      const agentTarget = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`);
+      const agentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       assert.ok((await readFile(agentTarget, "utf8")).length > 0, "agent .md must exist");
 
       const mcp = JSON.parse(await readFile(locations.mcpJsonPath, "utf8")) as {
@@ -2737,7 +2835,7 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
       assert.ok(record !== undefined);
       assert.deepEqual([...record.resources.skills], ["hello:tool"]);
       assert.deepEqual([...record.resources.prompts], ["hello:deploy"]);
-      assert.deepEqual([...record.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
+      assert.deepEqual([...record.resources.agents], ["pi-claude-marketplace-hello-bot"]);
       assert.deepEqual([...record.resources.mcpServers], ["server1"]);
 
       // V2 byte form matches `docs/output-catalog.md` (`success-with-soft-dep`):
@@ -3491,7 +3589,7 @@ test("AS-6: pluginDataDir mkdir failure post-state-commit -> V2 drops warning pe
 // AS-7 -- agents-bridge foreign-content rows surface via warning, state persists
 // ───────────────────────────────────────────────────────────────────────────
 
-test("AS-7: pre-existing foreign agent file under target name -> V2 drops warning per D-19-01, state record IS persisted", async () => {
+test("AS-7: retired foreign agent target is preserved while a distinct new agent installs", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-as7-"));
     try {
@@ -3501,18 +3599,18 @@ test("AS-7: pre-existing foreign agent file under target name -> V2 drops warnin
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "hello",
-        agents: [{ sourceName: "bot" }],
+        agents: [{ sourceName: "new-bot" }],
       });
 
       // Pre-seed the agents-index with a row for hello/bot pointing at a
-      // foreign file (no marker in body) at the target. The agents bridge
+      // foreign file (no marker in body) at a retired target. The agents bridge
       // SOFT-FAILS this row via `failed[]` -- the install proceeds. The
       // warning surface is DROPPED per D-19-01. The
       // underlying agents-index state still records the foreign-row
       // preservation; only the user-visible warning is gone.
       await mkdir(locations.extensionRoot, { recursive: true });
       await mkdir(locations.agentsDir, { recursive: true });
-      const foreignAgentName = `${GENERATED_AGENT_PREFIX}hello-bot`;
+      const foreignAgentName = "pi-claude-marketplace-hello-bot";
       const foreignAgentPath = path.join(locations.agentsDir, `${foreignAgentName}.md`);
       await writeFile(foreignAgentPath, "---\nname: foreign\n---\n\nNo marker.\n");
 
@@ -3566,6 +3664,10 @@ test("AS-7: pre-existing foreign agent file under target name -> V2 drops warnin
         (notifications[0]?.message ?? "").includes("pre-existing agent file"),
         false,
         "D-19-01: AS-7 foreign-agent warning surface is dropped in V2",
+      );
+      assert.strictEqual(
+        await readFile(foreignAgentPath, "utf8"),
+        "---\nname: foreign\n---\n\nNo marker.\n",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -3658,8 +3760,9 @@ test("RESV-01 / D-04-04: an orchestrated install records its cascade dependency 
         await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
       const { planReconcile } =
         await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
-      const { applyReconcile } =
+      const { createApplyReconcile } =
         await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+      const applyReconcile = createApplyReconcile({ loadState });
       async function reconcilePass(): Promise<void> {
         const pass = makeCtx();
         await applyReconcile({
@@ -3784,8 +3887,9 @@ test("D-04-05 / CMP-3: a dependency adopted from a user-scope marketplace surviv
         await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
       const { planReconcile } =
         await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
-      const { applyReconcile } =
+      const { createApplyReconcile } =
         await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+      const applyReconcile = createApplyReconcile({ loadState });
       const { merged } = await loadMergedScopeConfig(projectLocations);
       const planned = planReconcile(merged, installed, "project");
       const reload = makeCtx();
@@ -4128,7 +4232,7 @@ test("Sanity: staged agent target carries the AG-5 owned-agent marker", async ()
         plugin: "hello",
       });
 
-      const agentPath = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`);
+      const agentPath = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       const body = await readFile(agentPath, "utf8");
       assert.ok(
         body.includes(GENERATED_AGENT_MARKER),
@@ -4300,7 +4404,7 @@ test("Rollback-agents-undo: agents committed then mcp phase fails -> agent targe
       assert.equal(notifications[0]?.severity, "error");
 
       // Agents undo: the committed agent file must have been removed.
-      const agentTarget = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`);
+      const agentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       const { stat } = await import("node:fs/promises");
       let exists = true;
       try {
@@ -4740,7 +4844,7 @@ test("Orchestrated-agent-foreign: agentForeignFailures -> postCommitWarnings has
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "hello",
-        agents: [{ sourceName: "bot" }],
+        agents: [{ sourceName: "new-bot" }],
       });
 
       // Pre-seed a foreign agent file (no marker) at the target path and
@@ -4748,7 +4852,7 @@ test("Orchestrated-agent-foreign: agentForeignFailures -> postCommitWarnings has
       // a foreign-preserved row.
       await mkdir(locations.extensionRoot, { recursive: true });
       await mkdir(locations.agentsDir, { recursive: true });
-      const foreignAgentName = `${GENERATED_AGENT_PREFIX}hello-bot`;
+      const foreignAgentName = "pi-claude-marketplace-hello-bot";
       const foreignAgentPath = path.join(locations.agentsDir, `${foreignAgentName}.md`);
       await writeFile(foreignAgentPath, "---\nname: foreign\n---\n\nNo marker.\n");
 
@@ -4784,12 +4888,20 @@ test("Orchestrated-agent-foreign: agentForeignFailures -> postCommitWarnings has
         notifications: { mode: "orchestrated" },
       });
 
-      assert.equal(outcome.status, "installed");
-      const warnings = (outcome as { postCommitWarnings?: readonly string[] }).postCommitWarnings;
-      assert.ok(warnings !== undefined && warnings.length >= 1, "must have postCommitWarnings");
-      assert.ok(
-        warnings?.some((w) => w.includes("pre-existing agent file")),
-        `expected 'pre-existing agent file' in warnings; got: ${JSON.stringify(warnings)}`,
+      assert.deepStrictEqual(outcome, {
+        status: "installed",
+        version: "0.0.1",
+        resourcesChanged: true,
+        declaresAgents: true,
+        declaresMcp: false,
+        postCommitWarnings: [
+          `Plugin "hello" installed; 1 pre-existing agent file(s) preserved on disk: ${foreignAgentName}: target ${foreignAgentPath} is missing the generated marker`,
+          "[new-bot] source description was missing or empty -- using fallback",
+        ],
+      });
+      assert.strictEqual(
+        await readFile(foreignAgentPath, "utf8"),
+        "---\nname: foreign\n---\n\nNo marker.\n",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -5693,10 +5805,10 @@ async function disableSeededDependency(
   hooksRouting: InstallHooksRouting,
   seeded: { readonly ctx: NotificationContext; readonly pi: ToolInventory },
 ): Promise<void> {
-  const { createNodeSetPluginEnabled } =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts");
+  const { createEnableOperation } =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts");
   const disable = makeCtx();
-  await createNodeSetPluginEnabled(hooksRouting)({
+  await createEnableOperation(hooksRouting)({
     ctx: disable.ctx,
     pi: seeded.pi,
     cwd,
@@ -6605,11 +6717,9 @@ test("UAT-05: base-targeted install with marketplace already in base leaves the 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WR-03 / D-60-05: after a successful installPlugin for a plugin declaring a
-// hooks.json, the hooks-bridge routing table reflects the new entry. Without
-// the rebuildRoutingTables call inside the per-plugin lock, the routing table
-// would stay pinned to whatever the last reconcile produced and the new
-// plugin would not receive dispatch until `/reload` (NFR-2 violation).
+// RESV-01: the cascade's members are owed the same hooks-routing contract as
+// the plugin the user typed (WR-03 / D-60-05, now proven on the composed
+// operation in operations.test.ts).
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("RESV-01: the caller's version pin reaches the named plugin and no dependency", async () => {
@@ -6668,7 +6778,7 @@ test("RESV-01 / WR-03: a cascade-installed dependency's hooks reach the routing 
       // immediately; a member the cascade installed is owed the same, or its
       // hooks sit on disk inert until the next `/reload`.
       const ownerRuntime = createHooksRuntime();
-      const runtimeInstallPlugin = createNodeInstallPlugin(
+      const runtimeInstallPlugin = createInstallOperation(
         createHooksRouting(ownerRuntime, { readHooksJson }),
         createCompletionCache(),
       );
@@ -6716,97 +6826,6 @@ test("RESV-01 / WR-03: a cascade-installed dependency's hooks reach the routing 
         [{ pluginId: "some-other-plugin", scope: "project", command: "echo dependency" }],
         "the dependency's hooks are routable without a reload",
       );
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing table without /reload", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-wr03-"));
-    try {
-      const ownerRuntime = createHooksRuntime();
-      const peerRuntime = createHooksRuntime();
-      const runtimeInstallPlugin = createNodeInstallPlugin(
-        createHooksRouting(ownerRuntime, { readHooksJson }),
-        createCompletionCache(),
-      );
-      const locations = locationsFor("project", cwd);
-      await mkdir(locations.extensionRoot, { recursive: true });
-
-      await seedPathMarketplaceWithPlugin({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        pluginName: "p1",
-        hooksJson: {
-          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hello" }] }],
-        },
-      });
-
-      // Pre-condition: the routing table's PreToolUse bucket is empty.
-      assert.equal(ownerRuntime.getRoutingBucket("PreToolUse").length, 0);
-
-      const { ctx, pi, notifications } = makeCtx();
-      await runtimeInstallPlugin({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "p1",
-      });
-
-      // Confirm install succeeded (no "failed" / "unavailable" notification).
-      // The first notification carries the cascade text; we only need the
-      // routing-table effect to be observable.
-      const summary = notifications.map((n) => n.message).join("\n");
-      assert.ok(
-        !summary.includes("(failed)") && !summary.includes("(unavailable)"),
-        `expected clean install notification; got: ${summary}`,
-      );
-
-      // The plugin must have its hooks resource recorded -- otherwise the
-      // bridge cache lookup at rebuild time would silently skip it.
-      const afterState = await loadState(locations.extensionRoot);
-      assert.ok(
-        afterState.marketplaces["mp"]?.plugins["p1"]?.resources.hooks !== undefined,
-        `expected hooks resource recorded; full notification text: ${summary}`,
-      );
-      assert.ok(
-        (afterState.marketplaces["mp"]?.plugins["p1"]?.resources.hooks ?? []).length > 0,
-        `expected non-empty hooks resource; got ${JSON.stringify(afterState.marketplaces["mp"]?.plugins["p1"]?.resources)}; notification: ${summary}`,
-      );
-
-      // D-100-01 / ENBL-11: the same install also describes the hooks it
-      // materialized. `resources.hooks` names the container slug; this names
-      // the entries, which is what `info` reports once the artifacts are gone.
-      // A tool event carries its matcher (empty string = match-all); no
-      // handler payload is recorded.
-      assert.deepEqual(afterState.marketplaces["mp"]?.plugins["p1"]?.hookEntries, [
-        { event: "PreToolUse", matcher: "" },
-      ]);
-
-      // Post-condition: the routing-table now reflects the installed plugin's
-      // PreToolUse entry. This proves WR-03's `rebuildRoutingTables()` ran
-      // inside the per-plugin lock right after `addPluginConfigToCache`.
-      const bucket = ownerRuntime.getRoutingBucket("PreToolUse");
-      assert.equal(bucket.length, 1);
-      assert.equal(bucket[0]?.pluginId, "p1");
-      assert.equal(bucket[0]?.scope, "project");
-      assert.equal(bucket[0]?.handlerDecl["command"], "echo hello");
-      // resolvedSource must propagate from the resolver -> cache -> routing
-      // table; without this assert a regression that drops the pluginRoot
-      // argument from addPluginConfigToCache(...) would not be caught at
-      // the orchestrator-test layer. CLAUDE_PLUGIN_ROOT export at dispatch
-      // depends on this field.
-      assert.equal(
-        bucket[0]?.resolvedSource,
-        afterState.marketplaces["mp"]?.plugins["p1"]?.resolvedSource,
-        "RoutingEntry.resolvedSource must mirror state.json's resolvedSource",
-      );
-      assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -8412,7 +8431,7 @@ test("SUB-02: project-scope install substitutes ${CLAUDE_PROJECT_DIR} to the ins
       );
 
       const agentBody = await readFile(
-        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`),
+        path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"),
         "utf8",
       );
       assert.ok(
@@ -8475,7 +8494,7 @@ test("SUB-02: user-scope install keeps ${CLAUDE_PROJECT_DIR} literal in skill, c
       );
 
       const agentBody = await readFile(
-        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`),
+        path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"),
         "utf8",
       );
       assert.ok(
@@ -9306,7 +9325,7 @@ test("install cleans up each bridge staging root inside its own phase and a repe
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
       assert.deepStrictEqual(firstTree, [
         "agents/",
-        `agents/${GENERATED_AGENT_PREFIX}complete-reviewer.md`,
+        "agents/pi-claude-marketplace-complete-reviewer.md",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/agents-staging/",
@@ -9326,55 +9345,13 @@ test("install cleans up each bridge staging root inside its own phase and a repe
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.complete?.resources,
         {
-          agents: [`${GENERATED_AGENT_PREFIX}complete-reviewer`],
+          agents: ["pi-claude-marketplace-complete-reviewer"],
           hooks: [],
           mcpServers: [],
           prompts: ["complete:deploy"],
           skills: ["complete:audit"],
         },
       );
-    } finally {
-      await rm(cwd, { force: true, recursive: true });
-    }
-  });
-});
-
-test("install rejects the selected entry when its defense-in-depth validator fails", async (t) => {
-  await withHermeticHome(async ({ installPlugin }) => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-entry-revalidation-"));
-    try {
-      // arrange
-      await seedPathMarketplaceWithPlugin({
-        cwd,
-        marketplaceName: "mp",
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        pluginName: "invalid",
-      });
-      const validation = t.mock.method(PLUGIN_ENTRY_VALIDATOR, "Check", () => false);
-      const { ctx, notifications, pi } = makeCtx();
-
-      // act
-      const outcome = await installPlugin({
-        ctx,
-        cwd,
-        marketplace: "mp",
-        notifications: { mode: "orchestrated" },
-        pi,
-        plugin: "invalid",
-        scope: "project",
-      });
-
-      // assert
-      assert.deepStrictEqual(outcome, {
-        cause:
-          'Plugin entry for "invalid" in marketplace "mp" failed schema validation.\n\ncause: Plugin entry for "invalid" in marketplace "mp" failed schema validation.',
-        error: new Error(
-          'Plugin entry for "invalid" in marketplace "mp" failed schema validation.',
-        ),
-        status: "failed",
-      });
-      assert.strictEqual(validation.mock.callCount(), 1);
-      assert.deepStrictEqual(notifications, []);
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }
@@ -9780,9 +9757,11 @@ test("orchestrated install reports when the state write does not retain its fres
         marketplaceRoot: path.join(cwd, "mp-src"),
         pluginName: "vanishing",
       });
+      const seededBytes = await readFile(locations.stateJsonPath, "utf8");
+      const seededState = await loadState(locations.extensionRoot);
       const parse = t.mock.method(JSON, "parse", (text: string): unknown => {
-        const parsed = originalParse(text);
-        if (STATE_VALIDATOR.Check(parsed)) {
+        if (text === seededBytes) {
+          const parsed = structuredClone(seededState);
           const marketplace = parsed.marketplaces.mp;
           if (marketplace !== undefined) {
             marketplace.plugins = new Proxy(marketplace.plugins, {
@@ -9793,9 +9772,11 @@ test("orchestrated install reports when the state write does not retain its fres
               },
             });
           }
+
+          return parsed;
         }
 
-        return parsed;
+        return originalParse(text);
       });
       const { ctx, notifications, pi } = makeCtx();
       const expectedError = new Error(
@@ -10266,7 +10247,7 @@ test("retry proof: install: agents prepare failure after committed commands unwi
         {
           agentTarget: path.join(
             locations.agentsDir,
-            `${GENERATED_AGENT_PREFIX}retryable-reviewer.md`,
+            "pi-claude-marketplace-retryable-reviewer.md",
           ),
           agentsStagingDir: locations.agentsStagingDir,
           commandsStagingDir: locations.commandsStagingDir,
@@ -10348,7 +10329,7 @@ test("retry proof: install: agents prepare failure after committed commands unwi
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
         {
-          agents: [`${GENERATED_AGENT_PREFIX}retryable-reviewer`],
+          agents: ["pi-claude-marketplace-retryable-reviewer"],
           hooks: [],
           mcpServers: [],
           prompts: ["retryable:deploy"],
@@ -10409,7 +10390,7 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
         {
           agentTarget: path.join(
             locations.agentsDir,
-            `${GENERATED_AGENT_PREFIX}retryable-reviewer.md`,
+            "pi-claude-marketplace-retryable-reviewer.md",
           ),
           agentsStagingDir: locations.agentsStagingDir,
           commandsStagingDir: locations.commandsStagingDir,
@@ -10505,7 +10486,7 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
       ]);
       const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable;
       assert.deepStrictEqual(record?.resources, {
-        agents: [`${GENERATED_AGENT_PREFIX}retryable-reviewer`],
+        agents: ["pi-claude-marketplace-retryable-reviewer"],
         hooks: ["retryable"],
         mcpServers: [],
         prompts: ["retryable:deploy"],
@@ -10573,7 +10554,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
         {
           agentTarget: path.join(
             locations.agentsDir,
-            `${GENERATED_AGENT_PREFIX}retryable-reviewer.md`,
+            "pi-claude-marketplace-retryable-reviewer.md",
           ),
           agentsStagingDir: locations.agentsStagingDir,
           commandsStagingDir: locations.commandsStagingDir,
@@ -10652,7 +10633,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
         {
-          agents: [`${GENERATED_AGENT_PREFIX}retryable-reviewer`],
+          agents: ["pi-claude-marketplace-retryable-reviewer"],
           hooks: ["retryable"],
           mcpServers: ["server"],
           prompts: ["retryable:deploy"],
@@ -10944,10 +10925,11 @@ test("retry proof: install: state commit race after staged work retries from unc
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
+      const seededState = await loadState(locations.extensionRoot);
       let eraseFreshRecord = true;
       parseMock = t.mock.method(JSON, "parse", (text: string): unknown => {
-        const parsed = originalParse(text);
-        if (eraseFreshRecord && STATE_VALIDATOR.Check(parsed)) {
+        if (eraseFreshRecord && text === stateBytes) {
+          const parsed = structuredClone(seededState);
           const marketplace = parsed.marketplaces.mp;
           if (marketplace !== undefined) {
             marketplace.plugins = new Proxy(marketplace.plugins, {
@@ -10958,9 +10940,11 @@ test("retry proof: install: state commit race after staged work retries from unc
               },
             });
           }
+
+          return parsed;
         }
 
-        return parsed;
+        return originalParse(text);
       });
       restoreSchedule = observeRetryBridgeSchedule(
         transactionControl,

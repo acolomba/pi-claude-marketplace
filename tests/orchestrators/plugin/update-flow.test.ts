@@ -17,7 +17,6 @@ import test from "node:test";
 
 import lockfile from "proper-lockfile";
 
-import { GENERATED_AGENT_PREFIX } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import {
   createHooksRouting,
   createHooksRuntime,
@@ -37,7 +36,7 @@ import {
   materializePluginClone,
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
-import { createNodeInstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
+import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -1082,7 +1081,7 @@ test("updatePlugins preserves a generated skill preload in the staged agent", as
 
       // assert
       const agent = await readFile(
-        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`),
+        path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"),
         "utf8",
       );
       assert.match(agent, /^skills: hello:tool$/m);
@@ -1134,7 +1133,7 @@ test("updateSinglePlugin preserves a generated skill preload from its path sourc
 
     // assert
     const agent = await readFile(
-      path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`),
+      path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"),
       "utf8",
     );
     assert.equal(outcome.partition, "updated");
@@ -1220,7 +1219,7 @@ test("PDEF-01: update preview detects an agent conflict from a later resolved di
         plugins: {
           world: makePluginRecord("1.0.0", {
             skills: [],
-            agents: [`${GENERATED_AGENT_PREFIX}hello-later`],
+            agents: ["pi-claude-marketplace-hello-later"],
           }),
         },
       };
@@ -1242,7 +1241,7 @@ test("PDEF-01: update preview detects an agent conflict from a later resolved di
       const after = await loadState(locations.extensionRoot);
       assert.strictEqual(after.marketplaces.mp?.plugins.hello?.version, "1.0.0");
       await assert.rejects(
-        () => readFile(path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-first.md`)),
+        () => readFile(path.join(locations.agentsDir, "pi-claude-marketplace-hello-first.md")),
         { code: "ENOENT" },
       );
     } finally {
@@ -1289,9 +1288,9 @@ test("PDEF-01: update stages every agent directory and warns on a later duplicat
     });
     const conventionalAgentsDir = path.join(seeded.marketplaceRoot, "plugins", "hello", "agents");
     const expectedWarning =
-      `agent source "shared" in "${conventionalAgentsDir}" elides to generated name ` +
-      `"${GENERATED_AGENT_PREFIX}hello-shared" already produced by an earlier ` +
-      "componentPaths.agents entry; ignoring duplicate.";
+      `agent source "shared" at "${path.join(conventionalAgentsDir, "shared-later.md")}" duplicates generated name ` +
+      '"pi-claude-marketplace-hello-shared" already produced by agent source "shared" at ' +
+      `"${path.join(conventionalAgentsDir, "..", "declared-agents", "shared-first.md")}"; keeping first discovered source.`;
     process.chdir(cwd);
 
     const outcome = await updateSinglePlugin("hello", "mp", "project");
@@ -1300,19 +1299,19 @@ test("PDEF-01: update stages every agent directory and warns on a later duplicat
     assert.deepStrictEqual(outcome.notes, [expectedWarning]);
     const state = await loadState(locations.extensionRoot);
     assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.agents, [
-      `${GENERATED_AGENT_PREFIX}hello-shared`,
-      `${GENERATED_AGENT_PREFIX}hello-later`,
+      "pi-claude-marketplace-hello-shared",
+      "pi-claude-marketplace-hello-later",
     ]);
     assert.match(
       await readFile(
-        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-shared.md`),
+        path.join(locations.agentsDir, "pi-claude-marketplace-hello-shared.md"),
         "utf8",
       ),
       /First shared agent\./,
     );
     assert.match(
       await readFile(
-        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-later.md`),
+        path.join(locations.agentsDir, "pi-claude-marketplace-hello-later.md"),
         "utf8",
       ),
       /Later agent\./,
@@ -2628,7 +2627,7 @@ test("WR-04: successful update populates stagedAgentNames + stagedMcpServerNames
         "intent-mark marker must NOT leak into the all-success state",
       );
       assert.deepEqual([...rec.resources.skills], ["hello:tool"]);
-      assert.deepEqual([...rec.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
+      assert.deepEqual([...rec.resources.agents], ["pi-claude-marketplace-hello-bot"]);
       assert.deepEqual([...rec.resources.mcpServers], ["server1"]);
 
       assert.ok(seeded.marketplaceRoot.length > 0);
@@ -3292,9 +3291,7 @@ for (const { title, makeFailure, reason } of [
     title: "classifies rollback marketplace refresh failures",
     makeFailure: () =>
       Object.assign(
-        new PluginUpdatePhase3Error("replace failed", [
-          { phase: "skills", msg: "replace failed", cause: new Error("disk failure") },
-        ]),
+        new PluginUpdatePhase3Error("replace failed", [{ phase: "skills", msg: "replace failed" }]),
         { message: "opaque typed phase failure" },
       ),
     reason: "rollback partial",
@@ -4172,9 +4169,9 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
 
       // Pre-create the agent target path as a DIRECTORY to force agents commit
       // failure. The generated agent name for "bot" in plugin "hello" is
-      // GENERATED_AGENT_PREFIX + "hello-bot".
+      // The generated basename is pi-claude-marketplace-hello-bot.
       await mkdir(locations.agentsDir, { recursive: true });
-      await mkdir(path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`), {
+      await mkdir(path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"), {
         recursive: true,
       });
 
@@ -4279,7 +4276,7 @@ test("TR-04 matrix: skills-fails-others-succeed", async () => {
       assert.deepEqual([...rec.resources.skills], ["seeded-skill"]);
       // Succeeded bridges: resources updated to new generated names.
       assert.deepEqual([...rec.resources.prompts], ["hello:deploy"]);
-      assert.deepEqual([...rec.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
+      assert.deepEqual([...rec.resources.agents], ["pi-claude-marketplace-hello-bot"]);
       assert.deepEqual([...rec.resources.mcpServers], ["server1"]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -4335,7 +4332,7 @@ test("TR-04 matrix: commands-fails-others-succeed", async () => {
       assert.ok(rec.compatibility.notes.includes("update-in-progress"));
       assert.deepEqual([...rec.resources.skills], ["hello:tool"]);
       assert.deepEqual([...rec.resources.prompts], []);
-      assert.deepEqual([...rec.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
+      assert.deepEqual([...rec.resources.agents], ["pi-claude-marketplace-hello-bot"]);
       assert.deepEqual([...rec.resources.mcpServers], ["server1"]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -4366,7 +4363,7 @@ test("TR-04 matrix: agents-fails-others-succeed", async () => {
 
       // Force agents commit failure only (DIR at agent file path -> EISDIR).
       await mkdir(locations.agentsDir, { recursive: true });
-      await mkdir(path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`), {
+      await mkdir(path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"), {
         recursive: true,
       });
 
@@ -4955,7 +4952,7 @@ test("DFEN-07 / D-103-10: update against a flipped defaultEnabled moves the vers
       // record keeps the inventory ENBL-18 preserves, which a hand-seeded
       // disabled record leaves empty.
       const seed = makeCtx();
-      const installPlugin = createNodeInstallPlugin(
+      const installPlugin = createInstallOperation(
         createHooksRouting(createHooksRuntime(), { readHooksJson }),
         createCompletionCache(),
       );
@@ -5077,7 +5074,7 @@ test("DFEN-08: a declared-true entry and a silent entry render identical update 
       // install-time opt-in that the real install handler and the reconcile
       // apply pass both set. The whole point is that it changes nothing for two
       // of the three.
-      const installPlugin = createNodeInstallPlugin(
+      const installPlugin = createInstallOperation(
         createHooksRouting(createHooksRuntime(), { readHooksJson }),
         createCompletionCache(),
       );
@@ -7796,7 +7793,7 @@ test("SUB-02: project-scope update substitutes ${CLAUDE_PROJECT_DIR} to the inst
       );
 
       const agentBody = await readFile(
-        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`),
+        path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"),
         "utf8",
       );
       assert.ok(
@@ -9017,7 +9014,7 @@ test("PUP-6 happy: flow composes preflight, swap, state, tree, and notification"
       assert.strictEqual(record.version, "1.0.1");
       assert.deepStrictEqual(record.resources.skills, ["hello:tool"]);
       assert.deepStrictEqual(record.resources.prompts, ["hello:deploy"]);
-      assert.deepStrictEqual(record.resources.agents, [`${GENERATED_AGENT_PREFIX}hello-bot`]);
+      assert.deepStrictEqual(record.resources.agents, ["pi-claude-marketplace-hello-bot"]);
       assert.deepStrictEqual(record.resources.mcpServers, ["server1"]);
       assert.strictEqual(record.compatibility.installable, true);
       assert.strictEqual(record.compatibility.notes.includes("update-in-progress"), false);

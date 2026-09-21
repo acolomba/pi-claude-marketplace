@@ -133,8 +133,8 @@ export function outcomeToCascadePluginMessage(
   scope: Scope,
 ): UpdateRowMsg {
   // PluginUpdateOutcome is a discriminated union; the switch exhausts all 4
-  // partitions and ends with an `assertNever` so any future variant addition
-  // fails at compile time.
+  // partitions with no default arm, so any future variant addition fails at
+  // compile time.
   switch (outcome.partition) {
     case "updated": {
       // SEV-01 / WR-01: the missing-soft-dep-companion `warning` stamp is

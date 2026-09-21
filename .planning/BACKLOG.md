@@ -96,7 +96,7 @@ re-auditing `narrowResolverNotes`, which currently forces every resolver note in
 the unsupported family -- parse / structural notes need to reach failure-class
 tokens (the `narrowProbeError` path already does this for I/O errors).
 
-## COV-01: coverage exclusion policy, and the two out-of-bound orchestrators
+## ~~COV-01: coverage exclusion policy, and the two out-of-bound orchestrators~~ -- SUPERSEDED
 
 **Disposition 2026-09-11: `superseded`** (`RCOV-04`, `SCOPE-REQ-RCOV-04`,
 formerly Phase 8). The standalone remeasurement this item asked for is subsumed
@@ -389,7 +389,22 @@ Related: FLOW-01 (unzoned files are boundary-unchecked) is the same class of
 problem -- a gate that is complete by accident of the current tree rather than
 by construction.
 
-## FLOW-05: revisit CRAP and real coverage in the fallow health gate
+## ~~FLOW-05: revisit CRAP and real coverage in the fallow health gate~~ -- CLOSED
+
+Closed 2026-09-18 in test-backlog Phase 7; recorded here at the Phase 8
+reconciliation. CRAP is now measured from the verified Istanbul map that the
+`scripts/coverage-unit.mjs` pipeline publishes (`docs/coverage-metrics.md`). It
+is gated at the threshold in `scripts/coverage-risk-policy.json` (30) through
+`npm run coverage:risk`, a member of `check`, pre-commit and CI. The whole-tree
+`.fallowrc.json` `maxCrap: 0` is unchanged by design: the policy file, not the
+fallow configuration, owns the threshold. The fresh result in
+`08-MEASUREMENT.md` section 5 is 0 of 1865 production functions at or above 30,
+maximum 20.00. Independent verification passed 8/8 (frontmatter; the report
+body counts 10/10). See
+[verification](phases/07-reliable-coverage-metrics/07-VERIFICATION.md).
+The original filing below is preserved as history. Its three bullets about
+`c8` `-1` columns and the 25 to 238 swing are why the conversion had to be
+owned first.
 
 Filed 2026-08-16 alongside the FLOW-04 closure (quick task 260816-qov).
 
@@ -486,6 +501,9 @@ wall. Measured at filing: that form yields 4 unused files, 192 unused exports,
 
 ## ~~FLOW-07: is the ESLint `no-restricted-paths` zone matrix now redundant?~~ -- CLOSED
 
+Reconfirmed 2026-09-14: archived GGAT-03 remains checked complete and its
+Phase 7 verification remains passed (7/7). No duplicate work is opened.
+
 Closed 2026-09-11 by the `refine-unit-tests` milestone. Disposition:
 `implemented`, carried by `GGAT-03` (Phase 7), whose clause names this item by
 ID: "`FLOW-07` varies effective config sources and broad overrides across the
@@ -496,12 +514,12 @@ names by ID, so it rests on a record rather than on inference. The three weaker
 routes say so in their own entries; the difference between a named route and a
 derived one is the point of recording it.
 
-`.planning/phases/07-gate-integrity/07-16-SUMMARY.md` carries the satisfaction
+`.planning/milestones/refine-unit-tests-phases/07-gate-integrity/07-16-SUMMARY.md` carries the satisfaction
 row: plan `07-07` resolved both boundary gates through
 `ESLint#calculateConfigForFile` and deleted the two gates it replaced, verified
 by `node --test tests/architecture/eslint-effective-config.test.ts` and by
 `npm run lint` inside `npm run check`.
-`.planning/phases/07-gate-integrity/07-VERIFICATION.md` reads `status: passed`,
+`.planning/milestones/refine-unit-tests-phases/07-gate-integrity/07-VERIFICATION.md` reads `status: passed`,
 7/7, with the `GGAT-03` row `SATISFIED`.
 
 The edge-by-edge matrix comparison this entry said removal would need was
@@ -632,9 +650,53 @@ fallow coverage on all five barrels.
 Distinct from FLOW-09: that one is about internals exported for TESTS, a
 different cause with a different fix.
 
-## ~~FLOW-09: internals exported only for tests~~ -- CLOSED
+## FLOW-09: internals exported only for tests -- CLOSED
 
-Closed 2026-09-11 by the `refine-unit-tests` milestone. Disposition:
+**Promoted 2026-09-14:** test-backlog Phase 5 owns the ordinary-helper population
+and production-mode gate (EXPORT-01/02). Fallow 3.22.0 on this checkout reports
+111 production findings: 93 unused exports, 12 unused types, one unused file,
+one unused class member, and four duplicate-export groups. These are analyzer
+findings for triage, not 111 confirmed defects.
+
+**Ordinary-helper population: DONE.** The 111-finding snapshot above was a
+planning figure; the executable baseline measured after the preceding phases was
+57. Twenty-seven owner plans took it to one unused file, one entry export and one
+class member, with zero net additions at any step, each removal carried by a real
+production consumer, a private declaration, a retired implementation or a
+coherent module split -- never by a pin entry. This is the "roughly 94 ordinary
+internal helpers" population the status notes below separate out, and it is the
+half that actually stood between this repository and production reachability.
+The retired historical `scripts/check-phase-06-hub-ledger.mjs` census verifier is
+the unused file: its work is complete, its archives are preserved, and it had no
+package-script, workflow or production caller.
+
+**Production mode: DONE, and this closes the item.** `.fallowrc.json` sets
+`production` per analysis to `{deadCode: true, health: false, dupes: false}`,
+keeping `includeEntryExports` and every existing boundary, rule, health and
+duplication setting. `npm run fallow` -- the command the quality gate runs, with
+no production flag of its own -- discovers 11 production entry points and
+reports zero issues. `unowned-exports-census.test.ts` requires that report to
+equal the explicit `--production` report and requires both to be empty in every
+category; `fallow-production-mode.test.ts` runs its offender and benign controls
+against the shipping settings verbatim, so reverting the config fails them.
+
+Exactly two declarations carry an exception, each one line, each adjacent to its
+own declaration, each naming its real consumer: the entry default that
+`pi.extensions` loads from the package manifest, and `RingBuffer.read`, which
+the async-rewake registry's exit handler calls through the entry's stderr and
+stdout buffer fields. Controls prove neither exception covers a sibling export,
+an unrelated default, or the same member name on another class. There are no
+`health.thresholdOverrides`, no widened patterns, and no pinned identities
+standing in for an answer.
+
+Closing evidence, one snapshot: `npm run check` exit 0 with 6,263 unit tests and
+32 integration tests passing; production aggregate unit coverage exactly 100%
+(62,889/62,889 lines, 1,834/1,834 functions, 9,050/9,050 branches across 227
+emitted modules, the remaining nine production files being type-only and so
+emitting no records); 236 direct pairs green with the two existing pinned
+shortfalls matched exactly and unchanged.
+
+The explicit-seam/reset-export portion closed 2026-09-11 by the `refine-unit-tests` milestone. Disposition:
 `implemented`, carried by `TREF-05` and `TREF-06` (Phases 5-6), with the
 standing `no-test-only-production-surface` gate under `GGAT-04` keeping the
 surface at zero.
@@ -1944,7 +2006,27 @@ Code seams: `bridges/hooks/dispatch.ts` (`reduceBucket`,
 `compositeHandlerFor`), `bridges/hooks/timeout.ts` (`BLOCKING_EVENT_DEFAULT_SECONDS`),
 `bridges/hooks/event-router.ts` (the `session_shutdown` registration).
 
-## AGCOL-01: the agents collision gate is dead by the same argument that retired the skills one
+## ~~AGCOL-01: the agents collision gate is dead by the same argument that retired the skills one~~ — CLOSED
+
+**Current disposition, 2026-09-14:** Closed in test-backlog Phase 3, commit
+`b663bc68`; review clean and independent goal verification passed 18/18. The user chose Claude-compatible
+complete source names and migration of owned names. Distinct `reviewer` and
+`<plugin>-reviewer` sources now coexist; true duplicates keep the discovered
+incumbent and warn with both full source paths. The unreachable post-discovery
+throw is removed. AG-12, RN-1/RN-6, Appendix B, and source comments agree.
+
+Real install/update/reinstall tests cover ownership, legacy filename/index
+migration, coexistence, occupied destinations, rollback, and retry. Independent
+review found and repaired index-save failure recovery: new targets are reversed
+while the old index remains available for retry. The four direct agent owners
+retain 100% coverage; the combined final unit run passes 6,267 tests with exact
+100% production line/function/branch coverage. See
+[Phase 3 review](phases/03-reachable-agent-collision-contract/03-REVIEW.md)
+and the phase's verification report for final gate evidence.
+
+The following disposition and original report describe the archived
+refine-unit-tests scope; they do not restrict this authorized milestone.
+
 
 **Disposition 2026-09-11: `evidence-only`** (`GGAT-02`, `SCOPE-REQ-GGAT-02`,
 formerly Phase 7). This item asserts that the agents-collision gate is dead by
@@ -2152,7 +2234,23 @@ together or neither.
 Code seams: `bridges/hooks/event-router.ts` (the `session_start` wrapper),
 `domain/components/hook-events.ts` (`BUCKET_A_EVENTS`).
 
-## ARGS-01: the edge parse layer silently swallows unknown flags and surplus positionals
+## ~~ARGS-01: the edge parse layer silently swallows unknown flags and surplus positionals~~ — CLOSED
+
+**Current disposition, 2026-09-14:** Closed in test-backlog Phase 4, commit
+`a8ef0dac`; review clean and independent goal verification passed 7/7. All 19
+canonical verbs and three aliases reject unknown flags and surplus operands
+before dispatch. Explicit empty quoted operands remain arguments and are rejected
+where invalid; they cannot silently select bulk operations. The flag catalog and
+its independent missing/extra controls cover both command families.
+
+Marketplace info/list/update accept and document `--local` under the user's
+approved policy: reads remain merged; local selects configuration writes only.
+Real named and bulk update tests preserve both config files byte-for-byte while
+upgrading plugins. Complete unit coverage remains 100%; all 6,267 unit and 32
+integration tests pass. See [Phase 4 verification](phases/04-strict-command-arguments/04-VERIFICATION.md).
+
+The original report below is retained as historical evidence; its verb counts
+and examples describe the earlier implementation.
 
 Surfaced 2026-08-24 while probing what a usage error looks like, during the
 cross-scope reason-token work. Two independent defects in the same layer,
@@ -2623,6 +2721,9 @@ precisely so the bump stays optional.
 
 ## ~~TESTQ-01: act on the two-pass unit-test review corpus~~ -- CLOSED
 
+Reconfirmed 2026-09-14: the archived completed requirements preserve this
+closure. The new milestone promotes only the separately authorized follow-ups.
+
 Closed 2026-09-11 by the `refine-unit-tests` milestone, which was cut from this
 item. Disposition: `implemented`.
 
@@ -2644,7 +2745,7 @@ the corpus usable at all: all 110 files individually inspected, every report and
 recorded finding mapped to a current disposition with live source and test
 references, and stale, struck or displaced claims moved out of active scope with
 explicit current evidence before any implementation was planned.
-`.planning/phases/01-live-evidence-revalidation/01-67-SUMMARY.md:128` records
+`.planning/milestones/refine-unit-tests-phases/01-live-evidence-revalidation/01-67-SUMMARY.md:128` records
 the routing: "`TESTQ-01`, `FLOW-09`, `REASON-01`, and `FLOW-07` retain exact
 routes through their terminal findings."
 
@@ -2652,7 +2753,7 @@ routes through their terminal findings."
 closed by these IDs"; the table above is read off this item's own workstream
 list and the requirement clause text. Where a row rests on that inference it
 rests on it, and a reader checking the route should start from
-`.planning/REQUIREMENTS.md` and the per-phase verification reports rather than
+`.planning/milestones/refine-unit-tests-REQUIREMENTS.md` and the per-phase verification reports rather than
 from this table.
 
 This item's own calibration warning survives its closure and is now repository
@@ -2738,7 +2839,19 @@ recursion, no wrapper stripping. Both command arms now guard on
 `event.toolName` so `Bash(...)` rules no longer fire on powershell events.
 -->
 
-## SWTEST-01: the Sonar way ruleset stops at `extensions/`; `tests/` is unmeasured by it
+## ~~SWTEST-01: the Sonar way ruleset stops at `extensions/`; `tests/` is unmeasured by it~~ -- CLOSED
+
+**Closed 2026-09-14 — test-backlog Phase 2.** The three assertion rules now
+run as errors on tests. Seven exact type-only owner files retain their compile-time
+proofs; five helper/strict-mock cases have narrow, explained analyzer controls.
+The overload proof now also checks the full runtime outcome. Thirteen planted
+violation/benign controls pass, including controls that re-enable the exempt rule.
+The current full recommended scan found 1,083 flags across 354 files; all clusters
+have measured dispositions in [02-SONAR-POLICY.md](phases/02-sonar-rules-for-tests/02-SONAR-POLICY.md).
+Independent [verification](phases/02-sonar-rules-for-tests/02-VERIFICATION.md) passed
+4/4; full lint, typecheck, Fallow, formatting, direct checks, and 6,016 unit tests
+passed with exact 100% aggregate production coverage. Original filing follows
+as historical evidence; its counts and proposed dispositions are superseded.
 
 Filed 2026-09-07 alongside the change that adopted the ruleset (`fe1313c6`,
 quick task 260907-qsx). Deferred deliberately, with the cost measured rather
@@ -2885,7 +2998,16 @@ line 1051, the additive convention probe that masks the gap today),
 (`deriveInstallVersion` line 640 -- evidence that the version tier is
 unreachable for these four, so no change is needed there).
 
-## NEGCTL-01: the direct-coverage negative control cannot capture its child's stderr on Node 26
+## NEGCTL-01: the direct-coverage negative control cannot capture its child's stderr on Node 26 — CLOSED
+
+Closed 2026-09-14 in test-backlog Phase 1. The failure was isolated to the
+sandbox/process-pipe observation path on Node v26.8.2; file-backed separate
+stdout/stderr capture preserves the exact CLI diagnostic. Launch errors,
+signals, wrong status, and missing diagnostics have discriminating controls.
+The full negative suite passes inside and outside the sandbox; independent
+GSD review found no issues and verification passed 5/5. See
+[verification](phases/01-reliable-negative-controls/01-VERIFICATION.md).
+The original report below is preserved as history.
 
 Carried out of the `refine-unit-tests` milestone close (2026-09-13) as an open
 audit item. Recorded during Plan 06-39 repository verification.
@@ -2921,7 +3043,13 @@ Code seams: `scripts/test-coverage-direct.negative.mjs:134` (the capture and the
 assertion), `package.json` (`test:coverage:direct:negative`), `.github/workflows/ci.yml`
 (pins Node 24, which is why this is latent rather than red).
 
-## E2EIMP-01: three `import` e2e tests assert a summary header the command no longer emits
+## ~~E2EIMP-01: three `import` e2e tests assert a summary header the command no longer emits~~ -- CLOSED AS STALE
+
+**Revalidated 2026-09-14 (test-backlog HIST-01):** the current tests already
+assert the folded marketplace grammar. `env -u PI_CODING_AGENT_DIR node
+tests/e2e/import-command.test.ts` passes all three cases (3 pass, 0 fail) on
+Node v26.8.2. No test rewrite is needed. The original report below describes
+a condition that no longer exists.
 
 Carried out of the `refine-unit-tests` milestone close (2026-09-13) as an open
 audit item. Originally recorded in Phase 25, which archived with milestone v1.4.1.

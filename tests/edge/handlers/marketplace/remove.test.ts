@@ -256,22 +256,21 @@ test("supplies the remove usage block, shown when the name positional is missing
   verifyBoundary();
 });
 
-test("removes the first positional alone, so a surplus token drops rather than rejecting", async (t) => {
+test("rejects surplus input and preserves all recorded marketplaces", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
-    reads: 1,
-    value: workspace.cwd,
-  });
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const removeHandler = makeRemoveHandler(pi, { completionCache: createCompletionCache() });
 
   // act
   await removeHandler("alpha beta", ctx);
 
   // assert
-  assert.deepStrictEqual(notifications, [{ message: PROJECT_ALPHA_REMOVED }]);
-  assert.deepStrictEqual(await readMarketplaceFootprint(workspace.cwd), PROJECT_ALPHA_GONE);
+  assert.deepStrictEqual(notifications, [
+    { message: `Too many arguments.\n\n${REMOVE_USAGE}`, severity: "error" },
+  ]);
+  assert.deepStrictEqual(await readMarketplaceFootprint(workspace.cwd), BOTH_SCOPES_SEEDED);
   verifyBoundary();
 });
 

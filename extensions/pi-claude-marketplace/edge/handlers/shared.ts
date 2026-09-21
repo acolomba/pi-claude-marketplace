@@ -20,6 +20,7 @@
 // itself.
 
 import { notifyUsageError } from "../../shared/notification-dispatch.ts";
+import { tokenizeArgs } from "../args.ts";
 import { SCOPE_TARGET_FLAG } from "../flag-catalog.ts";
 
 import type { ExtensionCommandContext } from "../../platform/pi-api.ts";
@@ -71,49 +72,49 @@ export function extractLocalFlag(
   const acceptedFlags = consuming ? flags.consumeLongFlags : flags;
   const consumedFlags = new Set<string>();
   const isRejected = rejectionTestFor(flags);
-  const residualTokens: string[] = [];
+  const tokens = tokenizeArgs(args);
+  const consumed = new Set<number>();
   let local = false;
   let skipValue = false;
-  for (const token of args.split(/\s+/).filter((text) => text.length > 0)) {
-    residualTokens.push(token);
+  for (const [index, token] of tokens.entries()) {
+    const tok = token.value;
     if (skipValue) {
       skipValue = false;
       continue;
     }
 
-    if (token === "--scope") {
+    if (tok === "--scope") {
       skipValue = true;
       continue;
     }
 
-    if (token === SCOPE_TARGET_FLAG) {
+    if (tok === SCOPE_TARGET_FLAG) {
       local = true;
-      residualTokens.pop();
+      consumed.add(index);
       continue;
     }
 
-    if (consuming && acceptedFlags.includes(token)) {
-      consumedFlags.add(token);
-      residualTokens.pop();
+    if (consuming && acceptedFlags.includes(tok)) {
+      consumedFlags.add(tok);
+      consumed.add(index);
       continue;
     }
 
-    if (isRejected(token)) {
-      notifyUsageError(ctx, { message: `Unknown flag: "${token}".`, usage });
+    if (isRejected(tok)) {
+      notifyUsageError(ctx, { message: `Unknown flag: "${tok}".`, usage });
       return undefined;
     }
   }
 
-  // WR-03: the two modes differ on a SCOPE_TARGET_FLAG token sitting in the
-  // `--scope` VALUE position. Array-form callers strip every such token
-  // regardless of position, so `install --scope --local foo@bar` reaches the
-  // downstream parser as `--scope foo@bar` and it complains about the
-  // positional. Consuming callers keep the token verbatim, so the same input
-  // reaches the parser as `--scope --local foo@bar` and its message names the
-  // offending value. Both modes remove a SCOPE_TARGET_FLAG token in every other
-  // position (the loop pops it above).
-  const residualArgs = residualTokens
-    .filter((token) => consuming || token !== SCOPE_TARGET_FLAG)
+  // A SCOPE_TARGET_FLAG token sitting in the `--scope` VALUE position is that
+  // flag's value, not a flag: both modes keep it verbatim, so `--scope --local
+  // foo@bar` reaches the downstream parser unchanged and its message names the
+  // offending value. Every other position consumes it (the loop above). Each
+  // surviving token is the source slice, so quoting reaches the downstream
+  // parser as the user typed it.
+  const residualArgs = tokens
+    .filter((_, index) => !consumed.has(index))
+    .map((token) => args.slice(token.start, token.end))
     .join(" ");
   if (consuming) {
     // IN-03: the consuming overload promises `consumedFlags`, but TypeScript

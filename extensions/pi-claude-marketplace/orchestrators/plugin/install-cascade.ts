@@ -98,7 +98,7 @@ import type {
 } from "../../domain/dependency-closure.ts";
 import type { DependencyRangeIntersection } from "../../domain/dependency-range.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
-import type { GitBackedSource, PathSource } from "../../domain/source.ts";
+import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
@@ -142,14 +142,14 @@ export type CascadeTagProbe = typeof probeDependencyTags;
 export type CascadeMarketplaceTagProbe = typeof probeMarketplaceTags;
 
 /** The per-URL tag listing memo one cascade run threads through every query. */
-export type CascadeTagMemo = NonNullable<DependencyTagProbeOptions["tagMemo"]>;
+type CascadeTagMemo = NonNullable<DependencyTagProbeOptions["tagMemo"]>;
 
 /**
  * The per-marketplace-root tag listing memo one cascade run threads through
  * every path-source member's local probe, so several members constrained
  * against the SAME marketplace clone list it once (WR-02).
  */
-export type CascadeMarketplaceTagMemo = NonNullable<MarketplaceTagProbeOptions["tagMemo"]>;
+type CascadeMarketplaceTagMemo = NonNullable<MarketplaceTagProbeOptions["tagMemo"]>;
 
 /**
  * Resolves the marketplace record a member's source is read from.
@@ -210,7 +210,6 @@ export type CascadeConstraintFailure =
       readonly kind: "tag-listing-failed";
       readonly key: string;
       readonly range: string;
-      readonly cause: Error;
       readonly classification: DependencyTagListingFailureReason;
     };
 
@@ -257,12 +256,12 @@ export interface ResolvedCascadeMember extends ClosureMember {
 }
 
 /** Every member's constraint resolved, or the first failure one produced. */
-export type MemberConstraintResolution =
+type MemberConstraintResolution =
   | { readonly ok: true; readonly members: readonly ResolvedCascadeMember[] }
   | { readonly ok: false; readonly failure: CascadeConstraintFailure };
 
 /** Inputs of one cascade run's constraint resolution. */
-export interface MemberConstraintOptions {
+interface MemberConstraintOptions {
   /** The caller's locked snapshot: the recorded versions and the catalog roots. */
   readonly state: ExtensionState;
   /** The members this run would install, in closure order. */
@@ -489,7 +488,7 @@ function toIntersectionFailure(
  */
 type MemberTagSource =
   | { readonly kind: "git"; readonly source: GitBackedSource }
-  | { readonly kind: "path"; readonly source: PathSource; readonly marketplaceRoot: string }
+  | { readonly kind: "path"; readonly marketplaceRoot: string }
   | { readonly kind: "absent" };
 
 async function resolveMemberTagSource(
@@ -516,7 +515,7 @@ async function resolveMemberTagSource(
   }
 
   if (parsed.kind === "path") {
-    return { kind: "path", source: parsed, marketplaceRoot: record.marketplaceRoot };
+    return { kind: "path", marketplaceRoot: record.marketplaceRoot };
   }
 
   return { kind: "absent" };
@@ -551,7 +550,6 @@ function toMemberConstraintOutcome(
     | { readonly kind: "no-matching-tag"; readonly range: string }
     | {
         readonly kind: "tag-listing-failed";
-        readonly cause: Error;
         readonly classification: DependencyTagListingFailureReason;
       },
 ): MemberConstraintOutcome {
@@ -575,7 +573,6 @@ function toMemberConstraintOutcome(
       kind: "tag-listing-failed",
       key: member.key,
       range: renderConstraintRange(range),
-      cause: probed.cause,
       classification: probed.classification,
     },
   };
@@ -725,7 +722,7 @@ function checkInstalledMember(
  * query at all: a cascade that is going to fail on what is already on disk
  * never reaches a remote for the members it would otherwise have installed.
  */
-export async function resolveMemberConstraints(
+async function resolveMemberConstraints(
   options: MemberConstraintOptions,
 ): Promise<MemberConstraintResolution> {
   for (const member of options.alreadyInstalled) {

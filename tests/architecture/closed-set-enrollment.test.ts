@@ -38,10 +38,10 @@ import {
   TOOL_EVENTS,
 } from "../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import { softDepMarkers } from "../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
-import { REASONS } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Dependency } from "../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
+import type { Reason } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 /**
  * The two `Dependency` members `softDepMarkers` carries a branch for.
@@ -70,7 +70,7 @@ test("SCN-F025: BUCKET_A_EVENTS is the closed 10-entry admitted-event set", () =
   const admittedEvents = BUCKET_A_EVENTS;
 
   // assert
-  assert.equal(admittedEvents.length, expectedEventCount);
+  assert.strictEqual(admittedEvents.length, expectedEventCount);
 });
 
 test("SCN-F025: TOOL_EVENTS is the closed 3-entry tool-matcher subset", () => {
@@ -85,7 +85,7 @@ test("SCN-F025: TOOL_EVENTS is the closed 3-entry tool-matcher subset", () => {
   const toolEvents = TOOL_EVENTS;
 
   // assert
-  assert.equal(toolEvents.length, expectedToolEventCount);
+  assert.strictEqual(toolEvents.length, expectedToolEventCount);
 });
 
 test("SCN-F025: every TOOL_EVENTS member is an admitted bucket-A event", () => {
@@ -113,7 +113,7 @@ test("SCN-F025: Dependency is the closed 2-member set softDepMarkers branches on
     [],
     "SCN-F025: a Dependency member outside the enrolled pair is a compile failure at UNENROLLED_DEPENDENCIES, not a value this array could ever hold.",
   );
-  assert.equal(
+  assert.strictEqual(
     parameterCount,
     expectedDeclaresFlagCount + probeParameterCount,
     "SCN-F025: softDepMarkers changed arity, so the Dependency set moved without its marker branch, its catalog row, or this classification being revisited.",
@@ -190,19 +190,30 @@ test("SCN-F025: softDepMarkers emits nothing when both companions are loaded", (
   assert.deepStrictEqual(markers, []);
 });
 
-test("SCN-F025: every marker softDepMarkers can emit is a REASONS catalog member", () => {
+/**
+ * The complete set of markers `softDepMarkers` can emit, written here as
+ * independent literals and annotated `Reason`.
+ *
+ * The annotation is the catalog-enrollment half and it is total rather than
+ * sampled: a marker that stopped being a catalog member would fail to compile
+ * here, and `softDepMarkers`' own `readonly Reason[]` return type says the same
+ * thing about every input, not just the one the case below drives.
+ */
+const EMITTABLE_SOFT_DEP_MARKERS: readonly Reason[] = ["requires pi-subagents", "requires pi-mcp"];
+
+test("SCN-F025: every marker softDepMarkers can emit is a reason catalog member", () => {
   // arrange
   const probe = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
   } satisfies SoftDepStatus;
-  const catalogMembers: ReadonlySet<string> = new Set(REASONS);
+  const expectedMarkers = EMITTABLE_SOFT_DEP_MARKERS;
 
   // act
-  const uncatalogedMarkers = softDepMarkers(true, true, probe).filter(
-    (marker) => !catalogMembers.has(marker),
-  );
+  // Both dependencies declared and neither companion loaded is the one input
+  // that emits every marker, so this call enumerates the emittable set.
+  const markers = softDepMarkers(true, true, probe);
 
   // assert
-  assert.deepStrictEqual(uncatalogedMarkers, []);
+  assert.deepStrictEqual(markers, expectedMarkers);
 });

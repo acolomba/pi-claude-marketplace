@@ -9,7 +9,7 @@
 // form and reads the extra flags off `consumedFlags`. Delegates to
 // `uninstallPlugin`.
 
-import { createNodeUninstallPlugin } from "../../../orchestrators/plugin/uninstall.ts";
+import { createUninstallOperation } from "../../../orchestrators/plugin/operations.ts";
 import { KEEP_DATA_FLAG, passThroughFlagNames, PRUNE_FLAG } from "../../flag-catalog.ts";
 import { extractLocalFlag } from "../shared.ts";
 
@@ -35,7 +35,7 @@ export function makeUninstallHandler(
   hooksRouting: UninstallHooksRouting,
   completionCache: CompletionCache,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  const uninstallPlugin = createNodeUninstallPlugin(hooksRouting, completionCache);
+  const uninstallPlugin = createUninstallOperation(hooksRouting, completionCache);
   return async (args, ctx): Promise<void> => {
     // Shared scanner; see edge/handlers/shared.ts.
     const localFlag = extractLocalFlag(args, ctx, USAGE, CONSUMED_FLAGS);

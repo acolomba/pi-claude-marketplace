@@ -9,6 +9,10 @@
 //
 // The lifecycle CompletionCache travels beside the unchanged `pluginUpdate`
 // callback. The handler creates neither owner and always supplies both.
+//
+// `update` is a merged read that never writes configuration, so a
+// write-target flag has no meaning for it and `parseCommandArgs` rejects
+// it as an unknown flag like any other (AP-5).
 
 import {
   updateAllMarketplaces,

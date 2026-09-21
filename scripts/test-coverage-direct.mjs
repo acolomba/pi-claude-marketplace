@@ -107,7 +107,11 @@ export function productionPaths() {
  * and carried, and `args` is always an argument array so no ref name is ever word-split by a shell.
  */
 function gitLines(args, selectedProjectRoot = projectRoot) {
-  const run = spawnSync("git", args, { cwd: selectedProjectRoot, encoding: "utf8" });
+  const run = spawnSync("git", args, {
+    cwd: selectedProjectRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 
   if (run.error !== undefined) {
     return { ok: false, reason: `git ${args.join(" ")} could not run: ${run.error.message}` };

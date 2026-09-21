@@ -18,10 +18,8 @@ import test from "node:test";
 
 import {
   createWriteHookConfig,
-  hookConfigPathFor,
   readHooksJson,
   removeHookConfig,
-  writeHookConfig,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
@@ -80,6 +78,8 @@ function filesystemErrorCode(error: unknown): string | undefined {
 
   return undefined;
 }
+
+const writeHookConfig = createWriteHookConfig(realHooksTreeInspector());
 
 const PLUGIN = "acme";
 const HOOKS_VALUE = {
@@ -803,22 +803,6 @@ test("treats removal of an absent staged plugin as a no-op", async () => {
     // assert
     assert.deepStrictEqual(removal, { removed: PLUGIN });
     assert.strictEqual(directoryState, "ENOENT");
-  } finally {
-    await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
-  }
-});
-
-test("composes the staged hook config path", async () => {
-  const { locations, scopeRoot } = await allocateCasePaths("hooks-stage-path-");
-  try {
-    // arrange
-    const expectedPath = path.join(locations.hooksDir, PLUGIN, "hooks.json");
-
-    // act
-    const hookConfigPath = hookConfigPathFor(locations, PLUGIN);
-
-    // assert
-    assert.strictEqual(hookConfigPath, expectedPath);
   } finally {
     await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
   }

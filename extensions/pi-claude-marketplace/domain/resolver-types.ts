@@ -1,48 +1,54 @@
-import Type from "typebox";
-
 import type { DroppedHook } from "./components/hooks.ts";
 import type { GitHubSource, GitSubdirSource, PathSource, UrlSource } from "./source.ts";
+import type Type from "typebox";
 
-const ComponentPathsSchema = Type.Object({
-  skills: Type.Array(Type.String()),
-  commands: Type.Array(Type.String()),
-  agents: Type.Array(Type.String()),
-});
+type ComponentPathsSchema = Type.TObject<{
+  skills: Type.TArray<Type.TString>;
+  commands: Type.TArray<Type.TString>;
+  agents: Type.TArray<Type.TString>;
+}>;
 
-const McpServersFieldSchema = Type.Record(Type.String(), Type.Unknown());
+type McpServersFieldSchema = ReturnType<typeof Type.Record<Type.TString, Type.TUnknown>>;
 
-const DroppedHookSchema = Type.Union([
-  Type.Object({ kind: Type.Literal("event"), event: Type.String() }),
-  Type.Object({
-    kind: Type.Literal("group"),
-    event: Type.String(),
-    matcher: Type.String(),
-    cond: Type.Union([
-      Type.Literal("regex"),
-      Type.Literal("unmapped-tool"),
-      Type.Literal("no-matcher-support"),
-      Type.Literal("closed-set"),
-    ]),
-  }),
-  Type.Object({
-    kind: Type.Literal("handler"),
-    event: Type.String(),
-    matcher: Type.String(),
-    handlerType: Type.String(),
-  }),
-]);
+type DroppedHookSchema = Type.TUnion<
+  [
+    Type.TObject<{ kind: Type.TLiteral<"event">; event: Type.TString }>,
+    Type.TObject<{
+      kind: Type.TLiteral<"group">;
+      event: Type.TString;
+      matcher: Type.TString;
+      cond: Type.TUnion<
+        [
+          Type.TLiteral<"regex">,
+          Type.TLiteral<"unmapped-tool">,
+          Type.TLiteral<"no-matcher-support">,
+          Type.TLiteral<"closed-set">,
+        ]
+      >;
+    }>,
+    Type.TObject<{
+      kind: Type.TLiteral<"handler">;
+      event: Type.TString;
+      matcher: Type.TString;
+      handlerType: Type.TString;
+    }>,
+  ]
+>;
 
 type AssertTrue<T extends true> = T;
 
-// fallow-ignore-next-line private-type-leak -- compile-time drift guard; AssertTrue is an assertion helper with no caller meaning.
-export type DroppedHookDriftCheck = AssertTrue<
-  DroppedHook extends Type.Static<typeof DroppedHookSchema> ? true : false
+type DroppedHookDriftCheck = AssertTrue<
+  DroppedHook extends Type.Static<DroppedHookSchema>
+    ? Type.Static<DroppedHookSchema>["kind"] extends DroppedHook["kind"]
+      ? true
+      : false
+    : false
 >;
 
 type DroppedHookArmKeysMatch<K extends DroppedHook["kind"]> = [
   keyof Extract<DroppedHook, { kind: K }>,
-] extends [keyof Extract<Type.Static<typeof DroppedHookSchema>, { kind: K }>]
-  ? [keyof Extract<Type.Static<typeof DroppedHookSchema>, { kind: K }>] extends [
+] extends [keyof Extract<Type.Static<DroppedHookSchema>, { kind: K }>]
+  ? [keyof Extract<Type.Static<DroppedHookSchema>, { kind: K }>] extends [
       keyof Extract<DroppedHook, { kind: K }>,
     ]
     ? true
@@ -58,57 +64,66 @@ type DroppedHookArmKeysDrift =
       : never
     : never;
 
-// fallow-ignore-next-line private-type-leak -- compile-time key-parity guard; assertion internals have no caller meaning.
-export type DroppedHookArmKeysCheck = AssertTrue<
-  // fallow-ignore-next-line private-type-leak -- DroppedHookArmKeysDrift is an internal step of this compile-time key-parity guard.
-  [true] extends [DroppedHookArmKeysDrift] ? true : false
+type DroppedHookArmKeysCheck = AssertTrue<[true] extends [DroppedHookArmKeysDrift] ? true : false>;
+
+interface MaterializableFields {
+  installable: Type.TLiteral<true>;
+  name: Type.TString;
+  pluginRoot: Type.TString;
+  supported: Type.TArray<Type.TString>;
+  unsupported: Type.TArray<Type.TString>;
+  notes: Type.TArray<Type.TString>;
+  componentPaths: ComponentPathsSchema;
+  mcpServers: McpServersFieldSchema;
+  hooksConfigPath: Type.TOptional<Type.TString>;
+  orphanRewake: Type.TOptional<Type.TBoolean>;
+  droppedHooks: Type.TOptional<
+    Type.TArray<
+      [DroppedHookDriftCheck, DroppedHookArmKeysCheck] extends [true, true]
+        ? DroppedHookSchema
+        : never
+    >
+  >;
+  defaultEnabled: Type.TBoolean;
+}
+
+// TypeBox requires a mapped property record; an interface has no implicit index signature.
+type MaterializableProperties = {
+  [Field in keyof MaterializableFields]: MaterializableFields[Field];
+};
+
+type ResolvedPluginInstallableSchema = Type.TObject<
+  { state: Type.TLiteral<"installable"> } & MaterializableProperties
 >;
 
-const MATERIALIZABLE_FIELDS = {
-  installable: Type.Literal(true),
-  name: Type.String(),
-  pluginRoot: Type.String(),
-  supported: Type.Array(Type.String()),
-  unsupported: Type.Array(Type.String()),
-  notes: Type.Array(Type.String()),
-  componentPaths: ComponentPathsSchema,
-  mcpServers: McpServersFieldSchema,
-  hooksConfigPath: Type.Optional(Type.String()),
-  orphanRewake: Type.Optional(Type.Boolean()),
-  droppedHooks: Type.Optional(Type.Array(DroppedHookSchema)),
-  defaultEnabled: Type.Boolean(),
-} as const;
-
-const ResolvedPluginInstallableSchema = Type.Object({
-  state: Type.Literal("installable"),
-  ...MATERIALIZABLE_FIELDS,
-});
-
-const ResolvedPluginPartiallyAvailableSchema = Type.Object({
-  state: Type.Literal("partially-available"),
-  ...MATERIALIZABLE_FIELDS,
-});
-
-const ResolvedPluginUnavailableSchema = Type.Object({
-  state: Type.Literal("unavailable"),
-  installable: Type.Literal(false),
-  name: Type.String(),
-  notes: Type.Array(Type.String()),
-});
-
-/** Runtime schema for the exact three-arm resolver result union. */
-export const ResolvedPluginSchema = Type.Union([
-  ResolvedPluginInstallableSchema,
-  ResolvedPluginPartiallyAvailableSchema,
-  ResolvedPluginUnavailableSchema,
-]);
-
-export type ResolvedPluginInstallable = Type.Static<typeof ResolvedPluginInstallableSchema>;
-export type ResolvedPluginPartiallyAvailable = Type.Static<
-  typeof ResolvedPluginPartiallyAvailableSchema
+type ResolvedPluginPartiallyAvailableSchema = Type.TObject<
+  { state: Type.TLiteral<"partially-available"> } & MaterializableProperties
 >;
-export type ResolvedPluginUnavailable = Type.Static<typeof ResolvedPluginUnavailableSchema>;
-export type ResolvedPlugin = Type.Static<typeof ResolvedPluginSchema>;
+
+type ResolvedPluginUnavailableSchema = Type.TObject<{
+  state: Type.TLiteral<"unavailable">;
+  installable: Type.TLiteral<false>;
+  name: Type.TString;
+  notes: Type.TArray<Type.TString>;
+}>;
+
+/** Type-only schema for the exact three-arm resolver result union. */
+type ResolvedPluginSchema = Type.TUnion<
+  [
+    ResolvedPluginInstallableSchema,
+    ResolvedPluginPartiallyAvailableSchema,
+    ResolvedPluginUnavailableSchema,
+  ]
+>;
+
+// fallow-ignore-next-line private-type-leak -- ResolvedPluginSchema is the private TypeBox shape and hook-drift proof behind this public structural contract.
+export type ResolvedPlugin = Type.Static<ResolvedPluginSchema>;
+export type ResolvedPluginInstallable = Extract<ResolvedPlugin, { state: "installable" }>;
+export type ResolvedPluginPartiallyAvailable = Extract<
+  ResolvedPlugin,
+  { state: "partially-available" }
+>;
+export type ResolvedPluginUnavailable = Extract<ResolvedPlugin, { state: "unavailable" }>;
 
 /** Resolver results that own a safe materialization root. */
 export type MaterializablePlugin = ResolvedPluginInstallable | ResolvedPluginPartiallyAvailable;
@@ -121,7 +136,11 @@ export type StatKindReader = (path: string) => Promise<StatKind>;
 
 /** Result of resolving a Git-backed plugin root. */
 export type GitPluginRootResult =
-  | { readonly kind: "materialized"; readonly pluginRoot: string; readonly resolvedSha: string }
+  | {
+      readonly kind: "materialized";
+      readonly pluginRoot: string;
+      readonly resolvedSha: string;
+    }
   | { readonly kind: "not-cached" }
   | { readonly kind: "escapes"; readonly detail: string }
   | { readonly kind: "missing-subdir"; readonly detail: string };

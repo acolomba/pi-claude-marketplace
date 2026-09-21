@@ -66,10 +66,8 @@ import {
   mergeMarketplaceIntoState,
 } from "../marketplace-seed.ts";
 
-import type {
-  HooksRouting,
-  HooksRuntime,
-} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksRouting } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type {
   ExtensionAPI,
   ExtensionCommandContext,
@@ -512,28 +510,25 @@ for (const { enable, expectedFootprint, label, seedDisabled, summary } of [
   });
 }
 
-test("drops a surplus reference token and flips only the first one (ENBL-01)", async (t) => {
+test("rejects a surplus reference token and leaves both records unchanged (ENBL-01)", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus-positional");
   await seedBothScopes(workspace, false);
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
-    value: workspace.cwd,
-    reads: 1,
-  });
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const enableDisableHandler = makeHandlerUnderTest(pi, false);
 
   // act
   await enableDisableHandler("alpha@mp beta@mp --scope user", ctx);
 
   // assert
-  assert.deepStrictEqual(await readFootprint(workspace), {
-    projectRecords: BOTH_ENABLED,
-    userRecords: ALPHA_OFF,
-    projectBase: undefined,
-    projectLocal: undefined,
-    userBase: ALPHA_DECLARED_DISABLED,
-    userLocal: undefined,
-  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Too many arguments.\n\nUsage: /claude:plugin disable <plugin>@<marketplace> [--scope user|project] [--local]",
+      severity: "error",
+    },
+  ]);
+  assert.deepStrictEqual(await readFootprint(workspace), NOTHING_RECORDED);
   verifyBoundary();
 });
 

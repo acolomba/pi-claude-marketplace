@@ -16,10 +16,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  GENERATED_AGENT_MARKER,
-  GENERATED_AGENT_PREFIX,
-} from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import { GENERATED_AGENT_MARKER } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import {
   createHooksRouting,
   createHooksRuntime,
@@ -31,8 +28,8 @@ import {
   AgentsUnstageFailureError,
   cascadeUnstagePlugin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import { createUninstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import {
-  createNodeUninstallPlugin,
   createUninstallPlugin,
   UninstallRefusedError,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
@@ -62,10 +59,8 @@ import {
 } from "./state-fifo.ts";
 
 import type { FifoStateServer } from "./state-fifo.ts";
-import type {
-  HooksRouting,
-  HooksRuntime,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type {
   UninstallPluginOperation,
   UninstallPluginOptions,
@@ -146,7 +141,7 @@ test("uninstall exposes its required transaction factory", () => {
 
 /** Construct one production uninstall operation with fresh lifecycle owners. */
 function createUninstallOwner(): UninstallPluginOperation {
-  return createNodeUninstallPlugin(
+  return createUninstallOperation(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
@@ -258,7 +253,7 @@ async function seedFullPlugin(
 
   // agent: write owned file + index row
   await mkdir(locations.agentsDir, { recursive: true });
-  const agentName = `${GENERATED_AGENT_PREFIX}${plugin}-uni-agent`;
+  const agentName = `pi-claude-marketplace-${plugin}-uni-agent`;
   const agentFile = path.join(locations.agentsDir, `${agentName}.md`);
   await writeFile(agentFile, makeOwnedAgentFile(agentName));
   const agentsIndex: AgentsIndex = {
@@ -650,7 +645,7 @@ test("PU-3 + PU-7: foreign agent content -> V2 PluginFailedMessage + state recor
       // but body LACKS the marker, so the agents bridge soft-fails the rm
       // and preserves the index row.
       await mkdir(locations.agentsDir, { recursive: true });
-      const agentName = `${GENERATED_AGENT_PREFIX}hello-foreign`;
+      const agentName = "pi-claude-marketplace-hello-foreign";
       const agentFile = path.join(locations.agentsDir, `${agentName}.md`);
       await writeFile(agentFile, "---\nname: foreign\n---\n\nNo marker here.\n");
 
@@ -1113,7 +1108,7 @@ test("D-03-INV :: uninstall invalidates plugin cache for the target marketplace"
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
       const completionCache = createCompletionCache();
-      const uninstallPlugin = createNodeUninstallPlugin(
+      const uninstallPlugin = createUninstallOperation(
         createHooksRouting(createHooksRuntime(), { readHooksJson }),
         completionCache,
       );
@@ -1308,7 +1303,7 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
         marketplace: "mp",
         plugin: "hello",
       });
-      await createNodeUninstallPlugin(
+      await createUninstallOperation(
         hooksRouting,
         createCompletionCache(),
       )({
@@ -1435,7 +1430,7 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
         marketplace: "mp",
         plugin: "hello",
       });
-      await createNodeUninstallPlugin(
+      await createUninstallOperation(
         hooksRouting,
         createCompletionCache(),
       )({
@@ -1775,6 +1770,10 @@ test("RECON-03 uninstall orchestrated mode -- success returns { status: 'uninsta
       });
 
       assert.deepStrictEqual(outcome, { status: "uninstalled", name: "hello", version: "0.0.1" });
+      if (outcome.status === "uninstalled") {
+        assert.equal(outcome.name, "hello");
+      }
+
       assert.strictEqual(
         await readFile(path.join(dataDir, "nested", "history"), "utf8"),
         "orchestrated history\n",
@@ -2324,7 +2323,7 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
       );
 
       const { ctx, pi, notifications } = makeCtx();
-      await createNodeUninstallPlugin(
+      await createUninstallOperation(
         hooksRouting,
         createCompletionCache(),
       )({
@@ -2388,7 +2387,7 @@ test("WR-03: a post-save routing failure cannot roll back committed uninstall", 
       const routingError = new Error("forced post-save routing failure");
       const { ctx, pi, notifications } = makeCtx();
 
-      await createNodeUninstallPlugin(
+      await createUninstallOperation(
         {
           rebuildRoutingTables(): void {
             throw new Error("rebuild must not run after cache removal throws");
@@ -2500,7 +2499,7 @@ test("preservation bypasses the data path while retiring routes, caches and the 
       await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () =>
         Promise.resolve([{ name: "solo", status: "installed" }]),
       );
-      const uninstallPlugin = createNodeUninstallPlugin(hooksRouting, completionCache);
+      const uninstallPlugin = createUninstallOperation(hooksRouting, completionCache);
       const { ctx, pi, notifications } = makeCtx();
 
       // act
@@ -3544,7 +3543,7 @@ test("retry proof: uninstall: foreign agent content preserves the whole record a
       ]);
       assert.deepStrictEqual(secondSchedule, [
         "unstage:command:uni-cmd.md",
-        `unstage:agent:${GENERATED_AGENT_PREFIX}hello-uni-agent.md`,
+        "unstage:agent:pi-claude-marketplace-hello-uni-agent.md",
         "unstage:hooks",
         "drop:cache",
         "remove:data",
@@ -3665,7 +3664,7 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
       assert.deepStrictEqual(secondSchedule, [
         "unstage:skill:uni-skill",
         "unstage:command:uni-cmd.md",
-        `unstage:agent:${GENERATED_AGENT_PREFIX}hello-uni-agent.md`,
+        "unstage:agent:pi-claude-marketplace-hello-uni-agent.md",
         "unstage:hooks",
         "drop:cache",
         "remove:data",
@@ -3778,7 +3777,7 @@ test("retry proof: uninstall: an invalid config aborts before any mutation and t
       assert.deepStrictEqual(secondSchedule, [
         "unstage:skill:uni-skill",
         "unstage:command:uni-cmd.md",
-        `unstage:agent:${GENERATED_AGENT_PREFIX}hello-uni-agent.md`,
+        "unstage:agent:pi-claude-marketplace-hello-uni-agent.md",
         "unstage:hooks",
         "drop:cache",
         "remove:data",
@@ -4133,7 +4132,7 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
 test("retry proof: uninstall: a refused cache drop leaves the cache file and the retry reports not installed", async (t) => {
   await withHermeticHome(async () => {
     const completionCache = createCompletionCache();
-    const uninstallWithFreshOwner = createNodeUninstallPlugin(
+    const uninstallWithFreshOwner = createUninstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       completionCache,
     );
@@ -4199,7 +4198,7 @@ test("retry proof: uninstall: a refused cache drop leaves the cache file and the
       assert.deepStrictEqual(firstSchedule, [
         "unstage:skill:uni-skill",
         "unstage:command:uni-cmd.md",
-        `unstage:agent:${GENERATED_AGENT_PREFIX}hello-uni-agent.md`,
+        "unstage:agent:pi-claude-marketplace-hello-uni-agent.md",
         "unstage:hooks",
         "drop:cache",
         "refuse:cache-unlink",
@@ -4281,7 +4280,7 @@ test("retry proof: uninstall: a refused data-dir removal keeps the directory and
       assert.deepStrictEqual(firstSchedule, [
         "unstage:skill:uni-skill",
         "unstage:command:uni-cmd.md",
-        `unstage:agent:${GENERATED_AGENT_PREFIX}hello-uni-agent.md`,
+        "unstage:agent:pi-claude-marketplace-hello-uni-agent.md",
         "unstage:hooks",
         "drop:cache",
         "remove:data",
@@ -4692,7 +4691,7 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
       assert.deepStrictEqual(firstSchedule, [
         "unstage:skill:uni-skill",
         "unstage:command:uni-cmd.md",
-        `unstage:agent:${GENERATED_AGENT_PREFIX}hello-uni-agent.md`,
+        "unstage:agent:pi-claude-marketplace-hello-uni-agent.md",
         "unstage:hooks",
         "drop:cache",
       ]);
@@ -4788,7 +4787,7 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
       assert.deepStrictEqual(firstSchedule, [
         "unstage:skill:uni-skill",
         "unstage:command:uni-cmd.md",
-        `unstage:agent:${GENERATED_AGENT_PREFIX}hello-uni-agent.md`,
+        "unstage:agent:pi-claude-marketplace-hello-uni-agent.md",
         "unstage:hooks",
         "remove:data",
         "gc:scan",

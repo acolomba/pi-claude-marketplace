@@ -3,13 +3,21 @@ import test from "node:test";
 
 import {
   PENDING_CONTEXT,
-  PENDING_STATUSES,
   RECONCILE_APPLIED_CONTEXT,
   type PendingMsg,
   type ReconcileAppliedMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts";
 
+import type * as ReconcileMessaging from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts";
 import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+// Both status sets are private literal unions; each render map is pinned to
+// its own with `as const satisfies CommandContext<...>`, so a status without an
+// arm is a TS2741 compile error and the arm keys asserted below are the exact
+// set. Restoring the export makes the `satisfies` resolve and turns the
+// directive below into an unused one (TS2578).
+// @ts-expect-error reconcile.messaging.ts does not expose the pending status set
+void ({} satisfies { readonly retired?: typeof ReconcileMessaging.PENDING_STATUSES });
 
 function allSoftDependenciesLoaded(): SoftDepStatus {
   return { piMcpAdapterLoaded: true, piSubagentsLoaded: true };
@@ -86,14 +94,12 @@ test("reconcile contexts expose their exact labels and declared render arms", ()
   ];
 
   // act
-  const pendingStatuses = [...PENDING_STATUSES];
   const pendingRenderArms = Object.keys(PENDING_CONTEXT.render);
   const appliedRenderArms = Object.keys(RECONCILE_APPLIED_CONTEXT.render);
 
   // assert
-  assert.deepEqual(pendingStatuses, expectedPendingStatuses);
-  assert.deepEqual(pendingRenderArms, expectedPendingStatuses);
-  assert.deepEqual(appliedRenderArms, expectedAppliedStatuses);
+  assert.deepStrictEqual(pendingRenderArms, expectedPendingStatuses);
+  assert.deepStrictEqual(appliedRenderArms, expectedAppliedStatuses);
   assert.equal(PENDING_CONTEXT.Messaging.label, "Reconcile pending");
   assert.equal(RECONCILE_APPLIED_CONTEXT.Messaging.label, "Reconcile");
 });
@@ -110,7 +116,7 @@ test("pending will-install omits optional tokens when they are absent", () => {
   );
 
   // assert
-  assert.deepEqual(message, { name: "alpha", status: "will install" });
+  assert.deepStrictEqual(message, { name: "alpha", status: "will install" });
   assert.equal(rendered, "● alpha (will install)");
 });
 
@@ -222,7 +228,7 @@ test("applied installed omits optional row tokens when they are absent", () => {
   );
 
   // assert
-  assert.deepEqual(message, {
+  assert.deepStrictEqual(message, {
     dependencies: [],
     name: "alpha",
     needsReload: true,

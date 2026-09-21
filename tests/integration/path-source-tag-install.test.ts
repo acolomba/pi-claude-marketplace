@@ -28,7 +28,7 @@ import {
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { addMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
-import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
+import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -170,7 +170,7 @@ test("TAGS-01/TAGS-03: a constrained path-source dependency installs from the ma
   const addCtx = makeCtx(environment.cwd);
   const installCtx = makeCtx(environment.cwd);
   const completionCache = createCompletionCache();
-  const installPlugin = createNodeInstallPlugin(
+  const installPlugin = createInstallOperation(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache,
   );
@@ -264,7 +264,7 @@ test("CR-01: an untracked file in the marketplace root does not leak into the ma
   const addCtx = makeCtx(environment.cwd);
   const installCtx = makeCtx(environment.cwd);
   const completionCache = createCompletionCache();
-  const installPlugin = createNodeInstallPlugin(
+  const installPlugin = createInstallOperation(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache,
   );
@@ -399,7 +399,7 @@ test("TAGS-01: two cascade members resolving against the SAME marketplace clone 
   const addCtx = makeCtx(environment.cwd);
   const installCtx = makeCtx(environment.cwd);
   const completionCache = createCompletionCache();
-  const installPlugin = createNodeInstallPlugin(
+  const installPlugin = createInstallOperation(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache,
   );
@@ -526,7 +526,7 @@ test("TAGS-02: a constraint no marketplace tag satisfies still installs both plu
   const addCtx = makeCtx(environment.cwd);
   const installCtx = makeCtx(environment.cwd);
   const completionCache = createCompletionCache();
-  const installPlugin = createNodeInstallPlugin(
+  const installPlugin = createInstallOperation(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache,
   );

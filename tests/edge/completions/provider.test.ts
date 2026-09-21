@@ -73,10 +73,8 @@ import test, { type TestContext } from "node:test";
 import { getArgumentCompletions } from "../../../extensions/pi-claude-marketplace/edge/completions/provider.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
-import type {
-  LocationsResolver,
-  MarketplaceStateRecord,
-} from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
+import type { LocationsResolver } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
+import type { MarketplaceStateRecordLike } from "../../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
 import type { PluginIndexRow } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
@@ -116,7 +114,7 @@ function labManifest(): readonly PluginIndexRow[] {
   ];
 }
 
-function marketplacesForScope(scope: Scope): Record<string, MarketplaceStateRecord> {
+function marketplacesForScope(scope: Scope): Record<string, MarketplaceStateRecordLike> {
   return scope === "user" ? { hub: { plugins: {} } } : { lab: { plugins: {} } };
 }
 
@@ -178,15 +176,12 @@ async function seedResolver(t: TestContext, label: string): Promise<SeededResolv
   installNetworkTrap(t);
 
   const resolver = {
-    marketplaceNamesCachePath: (scope: Scope): string =>
-      path.join(cacheRoot, scope, "marketplace-names.json"),
-
     pluginCachePath: (scope: Scope, marketplace: string): Promise<string> =>
       Promise.resolve(path.join(cacheRoot, scope, "plugins", `${marketplace}.json`)),
 
     loadStateForScope: (
       scope: Scope,
-    ): Promise<{ marketplaces: Record<string, MarketplaceStateRecord> }> =>
+    ): Promise<{ marketplaces: Record<string, MarketplaceStateRecordLike> }> =>
       Promise.resolve({ marketplaces: marketplacesForScope(scope) }),
 
     loadManifestForMarketplace: (
@@ -871,3 +866,74 @@ test("TC-6 routes plugin references through the required completion cache", asyn
     { label: "cache-row@hub", value: "uninstall --scope user cache-row@hub " },
   ]);
 });
+
+for (const verb of ["add", "remove", "rm", "autoupdate", "noautoupdate"]) {
+  test(`offers local for marketplace ${verb} with its command-specific description`, async (t) => {
+    // arrange
+    const { resolver, completionCache } = await seedResolver(t, "marketplace-flag");
+    const description =
+      "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json";
+
+    // act
+    const suggestions = await getArgumentCompletions(
+      `marketplace ${verb} --l`,
+      resolver,
+      completionCache,
+    );
+
+    // assert
+    assert.deepStrictEqual(suggestions, [
+      { label: "--local", value: `marketplace ${verb} --local `, description },
+    ]);
+  });
+}
+
+for (const verb of ["remove", "rm", "autoupdate", "noautoupdate"]) {
+  test(`marketplace ${verb} still completes names after local`, async (t) => {
+    // arrange
+    const { resolver, completionCache } = await seedResolver(t, "marketplace-local-name");
+
+    // act
+    const suggestions = await getArgumentCompletions(
+      `marketplace ${verb} --local `,
+      resolver,
+      completionCache,
+    );
+
+    // assert
+    assert.deepStrictEqual(suggestions, [
+      { label: "hub", value: `marketplace ${verb} --local hub ` },
+      { label: "lab", value: `marketplace ${verb} --local lab ` },
+    ]);
+  });
+}
+
+for (const prefix of ["bootstrap -", "bootstrap --scope "]) {
+  test(`does not offer unsupported scope completions for ${prefix}`, async (t) => {
+    // arrange
+    const { resolver, completionCache } = await seedResolver(t, "bootstrap-flags");
+
+    // act
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
+
+    // assert
+    assert.deepStrictEqual(suggestions, []);
+  });
+}
+
+for (const verb of ["info", "list", "update"]) {
+  test(`does not offer local for marketplace ${verb}`, async (t) => {
+    // arrange
+    const { resolver, completionCache } = await seedResolver(t, `marketplace-${verb}-flag`);
+
+    // act
+    const suggestions = await getArgumentCompletions(
+      `marketplace ${verb} --l`,
+      resolver,
+      completionCache,
+    );
+
+    // assert
+    assert.deepStrictEqual(suggestions, []);
+  });
+}

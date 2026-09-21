@@ -8,12 +8,12 @@
 // `/claude:plugin disable <plugin>@<marketplace> [--scope user|project] [--local]`.
 //
 // Mirrors the `makeAutoupdateHandler` shape: a single factory parameterized by
-// `enable: boolean` returns the per-subcommand handler. Parses
-// `<plugin>@<marketplace>` + `--scope` via `parseRequiredPluginMarketplaceRef`,
-// then scans the residual argv for `--local`. Rejects unknown long flags via
-// `notifyUsageError`.
+// `enable: boolean` returns the per-subcommand handler. Scans the argv for
+// `--local` first, then parses the residue for `<plugin>@<marketplace>` +
+// `--scope` via `parseRequiredPluginMarketplaceRef`. Rejects unknown long
+// flags via `notifyUsageError`.
 
-import { createNodeSetPluginEnabled } from "../../../orchestrators/plugin/enable-disable.ts";
+import { createEnableOperation } from "../../../orchestrators/plugin/operations.ts";
 import { errorMessage } from "../../../shared/errors.ts";
 import { notify } from "../../../shared/notification-dispatch.ts";
 // Shared scanner; see edge/handlers/shared.ts.
@@ -36,7 +36,7 @@ export function makeEnableDisableHandler(
   hooksRouting: EnableDisableHooksRouting,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   const usage = usageFor(enable);
-  const setPluginEnabled = createNodeSetPluginEnabled(hooksRouting);
+  const setPluginEnabled = createEnableOperation(hooksRouting);
   return async (args, ctx): Promise<void> => {
     const localFlag = extractLocalFlag(args, ctx, usage);
     if (localFlag === undefined) {

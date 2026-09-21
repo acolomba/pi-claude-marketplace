@@ -60,6 +60,7 @@ import type {
   PlannedPluginEnable,
   PlannedPluginInstall,
   PlannedPluginUninstall,
+  PlannedSourceDetail,
   PlannedSourceMismatch,
   ReconcilePlan,
 } from "./types.ts";
@@ -110,10 +111,8 @@ interface PendingMarketplaceClaim {
   readonly candidateMarketplace: string;
 }
 
-interface MarketplaceClaimConflict {
+interface MarketplaceClaimConflict extends PlannedSourceDetail {
   readonly declaredMarketplace: string;
-  readonly declaredSource: string;
-  readonly recordedSource: string;
 }
 
 interface MarketplaceClaims {
@@ -756,8 +755,11 @@ const NO_HELD_DECLARERS: ScopeSatisfactionVerdict = Object.freeze({ ok: true, un
  * locked closure and hands it in. A caller that asks only "what does the
  * config-versus-state diff say" omits it and no plugin is held down.
  *
- * O(N + M) in the union of declared + recorded entries (no per-entry regex
- * compilation, no nested scans).
+ * O(N + M) in the union of declared + recorded entries for the direct-match
+ * fast path (no per-entry regex compilation). A declared marketplace with no
+ * name match against `recorded` falls through to `buildMarketplaceClaims`'s
+ * source-based matching, which scans the recorded marketplaces per such
+ * declaration (`recordedSourceCandidates`) -- O(D*R) in the worst case.
  */
 export function planReconcile(
   merged: MergedConfig,

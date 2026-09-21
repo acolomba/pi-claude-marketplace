@@ -175,13 +175,11 @@ const extensionState = {
   marketplaces: {},
 } satisfies ExtensionState;
 void ({
-  scope: "user",
   plan: undefined,
   invalidOutcomes: [],
   stateExisted: false,
 } satisfies ScopeReadResult);
 void ({
-  scope: "project",
   plan: emptyReconcilePlan("project"),
   invalidOutcomes: [
     {
@@ -371,13 +369,11 @@ void ({
   // @ts-expect-error exact optional properties reject an explicitly undefined uninstall operation
 } satisfies ApplyReconcileOptions);
 void ({
-  scope: "project",
   plan: undefined,
   invalidOutcomes: [],
   // @ts-expect-error scope reads always state whether state.json existed
 } satisfies ScopeReadResult);
 void ({
-  scope: "project",
   plan: undefined,
   invalidOutcomes: [
     {
@@ -391,7 +387,6 @@ void ({
   stateExisted: true,
 } satisfies ScopeReadResult);
 void ({
-  scope: "project",
   plan: undefined,
   invalidOutcomes: [],
   state: undefined,
@@ -432,10 +427,10 @@ describe("plannedSourceMismatchSubject", () => {
     } satisfies PlannedSourceMismatch;
 
     // act
-    const subject = plannedSourceMismatchSubject(mismatch);
+    const blockName = plannedSourceMismatchSubject(mismatch);
 
     // assert
-    assert.strictEqual(subject, "official");
+    assert.strictEqual(blockName, "official");
   });
 
   test("selects the raw key for a malformed plugin key", () => {
@@ -447,10 +442,10 @@ describe("plannedSourceMismatchSubject", () => {
     } satisfies PlannedSourceMismatch;
 
     // act
-    const subject = plannedSourceMismatchSubject(mismatch);
+    const blockName = plannedSourceMismatchSubject(mismatch);
 
     // assert
-    assert.strictEqual(subject, "formatter");
+    assert.strictEqual(blockName, "formatter");
   });
 });
 

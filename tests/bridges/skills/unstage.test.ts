@@ -14,15 +14,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
-import {
-  createUnstagePluginSkills,
-  unstagePluginSkills,
-} from "../../../extensions/pi-claude-marketplace/bridges/skills/unstage.ts";
+import { createUnstagePluginSkills } from "../../../extensions/pi-claude-marketplace/bridges/skills/unstage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type { SkillsUnstageRemover } from "../../../extensions/pi-claude-marketplace/bridges/skills/unstage.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+
+const unstagePluginSkills = createUnstagePluginSkills({
+  removeTree: (target: string) => rm(target, { recursive: true, force: true }),
+});
 
 interface SkillScope {
   readonly directory: string;

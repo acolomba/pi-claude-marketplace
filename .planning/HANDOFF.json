@@ -10,9 +10,21 @@
   "status": "paused",
   "completed_tasks": [],
   "remaining_tasks": [
-    {"id": 1, "name": "Rule on the two one-way catalog decisions this phase makes", "status": "awaiting_checkpoint_decision"},
-    {"id": 2, "name": "End-to-end -- enabling a plugin turns on its one disabled dependency and says so (tracer)", "status": "not_started"},
-    {"id": 3, "name": "The rest of the closure -- every member gets a row, and the refusals", "status": "not_started"}
+    {
+      "id": 1,
+      "name": "Rule on the two one-way catalog decisions this phase makes",
+      "status": "awaiting_checkpoint_decision"
+    },
+    {
+      "id": 2,
+      "name": "End-to-end -- enabling a plugin turns on its one disabled dependency and says so (tracer)",
+      "status": "not_started"
+    },
+    {
+      "id": 3,
+      "name": "The rest of the closure -- every member gets a row, and the refusals",
+      "status": "not_started"
+    }
   ],
   "blockers": [
     {
@@ -30,9 +42,21 @@
     }
   ],
   "decisions": [
-    {"decision": "D-08-01: EDEP-02's disable refusal uses a plain-English instruction naming dependents in order, not a shell-chained command (no multi-target disable exists).", "rationale": "parseRequiredPluginMarketplaceRef accepts exactly one plugin target; a chained command would imply a capability that doesn't exist.", "phase": "08"},
-    {"decision": "D-08-02: EDEP-03's cascade-enable-through-record gets a new closed-set token `{dependency enabled}`.", "rationale": "Parallels the existing register (dependency promoted/disabled/pruned); retires the RESV-05 {already installed, dependency disabled} skip.", "phase": "08"},
-    {"decision": "D-08-03: EDEP-01's enable cascade reports the full transitive closure, one row per dependency, including already-enabled ones.", "rationale": "Matches the install cascade's established full-member-reporting convention rather than a quieter diff-only report.", "phase": "08"}
+    {
+      "decision": "D-08-01: EDEP-02's disable refusal uses a plain-English instruction naming dependents in order, not a shell-chained command (no multi-target disable exists).",
+      "rationale": "parseRequiredPluginMarketplaceRef accepts exactly one plugin target; a chained command would imply a capability that doesn't exist.",
+      "phase": "08"
+    },
+    {
+      "decision": "D-08-02: EDEP-03's cascade-enable-through-record gets a new closed-set token `{dependency enabled}`.",
+      "rationale": "Parallels the existing register (dependency promoted/disabled/pruned); retires the RESV-05 {already installed, dependency disabled} skip.",
+      "phase": "08"
+    },
+    {
+      "decision": "D-08-03: EDEP-01's enable cascade reports the full transitive closure, one row per dependency, including already-enabled ones.",
+      "rationale": "Matches the install cascade's established full-member-reporting convention rather than a quieter diff-only report.",
+      "phase": "08"
+    }
   ],
   "uncommitted_files": [
     " M .claude/settings.json",

@@ -28,6 +28,7 @@
 //       line LAST
 
 import assert from "node:assert/strict";
+import { createHook } from "node:async_hooks";
 import * as fs from "node:fs";
 import { mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
 import { devNull } from "node:os";
@@ -49,7 +50,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
   createGetPluginInfo,
-  getPluginInfo,
   type InfoCloneCacheSeam,
   type PluginInfoReader,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
@@ -67,9 +67,58 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type * as InfoOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 type FaultableFsPromiseMethod = "readFile" | "readdir" | "stat";
+
+// info.ts publishes the factory and its injected reader contract; the single
+// production composition of them lives in orchestrators/plugin/operations.ts.
+// Re-adding a composed value here would give the command two production
+// bindings. Restoring the export makes the `satisfies` resolve and turns the
+// directive below into an unused one (TS2578).
+// @ts-expect-error info.ts does not expose a composed getPluginInfo value
+void ({} satisfies { readonly retired?: typeof InfoOrchestrator.getPluginInfo });
+
+/**
+ * The Node-backed read capability, stated once so the fault-injecting reader
+ * below delegates to it rather than restating the three real reads. It is the
+ * same pair the production composition binds.
+ */
+const NODE_READER: PluginInfoReader = {
+  isRegularFile: async (filePath) => (await stat(filePath)).isFile(),
+  readTextFile: (filePath) => readFile(filePath, "utf8"),
+  listDirectory: (directoryPath) => readdir(directoryPath, { withFileTypes: true }),
+};
+
+/**
+ * The composition every case below drives: this module's own factory bound to
+ * the real read capability, stated at one site so each case reads as the
+ * command rather than as its assembly.
+ */
+const getPluginInfo = createGetPluginInfo(NODE_READER);
+
+test("constructs the info command without using its reader capability or starting asynchronous work", (t) => {
+  // arrange
+  const reader = mock<PluginInfoReader>({ exactParams: true, name: "plugin info reader" });
+  const startedResourceTypes: string[] = [];
+  const resources = createHook({
+    init: (_asyncId, type) => {
+      startedResourceTypes.push(type);
+    },
+  });
+  t.after(() => resources.disable());
+
+  // act
+  resources.enable();
+  const infoWithReader = createGetPluginInfo(reader);
+  resources.disable();
+
+  // assert
+  assert.strictEqual(typeof infoWithReader, "function");
+  assert.deepStrictEqual(startedResourceTypes, []);
+  verify(reader);
+});
 
 test("exposes a required plugin info reader factory", async () => {
   const infoModule: Record<string, unknown> =
@@ -100,7 +149,7 @@ async function withFsPromiseFault<T>(
         throw error;
       }
 
-      return readFile(filePath, "utf8");
+      return NODE_READER.readTextFile(filePath);
     },
     async listDirectory(directoryPath) {
       if (method === "readdir" && directoryPath === targetPath) {
@@ -108,7 +157,7 @@ async function withFsPromiseFault<T>(
         throw error;
       }
 
-      return readdir(directoryPath, { withFileTypes: true });
+      return NODE_READER.listDirectory(directoryPath);
     },
   };
 
@@ -4816,6 +4865,78 @@ test("INFO-05: invalid-JSON `hooks/hooks.json` suppresses the `hooks:` block on 
   });
 });
 
+test("PHOOK-05: a hooks.json that mutates between resolve and the strict re-read still renders `(installed)` with no `hooks:` block", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "raced", source: "./raced", version: "1.0.0" }],
+      },
+      installed: { raced: { version: "1.0.0" } },
+      installablePluginDirs: ["raced"],
+    });
+
+    // The resolver reads through the same injected reader as the SEPARATE
+    // strict re-read (`readHookSummaryEntries`), so the reader answers the
+    // FIRST read of this path -- the resolver's -- with the valid bytes on
+    // disk, recording `hooksConfigPath`, and every later read with malformed
+    // JSON. The only way the bytes seen by resolve and by the re-read can
+    // differ is a mutation in between (a TOCTOU race); this reader simulates
+    // that.
+    const pluginDir = path.join(mpRoot, "raced");
+    const hooksConfigFile = path.join(pluginDir, "hooks", "hooks.json");
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(
+      hooksConfigFile,
+      JSON.stringify({
+        PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo pre-bash" }] }],
+      }),
+      "utf8",
+    );
+    let hooksConfigReads = 0;
+    const reader: PluginInfoReader = {
+      isRegularFile: (filePath) => NODE_READER.isRegularFile(filePath),
+      readTextFile: (filePath) => {
+        if (filePath !== hooksConfigFile) {
+          return NODE_READER.readTextFile(filePath);
+        }
+
+        hooksConfigReads += 1;
+        return hooksConfigReads === 1
+          ? NODE_READER.readTextFile(filePath)
+          : Promise.resolve("{ not valid json");
+      },
+      listDirectory: (directoryPath) => NODE_READER.listDirectory(directoryPath),
+    };
+
+    const { ctx, pi, notifications } = makeCtx();
+    // act
+    await createGetPluginInfo(reader)({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "raced",
+      scope: "user",
+      cwd,
+    });
+    // assert
+    assert.equal(notifications.length, 1);
+    const msg = notifications[0]!.message;
+    // The resolver already recorded the plugin as fully supported from its
+    // own (valid) read, so the row stays a plain `(installed)` -- the
+    // re-parse failure is a display-only defensive fallback, not a
+    // resolution failure.
+    assert.match(msg, /● raced v1\.0\.0 \(installed\)$/m);
+    assert.doesNotMatch(msg, /hooks:/);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // RSTA-01 / RSTA-04 / RSTA-05 / RSTA-06 / D-80-04 / NFR-5: git-source plugins
 // on the info surface. A NOT-installed git plugin (url / github / git-subdir)
@@ -7591,9 +7712,16 @@ test("a non-object own manifest stops before the bare sibling", async () => {
   );
 });
 
-for (const { label, error } of [
-  { label: "a permission error", error: Object.assign(new Error("denied"), { code: "EACCES" }) },
-  { label: "an error without an errno", error: new Error("unreadable") },
+// The read failure propagates out of the resolver with its identity intact, so
+// the probe classifier names its class on the row instead of a bare sibling
+// standing in for the unreadable manifest.
+for (const { label, error, reason } of [
+  {
+    label: "a permission error",
+    error: Object.assign(new Error("denied"), { code: "EACCES" }),
+    reason: "permission denied",
+  },
+  { label: "an error without an errno", error: new Error("unreadable"), reason: "unreadable" },
 ]) {
   test(`an own manifest read with ${label} does not use a valid bare sibling`, async () => {
     await withHermeticHome(async ({ home, cwd }) => {
@@ -7628,7 +7756,9 @@ for (const { label, error } of [
       // assert
       assert.deepEqual(
         notifications.map(({ message }) => message),
-        ["● mp [user] <no autoupdate>\n  ⊘ host (unavailable) {unsupported source}"],
+        [
+          `● mp [user] <no autoupdate>\n  ⊘ host (unavailable) {${reason}}\n    components: not resolved`,
+        ],
       );
     });
   });

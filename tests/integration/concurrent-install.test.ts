@@ -12,7 +12,6 @@ import {
   saveState,
   type ExtensionState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { STATE_LOCK_HELD_PREFIX } from "../../extensions/pi-claude-marketplace/shared/markers.ts";
 
 interface ChildResult {
   readonly ok: boolean;
@@ -182,7 +181,7 @@ function assertOneWinner(outcome: RaceOutcome): ChildResult {
 
   assert.equal(winners.length, 1, JSON.stringify(results));
   assert.equal(losers.length, 1, JSON.stringify(results));
-  assert.match(losers[0]!.message, new RegExp(STATE_LOCK_HELD_PREFIX));
+  assert.match(losers[0]!.message, /Another pi-claude-marketplace operation is in progress for/);
   return winners[0]!;
 }
 
@@ -211,9 +210,9 @@ test("D-15 same-plugin race leaves one installed record and no orphan skills", a
     assertOneWinner(await runRace(env, "alpha", "alpha"));
 
     const state = await readState(env.cwd);
-    assert.deepEqual(Object.keys(state.marketplaces.mp!.plugins), ["alpha"]);
+    assert.deepStrictEqual(Object.keys(state.marketplaces.mp!.plugins), ["alpha"]);
     const installedSkills = state.marketplaces.mp!.plugins.alpha!.resources!.skills ?? [];
-    assert.deepEqual(await listSkillDirs(env.cwd), [...installedSkills].sort());
+    assert.deepStrictEqual(await listSkillDirs(env.cwd), [...installedSkills].sort());
   } finally {
     await env.cleanup();
   }
@@ -230,7 +229,7 @@ test("D-15 different-plugin same-scope race records exactly one plugin and no or
     assert.equal(pluginNames.length, 1);
     const installedSkills =
       state.marketplaces.mp!.plugins[pluginNames[0]!]!.resources!.skills ?? [];
-    assert.deepEqual(await listSkillDirs(env.cwd), [...installedSkills].sort());
+    assert.deepStrictEqual(await listSkillDirs(env.cwd), [...installedSkills].sort());
   } finally {
     await env.cleanup();
   }

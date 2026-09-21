@@ -147,17 +147,19 @@ export function settleHandlerFor(
         await runStopBucket(runtime, last, capturedGeneration, ctx, pi, executor);
         return;
       case "error":
-      case "length":
-        await runStopFailure(
-          last,
-          classifyStopFailure(last.errorMessage ?? "", last.stopReason),
-          runtime,
-          capturedGeneration,
-          ctx,
-          pi,
-          executor,
-        );
+      case "length": {
+        const stopErrorMessage = last.errorMessage ?? "";
+        const errorType = classifyStopFailure(stopErrorMessage, last.stopReason);
+        if (errorType === "unknown") {
+          hookDebugLog(
+            `settle: unrecognized StopFailure errorMessage: ${JSON.stringify(stopErrorMessage)}`,
+          );
+        }
+
+        await runStopFailure(last, errorType, runtime, capturedGeneration, ctx, pi, executor);
         return;
+      }
+
       // Defensive no-op group (STOP-01): none of these is a turn ending the
       // Stop bucket may observe. `deferred` means the provider request was
       // handed to a batch or asynchronous lane and the message carries a
@@ -169,15 +171,12 @@ export function settleHandlerFor(
       case "toolUse":
       case "deferred":
         return;
-      default: {
-        // Compile-time exhaustiveness pin (NFR-7): a peer-dep bump that widens
-        // `StopReason` becomes a type error here. At runtime the unknown ending
-        // is debug-logged and dropped -- the settle handler never throws.
-        const unknownStopReason: never = last.stopReason;
-        hookDebugLog(`settle: unknown stopReason ${JSON.stringify(unknownStopReason)}; dropped`);
-        return;
-      }
     }
+
+    // NFR-7: the switch lists every `StopReason` and has no default arm, so a
+    // peer-dep bump that widens the union is a type and lint error above. A
+    // stop reason outside the union at runtime falls out of the switch and is
+    // dropped here -- the settle handler never throws.
   };
 }
 

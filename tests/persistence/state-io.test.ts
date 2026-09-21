@@ -7,9 +7,7 @@ import test, { type TestContext } from "node:test";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   DEFAULT_STATE,
-  STATE_VALIDATOR,
   type DisabledPluginRecord,
-  type EnabledPluginRecord,
   type ExtensionState,
   type PluginInstallRecord,
   clonePluginRecord,
@@ -36,10 +34,10 @@ void ({
   provenance: "explicit",
   installedAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
-} satisfies EnabledPluginRecord);
+} satisfies PluginInstallRecord);
 
-// @ts-expect-error an enabled record must retain the true discriminant
-void ({ enabled: false } satisfies EnabledPluginRecord);
+// @ts-expect-error a stored plugin record requires its complete installation fields
+void ({ enabled: false } satisfies PluginInstallRecord);
 
 // @ts-expect-error D-04-01: provenance is a closed two-mode union
 void ({ provenance: "manual" } satisfies Pick<PluginInstallRecord, "provenance">);
@@ -248,26 +246,38 @@ test("disables a plugin while preserving its complete inventory", () => {
   assert.strictEqual(disabledRecord.resources, resources);
 });
 
-for (const { name, state, accepted } of [
-  { name: "schema version 1", state: { schemaVersion: 1, marketplaces: {} }, accepted: true },
-  { name: "schema version 2", state: { schemaVersion: 2, marketplaces: {} }, accepted: true },
-  { name: "schema version 3", state: { schemaVersion: 3, marketplaces: {} }, accepted: true },
-  { name: "schema version 4", state: { schemaVersion: 4, marketplaces: {} }, accepted: false },
+for (const { name, state, expectedState } of [
+  {
+    name: "schema version 1",
+    state: { schemaVersion: 1, marketplaces: {} },
+    expectedState: { schemaVersion: 3, marketplaces: {} },
+  },
+  {
+    name: "schema version 2",
+    state: { schemaVersion: 2, marketplaces: {} },
+    expectedState: { schemaVersion: 3, marketplaces: {} },
+  },
+  {
+    name: "schema version 3",
+    state: { schemaVersion: 3, marketplaces: {} },
+    expectedState: { schemaVersion: 3, marketplaces: {} },
+  },
   {
     name: "optional reconciliation stamp",
     state: { schemaVersion: 3, lastReconciledExtensionVersion: "0.17.0", marketplaces: {} },
-    accepted: true,
+    expectedState: { schemaVersion: 3, lastReconciledExtensionVersion: "0.17.0", marketplaces: {} },
   },
 ]) {
-  test(`validates ${name}`, () => {
+  test(`loads ${name} through the state contract`, async (t) => {
     // arrange
-    const storedState = state;
+    const extensionRoot = await createExtensionRoot(t, "state-io-version-contract-");
+    await writeFile(path.join(extensionRoot, "state.json"), JSON.stringify(state));
 
     // act
-    const valid = STATE_VALIDATOR.Check(storedState);
+    const loadedState = await loadState(extensionRoot);
 
     // assert
-    assert.strictEqual(valid, accepted);
+    assert.deepStrictEqual(loadedState, expectedState);
   });
 }
 
@@ -314,7 +324,7 @@ test("loads a null legacy root as empty state without replacing the stored bytes
   assert.strictEqual(retainedBytes, storedBytes);
 });
 
-test("validates complete hook and resolved-sha plugin records", () => {
+test("loads complete hook and resolved-sha plugin records", async (t) => {
   // arrange
   const storedState = {
     schemaVersion: 3,
@@ -350,11 +360,14 @@ test("validates complete hook and resolved-sha plugin records", () => {
     },
   };
 
+  const extensionRoot = await createExtensionRoot(t, "state-io-complete-record-");
+  await writeFile(path.join(extensionRoot, "state.json"), JSON.stringify(storedState));
+
   // act
-  const valid = STATE_VALIDATOR.Check(storedState);
+  const loadedState = await loadState(extensionRoot);
 
   // assert
-  assert.strictEqual(valid, true);
+  assert.deepStrictEqual(loadedState, storedState);
 });
 
 /** A stored document whose one plugin record carries the given extra keys. */
@@ -405,15 +418,22 @@ for (const { name, extra, accepted } of [
     accepted: false,
   },
 ]) {
-  test(`validates ${name}`, () => {
+  test(`validates ${name}`, async (t) => {
     // arrange
-    const storedState = storedStateWithPluginKeys(extra);
+    const extensionRoot = await createExtensionRoot(t, "state-io-dependency-disabled-");
+    await writeFile(
+      path.join(extensionRoot, "state.json"),
+      JSON.stringify(storedStateWithPluginKeys(extra)),
+    );
 
     // act
-    const valid = STATE_VALIDATOR.Check(storedState);
+    const loaded = await loadState(extensionRoot).then(
+      () => true,
+      () => false,
+    );
 
     // assert
-    assert.strictEqual(valid, accepted);
+    assert.strictEqual(loaded, accepted);
   });
 }
 
@@ -1114,60 +1134,31 @@ test("reports the exact post-normalization schema failure", async (t) => {
   );
 });
 
-test("formats a root validator failure through the public loader", async (t) => {
+test("rejects a nonobject save without replacing state bytes", async (t) => {
   // arrange
   const extensionRoot = await createExtensionRoot(t, "state-io-root-error-");
   const stateJsonPath = path.join(extensionRoot, "state.json");
-  const rootErrors = STATE_VALIDATOR.Errors(null);
-  t.mock.method(STATE_VALIDATOR, "Check", () => false);
-  t.mock.method(STATE_VALIDATOR, "Errors", () => rootErrors);
   await writeFile(stateJsonPath, "{}");
 
   // act & assert
   await assert.rejects(
-    () => loadState(extensionRoot),
+    // @ts-expect-error an unchecked JavaScript caller can pass a nonobject state
+    () => saveState(extensionRoot, null),
     (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.deepStrictEqual(
         { name: error.name, message: error.message, cause: error.cause },
         {
           name: "Error",
-          message: `state.json at ${stateJsonPath} failed schema validation: <root>: must be object`,
+          message:
+            "saveState refused: in-memory state failed schema validation: <root>: must be object",
           cause: undefined,
         },
       );
       return true;
     },
   );
-});
-
-test("uses the no-detail fallback when an invalid save has no validator errors", async (t) => {
-  // arrange
-  const extensionRoot = await createExtensionRoot(t, "state-io-empty-errors-");
-  const stateJsonPath = path.join(extensionRoot, "state.json");
-  const existingBytes = '{"keep":true}\n';
-  const invalidState = { schemaVersion: 4, marketplaces: {} } as unknown as ExtensionState;
-  t.mock.method(STATE_VALIDATOR, "Errors", () => []);
-  await writeFile(stateJsonPath, existingBytes);
-
-  // act
-  const error = await saveState(extensionRoot, invalidState).then(
-    () => undefined,
-    (reason: unknown) => reason,
-  );
-  const retainedBytes = await readFile(stateJsonPath, "utf8");
-
-  // assert
-  assert.ok(error instanceof Error);
-  assert.deepStrictEqual(
-    { name: error.name, message: error.message, cause: error.cause },
-    {
-      name: "Error",
-      message: "saveState refused: in-memory state failed schema validation: (no detail available)",
-      cause: undefined,
-    },
-  );
-  assert.strictEqual(retainedBytes, existingBytes);
+  assert.strictEqual(await readFile(stateJsonPath, "utf8"), "{}");
 });
 
 test("rejects an invalid save before replacing existing bytes", async (t) => {
@@ -1349,9 +1340,11 @@ test(
   },
 );
 
-for (const { name, plugin } of [
+for (const { name, plugin, expectedError } of [
   {
     name: "a plugin without hooks",
+    expectedError:
+      "saveState refused: in-memory state failed schema validation: /marketplaces/catalog/plugins/plugin/resources: must have required properties hooks",
     plugin: {
       version: "1.0.0",
       resolvedSource: "/catalog/plugin",
@@ -1365,6 +1358,8 @@ for (const { name, plugin } of [
   },
   {
     name: "a plugin with non-array hooks",
+    expectedError:
+      "saveState refused: in-memory state failed schema validation: /marketplaces/catalog/plugins/plugin/resources/hooks: must be array",
     plugin: {
       version: "1.0.0",
       resolvedSource: "/catalog/plugin",
@@ -1378,6 +1373,8 @@ for (const { name, plugin } of [
   },
   {
     name: "a plugin without enabled",
+    expectedError:
+      "saveState refused: in-memory state failed schema validation: /marketplaces/catalog/plugins/plugin: must have required properties enabled",
     plugin: {
       version: "1.0.0",
       resolvedSource: "/catalog/plugin",
@@ -1390,6 +1387,8 @@ for (const { name, plugin } of [
   },
   {
     name: "a plugin without provenance",
+    expectedError:
+      "saveState refused: in-memory state failed schema validation: /marketplaces/catalog/plugins/plugin: must have required properties provenance",
     plugin: {
       version: "1.0.0",
       resolvedSource: "/catalog/plugin",
@@ -1402,6 +1401,8 @@ for (const { name, plugin } of [
   },
   {
     name: "a plugin whose provenance is outside the two modes",
+    expectedError:
+      "saveState refused: in-memory state failed schema validation: /marketplaces/catalog/plugins/plugin/provenance: must be equal to constant",
     plugin: {
       version: "1.0.0",
       resolvedSource: "/catalog/plugin",
@@ -1414,7 +1415,7 @@ for (const { name, plugin } of [
     },
   },
 ]) {
-  test(`rejects ${name} at the published validator`, () => {
+  test(`rejects ${name} before saving state`, async (t) => {
     // arrange
     const storedState = {
       schemaVersion: 3,
@@ -1431,11 +1432,24 @@ for (const { name, plugin } of [
       },
     };
 
-    // act
-    const valid = STATE_VALIDATOR.Check(storedState);
+    const extensionRoot = await createExtensionRoot(t, "state-io-invalid-plugin-");
+    const stateJsonPath = path.join(extensionRoot, "state.json");
+    await writeFile(stateJsonPath, "retain existing state");
 
-    // assert
-    assert.strictEqual(valid, false);
+    // act & assert
+    await assert.rejects(
+      // @ts-expect-error malformed persisted records cross an unchecked JavaScript boundary
+      () => saveState(extensionRoot, storedState),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.deepStrictEqual(
+          { name: error.name, message: error.message, cause: error.cause },
+          { name: "Error", message: expectedError, cause: undefined },
+        );
+        return true;
+      },
+    );
+    assert.strictEqual(await readFile(stateJsonPath, "utf8"), "retain existing state");
   });
 }
 

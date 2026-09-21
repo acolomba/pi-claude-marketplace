@@ -7,11 +7,9 @@ import {
   finalizeMcpReplacement,
   prepareStageMcpServers,
   replacePreparedMcp,
-  resolvePluginMcpServers,
   rollbackMcpReplacement,
   unstageMcpServers,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
-import { resolvePluginMcpServers as peerResolvePluginMcpServers } from "../../../extensions/pi-claude-marketplace/bridges/mcp/parse.ts";
 import {
   abortPreparedMcp as peerAbortPreparedMcp,
   commitPreparedMcp as peerCommitPreparedMcp,
@@ -122,16 +120,5 @@ describe("MCP barrel runtime bindings", () => {
 
     // assert
     assert.strictEqual(boundaryUnstageMcpServers, expectedUnstageMcpServers);
-  });
-
-  test("re-exports resolvePluginMcpServers from the parse module", () => {
-    // arrange
-    const expectedResolvePluginMcpServers = peerResolvePluginMcpServers;
-
-    // act
-    const boundaryResolvePluginMcpServers = resolvePluginMcpServers;
-
-    // assert
-    assert.strictEqual(boundaryResolvePluginMcpServers, expectedResolvePluginMcpServers);
   });
 });

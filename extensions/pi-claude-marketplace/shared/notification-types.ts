@@ -2,52 +2,60 @@ import type { HookSummaryEntry } from "./concerns/hooks.ts";
 import type { Dependency } from "./concerns/soft-dep.ts";
 import type { Scope } from "./types.ts";
 
-/** Closed notification reason vocabulary in canonical render order. */
-export const REASONS = [
-  "up-to-date",
-  "not found",
-  "already installed",
-  "not installed",
-  "not in manifest",
-  "invalid manifest",
-  "no longer installable",
-  "unsupported source",
-  "unsupported component",
-  "unsupported hooks",
-  "lsp",
-  "requires pi-subagents",
-  "requires pi-mcp",
-  "rollback partial",
-  "unreadable",
-  "unparseable",
-  "unreadable manifest",
-  "source mismatch",
-  "plugins remain",
-  "concurrently uninstalled",
-  "concurrently updated",
-  "stale clone",
-  "duplicate name",
-  "lock held",
-  "already autoupdate",
-  "already no autoupdate",
-  "already enabled",
-  "already disabled",
-  "permission denied",
-  "source missing",
-  "network unreachable",
-  "marketplace not added",
-  "marketplace not added to user scope",
-  "marketplace not added to project scope",
-  "orphan rewake",
-  "authentication required",
-  "dangling reference",
-  "malformed mcp",
-  "malformed skill",
-  "malformed command",
-  "installs disabled",
-  "marketplace in user scope",
-  "marketplace in project scope",
-  "workflows",
+/**
+ * Closed notification reason vocabulary in canonical render order.
+ *
+ * Declared as a bare union rather than an `as const` tuple: nothing reads the
+ * members at runtime, and a tuple that only ever feeds `(typeof X)[number]` is an
+ * unreferenced runtime value. The declaration order is the catalog's order -- a
+ * new token appends at the tail -- and `compat-01-no-expansion.test.ts` reads it
+ * here, because a union carries membership and not order.
+ */
+export type Reason =
+  | "up-to-date"
+  | "not found"
+  | "already installed"
+  | "not installed"
+  | "not in manifest"
+  | "invalid manifest"
+  | "no longer installable"
+  | "unsupported source"
+  | "unsupported component"
+  | "unsupported hooks"
+  | "lsp"
+  | "requires pi-subagents"
+  | "requires pi-mcp"
+  | "rollback partial"
+  | "unreadable"
+  | "unparseable"
+  | "unreadable manifest"
+  | "source mismatch"
+  | "plugins remain"
+  | "concurrently uninstalled"
+  | "concurrently updated"
+  | "stale clone"
+  | "duplicate name"
+  | "lock held"
+  | "already autoupdate"
+  | "already no autoupdate"
+  | "already enabled"
+  | "already disabled"
+  | "permission denied"
+  | "source missing"
+  | "network unreachable"
+  | "marketplace not added"
+  | "marketplace not added to user scope"
+  | "marketplace not added to project scope"
+  | "orphan rewake"
+  | "authentication required"
+  | "dangling reference"
+  | "malformed mcp"
+  | "malformed skill"
+  | "malformed command"
+  | "installs disabled"
+  | "marketplace in user scope"
+  | "marketplace in project scope"
+  | "workflows"
   // DATA-01 / WR-06: the uninstall row's disposition marker. Uninstall destroys
   // the plugin's data directory by default, and without a marker the two
   // dispositions render the same row: the operator who typed `--keep-data`
@@ -55,42 +63,42 @@ export const REASONS = [
   // a data tree was destroyed. The token rides the PRESERVING branch, which
   // keeps the default row byte-frozen (D-02-01) while making the two branches
   // distinguishable.
-  "data kept",
+  | "data kept"
   // RESV-03: the dependency's source advertises no release tag inside the
   // effective constraint. The outcome the operator can act on, kept separate
   // from the transport failures (`network unreachable` / `authentication
   // required`), which say the listing could not be READ rather than that it
   // held nothing usable.
-  "no matching version",
+  | "no matching version"
   // RESV-03 / RESV-05: the effective constraint cannot be satisfied. One token
   // over two rows -- declarations that contradict each other, and a copy
   // already on disk that falls outside them. The already-installed row joins
   // `already installed` in the same brace and carries its recorded version, so
   // the two subjects stay distinguishable without a second token.
-  "version conflict",
+  | "version conflict"
   // RESV-03: the declared constraints pass one of the two combination size
   // caps. The input is well formed and it is the COMBINATION that is refused,
   // so `invalid version constraint` would misattribute it.
-  "constraint too complex",
+  | "constraint too complex"
   // RESV-03: a declared constraint is not a version range the evaluator can
   // read. Distinct from `unparseable`, whose subject is a whole document rather
   // than one field of one declaration.
-  "invalid version constraint",
+  | "invalid version constraint"
   // RESV-02 / D-03-08: the dependency names a marketplace the target scope has
   // not added. A CONTENT reason, on the `marketplace in user scope` precedent:
   // its subject is the dependency row it rides, which is why the three
   // structural `marketplace not added*` markers -- whose subject is a
   // standalone marketplace row -- cannot carry it.
-  "dependency marketplace not added",
+  | "dependency marketplace not added"
   // RESV-04: the dependency graph closes on itself. Every inherited token names
   // a property of ONE plugin; a cycle is a property of the path between
   // several, which the row's cause line spells out in walk order.
-  "dependency cycle",
+  | "dependency cycle"
   // RESV-06: stamped on the requesting plugin's own row when what failed was
   // one of its dependencies. Without it that row -- the one the user's command
   // produced -- reads as an unexplained failure beside the dependency row that
   // carries the real cause.
-  "dependency failed",
+  | "dependency failed"
   // RESV-05: the dependency the cascade left alone is RECORDED but disabled, so
   // it materialized nothing on disk. `already installed` alone is true and
   // misleading together -- it reads as the benign idempotent skip, and the
@@ -98,7 +106,7 @@ export const REASONS = [
   // there. This token is what raises that row off info and names the one thing
   // the user can act on. Enablement is never decided on a dependency's behalf
   // (see `docs/plugin-enablement.md`), so reporting it is the whole remedy.
-  "dependency disabled",
+  | "dependency disabled"
   // D-04-07: the plugin the user just named was already recorded, as another
   // plugin's dependency, and this command promoted that record to a direct
   // install. `already installed` alone reports a REFUSAL -- the command did
@@ -107,13 +115,13 @@ export const REASONS = [
   // `already installed`: the desired state is reached, nothing was
   // materialized, and the pair says which of those two facts this command
   // is responsible for.
-  "dependency promoted",
+  | "dependency promoted"
   // D-05-11 / PRUNE-04: the plugin was recorded as another plugin's
   // dependency, nothing installed declares it any more, and `uninstall
   // --prune` removed it. It rides an ordinary `uninstalled` row because the
   // operation IS an uninstall; the brace says why this plugin, which the user
   // did not name, went. Under `--keep-data` it precedes `data kept` (D-05-09).
-  "dependency pruned",
+  | "dependency pruned"
   // LOAD-01: the load-time check disabled this recorded plugin, because a
   // dependency it declares is not satisfied in the same scope. It mirrors
   // upstream's `dependency-unsatisfied` error code, so the token names the
@@ -126,7 +134,7 @@ export const REASONS = [
   // token's subject is the DEPENDENT the load-time check just disabled. Same
   // words, different subject, different surface -- one token for both would
   // make a grep for either fact return the other.
-  "dependency unsatisfied",
+  | "dependency unsatisfied"
   // LOAD-01: the same load-time check, on the arm where the dependency IS
   // recorded and enabled but its recorded version falls outside the declared
   // range. It mirrors upstream's second error code,
@@ -137,7 +145,7 @@ export const REASONS = [
   // one token must not be shown the other's situation. As with its neighbour
   // the token names the CONDITION and the remedy, which interpolates both the
   // dependency and the range, rides the row's cause line.
-  "dependency version unsatisfied",
+  | "dependency version unsatisfied"
   // LOAD-03 / D-06-06: the plugin the command just removed was still declared
   // as a dependency by other installed plugins in the same scope. The removal
   // WENT THROUGH -- that is upstream's behaviour, and it is what breaks the
@@ -151,17 +159,13 @@ export const REASONS = [
   // keys ride the row's cause line rather than the token, on the `dependency
   // cycle` precedent -- a token names one fact about one plugin, and the list
   // of who needed it is a fact about several.
-  "dependents unsatisfied",
+  | "dependents unsatisfied"
   // TAGS-02 / D-07-03: no marketplace tag satisfied a path-source dependency's
   // constraint, so the marketplace's CURRENT copy installed instead of
   // failing. It rides an `installed` row -- the install succeeded -- and is
   // neither idempotent (a copy installed) nor a failure reason. The
   // constraint itself is left for the LOAD-01 load-time check to enforce.
-  "dependency current copy",
-] as const;
-
-/** Literal union derived from the closed reason vocabulary. */
-export type Reason = (typeof REASONS)[number];
+  | "dependency current copy";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<
@@ -171,76 +175,73 @@ export type ContentReason = Exclude<
   | "marketplace not added to project scope"
 >;
 
-/** Closed notification status vocabulary in canonical render order. */
-export const STATUS_TOKENS = [
-  "installed",
-  "updated",
-  "reinstalled",
-  "uninstalled",
-  "added",
-  "removed",
-  "available",
-  "unavailable",
-  "upgradable",
-  "skipped",
-  "failed",
-  "rollback failed",
-  "manual recovery",
-  "no marketplaces",
-  "no plugins",
-  "will install",
-  "will uninstall",
-  "will enable",
-  "will disable",
-  "disabled",
-  "partially-installed",
-  "partially-upgradable",
-  "partially-available",
-  "remote",
-] as const;
+/**
+ * Closed notification status vocabulary in canonical render order.
+ * A bare union for the reason given on `Reason`.
+ */
+export type StatusToken =
+  | "installed"
+  | "updated"
+  | "reinstalled"
+  | "uninstalled"
+  | "added"
+  | "removed"
+  | "available"
+  | "unavailable"
+  | "upgradable"
+  | "skipped"
+  | "failed"
+  | "rollback failed"
+  | "manual recovery"
+  | "no marketplaces"
+  | "no plugins"
+  | "will install"
+  | "will uninstall"
+  | "will enable"
+  | "will disable"
+  | "disabled"
+  | "partially-installed"
+  | "partially-upgradable"
+  | "partially-available"
+  | "remote";
 
-/** Literal union derived from the closed notification status vocabulary. */
-export type StatusToken = (typeof STATUS_TOKENS)[number];
+/**
+ * Closed plugin status vocabulary in canonical render order.
+ * A bare union for the reason given on `Reason`.
+ */
+export type PluginStatus =
+  | "installed"
+  | "updated"
+  | "reinstalled"
+  | "uninstalled"
+  | "available"
+  | "unavailable"
+  | "upgradable"
+  | "failed"
+  | "skipped"
+  | "manual recovery"
+  | "will install"
+  | "will uninstall"
+  | "will enable"
+  | "will disable"
+  | "disabled"
+  | "partially-installed"
+  | "partially-upgradable"
+  | "partially-available"
+  | "remote";
 
-/** Closed plugin status vocabulary in canonical render order. */
-export const PLUGIN_STATUSES = [
-  "installed",
-  "updated",
-  "reinstalled",
-  "uninstalled",
-  "available",
-  "unavailable",
-  "upgradable",
-  "failed",
-  "skipped",
-  "manual recovery",
-  "will install",
-  "will uninstall",
-  "will enable",
-  "will disable",
-  "disabled",
-  "partially-installed",
-  "partially-upgradable",
-  "partially-available",
-  "remote",
-] as const;
-
-/** Closed marketplace status vocabulary in canonical render order. */
-export const MARKETPLACE_STATUSES = [
-  "added",
-  "removed",
-  "updated",
-  "failed",
-  "autoupdate enabled",
-  "autoupdate disabled",
-  "skipped",
-] as const;
-
-/** Literal union derived from the plugin status vocabulary. */
-export type PluginStatus = (typeof PLUGIN_STATUSES)[number];
-
-/** Literal union derived from the marketplace status vocabulary. */
-export type MarketplaceStatus = (typeof MARKETPLACE_STATUSES)[number];
+/**
+ * Closed marketplace status vocabulary in canonical render order.
+ * A bare union for the reason given on `Reason`.
+ */
+export type MarketplaceStatus =
+  | "added"
+  | "removed"
+  | "updated"
+  | "failed"
+  | "autoupdate enabled"
+  | "autoupdate disabled"
+  | "skipped";
 
 /** Marketplace details shown by list and info messages. */
 export interface MarketplaceDetails {
@@ -542,7 +543,7 @@ export function isScopeBearingListRow(
 }
 
 /**
- * Read `p.scope` defensively from the PluginNotificationMessage union.
+ * Read `row.scope` defensively from the PluginNotificationMessage union.
  * The `available` / `unavailable` variants OMIT the `scope` field by
  * construction (SNM-11); the other list-surface variants carry an OPTIONAL
  * `scope` that is present only when the plugin's install scope differs
@@ -555,14 +556,14 @@ export function isScopeBearingListRow(
  * narrows the variants appropriately.
  */
 export function pluginScopeOrFallback(
-  p: PluginNotificationMessage,
+  row: PluginNotificationMessage,
   marketplaceScope: Scope,
 ): Scope {
-  return isScopeBearingListRow(p) ? (p.scope ?? marketplaceScope) : marketplaceScope;
+  return isScopeBearingListRow(row) ? (row.scope ?? marketplaceScope) : marketplaceScope;
 }
 
 /**
- * Read `p.version` off a plugin notification row. D-15-04: every list-surface
+ * Read `row.version` off a plugin notification row. D-15-04: every list-surface
  * variant carries the same optional `version?` slot, so every arm returns the
  * same field and the switch computes nothing.
  *
@@ -572,8 +573,8 @@ export function pluginScopeOrFallback(
  * so a status added to the row union is a compile error here rather than a row
  * that silently loses its version.
  */
-export function pluginVersion(p: PluginNotificationMessage): string | undefined {
-  switch (p.status) {
+export function pluginVersion(row: PluginNotificationMessage): string | undefined {
+  switch (row.status) {
     case "installed":
     case "reinstalled":
     case "uninstalled":
@@ -587,9 +588,9 @@ export function pluginVersion(p: PluginNotificationMessage): string | undefined 
     case "partially-upgradable":
     case "failed":
     case "skipped":
-      return p.version;
+      return row.version;
     case "updated":
-      return p.to;
+      return row.to;
     case "manual recovery":
     case "will install":
     case "will uninstall":

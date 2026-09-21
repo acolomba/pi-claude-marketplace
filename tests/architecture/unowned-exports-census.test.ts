@@ -1,61 +1,62 @@
 /**
- * tests/architecture/unowned-exports-census.test.ts -- the pinned census of
- * exports that no production consumer reads (D-07-19 / GGAT-04).
- *
- * WHAT THIS PIN IS. `UNOWNED_EXPORT_CENSUS` (`gate-targets.ts`) is the complete
- * measured set of exports whose only readers are tests. This gate re-measures it
- * with the repository's own analyzer and asserts EXACT equality.
- *
- * WHAT THIS PIN IS NOT. It is not an allow-list, and nothing in it is forgiven.
- * An allow-list names entries it will keep excusing, silently and forever; this
- * set fails on an ADDITION, fails on a REMOVAL, and fails on a SWAP -- so any
- * change to the export surface of the tree has to be written down in the same
- * commit that causes it. That is the whole point: the deep comparison is what
- * makes a one-in-one-out exchange impossible to absorb, which a bare count would
- * do quietly. Both directions are proved by planting them, not assumed.
- *
- * WHY THE ANALYZER NEEDS `--production`. Under the committed configuration every
- * test file is an entry point, so a test import counts as a consumer and an
- * export read only by its own test looks alive. `--production` narrows the entry
- * points to the ones the published package declares, and the gap between the two
- * runs IS the blind spot: the benign control below runs the same command without
- * the flag and gets a clean report over the very same tree. `--production` is a
- * per-invocation flag, so `.fallowrc.json` is never written -- the deliberate
- * `production: false` setting stays exactly as it is, and this obligation lives
- * in a test rather than in a configuration file.
- *
- * The dispositions record this file also gates is the other half of the same
- * obligation: `D-07-17` allows a finding to be recorded as already-closed, but
- * only against evidence measured this cycle, and a record nobody checks drifts
- * out of step with the ledger it summarizes exactly as a stale gate does.
+ * Exact production finding census and historical disposition evidence.
+ * Every category is pinned by identity, so additions, removals, and equal-count
+ * swaps require review. Real offender/benign controls calibrate the shared
+ * instrument independently of whether the production census is empty.
  */
 
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import { FINDING_DISPOSITIONS_REL, UNOWNED_EXPORT_CENSUS } from "./gate-targets.ts";
+import {
+  assertFindingCensus,
+  readAnalyzerReport,
+  type AnalyzerReport,
+  type FindingGroups,
+} from "./fallow-report.ts";
+import {
+  FINDING_DISPOSITIONS_REL,
+  PRODUCTION_FINDING_CENSUS,
+  UNOWNED_EXPORT_CENSUS,
+} from "./gate-targets.ts";
 import { REPO_ROOT } from "./source-scan.ts";
 
 const ANALYZER = path.join(REPO_ROOT, "node_modules", "fallow", "bin", "fallow");
 
-/** The census run: production entry points only, unused exports only. */
-const CENSUS_ARGS = ["dead-code", "--production", "--unused-exports", "--format", "json"];
+/** Complete production findings, with test readers excluded. */
+const CENSUS_ARGS = [
+  "dead-code",
+  "--production",
+  "--no-cache",
+  "--format",
+  "json",
+  "--fail-on-issues",
+];
 
-/** The same question asked with the committed entry-point set. */
-const CONTROL_ARGS = ["dead-code", "--unused-exports", "--format", "json"];
+/**
+ * The shipping command, with no forced production flag.
+ *
+ * The `fallow` npm script invokes `dead-code` exactly this way, so this argv is
+ * what the quality gate actually runs. Production reachability reaches it only
+ * through the committed config, which is the point: if that config stops
+ * requesting it, this command answers a different question than `CENSUS_ARGS`
+ * and the equality clause below says so.
+ */
+const SHIPPING_ARGS = ["dead-code", "--no-cache", "--format", "json", "--fail-on-issues"];
+
+/** Every finding category, so a clean report is asserted collection by collection. */
+const EMPTY_FINDINGS: FindingGroups = {
+  unused_exports: [],
+  unused_types: [],
+  unused_files: [],
+  unused_class_members: [],
+  duplicate_exports: [],
+};
 
 /** The measured census, keyed by publishing file exactly as the pin is. */
 type Census = Record<string, string[]>;
-
-/** The subset of the analyzer's JSON report this gate reads. */
-interface DeadCodeReport {
-  readonly total_issues: number;
-  readonly entry_points: { readonly total: number };
-  readonly unused_exports: readonly { readonly path: string; readonly export_name: string }[];
-}
 
 /**
  * Every finding the live evidence ledger routed to this phase, plus the two
@@ -84,40 +85,15 @@ const ROUTED_FINDINGS = [
   "ORA-F32",
 ] as const;
 
-/**
- * Run the analyzer with a fixed argument vector and no shell, so no flag or path
- * can be word-split or reinterpreted, and surface its own stderr when the
- * invocation itself fails. A run that never produced a report must fail this
- * gate rather than hand an empty payload to the comparison below.
- */
-function readDeadCodeReport(args: readonly string[]): DeadCodeReport {
-  const execution = spawnSync(process.execPath, [ANALYZER, ...args], {
-    cwd: REPO_ROOT,
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  });
-
-  if (execution.error !== undefined) {
-    throw execution.error;
-  }
-
-  assert.strictEqual(
-    execution.signal,
-    null,
-    `GGAT-04: the analyzer was terminated by ${String(execution.signal)}, so the census was never measured`,
-  );
-  assert.ok(
-    execution.status === 0 || execution.status === 1,
-    `GGAT-04: the analyzer exited ${String(execution.status)} rather than reporting findings:\n${execution.stderr}`,
-  );
-
-  return JSON.parse(execution.stdout) as DeadCodeReport;
+/** Read the real analyzer through the same instrument calibrated by live controls. */
+function readDeadCodeReport(args: readonly string[]): AnalyzerReport {
+  return readAnalyzerReport(process.execPath, [ANALYZER, ...args], REPO_ROOT);
 }
 
 /** Project one report onto the census shape, with each file's names sorted. */
-function censusFrom(report: DeadCodeReport): Census {
+function censusFrom(report: AnalyzerReport): Census {
   const census: Census = {};
-  for (const finding of report.unused_exports) {
+  for (const finding of report.findings.unused_exports) {
     (census[finding.path] ??= []).push(finding.export_name);
   }
 
@@ -160,34 +136,90 @@ function describeCensusDrift(measured: Census): string {
 test("D-07-19 / GGAT-04: the production-unowned-export census equals its committed pin", () => {
   const measured = censusFrom(readDeadCodeReport(CENSUS_ARGS));
 
-  // A run that produced nothing must not deep-equal an accidentally-empty pin
-  // and report success. The tree has unowned exports; measuring none means the
-  // instrument, not the tree, changed.
-  assert.ok(
-    keysOf(measured).size > 0,
-    "GGAT-04: the analyzer reported zero unowned exports, so the census measured nothing",
-  );
   assert.deepStrictEqual(measured, UNOWNED_EXPORT_CENSUS, describeCensusDrift(measured));
 });
 
-test("D-07-20: the same question over the committed entry points reports nothing, which is the blind spot", () => {
-  const control = readDeadCodeReport(CONTROL_ARGS);
-  const census = readDeadCodeReport(CENSUS_ARGS);
+test("The complete production finding census equals its committed identities", () => {
+  // arrange
+  const pinned = PRODUCTION_FINDING_CENSUS;
 
-  // Same command, same tree, one flag apart. Every test file is an entry point
-  // here, so a test import counts as a consumer and every export in the pinned
-  // census reads as alive. This contrast is the reason the census gate exists,
-  // and it is also why the obligation cannot be met by reading configuration:
-  // the clean report is what the committed configuration honestly produces.
-  assert.strictEqual(
-    control.total_issues,
-    0,
-    "D-07-20: the committed entry-point set now reports findings of its own, so this run no longer isolates the entry-point blind spot",
+  // act
+  const report = readDeadCodeReport(CENSUS_ARGS);
+  const measured = report.findings;
+
+  // assert
+  assertFindingCensus(measured, pinned);
+});
+
+for (const drift of [
+  { name: "addition", pinned: ["first"], measured: ["first", "second"] },
+  { name: "removal", pinned: ["first", "second"], measured: ["first"] },
+  { name: "equal-count swap", pinned: ["first"], measured: ["second"] },
+]) {
+  test(`The exact census rejects ${drift.name}`, () => {
+    // arrange
+    const pinned: FindingGroups = {
+      unused_exports: drift.pinned.map((export_name) => ({ path: "fixture.ts", export_name })),
+      unused_types: [],
+      unused_files: [],
+      unused_class_members: [],
+      duplicate_exports: [],
+    };
+    const measured: FindingGroups = {
+      ...pinned,
+      unused_exports: drift.measured.map((export_name) => ({ path: "fixture.ts", export_name })),
+    };
+
+    // act & assert
+    assert.throws(
+      () => {
+        assertFindingCensus(measured, pinned);
+      },
+      {
+        name: "AssertionError",
+        actual: drift.measured.map((name) => `unused_exports|fixture.ts|${name}`),
+        expected: drift.pinned.map((name) => `unused_exports|fixture.ts|${name}`),
+        operator: "deepStrictEqual",
+      },
+    );
+  });
+}
+
+test("D-07-20: the shipping command and the explicit production command agree", () => {
+  // arrange
+  const production = readDeadCodeReport(CENSUS_ARGS);
+
+  // act
+  const shipping = readDeadCodeReport(SHIPPING_ARGS);
+
+  // assert
+  assert.deepStrictEqual(
+    shipping,
+    production,
+    "D-07-20: the command the quality gate runs and the command this census runs no longer measure the same thing, so a finding can exist in one and not the other. Production reachability belongs in the committed config, not in a flag only the gate passes.",
   );
-  assert.deepStrictEqual(control.unused_exports, []);
+});
+
+test("D-07-20: the shipping report is complete and entirely clean", () => {
+  // arrange
+  const shipping = readDeadCodeReport(SHIPPING_ARGS);
+
+  // act
+  const measured = {
+    findings: shipping.findings,
+    totalIssues: shipping.totalIssues,
+    exitStatus: shipping.exitStatus,
+  };
+
+  // assert
   assert.ok(
-    control.entry_points.total > census.entry_points.total,
-    `D-07-20: the committed run resolved ${control.entry_points.total.toString()} entry points and the production run ${census.entry_points.total.toString()}; the blind spot is that difference, and it has closed`,
+    shipping.entryPointCount > 0,
+    "D-07-20: the analyzer discovered no production entry point, so it reached no code and its empty report means nothing",
+  );
+  assert.deepStrictEqual(
+    measured,
+    { findings: EMPTY_FINDINGS, totalIssues: 0, exitStatus: 0 },
+    "D-07-20 / EXPORT-02: the shipping dead-code report is no longer empty. Answer the finding with a real production consumer, a private declaration, a retirement, or an exact adjacent annotation -- never by pinning the identity here.",
   );
 });
 

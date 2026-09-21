@@ -123,21 +123,18 @@ const CONSTRAINT_FAILURES = {
     kind: "tag-listing-failed",
     key: DEPENDENCY_KEY,
     range: "^2.0.0",
-    cause: new Error("connect ECONNREFUSED"),
     classification: "network unreachable",
   },
   "tag-listing-failed:auth": {
     kind: "tag-listing-failed",
     key: DEPENDENCY_KEY,
     range: "^2.0.0",
-    cause: new Error("HTTP 401"),
     classification: "authentication required",
   },
   "tag-listing-failed:unclassified": {
     kind: "tag-listing-failed",
     key: DEPENDENCY_KEY,
     range: "^2.0.0",
-    cause: new Error("something else"),
     classification: undefined,
   },
 } as const satisfies Record<string, CascadeConstraintFailure>;

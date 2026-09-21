@@ -1,11 +1,8 @@
 // Owner for edge/handlers/plugin/fetch.ts (MOD-09).
 //
-// This is the only plugin shim that EXPORTS its parser, so the module carries
-// two public contracts rather than one. `parseFetchTarget` is a pure function
-// over the raw argument string and is proven as a contract in its own right:
-// every accepted shape is asserted as one whole `{ target, scope? }` value, and
-// every rejection carries its own stated sentence. `makeFetchHandler` is proven
-// separately, as delegation plus the short-circuit that precedes it.
+// Target parsing is private. Successful forms are observed through the complete
+// scoped fetch notification; rejected forms retain their exact sentence and
+// severity and prove that validation precedes every workflow interaction.
 //
 // D-81-01 gives the three accepted positional shapes and the three target forms
 // they select: no positional yields the all form, `@<marketplace>` yields the
@@ -66,13 +63,9 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { describe, test, type TestContext } from "node:test";
+import { test, type TestContext } from "node:test";
 
-import {
-  makeFetchHandler,
-  parseFetchTarget,
-  type ParsedFetchTarget,
-} from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts";
+import { makeFetchHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
@@ -148,263 +141,224 @@ async function seedBothScopes(workspace: HermeticWorkspace): Promise<void> {
   await seedMarketplace(workspace, "user", workspace.userRoot, "other", ["gamma"]);
 }
 
-describe("parseFetchTarget", () => {
-  for (const { args, expectedParse, summary } of [
-    {
-      args: "",
-      summary: "maps no positional onto the all form",
-      expectedParse: { target: { kind: "all" } },
-    },
-    {
-      args: "--scope user",
-      summary: "carries the user scope beside the all form",
-      expectedParse: { target: { kind: "all" }, scope: "user" },
-    },
-    {
-      args: "--scope project",
-      summary: "carries the project scope beside the all form",
-      expectedParse: { target: { kind: "all" }, scope: "project" },
-    },
-    {
-      args: "@mymkt",
-      summary: "strips the leading separator from a bare marketplace reference",
-      expectedParse: { target: { kind: "marketplace", marketplace: "mymkt" } },
-    },
-    {
-      args: "hello@mymkt",
-      summary: "splits a plugin reference into both halves",
-      expectedParse: { target: { kind: "plugin", plugin: "hello", marketplace: "mymkt" } },
-    },
-    {
-      args: "hello@mymkt --scope user",
-      summary: "carries the user scope beside a plugin reference",
-      expectedParse: {
-        target: { kind: "plugin", plugin: "hello", marketplace: "mymkt" },
-        scope: "user",
-      },
-    },
-  ] satisfies readonly { args: string; expectedParse: ParsedFetchTarget; summary: string }[]) {
-    test(`${summary} and stays silent (D-81-01)`, () => {
-      // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
-
-      // act
-      const parsed = parseFetchTarget(args, ctx);
-
-      // assert
-      assert.deepStrictEqual(parsed, expectedParse);
-      assert.deepStrictEqual(notifications, []);
-      verifyBoundary();
-    });
-  }
-
-  for (const { args, expectedMessage, summary } of [
-    {
-      args: "no-at-sign",
-      summary: "a reference carrying no separator",
-      expectedMessage:
-        'Invalid <plugin>@<marketplace> ref: "no-at-sign".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
-    },
-    {
-      args: "@",
-      summary: "a lone separator with no marketplace after it",
-      expectedMessage:
-        'Invalid <plugin>@<marketplace> ref: "@".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
-    },
-    {
-      args: "foo@",
-      summary: "a reference ending at the separator",
-      expectedMessage:
-        'Invalid <plugin>@<marketplace> ref: "foo@".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
-    },
-  ]) {
-    test(`names ${summary} verbatim and returns no target (FTCH-01)`, () => {
-      // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-
-      // act
-      const parsed = parseFetchTarget(args, ctx);
-
-      // assert
-      assert.strictEqual(parsed, undefined);
-      assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
-      verifyBoundary();
-    });
-  }
-
-  for (const { args, summary } of [
-    { args: "a@mp b@mp", summary: "two references" },
-    { args: "a@mp b@mp c@mp", summary: "three references" },
-  ]) {
-    test(`rejects ${summary} as too many arguments and returns no target (D-81-01)`, () => {
-      // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-
-      // act
-      const parsed = parseFetchTarget(args, ctx);
-
-      // assert
-      assert.strictEqual(parsed, undefined);
-      assert.deepStrictEqual(notifications, [
-        {
-          message:
-            "Too many arguments.\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]",
-          severity: "error",
-        },
-      ]);
-      verifyBoundary();
-    });
-  }
-
-  for (const { args, expectedMessage, summary } of [
-    {
-      args: "--bogus",
-      summary: "an unrecognised long flag supplied as the only positional",
-      expectedMessage:
-        'Unknown flag: "--bogus".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
-    },
-    {
-      args: "a@mp --bogus",
-      summary: "an unrecognised long flag supplied after a valid reference",
-      expectedMessage:
-        'Unknown flag: "--bogus".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
-    },
-    {
-      args: "--scope user --local",
-      summary: "the scope-target flag supplied beside a scope flag",
-      expectedMessage:
-        'Unknown flag: "--local".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
-    },
-  ]) {
-    test(`names ${summary} verbatim and returns no target (T-81-10)`, () => {
-      // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-
-      // act
-      const parsed = parseFetchTarget(args, ctx);
-
-      // assert
-      assert.strictEqual(parsed, undefined);
-      assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
-      verifyBoundary();
-    });
-  }
-
-  test("carries the tokenizer's own sentence for an unrecognised scope value (FTCH-01)", () => {
+for (const { args, expectedMessage, summary } of [
+  {
+    args: "no-at-sign",
+    summary: "a reference carrying no separator",
+    expectedMessage:
+      'Invalid <plugin>@<marketplace> ref: "no-at-sign".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
+  },
+  {
+    args: "@",
+    summary: "a lone separator with no marketplace after it",
+    expectedMessage:
+      'Invalid <plugin>@<marketplace> ref: "@".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
+  },
+  {
+    args: "foo@",
+    summary: "a reference ending at the separator",
+    expectedMessage:
+      'Invalid <plugin>@<marketplace> ref: "foo@".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
+  },
+]) {
+  test(`names ${summary} verbatim and returns no target (FTCH-01)`, async (t) => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-
-    // act
-    const parsed = parseFetchTarget("hello@mymkt --scope bogus", ctx);
-
-    // assert
-    assert.strictEqual(parsed, undefined);
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          'Invalid --scope value: "bogus". Must be "user" or "project".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
-        severity: "error",
-      },
-    ]);
-    verifyBoundary();
-  });
-});
-
-describe("makeFetchHandler", () => {
-  for (const { args, expectedMessage, label, summary } of [
-    {
-      args: "",
-      label: "all-form",
-      summary: "sweeps every marketplace in both scopes when no positional is supplied",
-      expectedMessage:
-        "● mp [project]\n  ⊘ alpha v1.0.0 (skipped) {up-to-date}\n  ⊘ beta v1.0.0 (skipped) {up-to-date}\n\n● other [user]\n  ⊘ gamma v1.0.0 (skipped) {up-to-date}\n\nPlugin fetch: 3 successes",
-    },
-    {
-      args: "@mp",
-      label: "marketplace-form",
-      summary: "narrows the sweep to the named marketplace",
-      expectedMessage:
-        "● mp [project]\n  ⊘ alpha v1.0.0 (skipped) {up-to-date}\n  ⊘ beta v1.0.0 (skipped) {up-to-date}\n\nPlugin fetch: 2 successes",
-    },
-    {
-      args: "alpha@mp",
-      label: "plugin-form",
-      summary: "narrows the sweep to the named plugin",
-      expectedMessage: "● mp [project]\n  ⊘ alpha v1.0.0 (skipped) {up-to-date}",
-    },
-  ]) {
-    test(`${summary} (D-81-01)`, async (t) => {
-      // arrange
-      const workspace = await createHermeticWorkspace(t, label);
-      await seedBothScopes(workspace);
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
-        value: workspace.cwd,
-        reads: 1,
-      });
-      const fetchHandler = makeFetchHandler(pi);
-
-      // act
-      await fetchHandler(args, ctx);
-
-      // assert
-      assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
-      verifyBoundary();
-    });
-  }
-
-  for (const { args, expectedMessage, label, scope } of [
-    {
-      args: "--scope project",
-      label: "scope-project",
-      scope: "project",
-      expectedMessage:
-        "● mp [project]\n  ⊘ alpha v1.0.0 (skipped) {up-to-date}\n  ⊘ beta v1.0.0 (skipped) {up-to-date}\n\nPlugin fetch: 2 successes",
-    },
-    {
-      args: "--scope user",
-      label: "scope-user",
-      scope: "user",
-      expectedMessage:
-        "● other [user]\n  ⊘ gamma v1.0.0 (skipped) {up-to-date}\n\nPlugin fetch: 1 success",
-    },
-  ]) {
-    test(`sweeps the ${scope} scope alone when it is the supplied scope (FTCH-01)`, async (t) => {
-      // arrange
-      const workspace = await createHermeticWorkspace(t, label);
-      await seedBothScopes(workspace);
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
-        value: workspace.cwd,
-        reads: 1,
-      });
-      const fetchHandler = makeFetchHandler(pi);
-
-      // act
-      await fetchHandler(args, ctx);
-
-      // assert
-      assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
-      verifyBoundary();
-    });
-  }
-
-  test("reports an unknown flag and never reaches the fetch workflow (D-116-06)", async (t) => {
-    // arrange
-    const workspace = await createHermeticWorkspace(t, "short-circuit");
+    const workspace = await createHermeticWorkspace(t, "validation");
     await seedBothScopes(workspace);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const fetchHandler = makeFetchHandler(pi);
 
     // act
-    await fetchHandler("--bogus", ctx);
+    await fetchHandler(args, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
+    verifyBoundary();
+  });
+}
+
+for (const { args, summary } of [
+  { args: "a@mp b@mp", summary: "two references" },
+  { args: "a@mp b@mp c@mp", summary: "three references" },
+]) {
+  test(`rejects ${summary} as too many arguments and returns no target (D-81-01)`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, "validation");
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const fetchHandler = makeFetchHandler(pi);
+
+    // act
+    await fetchHandler(args, ctx);
 
     // assert
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Unknown flag: "--bogus".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
+          "Too many arguments.\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]",
         severity: "error",
       },
     ]);
     verifyBoundary();
   });
+}
+
+for (const { args, expectedMessage, summary } of [
+  {
+    args: "--bogus",
+    summary: "an unrecognised long flag supplied as the only positional",
+    expectedMessage:
+      'Unknown flag: "--bogus".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
+  },
+  {
+    args: "a@mp --bogus",
+    summary: "an unrecognised long flag supplied after a valid reference",
+    expectedMessage:
+      'Unknown flag: "--bogus".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
+  },
+  {
+    args: "--scope user --local",
+    summary: "the scope-target flag supplied beside a scope flag",
+    expectedMessage:
+      'Unknown flag: "--local".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
+  },
+]) {
+  test(`names ${summary} verbatim and returns no target (T-81-10)`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, "validation");
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const fetchHandler = makeFetchHandler(pi);
+
+    // act
+    await fetchHandler(args, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
+    verifyBoundary();
+  });
+}
+
+test("carries the tokenizer's own sentence for an unrecognised scope value (FTCH-01)", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "validation");
+  await seedBothScopes(workspace);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+  const fetchHandler = makeFetchHandler(pi);
+
+  // act
+  await fetchHandler("hello@mymkt --scope bogus", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        'Invalid --scope value: "bogus". Must be "user" or "project".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
+for (const { args, expectedMessage, label, summary } of [
+  {
+    args: "gamma@other --scope user",
+    label: "scoped-plugin-form",
+    summary: "carries the explicit user scope beside a named plugin reference",
+    expectedMessage: "● other [user]\n  ⊘ gamma v1.0.0 (skipped) {up-to-date}",
+  },
+  {
+    args: "",
+    label: "all-form",
+    summary: "sweeps every marketplace in both scopes when no positional is supplied",
+    expectedMessage:
+      "● mp [project]\n  ⊘ alpha v1.0.0 (skipped) {up-to-date}\n  ⊘ beta v1.0.0 (skipped) {up-to-date}\n\n● other [user]\n  ⊘ gamma v1.0.0 (skipped) {up-to-date}\n\nPlugin fetch: 3 successes",
+  },
+  {
+    args: "@mp",
+    label: "marketplace-form",
+    summary: "narrows the sweep to the named marketplace",
+    expectedMessage:
+      "● mp [project]\n  ⊘ alpha v1.0.0 (skipped) {up-to-date}\n  ⊘ beta v1.0.0 (skipped) {up-to-date}\n\nPlugin fetch: 2 successes",
+  },
+  {
+    args: "alpha@mp",
+    label: "plugin-form",
+    summary: "narrows the sweep to the named plugin",
+    expectedMessage: "● mp [project]\n  ⊘ alpha v1.0.0 (skipped) {up-to-date}",
+  },
+]) {
+  test(`${summary} (D-81-01)`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, label);
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+      value: workspace.cwd,
+      reads: 1,
+    });
+    const fetchHandler = makeFetchHandler(pi);
+
+    // act
+    await fetchHandler(args, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
+    verifyBoundary();
+  });
+}
+
+for (const { args, expectedMessage, label, scope } of [
+  {
+    args: "--scope project",
+    label: "scope-project",
+    scope: "project",
+    expectedMessage:
+      "● mp [project]\n  ⊘ alpha v1.0.0 (skipped) {up-to-date}\n  ⊘ beta v1.0.0 (skipped) {up-to-date}\n\nPlugin fetch: 2 successes",
+  },
+  {
+    args: "--scope user",
+    label: "scope-user",
+    scope: "user",
+    expectedMessage:
+      "● other [user]\n  ⊘ gamma v1.0.0 (skipped) {up-to-date}\n\nPlugin fetch: 1 success",
+  },
+]) {
+  test(`sweeps the ${scope} scope alone when it is the supplied scope (FTCH-01)`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, label);
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+      value: workspace.cwd,
+      reads: 1,
+    });
+    const fetchHandler = makeFetchHandler(pi);
+
+    // act
+    await fetchHandler(args, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: expectedMessage }]);
+    verifyBoundary();
+  });
+}
+
+test("reports an unknown flag and never reaches the fetch workflow (D-116-06)", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "short-circuit");
+  await seedBothScopes(workspace);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+  const fetchHandler = makeFetchHandler(pi);
+
+  // act
+  await fetchHandler("--bogus", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        'Unknown flag: "--bogus".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
 });

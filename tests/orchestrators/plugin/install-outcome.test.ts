@@ -766,10 +766,10 @@ test("collects the per-source frontmatter degrade records from the skills and co
   assert.deepStrictEqual(ledgerOutcome.summary.stagedCommandNames, ["empty:bad-command"]);
 });
 
-test("AS-7: a foreign file under a generated agent name lands on agentForeignFailures, not the rollback path", async (t) => {
+test("AS-7: a retired foreign agent target is preserved while a distinct agent installs", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-agent-foreign-");
-  const seeded = await seedPlugin(environment.cwd, { components: { agents: ["gamma"] } });
+  const seeded = await seedPlugin(environment.cwd, { components: { agents: ["new-gamma"] } });
   const locations = locationsFor("project", environment.cwd);
   const generatedName = "pi-claude-marketplace-empty-gamma";
   await mkdir(locations.agentsDir, { recursive: true });
@@ -811,9 +811,18 @@ test("AS-7: a foreign file under a generated agent name lands on agentForeignFai
 
   // assert
   assert.ok(ledgerOutcome.kind === "installed");
-  assert.deepStrictEqual(
-    ledgerOutcome.summary.agentForeignFailures.map((failure) => failure.generatedName),
-    [generatedName],
+  assert.deepStrictEqual(ledgerOutcome.summary.agentForeignFailures, [
+    {
+      generatedName,
+      reason: `target ${path.join(locations.agentsDir, `${generatedName}.md`)} is missing the generated marker`,
+    },
+  ]);
+  assert.deepStrictEqual(ledgerOutcome.summary.stagedAgentNames, [
+    "pi-claude-marketplace-empty-new-gamma",
+  ]);
+  assert.strictEqual(
+    await readFile(path.join(locations.agentsDir, `${generatedName}.md`), "utf8"),
+    "---\nname: foreign\n---\n\nNo marker.\n",
   );
   // AS-7: the install SUCCEEDED. A preserved foreign row is the user's problem
   // to resolve by hand, not a reason to unwind the plugin around it.
@@ -900,6 +909,61 @@ test("an mcp phase that cannot even prepare unwinds the hooks config the phase b
   assert.equal(await survives(path.join(locations.skillsTargetDir, "empty:alpha")), false);
   assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
   // Every undo ran to completion; nothing was left half-unwound.
+  assert.deepStrictEqual(capture.rollbackPartials, []);
+});
+
+test("a hooks.json that turns malformed after resolution unwinds the ledger", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-hooks-reparse-");
+  const seeded = await seedPlugin(environment.cwd, {
+    components: { skills: ["alpha"] },
+    hooksJson: SESSION_START_HOOKS,
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const hooksJsonPath = path.join(seeded.pluginRoot, "hooks", "hooks.json");
+  const realRemovalOps = createRemovalOps();
+  // The resolver validated hooks.json at install entry. The skills phase's
+  // staging cleanup runs between that validation and the hooks phase's
+  // re-read, so a plugin tree rewritten in that window is what the guard
+  // exists for.
+  const removalOps = {
+    ...realRemovalOps,
+    rm: async (target: string, options: { recursive?: boolean; force?: boolean }) => {
+      await writeFile(hooksJsonPath, "{");
+      await realRemovalOps.rm(target, options);
+    },
+  };
+  const capture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps,
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /^hooks\.json re-parse failed: /);
+    return true;
+  });
+  const survives = async (candidate: string): Promise<boolean> =>
+    stat(candidate).then(
+      () => true,
+      () => false,
+    );
+  assert.equal(await survives(path.join(locations.hooksDir, "empty", "hooks.json")), false);
+  assert.equal(await survives(path.join(locations.skillsTargetDir, "empty:alpha")), false);
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
   assert.deepStrictEqual(capture.rollbackPartials, []);
 });
 

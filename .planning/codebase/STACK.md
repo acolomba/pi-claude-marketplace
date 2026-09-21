@@ -38,8 +38,9 @@
 - No bundler/build step -- TypeScript is type-checked only (`tsc --noEmit`); Node runs `.ts` sources natively
 - `eslint` `^10.4.0` with flat config (`eslint.config.js`, ~400 lines), including custom architecture-boundary and output-discipline rules (`no-restricted-syntax` forbids `process.stdout.write`/`process.stderr.write` in `extensions/pi-claude-marketplace/**`)
 - `prettier` `^3.8.3` for formatting (`npm run format` / `format:check`)
-- `fallow` `^3.17.0` - whole-graph static analysis (`.fallowrc.json`). `npm run fallow` chains three subcommands, each `--fail-on-issues --format human`, run whole-repo:
-  - `fallow dead-code` (entry point `extensions/pi-claude-marketplace/index.ts`)
+- `fallow` `^3.17.0` - whole-graph static analysis (`.fallowrc.json`). `npm run fallow` chains four subcommands, each `--fail-on-issues --format human`:
+  - `fallow dead-code` (entry point `extensions/pi-claude-marketplace/index.ts`), scoped to production reachability by `production.deadCode`
+  - `fallow dead-code --no-production --circular-deps --re-export-cycles`, which carries the two cycle classes across `tests/` and `scripts/`
   - `fallow health` (`maxCyclomatic: 20`, `maxCognitive: 15`, `maxUnitSize: 60`, `maxCrap: 0`)
   - `fallow dupes` (`threshold: 3`, with two ignored-clone IDs pre-approved in `duplicates.ignoredClones`)
   - `.fallowrc.json`'s `boundaries` block defines 13 architecture zones (`entry`, `edge`, `orchestrators`, `bridges-agents`, `bridges-commands`, `bridges-mcp`, `bridges-skills`, `bridges-hooks`, `domain`, `transaction`, `persistence`, `platform`, `shared`) with an explicit allow-list of legal import edges between zones, plus a `calls.forbidden` block barring `process.stdout.*`/`process.stderr.*` from every zone -- finer-grained than the ESLint `no-restricted-paths` gate and the only mechanism enforcing that cross-bridge imports (e.g. `bridges-agents` -> `bridges-commands`) are forbidden

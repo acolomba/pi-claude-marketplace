@@ -4,15 +4,9 @@
 // union locked by NFR-7: TypeScript refuses to compile any code that reads
 // `pluginRoot` from the structurally-broken `unavailable` variant.
 //
-// Per D-04: TWO distinct functions, no shared branching.
-//   - resolveStrict (MM-5):   union of entry + manifest + implicit + standalone
-//   - resolveLoose  (MM-6/7): entry-only for COMPONENT declarations;
-//                             manifest/standalone declarations conflict.
-//                             D-101-08: METADATA (description, version,
-//                             defaultEnabled) is outside that rule and is never
-//                             conflict material -- see `resolveLoose`'s own doc.
+// Strict resolution combines entry, manifest, conventional, and standalone declarations.
 //
-// Type.Union([...]) takes NO `discriminator` option in TypeBox 1.x.
+// The type-only schema retains literal-tagged discriminator variants.
 // Literal-tagged variants ARE the discriminator -- TypeScript narrowing
 // works automatically on `switch (r.state)` / `if (r.state === ...)`.
 //
@@ -26,8 +20,8 @@
 // unsupported component kinds resolves `unavailable`.
 //
 // HOOK-01: `hooks` is admitted alongside `skills` / `commands` / `agents` /
-// `mcpServers`. The supported-kind tuple is the PUBLIC closed set; the
-// path-validation loop iterates a PRIVATE subset (`SUPPORTED_COMPONENT_PATH_KINDS`)
+// `mcpServers`. The supported component result is a closed set; the
+// path-validation loop iterates a PRIVATE subset (`COMPONENT_PATH_KINDS`)
 // because `hooks` carries no per-entry component-path semantics -- the
 // discovery path is the convention file `<pluginRoot>/hooks/hooks.json`,
 // parsed through `parseHooksConfig` (D-57-04: a parse failure is structural
@@ -36,19 +30,15 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { isErrnoException, PluginShapeError } from "../shared/errors.ts";
+import { errorMessage, isErrnoException, PluginShapeError } from "../shared/errors.ts";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
 
-import {
-  collectLooseComponentPaths,
-  collectStrictComponentPaths,
-  type ComponentPathResolution,
-} from "./component-paths.ts";
+import { collectStrictComponentPaths, type ComponentPathResolution } from "./component-paths.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
 import { parseDeclaredDependencies } from "./dependencies.ts";
 import { resolveHooks, type HooksResolution } from "./hooks-resolution.ts";
 import { MANIFEST_CANDIDATES } from "./manifest-path.ts";
-import { resolveLooseMcp, resolveStrictMcp, type McpResolution } from "./mcp-resolution.ts";
+import { resolveStrictMcp, type McpResolution } from "./mcp-resolution.ts";
 import { assertSafeName } from "./name.ts";
 import {
   parsePluginSource,
@@ -83,7 +73,7 @@ async function defaultStatKind(p: string): Promise<StatKind> {
     }
 
     return null;
-  } catch (err) {
+  } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       return null;
     }
@@ -237,7 +227,7 @@ async function sourceEscapeReason(
   try {
     await assertPathInside(ctx.marketplaceRoot, pluginRoot, `plugin source path "${rawSource}"`);
     return undefined;
-  } catch (err) {
+  } catch (err: unknown) {
     if (err instanceof PathContainmentError) {
       return `source path escapes marketplace root: ${rawSource}`;
     }
@@ -258,8 +248,8 @@ async function manifestCandidateIsFile(
       return false;
     }
 
-    // A failed stat is not evidence of absence. The manifest reader reports
-    // it as unusable, just like a read failure, without trying another file.
+    // A failed stat is not evidence of absence. The manifest reader lets it
+    // propagate, just like a read failure, without trying another file.
     throw err;
   }
 }
@@ -279,12 +269,16 @@ async function readManifest(
     // D-01-07: ABSENCE is the only fall-through. The first candidate that
     // exists is this plugin's manifest and its read decides the outcome; a
     // present-but-unusable file never hands off to the next candidate.
-    try {
-      if (!(await manifestCandidateIsFile(ctx, manifestPath))) {
-        continue;
-      }
+    if (!(await manifestCandidateIsFile(ctx, manifestPath))) {
+      continue;
+    }
 
-      const raw = await readFileTextOf(ctx)(manifestPath);
+    // Stat and read failures (e.g. EACCES) retain their identity for the
+    // outer probe classifier -- only the parse and validation below are a
+    // real "malformed plugin.json".
+    const raw = await readFileTextOf(ctx)(manifestPath);
+
+    try {
       const parsed: unknown = JSON.parse(raw);
 
       if (!PLUGIN_MANIFEST_VALIDATOR.Check(parsed)) {
@@ -302,17 +296,18 @@ async function readManifest(
 
       return { ok: true, manifest: parsed };
     } catch (err: unknown) {
-      // D-01-08 / D-01-09: this catch only ever sees a THROWN failure -- a
-      // rejected stat (manifestCandidateIsFile rethrows anything but ENOENT /
-      // ENOTDIR), an unreadable file, or a JSON.parse syntax error. Schema
+      // D-01-08: this catch only ever sees a JSON.parse syntax error. Schema
       // rejection and an invalid `dependencies` declaration are direct
-      // `return`s above, inside the same `try`, and never land here. All five
+      // `return`s above, inside the same `try`, and never land here. All three
       // origins still end up observably identical to the caller: each
       // produces the same `malformed plugin.json: ...` reason on the
-      // `unavailable` arm.
+      // `unavailable` arm. A rejected stat (manifestCandidateIsFile rethrows
+      // anything but ENOENT / ENOTDIR) or an unreadable file never lands here
+      // either: both propagate above, so the caller's probe classifier can
+      // name the failure class (D-01-09: neither is read as an absence).
       return {
         ok: false,
-        reason: `malformed plugin.json: ${err instanceof Error ? err.message : String(err)}`,
+        reason: `malformed plugin.json: ${errorMessage(err)}`,
       };
     }
   }
@@ -332,12 +327,8 @@ async function readManifest(
  * DFEN-03: this is the only evaluation of the rule. Callers read the resolved
  * boolean off the materializable arm and never re-derive it.
  *
- * D-101-08: it runs from the shared `preflightStages`, so BOTH modes read
- * `plugin.json` for it. That is deliberate and is the one place loose mode
- * honors a manifest declaration a silent entry did not mirror: MM-6 / MM-7
- * conflict semantics govern component declarations and `mcpServers`, not
- * metadata. A manifest-only `defaultEnabled` must never push a plugin to
- * `unavailable`.
+ * D-101-08: preflight reads manifest metadata before component resolution.
+ * A manifest-only `defaultEnabled` never makes a plugin unavailable.
  *
  * Both `typeof` narrows are defense-in-depth, not validation: the entry has
  * already passed PLUGIN_ENTRY_VALIDATOR and the manifest PLUGIN_MANIFEST_VALIDATOR,
@@ -460,9 +451,9 @@ async function deriveSourcePluginRoot(
 }
 
 /**
- * Steps 1-6 are shared between resolveStrict and resolveLoose. Returns
+ * Steps 1-6 validate the source and metadata before strict resolution. Returns
  * either:
- *   - { kind: "ok", pluginRoot, manifest, partial } -- proceed to mode-specific steps
+ *   - { kind: "ok", pluginRoot, manifest, partial } -- proceed to component resolution
  *   - { kind: "unavailable", result }               -- structural short-circuit
  *
  * D-64-07: every preflight short-circuit (bad source kind, path escape,
@@ -478,8 +469,7 @@ async function preflightStages(
       pluginRoot: string;
       manifest: Record<string, unknown> | null;
       partial: PartialResolution;
-      // DFEN-03: resolved here, in the one stage both resolution modes enter
-      // first, so the evaluation order is mode-independent by construction.
+      // DFEN-03: resolved here, in the preflight stage before component resolution.
       defaultEnabled: boolean;
     }
   | { kind: "unavailable"; result: ResolvedPluginUnavailable }
@@ -584,65 +574,6 @@ export async function resolveStrict(
   entry: PluginEntry,
   ctx: ResolveContext,
 ): Promise<ResolvedPlugin> {
-  return resolveWithMode(entry, ctx, {
-    // Step 7 (MM-5 + D-07/COMP-01): component paths are the UNION of declared
-    // (entry > manifest order) + implicit-by-convention. Implicit-by-convention
-    // is ADDITIVE rather than fallback-only (cf. PR-4) -- if the conventional
-    // dir exists on disk and is not already declared, it is appended to the
-    // array. First-wins dedup by relative-path string preserves ordering
-    // (declared first, implicit last).
-    collectComponentPaths: (args) =>
-      collectStrictComponentPaths(
-        {
-          entry: args.entry,
-          manifest: args.manifest,
-          pluginRoot: args.pluginRoot,
-          resolution: args.partial,
-        },
-        statKindOf(args.ctx),
-      ),
-    // Step 8 (MM-5): mcpServers union (entry > manifest > standalone .mcp.json).
-    applyMcp: (args) =>
-      resolveStrictMcp(
-        {
-          entry: args.entry,
-          manifest: args.manifest,
-          pluginRoot: args.pluginRoot,
-          resolution: args.partial,
-        },
-        { statKind: statKindOf(args.ctx), readFileText: readFileTextOf(args.ctx) },
-      ),
-  });
-}
-
-/**
- * The stage pipeline both resolution modes run, with the two mode-specific
- * stages injected. Steps 8b, 9 and 10 and the final decision are mode-agnostic
- * and were byte-identical in both callers, which is what made a shared driver
- * the honest shape rather than a coincidence worth restating twice.
- */
-interface ResolveMode {
-  readonly collectComponentPaths: (args: {
-    readonly entry: PluginEntry;
-    readonly manifest: Record<string, unknown> | null;
-    readonly partial: PartialResolution;
-    readonly pluginRoot: string;
-    readonly ctx: ResolveContext;
-  }) => Promise<boolean>;
-  readonly applyMcp: (args: {
-    readonly entry: PluginEntry;
-    readonly manifest: Record<string, unknown> | null;
-    readonly partial: PartialResolution;
-    readonly pluginRoot: string;
-    readonly ctx: ResolveContext;
-  }) => Promise<boolean>;
-}
-
-async function resolveWithMode(
-  entry: PluginEntry,
-  ctx: ResolveContext,
-  mode: ResolveMode,
-): Promise<ResolvedPlugin> {
   const pre = await preflightStages(entry, ctx);
 
   if (pre.kind === "unavailable") {
@@ -650,7 +581,7 @@ async function resolveWithMode(
   }
 
   const { pluginRoot, manifest, partial, defaultEnabled } = pre;
-  const dirty = await runStructuralStages({ entry, ctx, pluginRoot, manifest, partial, mode });
+  const dirty = await runStructuralStages({ entry, ctx, pluginRoot, manifest, partial });
 
   // Step 9 (PR-3 / PR-4): unsupported components declared explicitly or via
   // Claude Code default locations (.lsp.json, monitors/monitors.json, etc.).
@@ -671,7 +602,7 @@ async function resolveWithMode(
  * did too.
  *
  * Component-path collection owns the closed skills/commands/agents subset;
- * hooks-config discovery remains the separate mode-agnostic stage below.
+ * hooks-config discovery remains the separate shared stage below.
  */
 async function runStructuralStages(args: {
   readonly entry: PluginEntry;
@@ -679,14 +610,19 @@ async function runStructuralStages(args: {
   readonly pluginRoot: string;
   readonly manifest: Record<string, unknown> | null;
   readonly partial: PartialResolution;
-  readonly mode: ResolveMode;
 }): Promise<boolean> {
-  const { entry, ctx, pluginRoot, manifest, partial, mode } = args;
+  const { entry, ctx, pluginRoot, manifest, partial } = args;
   const flags: boolean[] = [];
 
   flags.push(
-    await mode.collectComponentPaths({ entry, manifest, partial, pluginRoot, ctx }),
-    await mode.applyMcp({ entry, manifest, partial, pluginRoot, ctx }),
+    await collectStrictComponentPaths(
+      { entry, manifest, pluginRoot, resolution: partial },
+      statKindOf(ctx),
+    ),
+    await resolveStrictMcp(
+      { entry, manifest, pluginRoot, resolution: partial },
+      { statKind: statKindOf(ctx), readFileText: readFileTextOf(ctx) },
+    ),
     // Step 8b (HOOK-01 / D-57-04): probe `<pluginRoot>/hooks/hooks.json` and
     // either add `hooks` to supported (parse OK) or flip installable=false with
     // the parse-failure detail. Mode-agnostic: entry-vs-manifest hooks-FIELD
@@ -701,7 +637,7 @@ async function runStructuralStages(args: {
 }
 
 /**
- * D-64-01 / D-64-07: the three-way decision shared by both modes. Structural
+ * D-64-01 / D-64-07: the three-way resolver decision. Structural
  * precedence -- a structural defect (`structuralDirty`) wins over any
  * unsupported-component signal, so a both-defects plugin resolves
  * `unavailable` and never leaks `pluginRoot` through the `partially-available` arm.
@@ -722,50 +658,6 @@ function decideResolution(
   }
 
   return installable(name, pluginRoot, partial, defaultEnabled);
-}
-
-/**
- * MM-6 / MM-7 loose: entry-only for COMPONENT declarations -- a manifest or
- * standalone declaration of a component kind (or of `mcpServers`) with a silent
- * entry is a conflict and resolves `unavailable`.
- *
- * D-101-08: METADATA is outside that rule. `description`, `version` and
- * `defaultEnabled` are never conflict material, so a manifest-only
- * `defaultEnabled` with a silent entry is honored here rather than rejected --
- * it is resolved once in `preflightStages` and reads `plugin.json` in loose mode
- * exactly as it does in strict mode. The conflict machinery is closed-set by
- * construction (the component-path owner iterates its closed tuple plus `mcpServers` here),
- * which is what keeps the two classes of field apart.
- */
-export async function resolveLoose(
-  entry: PluginEntry,
-  ctx: ResolveContext,
-): Promise<ResolvedPlugin> {
-  return resolveWithMode(entry, ctx, {
-    // Step 7 (MM-6 entry-only, D-07 array shape): no implicit-by-convention;
-    // manifest declarations without a matching entry-level declaration are a
-    // conflict. Array shape mirrors strict mode, but with first-wins dedup
-    // applied only to entry-declared paths (no convention probing). The loose
-    // collector takes no `ctx` precisely because it never probes disk.
-    collectComponentPaths: (args) =>
-      collectLooseComponentPaths({
-        entry: args.entry,
-        manifest: args.manifest,
-        pluginRoot: args.pluginRoot,
-        resolution: args.partial,
-      }),
-    // Step 8 (MM-7 loose mcpServers).
-    applyMcp: (args) =>
-      resolveLooseMcp(
-        {
-          entry: args.entry,
-          manifest: args.manifest,
-          pluginRoot: args.pluginRoot,
-          resolution: args.partial,
-        },
-        statKindOf(args.ctx),
-      ),
-  });
 }
 
 /**

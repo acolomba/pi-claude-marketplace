@@ -70,7 +70,7 @@ type InstallStatus =
  * it is a message-row shape: `composeInstallFailureMessage` consumes it and
  * returns `InstallMsg`.
  *
- * Examples: `⊘ unknown@claude-plugins-official (failed) {not found}`;
+ * Examples: `⊘ unknown@claude-plugins-official (failed) {not in manifest}`;
  * `⊘ hookify [user] (unavailable) {unsupported hooks}`.
  */
 export interface EntityErrorRow {
@@ -471,8 +471,8 @@ export function classifyEntityShapeError(
 // The carve-out: `startsWith("contains ")` strips the resolver's prefix,
 // then checks the remaining token against the set.
 // HOOK-04 / D-58-02: `lspServers` is the SOLE manifest-field
-// carve-out. `hooks` is a supported component kind (the
-// `SUPPORTED_COMPONENT_KINDS` set), so the resolver never emits a
+// carve-out. `hooks` is a supported component kind -- it is not a member
+// of `UNSUPPORTED_COMPONENT_KINDS` -- so the resolver never emits a
 // `"contains hooks"` note here. The `{unsupported hooks}` reason is a
 // normal 2-word REASON sourced through
 // `shared/probe-classifiers.ts::narrowResolverNotes` against the
@@ -653,7 +653,7 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
  * such a note ONLY on the partially-available arm; the structural arm keeps it on
  * the source axis (`unsupported source`), agreeing with `narrowResolverNotes`.
  */
-export function narrowResolverReasons(
+function narrowResolverReasons(
   reasons: readonly string[],
   unsupportedKinds: readonly string[] = [],
   partialable = false,

@@ -46,16 +46,7 @@ export function makeReinstallHandler(
       return;
     }
 
-    const refs: string[] = [];
-    for (const token of parsed.positional) {
-      if (token.startsWith("--")) {
-        notifyUsageError(ctx, { message: `Unknown option: "${token}".`, usage: USAGE });
-        return;
-      } else {
-        refs.push(token);
-      }
-    }
-
+    const refs = parsed.positional;
     if (refs.length > 1) {
       notifyUsageError(ctx, { message: "Too many arguments.", usage: USAGE });
       return;

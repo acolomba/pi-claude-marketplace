@@ -18,6 +18,5 @@ export {
 } from "./stage.ts";
 export { unstagePluginAgents } from "./unstage.ts";
 export { discoverPluginAgents } from "./discover.ts";
-export { GENERATED_AGENT_MARKER, GENERATED_AGENT_MARKER_LEGACY } from "./marker.ts";
 
 export type { AgentsReplacement, PreparedAgentsStaging } from "./types.ts";

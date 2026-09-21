@@ -7,6 +7,10 @@
 // `makeMarketplaceListHandler(pi)` factory threads `pi` down to
 // `listMarketplaces`, following the `makeAddHandler` /
 // `makeAutoupdateHandler` / `makeRemoveHandler` convention.
+//
+// `list` is a merged read that never writes configuration, so a
+// write-target flag has no meaning for it and `parseCommandArgs` rejects
+// it as an unknown flag like any other (AP-5).
 
 import { listMarketplaces } from "../../../orchestrators/marketplace/list.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";

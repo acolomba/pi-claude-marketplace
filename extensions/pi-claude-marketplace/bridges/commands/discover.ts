@@ -207,12 +207,22 @@ async function readWalkEntries(dir: string, base: string, warnings: string[]): P
  * throw site and the call site each hold half of the answer, and the call
  * site is where they meet. `CommandNameError` carries both, and the reason
  * rides `Error.cause`.
+ *
+ * The error is returned, not thrown: the one caller skips the file and
+ * reports it on `warnings`, so it reads the typed value directly instead of
+ * narrowing an `unknown` catch binding back to this class.
  */
-function nameCommandInDir(pluginName: string, sourceName: string, base: string): string {
+function nameCommandInDir(
+  pluginName: string,
+  sourceName: string,
+  base: string,
+):
+  | { readonly ok: true; readonly name: string }
+  | { readonly ok: false; readonly error: CommandNameError } {
   try {
-    return generatedCommandName(pluginName, sourceName);
+    return { ok: true, name: generatedCommandName(pluginName, sourceName) };
   } catch (err) {
-    throw new CommandNameError(sourceName, base, { cause: err });
+    return { ok: false, error: new CommandNameError(sourceName, base, { cause: err }) };
   }
 }
 
@@ -270,19 +280,13 @@ async function collectCommandFile(args: {
   // inside generatedCommandName, which splits the `/`-separated sourceName
   // and validates each segment. The full sourceName intentionally contains
   // `/` for nested files, so it MUST NOT be passed to assertSafeName here.
-  let generatedName: string;
-  try {
-    generatedName = nameCommandInDir(pluginName, sourceName, base);
-  } catch (err) {
-    if (!(err instanceof CommandNameError)) {
-      throw err;
-    }
-
-    warnings.push(badNameWarning(err));
+  const named = nameCommandInDir(pluginName, sourceName, base);
+  if (!named.ok) {
+    warnings.push(badNameWarning(named.error));
     return;
   }
 
-  out.push({ sourceName, generatedName, commandFile: full });
+  out.push({ sourceName, generatedName: named.name, commandFile: full });
 }
 
 /**

@@ -59,7 +59,10 @@ jobs:
   check:
     name: npm run check (Node 24)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The chain runs one full unit run under V8 coverage (about eight minutes
+    # locally) after its older members. The ceiling is sized for a slower
+    # runner, not for the measured time.
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -76,7 +79,8 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Run full check pipeline
-        # NFR-6: typecheck + ESLint + Prettier + node:test
+        # NFR-6: typecheck + ESLint + fallow + Prettier + the unit suite at
+        # 100% coverage + integration tests + the member gates
         run: npm run check
 
   integration-tests:

@@ -68,14 +68,7 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * row (source-mismatch dangling reference) carries its `reasons` via the shared
  * `pluginRow` primitive.
  */
-export const PENDING_STATUSES = [
-  "will install",
-  "will uninstall",
-  "will enable",
-  "will disable",
-  "failed",
-] as const;
-type PendingStatus = (typeof PENDING_STATUSES)[number];
+type PendingStatus = "will install" | "will uninstall" | "will enable" | "will disable" | "failed";
 
 export type PendingMsg =
   | PluginWillInstallMessage
@@ -207,11 +200,14 @@ const renderForceInstalled: RenderFn<PluginPartiallyInstalledMessage> = (p, prob
 /**
  * `(disabled)` -- realized disable row. NO dependencies. Lifted verbatim from
  * the central `renderPluginRow` `disabled` arm, including its ENBL-16 /
- * D-100-07 reason threading: the toggle disable stamps no reason (the row
- * reports a transition it just carried out) and its brace collapses, while the
- * load-time dependency disable stamps `DEPENDENCY_UNSATISFIED_ROW_REASONS`
- * below and renders it. Both soft-dep flags stay hard-coded false (ENBL-15 /
- * D-100-06).
+ * D-100-07 reason threading: the plain toggle path stamps no reason (the row
+ * reports a transition the user asked for) and its brace collapses, while the
+ * DFEN-04 install-disabled cascade stamps `reasons: ["installs disabled"]`
+ * (apply.ts) and the load-time dependency disable stamps
+ * `DEPENDENCY_UNSATISFIED_ROW_REASONS` below; `pluginRow` threads whichever
+ * `p.reasons` the producer supplies, so a stamped reason cannot be dropped here
+ * without a byte change anyone can see. Both soft-dep flags stay hard-coded
+ * false (ENBL-15 / D-100-06).
  */
 const renderDisabled: RenderFn<PluginDisabledMessage> = (p, probe, mpScope) =>
   pluginRow(ICON_DISABLED, p, mpScope, "(disabled)", probe);

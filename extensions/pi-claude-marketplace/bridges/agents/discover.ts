@@ -11,9 +11,9 @@
 // rather than following them (consistent with PS-1).
 //
 // D-07 (COMP-01): the signature is `agentsDirs: readonly string[]` for
-// symmetry with the skills/commands bridges. First-wins dedup by generated
-// agent name across array elements; the second occurrence surfaces in
-// `warnings[]`. RN-4 cross-marketplace agent ownership conflicts are
+// symmetry with the skills/commands bridges. First-discovered exact source
+// names win within and across directories; later duplicates surface with
+// both full source paths in `warnings[]`. RN-4 ownership conflicts are
 // enforced in `bridges/agents/stage.ts::prepareStagePluginAgents` (NOT
 // duplicated here -- that's the wrong layer; this module knows nothing about
 // marketplace ownership).
@@ -35,11 +35,15 @@ export interface DiscoverPluginAgentsResult {
   readonly warnings: readonly string[];
 }
 
-function duplicateWarning(sourceName: string, agentsDir: string, generatedName: string): string {
+function duplicateWarning(
+  incumbent: DiscoveredAgent,
+  sourceName: string,
+  sourcePath: string,
+): string {
   return (
-    `agent source "${sourceName}" in "${agentsDir}" elides to generated name ` +
-    `"${generatedName}" already produced by an earlier componentPaths.agents entry; ` +
-    `ignoring duplicate.`
+    `agent source "${sourceName}" at "${sourcePath}" duplicates generated name ` +
+    `"${incumbent.generatedName}" already produced by agent source "${incumbent.sourceName}" ` +
+    `at "${incumbent.sourcePath}"; keeping first discovered source.`
   );
 }
 
@@ -51,8 +55,8 @@ function duplicateWarning(sourceName: string, agentsDir: string, generatedName: 
  * - Sorts by filename for determinism within each dir.
  * - sourceHash over raw bytes for BOM/line-ending tolerance.
  * - sourceName = frontmatter `name:` field if present, else filename stem.
- * - D-07: first-wins dedup by generated agent name across array elements;
- *   the second occurrence surfaces as a warning, NOT a throw.
+ * - AG-12: first-discovered exact source names win within and across dirs;
+ *   later duplicates warn with both full paths. Discovery owns this policy.
  */
 export async function discoverPluginAgents(input: {
   pluginName: string;
@@ -90,11 +94,10 @@ export async function discoverPluginAgents(input: {
 
       const generatedName = generatedAgentName(pluginName, sourceName);
 
-      // D-07 first-wins dedup across array elements; within-dir
-      // collisions on generated name are caught later by
-      // `assertNoAgentCollisions` (hard error).
-      if (seenByGenerated.has(generatedName)) {
-        warnings.push(duplicateWarning(sourceName, agentsDir, generatedName));
+      // Full-source generation preserves distinct names within this plugin.
+      const incumbent = seenByGenerated.get(generatedName);
+      if (incumbent !== undefined) {
+        warnings.push(duplicateWarning(incumbent, sourceName, sourcePath));
         continue;
       }
 

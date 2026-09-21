@@ -1,5 +1,7 @@
 import path from "node:path";
 
+import { errorMessage } from "../shared/errors.ts";
+
 import { resolveContainedComponentPath } from "./component-paths.ts";
 import { MCP_SERVERS_VALIDATOR } from "./components/mcp.ts";
 
@@ -16,7 +18,7 @@ interface McpResolutionDependencies {
   readonly readFileText: (path: string) => Promise<string>;
 }
 
-function applyMcpValue(resolution: McpResolution, mcp: unknown, detail = true): boolean {
+function applyMcpValue(resolution: McpResolution, mcp: unknown): boolean {
   if (mcp === undefined) {
     return false;
   }
@@ -26,15 +28,11 @@ function applyMcpValue(resolution: McpResolution, mcp: unknown, detail = true): 
     return false;
   }
 
-  if (detail) {
-    const errorDetail = MCP_SERVERS_VALIDATOR.Errors(mcp)
-      .slice(0, 1)
-      .map((error) => error.message)
-      .join("");
-    resolution.notes.push(`malformed mcpServers: ${errorDetail}`);
-  } else {
-    resolution.notes.push("malformed mcpServers");
-  }
+  const errorDetail = MCP_SERVERS_VALIDATOR.Errors(mcp)
+    .slice(0, 1)
+    .map((error) => error.message)
+    .join("");
+  resolution.notes.push(`malformed mcpServers: ${errorDetail}`);
 
   return true;
 }
@@ -48,14 +46,17 @@ async function readStandaloneMcp(
     return { ok: true, value: undefined };
   }
 
+  // Read failures (e.g. EACCES) retain their identity for the outer probe
+  // classifier -- only JSON.parse below is a real "malformed mcpServers".
+  const raw = await dependencies.readFileText(mcpPath);
+
   try {
-    const raw = await dependencies.readFileText(mcpPath);
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     return { ok: true, value: "mcpServers" in parsed ? parsed.mcpServers : parsed };
   } catch (error: unknown) {
     return {
       ok: false,
-      reason: `malformed mcpServers (.mcp.json): ${error instanceof Error ? error.message : String(error)}`,
+      reason: `malformed mcpServers (.mcp.json): ${errorMessage(error)}`,
     };
   }
 }
@@ -107,7 +108,7 @@ async function readReferencedMcp(
   } catch (error: unknown) {
     return {
       ok: false,
-      reason: `malformed mcp reference: invalid JSON in "${raw}": ${(error as SyntaxError).message}`,
+      reason: `malformed mcp reference: invalid JSON in "${raw}": ${errorMessage(error)}`,
     };
   }
 }
@@ -145,40 +146,4 @@ export async function resolveStrictMcp(
   }
 
   return applyMcpValue(input.resolution, declaredMcp ?? standalone?.value);
-}
-
-/** Resolves entry-only MCP and reports manifest or standalone conflicts. */
-export async function resolveLooseMcp(
-  input: {
-    readonly entry: { readonly mcpServers?: unknown };
-    readonly manifest: { readonly mcpServers?: unknown } | null;
-    readonly pluginRoot: string;
-    readonly resolution: McpResolution;
-  },
-  statKind: StatKindReader,
-): Promise<boolean> {
-  const entryMcp = input.entry.mcpServers;
-
-  if (entryMcp === undefined) {
-    const manifestMcp = input.manifest?.mcpServers;
-    const standaloneExists = (await statKind(path.join(input.pluginRoot, ".mcp.json"))) === "file";
-
-    if (manifestMcp === undefined && !standaloneExists) {
-      return false;
-    }
-
-    input.resolution.notes.push(
-      "component declarations conflict: manifest/standalone mcpServers without entry-level declaration",
-    );
-    return true;
-  }
-
-  if (typeof entryMcp === "string") {
-    input.resolution.notes.push(
-      `unsupported mcpServers string reference in loose mode: "${entryMcp}"`,
-    );
-    return true;
-  }
-
-  return applyMcpValue(input.resolution, entryMcp, false);
 }

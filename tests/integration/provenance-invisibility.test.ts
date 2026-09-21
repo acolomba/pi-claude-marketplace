@@ -11,16 +11,23 @@
 // line-based parseFrontmatter (which trims lines and does NOT mirror
 // pi-subagents' anchored `^([\w-]+):` key regex over indented content).
 //
-// pi-subagents is an OPTIONAL peer. Its package.json `exports` map exposes
-// only ".", "./background-work", and "./delegation", so the agent frontmatter
-// parser (src/agents/frontmatter.ts) cannot be imported by a bare specifier
-// subpath. It also cannot be imported directly from node_modules: Node
-// refuses native TypeScript type-stripping for any file whose resolved path
-// contains a `node_modules` segment. This test reuses skill-path-resolution's
-// pattern -- copy the installed package's real `src/` tree into a scratch
-// directory outside node_modules and import the module by absolute file path
-// via `pathToFileURL`, skipping gracefully on any failure so `npm run check`
+// pi-subagents is an OPTIONAL peer. Its package.json `exports` map does not
+// expose the agent frontmatter module (src/agents/frontmatter.ts) under any
+// subpath, so it cannot be imported by a bare specifier. It also cannot be
+// imported directly from node_modules: Node refuses native TypeScript
+// type-stripping for any file whose resolved path contains a `node_modules`
+// segment. This test reuses skill-path-resolution's pattern -- copy the
+// installed package's real `src/` tree into a scratch directory outside
+// node_modules and import the module by absolute file path via
+// `pathToFileURL`, skipping gracefully on any failure so `npm run check`
 // stays green where the optional peer is absent.
+//
+// CI gap: no .github/workflows/*.yml step installs pi-subagents globally, so
+// resolvePiSubagentsPackageRoot() always resolves to an absent package in CI
+// and this test always hits the t.skip() below -- the sole safety-claim
+// check in this file currently never runs in CI. TODO: track adding a global
+// `npm install -g pi-subagents` step to the integration-tests job (or an
+// equivalent peer fixture) so this check actually executes in CI.
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -31,10 +38,8 @@ import path from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 
-import {
-  emitGeneratedAgentFile,
-  GENERATED_AGENT_MARKER,
-} from "../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
+import { emitGeneratedAgentFile } from "../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
+import { GENERATED_AGENT_MARKER } from "../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 
 interface PiSubagentsFrontmatterModule {
   readonly parseFrontmatter: (content: string) => {

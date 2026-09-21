@@ -32,17 +32,10 @@ const invalidRemoteResolution: ResolvedPlugin = {
 };
 void invalidRemoteResolution;
 
-function installedRecord(
-  enabled: boolean,
-  installable: boolean,
-  unsupported: readonly string[],
-): InstalledRecordLike {
+function installedRecord(enabled: boolean, unsupported: readonly string[]): InstalledRecordLike {
   return {
     enabled,
-    compatibility: {
-      installable,
-      unsupported: [...unsupported],
-    },
+    compatibility: { unsupported: [...unsupported] },
   };
 }
 
@@ -95,13 +88,13 @@ interface InstalledCase {
 const installedCases: readonly InstalledCase[] = [
   {
     name: "freezes a disabled clean record without a newer candidate as installed",
-    persisted: () => installedRecord(false, true, []),
+    persisted: () => installedRecord(false, []),
     candidate: () => ({ upgradable: false }),
     status: "installed",
   },
   {
     name: "freezes a disabled degraded record before the partial-candidate split",
-    persisted: () => installedRecord(false, false, ["lspServers"]),
+    persisted: () => installedRecord(false, ["lspServers"]),
     candidate: () => ({
       upgradable: true,
       resolved: partiallyAvailableResolution("disabled-partial"),
@@ -110,19 +103,19 @@ const installedCases: readonly InstalledCase[] = [
   },
   {
     name: "keeps an enabled clean record without a newer candidate installed",
-    persisted: () => installedRecord(true, true, []),
+    persisted: () => installedRecord(true, []),
     candidate: () => ({ upgradable: false }),
     status: "installed",
   },
   {
     name: "marks an enabled clean record with a clean newer candidate upgradable",
-    persisted: () => installedRecord(true, true, []),
+    persisted: () => installedRecord(true, []),
     candidate: () => ({ upgradable: true, resolved: installableResolution("clean-candidate") }),
     status: "upgradable",
   },
   {
     name: "marks an enabled clean record with a partial newer candidate partially upgradable",
-    persisted: () => installedRecord(true, true, []),
+    persisted: () => installedRecord(true, []),
     candidate: () => ({
       upgradable: true,
       resolved: partiallyAvailableResolution("partial-candidate"),
@@ -131,7 +124,7 @@ const installedCases: readonly InstalledCase[] = [
   },
   {
     name: "keeps an enabled clean record with an unavailable newer candidate upgradable",
-    persisted: () => installedRecord(true, true, []),
+    persisted: () => installedRecord(true, []),
     candidate: () => ({
       upgradable: true,
       resolved: unavailableResolution("unavailable-candidate"),
@@ -140,19 +133,19 @@ const installedCases: readonly InstalledCase[] = [
   },
   {
     name: "keeps an enabled clean record with an unprobeable newer candidate upgradable",
-    persisted: () => installedRecord(true, true, []),
+    persisted: () => installedRecord(true, []),
     candidate: () => ({ upgradable: true, resolved: undefined }),
     status: "upgradable",
   },
   {
     name: "keeps an enabled degraded record without a newer candidate partially installed",
-    persisted: () => installedRecord(true, false, ["lspServers"]),
+    persisted: () => installedRecord(true, ["lspServers"]),
     candidate: () => ({ upgradable: false }),
     status: "partially-installed",
   },
   {
     name: "offers an enabled degraded record with a clean newer candidate for partial update",
-    persisted: () => installedRecord(true, false, ["lspServers"]),
+    persisted: () => installedRecord(true, ["lspServers"]),
     candidate: () => ({
       upgradable: true,
       resolved: installableResolution("clean-promotion"),
@@ -161,7 +154,7 @@ const installedCases: readonly InstalledCase[] = [
   },
   {
     name: "offers an enabled degraded record with a partial newer candidate for partial update",
-    persisted: () => installedRecord(true, false, ["lspServers"]),
+    persisted: () => installedRecord(true, ["lspServers"]),
     candidate: () => ({
       upgradable: true,
       resolved: partiallyAvailableResolution("partial-reapply"),
@@ -170,7 +163,7 @@ const installedCases: readonly InstalledCase[] = [
   },
   {
     name: "keeps an enabled degraded record with an unavailable newer candidate partially installed",
-    persisted: () => installedRecord(true, false, ["lspServers"]),
+    persisted: () => installedRecord(true, ["lspServers"]),
     candidate: () => ({
       upgradable: true,
       resolved: unavailableResolution("unavailable-partial-candidate"),
@@ -179,7 +172,7 @@ const installedCases: readonly InstalledCase[] = [
   },
   {
     name: "offers an enabled degraded record with an unprobeable newer candidate for partial update",
-    persisted: () => installedRecord(true, false, ["lspServers"]),
+    persisted: () => installedRecord(true, ["lspServers"]),
     candidate: () => ({ upgradable: true, resolved: undefined }),
     status: "partially-installed-upgradable",
   },

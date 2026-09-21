@@ -8,6 +8,7 @@ import {
 import { parsePluginSource } from "../../domain/source.ts";
 import { shaVersion } from "../../domain/version.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
@@ -128,8 +129,7 @@ export type UpdatePreflightOutcome =
   PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome | PreflightFailedOutcome;
 
 type PartialableUpdateShapeError = PluginShapeError & {
-  readonly shape: PluginShapeError["shape"] & {
-    readonly kind: "no-longer-installable";
+  readonly shape: Extract<PluginShapeError["shape"], { kind: "no-longer-installable" }> & {
     readonly partialable: true;
     readonly unsupportedKinds: readonly string[];
   };
@@ -279,6 +279,18 @@ async function resolveUpdateCandidate(
       };
     }
 
+    if (error instanceof PluginShapeError && error.shape.kind === "no-longer-installable") {
+      return skippedCandidate(options, [errorMessage(error)], ["no longer installable"]);
+    }
+
+    // Anything else is genuinely unexpected -- not a classified git-transport
+    // failure and not the resolver's typed `no-longer-installable` shape.
+    // "no longer installable" stays the user-facing verdict (the candidate
+    // could not be resolved either way), but it is not necessarily the real
+    // cause, so log the actual error for diagnosis.
+    hookDebugLog(
+      `resolveUpdateCandidate: unclassified error for "${options.plugin}": ${errorMessage(error)}`,
+    );
     return skippedCandidate(options, [errorMessage(error)], ["no longer installable"]);
   }
 }
@@ -300,6 +312,22 @@ function skippedCandidate(
 }
 
 /**
+ * The slots every static preflight verdict carries, including the version slot
+ * only the `skipped` partition ever fills.
+ *
+ * The version sits here rather than on each arm so the `failed` arm has
+ * something to narrow: an absence marker closes a slot the rest of the
+ * intersection already declares, while a slot spelled only inside a union arm
+ * would be an addition instead.
+ */
+interface StaticPreflightRowBase {
+  readonly plugin: string;
+  readonly notes: readonly string[];
+  readonly reason: ContentReason;
+  readonly fromVersion?: string;
+}
+
+/**
  * A static preflight verdict -- one the update reaches without resolving a
  * candidate.
  *
@@ -308,14 +336,9 @@ function skippedCandidate(
  * to read a version from; pinning the field `never` there keeps a version arrow
  * off a row for a plugin that was never installed.
  */
-type StaticPreflightRowOptions = {
-  readonly plugin: string;
-  readonly notes: readonly string[];
-  readonly reason: ContentReason;
-} & (
-  | { readonly partition: "failed"; readonly fromVersion?: never }
-  | { readonly partition: "skipped"; readonly fromVersion?: string }
-);
+type StaticPreflightRowOptions =
+  | (StaticPreflightRowBase & { readonly partition: "failed"; readonly fromVersion?: never })
+  | (StaticPreflightRowBase & { readonly partition: "skipped" });
 
 function staticPreflightRow(
   options: StaticPreflightRowOptions,
@@ -485,8 +508,11 @@ async function refreshDisabledPluginUpdate(
   if (wrote && preflight.resolvedSha !== preflight.record.resolvedSha) {
     try {
       await options.cleanupClones(options.locations);
-    } catch {
+    } catch (err) {
       // Clone cleanup is hygienic and retries on a later lifecycle operation.
+      hookDebugLog(
+        `refreshDisabledPluginUpdate: clone cleanup failed for ${options.plugin}: ${errorMessage(err)}`,
+      );
     }
   }
 

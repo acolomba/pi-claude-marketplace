@@ -23,7 +23,7 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
-import { applyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import { createApplyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -37,6 +37,12 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+/**
+ * The reconcile composition: the factory bound to the real selected-state
+ * reader, which is the same reader the extension entry point binds.
+ */
+const applyReconcile = createApplyReconcile({ loadState });
 
 function makeMockPi(): ExtensionAPI {
   return {
@@ -168,7 +174,6 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
       },
     } as unknown as ExtensionContext;
     await hooksHydration.registerHooksBridge(makeMockPi(), {
-      ctx: placeholderCtx,
       cwd: projectCwd,
     });
 
@@ -204,7 +209,7 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
       `cross-scope wipe regression: expected BOTH user + project entries after applyReconcile; got ${String(postBucket.length)}`,
     );
     const pluginIds = postBucket.map((e) => `${e.scope}/${e.pluginId}`).sort();
-    assert.deepEqual(
+    assert.deepStrictEqual(
       pluginIds,
       ["project/project-plugin", "user/user-plugin"],
       "applyReconcile's per-scope rebuild must preserve entries from BOTH scopes",

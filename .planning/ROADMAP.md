@@ -3,12 +3,11 @@
 ## Milestones
 
 - 🚧 **v1.20 transitive-dependencies** — Phases 1-12 (planning opened 2026-09-09, branch `features/manifest`; Phases 6-12 added 2026-09-18) — record how each installed plugin got there so `uninstall --prune` can remove the ones nothing needs any more, close the two adjacent gaps that land on the same surfaces, then align the shipped dependency feature with the Claude Code dependency docs
-- ✅ **refine-unit-tests — Refine Unit Tests** — Phases 1-9 (shipped 2026-09-13) — full detail: [`milestones/refine-unit-tests-ROADMAP.md`](milestones/refine-unit-tests-ROADMAP.md)
-- ✅ **v1.19 Unit Test Refactor** — Phases 108-117 (completed 2026-09-04) — full detail: [`milestones/v1.19-ROADMAP.md`](milestones/v1.19-ROADMAP.md)
+- **test-backlog** — shipped 2026-09-18; [archive](milestones/test-backlog-ROADMAP.md)
+- **refine-unit-tests** — shipped 2026-09-13; [archive](milestones/refine-unit-tests-ROADMAP.md)
+- **v1.19 Unit Test Refactor** — shipped 2026-09-04; [archive](milestones/v1.19-ROADMAP.md)
 
-Earlier milestones are recorded in [`.planning/MILESTONES.md`](MILESTONES.md);
-each one's full phase detail is archived under
-[`.planning/milestones/`](milestones/).
+Earlier milestones remain in [MILESTONES.md](MILESTONES.md).
 
 ## Phases
 
@@ -120,6 +119,20 @@ imports it directly. 204 pairs, corresponding-test gate at zero violations.
 **Archive:** [`milestones/v1.19-ROADMAP.md`](milestones/v1.19-ROADMAP.md) ·
 [`milestones/v1.19-REQUIREMENTS.md`](milestones/v1.19-REQUIREMENTS.md) ·
 [`milestones/v1.19-MILESTONE-AUDIT.md`](milestones/v1.19-MILESTONE-AUDIT.md)
+
+</details>
+
+<details>
+<summary>test-backlog (Phases 1-8) — shipped 2026-09-18</summary>
+
+- [x] Phase 1: Reliable Negative Controls (2/2 plans) — completed 2026-09-14
+- [x] Phase 2: Sonar Rules for Tests (1/1 plans) — completed 2026-09-14
+- [x] Phase 3: Reachable Agent Collision Contract (4/4 plans) — completed 2026-09-14
+- [x] Phase 4: Strict Command Arguments (3/3 plans) — completed 2026-09-14
+- [x] Phase 5: Production Export Ownership (28/28 plans) — completed 2026-09-15
+- [x] Phase 6: Unused Type Member Gate (17/17 plans) — completed 2026-09-17
+- [x] Phase 7: Reliable Coverage Metrics (8/8 plans) — completed 2026-09-18
+- [x] Phase 8: Final Verification and Reconciliation (2/2 plans) — completed 2026-09-18
 
 </details>
 

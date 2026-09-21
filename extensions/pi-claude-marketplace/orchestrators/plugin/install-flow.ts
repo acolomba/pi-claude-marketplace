@@ -22,8 +22,6 @@ import { notify } from "../../shared/notification-dispatch.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
-import { runPhases } from "../../transaction/phase-ledger.ts";
-import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin, crossScopeFlag } from "../marketplace/shared.ts";
 
 import { readDependencyDeclaration } from "./dependency-declaration-read.ts";
@@ -81,6 +79,8 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { runPhases } from "../../transaction/phase-ledger.ts";
+import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { InstallPluginOutcome } from "../types.ts";
 
@@ -247,11 +247,6 @@ export interface InstallTransaction {
   readonly runPhases: typeof runPhases;
   readonly withLockedStateTransaction: typeof withLockedStateTransaction;
 }
-
-const REAL_INSTALL_TRANSACTION: InstallTransaction = {
-  runPhases: (...args) => runPhases(...args),
-  withLockedStateTransaction: (...args) => withLockedStateTransaction(...args),
-};
 
 /**
  * Assemble the `InstallLedgerOptions` for ONE cascade member from the
@@ -586,35 +581,6 @@ function unwrapCascade(
 }
 
 /**
- * DFEN-05: the effective `enabled` declaration for one plugin key, read across
- * BOTH physical config files of the scope.
- *
- * CFG-02 / D-01: a `claude-plugins.local.json` entry REPLACES the same-keyed
- * base entry WHOLESALE and unconditionally. The merge never consults the
- * caller's `--local` flag -- that flag says which file to WRITE, not which file
- * the declaration is IN. Reading only the write target therefore reports
- * `enabled` absent for a locally-declared plugin installed without `--local`,
- * and the precedence gate then installs it disabled against the user's explicit
- * word while stamping an `enabled: false` the user never typed into the OTHER
- * file (the failure `InstallPluginOptions.local`'s own doc comment describes).
- *
- * The local file wins by IDENTITY, not by precedence: whichever of the two
- * paths is `claude-plugins.local.json` answers the key, and the entry is
- * selected before its `enabled` field is read, because a wholesale replacement
- * shadows the base entry's `enabled` too. Both parses arrive from
- * `selectDeclaringConfigWriteTarget`, read fresh INSIDE the caller's lock
- * (WB-01) for this test only -- never written, never serialized back.
- *
- * An UNREADABLE sibling (`sibling === undefined`) contributes nothing, and on
- * the flagless path that costs no signal: the selector aborts when the LOCAL
- * file is unreadable, and when the target IS the local file the key is declared
- * there by construction, so the base file is never the one that answers.
- * A typed `--local` over an unreadable BASE file is the sole arm where an
- * `enabled` value could be missed -- the flag names the destination outright,
- * so no abort is owed there, and the arm reads exactly as it did before the
- * sibling parse was threaded.
- */
-/**
  * POST-state-commit side effects and their soft warnings (D-08 / AS-6 /
  * AS-7 / WARN-01). The state record is already committed, so every arm is
  * defensive: a failure here must not strand a successful install.
@@ -643,8 +609,11 @@ async function collectPostCommitWarnings(
 ): Promise<string[]> {
   const { locations, marketplace, plugin } = installCtx;
   const warnings: string[] = [];
-  // Hygiene warnings only; the standalone drop is D-19-01.
+  // Hygiene warnings ride the returned array only in orchestrated mode
+  // (D-19-01); logged unconditionally either way so a standalone install
+  // does not drop the failure without a trace.
   const push = (msg: string): void => {
+    hookDebugLog(msg);
     if (orchestrated) {
       warnings.push(msg);
     }
@@ -1536,7 +1505,6 @@ async function installPluginWithTransaction(
         // no edit to any of the six phase bodies.
         const disableResult = await disableCascade.disableFreshInstall({
           state,
-          scope,
           locations,
           marketplace,
           plugin,
@@ -1916,12 +1884,4 @@ export function createInstallPlugin(
   completionCache: CompletionCache,
 ): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
   return (opts) => installPluginWithTransaction(transaction, hooksRouting, completionCache, opts);
-}
-
-/** Bind production install behavior to required routing and completion-cache owners. */
-export function createNodeInstallPlugin(
-  hooksRouting: InstallHooksRouting,
-  completionCache: CompletionCache,
-): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
-  return createInstallPlugin(REAL_INSTALL_TRANSACTION, hooksRouting, completionCache);
 }

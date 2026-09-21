@@ -1,0 +1,14 @@
+{
+  "plan-15-partial.tar.gz": {
+    "sha256": "2bca4696d4e8544943311a23844dd5ee23c8bb2aa653673d6fa076ddf6fd77d5",
+    "bytes": 475508
+  },
+  "wave-4-verification.tar.gz": {
+    "sha256": "0b5b2c961efc9a3bbf37cc97341a1a1ec9c81d6e976c5c1ad280d578150a9b50",
+    "bytes": 320128
+  },
+  "wave-5-preparation.tar.gz": {
+    "sha256": "5820d6dd4e07bd51e4354bf30b397e25c3b4d735a40cbaa34e2101f1ddc31bf6",
+    "bytes": 195102
+  }
+}

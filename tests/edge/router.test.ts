@@ -38,10 +38,8 @@ import { mock, verify, when } from "strong-mock";
 
 import {
   MARKETPLACE_SUBCOMMANDS,
-  MARKETPLACE_USAGE,
   routeClaudePlugin,
   TOP_LEVEL_SUBCOMMANDS,
-  TOP_LEVEL_USAGE,
   type SubcommandHandlers,
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
 
@@ -53,6 +51,8 @@ interface DispatchRow {
   readonly subcommand: string;
   readonly handler: HandlerName;
   readonly expectedArgs?: string;
+  /** Operand text this row is driven with, for a verb the shared one is invalid for. */
+  readonly operand?: string;
 }
 
 // The accepted top-level vocabulary, minus the one token that opens the second
@@ -86,7 +86,9 @@ const MARKETPLACE_DISPATCH: readonly DispatchRow[] = [
   { subcommand: "update", handler: "marketplaceUpdate" },
   { subcommand: "autoupdate", handler: "marketplaceAutoupdate" },
   { subcommand: "noautoupdate", handler: "marketplaceNoautoupdate" },
-  { subcommand: "help", handler: "help", expectedArgs: "marketplace" },
+  // The spelling fixes the topic, so this row carries no operand of its own --
+  // and the router rejects one rather than discarding it.
+  { subcommand: "help", handler: "help", expectedArgs: "marketplace", operand: "" },
 ];
 
 const EXPECTED_TOP_LEVEL_USAGE =
@@ -134,16 +136,17 @@ for (const { subcommand, handler } of TOP_LEVEL_DISPATCH) {
   });
 }
 
-for (const { subcommand, handler, expectedArgs } of MARKETPLACE_DISPATCH) {
+for (const { subcommand, handler, expectedArgs, operand } of MARKETPLACE_DISPATCH) {
   test(`dispatches the marketplace ${subcommand} subcommand to the ${handler} handler with the remaining argument text (AP-3)`, async () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
     const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
-    const forwardArg = expectedArgs ?? "official --scope user";
+    const driven = operand ?? "official --scope user";
+    const forwardArg = expectedArgs ?? driven;
     when(() => handlers[handler](forwardArg, ctx)).thenResolve(undefined);
 
     // act
-    await routeClaudePlugin(`marketplace ${subcommand} official --scope user`, handlers, ctx);
+    await routeClaudePlugin(`marketplace ${subcommand} ${driven}`, handlers, ctx);
 
     // assert
     assert.deepStrictEqual(notifications, []);
@@ -432,6 +435,25 @@ for (const { input, shape } of [
   });
 }
 
+test("refuses an argument after marketplace help rather than discarding it (AP-3)", async () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+
+  // act
+  await routeClaudePlugin("marketplace help official", handlers, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message: "marketplace help takes no arguments.\n\nUsage: /claude:plugin marketplace help",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+  verify(handlers);
+});
+
 test("names an unrecognized marketplace token back to the operator with the marketplace usage block (AP-3)", async () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
@@ -449,26 +471,4 @@ test("names an unrecognized marketplace token back to the operator with the mark
   ]);
   verifyBoundary();
   verify(handlers);
-});
-
-test("publishes the top-level usage block for the surfaces that render it", () => {
-  // arrange
-  const expectedUsage = EXPECTED_TOP_LEVEL_USAGE;
-
-  // act
-  const publishedUsage = TOP_LEVEL_USAGE;
-
-  // assert
-  assert.deepStrictEqual(publishedUsage, expectedUsage);
-});
-
-test("publishes the marketplace usage block for the surfaces that render it", () => {
-  // arrange
-  const expectedUsage = EXPECTED_MARKETPLACE_USAGE;
-
-  // act
-  const publishedUsage = MARKETPLACE_USAGE;
-
-  // assert
-  assert.deepStrictEqual(publishedUsage, expectedUsage);
 });

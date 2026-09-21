@@ -23,7 +23,6 @@ void discoveredSkill;
 
 const stageSkillsInput: StageSkillsInput = {
   locations: undefined!,
-  marketplaceName: "official",
   pluginName: "acme",
   pluginRoot: "/plugins/acme",
   pluginDataDir: "/data/official/acme",
@@ -95,7 +94,6 @@ void discoveredSkillWithoutDirectory;
 // @ts-expect-error a stage input always carries the install cwd
 const stageSkillsInputWithoutCwd: StageSkillsInput = {
   locations: undefined!,
-  marketplaceName: "official",
   pluginName: "acme",
   pluginRoot: "/plugins/acme",
   pluginDataDir: "/data/official/acme",

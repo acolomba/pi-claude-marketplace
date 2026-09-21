@@ -10,6 +10,7 @@ External system facades. Phase 1 lands `git.ts`. Phase 7 added `pi-api.ts`. Phas
 
 ## Planned Contents
 
-- [x] `git.ts` -- `isomorphic-git` wrapper exposing `clone`, `fetch`, `pull`, `checkout`, `resolveRef`, `listBranches`, `listRemotes` (Phase 1)
+- [x] `git.ts` -- `isomorphic-git` wrapper exposing `clone`, `fetch`, `checkout`, `resolveRef`, `resolveRemoteRef`, `forceUpdateRef`, `currentBranch` (Phase 1)
+- [x] `git-auth-callbacks.ts` -- the git authentication-callback protocol (`buildAuthCallbacks` and its seam types) consumed by isomorphic-git's `onAuth` / `onAuthFailure` hooks (AUTH-01/02/09)
 - [x] `git-credential.ts` -- CredentialOps interface + DEFAULT_CREDENTIAL_OPS spawning `git credential fill/approve/reject` for OS-keychain access (Phase 31, AUTH-06/08/09)
 - [ ] `pi-api.ts` -- thin wrapper around `@earendil-works/pi-coding-agent` for testability (Phase 7)

@@ -592,7 +592,6 @@ describe("composeCascadeFailureMessage", () => {
         kind: "tag-listing-failed",
         key: "formatter@tools",
         range: "^2.0.0",
-        cause: new Error("401"),
         classification: "authentication required",
       },
     };
@@ -622,7 +621,6 @@ describe("composeCascadeFailureMessage", () => {
         kind: "tag-listing-failed",
         key: "formatter@tools",
         range: "^2.0.0",
-        cause: new Error("boom"),
         classification: undefined,
       },
     };

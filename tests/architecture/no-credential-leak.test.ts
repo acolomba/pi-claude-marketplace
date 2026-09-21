@@ -54,6 +54,7 @@ const [
   AUTH_HOST_FILE,
   MARKETPLACE_ADD_FILE,
   MARKETPLACE_UPDATE_FILE,
+  GIT_AUTH_CALLBACKS_FILE,
 ] = CREDENTIAL_LEAK_TARGETS;
 
 /**
@@ -71,6 +72,7 @@ const DECLARED_MODULE_ORDER: ReadonlyArray<string> = [
   "orchestrators/auth-host.ts",
   "orchestrators/marketplace/add.ts",
   "orchestrators/marketplace/update.ts",
+  "platform/git-auth-callbacks.ts",
 ];
 
 const STATE_WRITE_FILES: ReadonlyArray<string> = [
@@ -147,7 +149,7 @@ function assertNoCredentialInLiterals(rel: string, stripped: string, callSite: R
   const offenders = fullTemplateLiteralsAfter(stripped, callSite).filter((lit) =>
     CREDENTIAL_IN_LITERAL.test(lit),
   );
-  assert.deepEqual(
+  assert.deepStrictEqual(
     offenders,
     [],
     `AUTH-09 violation: a message template literal in ${rel} interpolates a credential field past a literal ) or beyond the first interpolation: ${offenders.join(", ")}`,
@@ -170,7 +172,7 @@ test("AUTH-09: no credential field name appears in any state-write code path", a
     CREDENTIAL_LEAK_TARGETS.length > 0,
     "D-07-03: an empty CREDENTIAL_LEAK_TARGETS leaves every scan in this gate reporting success over zero declared files.",
   );
-  assert.deepEqual(
+  assert.deepStrictEqual(
     CREDENTIAL_LEAK_TARGETS.map((rel) => path.relative(EXTENSION_ROOT_REL, rel)),
     DECLARED_MODULE_ORDER,
     "D-07-03: every scan in this gate is aimed by POSITION in CREDENTIAL_LEAK_TARGETS. A member reordered, added, or dropped in the registry re-aims a regex at a file it was never written for, and the scan would still report success.",
@@ -187,12 +189,12 @@ test("AUTH-09: no credential field name appears in any state-write code path", a
     }
   }
 
-  assert.deepEqual(
+  assert.deepStrictEqual(
     visited,
     [...STATE_WRITE_FILES],
     "D-07-03: the scan must have opened every declared state-write path; one that stopped resolving drops out of this list.",
   );
-  assert.deepEqual(
+  assert.deepStrictEqual(
     offenders,
     [],
     `AUTH-09 violation: state-write code path leaks a credential field name:\n  ${offenders.join("\n  ")}`,
@@ -216,9 +218,9 @@ test("AUTH-09: platform/git-credential.ts never interpolates a password in an Er
   // `access_token`, or `cred.<field>` inside an Error(...) constructor.
   const errorWithCred =
     /new\s+Error\s*\((?:[^)]*\$\{[^}]*(password|access_token|cred\.[a-z]+)|[^)]*\+\s*(password|access_token|cred\.[a-z]+))/i;
-  assert.equal(
-    errorWithCred.test(stripped),
-    false,
+  assert.doesNotMatch(
+    stripped,
+    errorWithCred,
     "Error constructor in git-credential.ts interpolates a credential field (AUTH-09 violation)",
   );
 
@@ -245,9 +247,9 @@ test("AUTH-09: domain/github-auth.ts never interpolates a token in an Error or n
   // INSIDE a `new Error(...)` constructor OR a `notifyFn(...)` call.
   const errorOrNotifyWithToken =
     /(new\s+Error\s*\(|notifyFn\s*\()(?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
-  assert.equal(
-    errorOrNotifyWithToken.test(stripped),
-    false,
+  assert.doesNotMatch(
+    stripped,
+    errorOrNotifyWithToken,
     "Error or notifyFn in domain/github-auth.ts interpolates a token field (AUTH-09 violation)",
   );
 
@@ -276,7 +278,7 @@ test("AUTH-09: describeDeviceCodeErrorBody never references a credential field",
   // or res.text()) would slip past it undetected, so it is forbidden here
   // too.
   const forbiddenBodyDump = /JSON\.stringify\s*\(|(?:res|response)\.text\s*\(/i;
-  assert.equal(
+  assert.strictEqual(
     forbiddenField.test(fnMatch[0]) || forbiddenBodyDump.test(fnMatch[0]),
     false,
     "describeDeviceCodeErrorBody references a credential field or dumps the whole response body (AUTH-09 violation)",
@@ -305,16 +307,16 @@ test("AUTH-09: domain/github-auth.ts reason: fields never interpolate a token", 
 
   const reasonFieldWithToken =
     /reason:\s*(?:[^,}]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^,}]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
-  assert.equal(
-    reasonFieldWithToken.test(stripped),
-    false,
+  assert.doesNotMatch(
+    stripped,
+    reasonFieldWithToken,
     "a reason: field in domain/github-auth.ts interpolates a token field (AUTH-09 violation)",
   );
 
   assertNoCredentialInLiterals(GITHUB_AUTH_FILE, stripped, /reason:\s*(`(?:[^`\\]|\\.)*`)/g);
 });
 
-test("AUTH-09: platform/git.ts hookDebugLog calls never interpolate a credential field", async () => {
+test("AUTH-09: the git hookDebugLog calls never interpolate a credential field", async () => {
   // buildAuthCallbacks routes onAuth/onAuthFailure failure reasons through
   // hookDebugLog (see the CP-10 discussion above buildAuthCallbacks). That
   // call form is not `new Error(...)` or `notifyFn(...)`, so it falls
@@ -331,23 +333,42 @@ test("AUTH-09: platform/git.ts hookDebugLog calls never interpolate a credential
   // following each `hookDebugLog(` as one token and scans it in full, so a
   // leak appended after a nested function call's closing paren (e.g. after
   // `${errorMessage(err)}`) is caught too.
-  const absPath = path.join(REPO_ROOT, GIT_PLATFORM_FILE);
-  const src = await readFile(absPath, "utf8");
-  const stripped = stripComments(src);
-
+  // Both git modules are scanned as one subject: `git-auth-callbacks.ts` carries
+  // the calls, and `git.ts` is covered so a call added there is caught rather
+  // than landing outside the gate.
   const hookDebugLogWithToken =
     /hookDebugLog\s*\((?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
-  assert.equal(
-    hookDebugLogWithToken.test(stripped),
-    false,
-    "hookDebugLog in platform/git.ts interpolates a credential field (AUTH-09 violation)",
+  const hookDebugLogCall = /hookDebugLog\s*\(/g;
+  const SCANNED = [GIT_PLATFORM_FILE, GIT_AUTH_CALLBACKS_FILE];
+
+  const sources = new Map<string, string>();
+  let scannedCallSites = 0;
+  for (const rel of SCANNED) {
+    const src = await readFile(path.join(REPO_ROOT, rel), "utf8");
+    const stripped = stripComments(src);
+    sources.set(rel, stripped);
+    scannedCallSites += [...stripped.matchAll(hookDebugLogCall)].length;
+  }
+
+  // D-07-03: the subject is counted BEFORE either check runs, because both
+  // checks are satisfied by a file that holds no `hookDebugLog(` at all --
+  // which is how an AUTH-09 scan aimed at a module the calls no longer live in
+  // reports success over nothing. Either file may be empty of them on its own;
+  // the SET may not.
+  assert.ok(
+    scannedCallSites > 0,
+    `AUTH-09 / D-07-03: no hookDebugLog call site exists in ${SCANNED.join(" or ")}, so both checks below pass over nothing. Re-aim the gate at the module that now carries the calls.`,
   );
 
-  assertNoCredentialInLiterals(
-    GIT_PLATFORM_FILE,
-    stripped,
-    /hookDebugLog\s*\(\s*(`(?:[^`\\]|\\.)*`)/g,
-  );
+  for (const [rel, stripped] of sources) {
+    assert.doesNotMatch(
+      stripped,
+      hookDebugLogWithToken,
+      `hookDebugLog in ${rel} interpolates a credential field (AUTH-09 violation)`,
+    );
+
+    assertNoCredentialInLiterals(rel, stripped, /hookDebugLog\s*\(\s*(`(?:[^`\\]|\\.)*`)/g);
+  }
 });
 
 test("PROV-05: every provider file is scanned for token interpolation in an Error or notifyFn message", async () => {
@@ -369,15 +390,15 @@ test("PROV-05: every provider file is scanned for token interpolation in an Erro
     const src = await readFile(absPath, "utf8");
     visited.push(rel);
     const stripped = stripComments(src);
-    assert.equal(
-      errorOrNotifyWithToken.test(stripped),
-      false,
+    assert.doesNotMatch(
+      stripped,
+      errorOrNotifyWithToken,
       `Error or notifyFn in ${rel} interpolates a token field (AUTH-09 violation)`,
     );
     assertNoCredentialInLiterals(rel, stripped, ERROR_OR_NOTIFY_FN_LITERAL_CALL_SITE);
   }
 
-  assert.deepEqual(
+  assert.deepStrictEqual(
     visited,
     [...PROVIDER_FILES],
     "D-07-03: the scan must have opened every declared provider file; one that stopped resolving drops out of this list.",
@@ -412,15 +433,15 @@ test("AUTH-09: orchestrators/marketplace/{add,update}.ts never interpolate a cre
     const src = await readFile(absPath, "utf8");
     visited.push(rel);
     const stripped = stripComments(src);
-    assert.equal(
-      forbidden.test(stripped),
-      false,
+    assert.doesNotMatch(
+      stripped,
+      forbidden,
       `Error or ctx.ui.notify in ${rel} interpolates a credential field (AUTH-09 violation; closes review WR-02)`,
     );
     assertNoCredentialInLiterals(rel, stripped, ERROR_OR_UI_NOTIFY_LITERAL_CALL_SITE);
   }
 
-  assert.deepEqual(
+  assert.deepStrictEqual(
     visited,
     [...CREDENTIAL_CAPTURING_ORCHESTRATORS],
     "D-07-03: the scan must have opened both credential-capturing orchestrators; one that stopped resolving drops out of this list.",

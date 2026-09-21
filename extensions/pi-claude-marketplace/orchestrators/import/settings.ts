@@ -25,7 +25,7 @@ function knownSection(value: unknown): Record<string, unknown> {
   return isPlainObject(value) ? value : {};
 }
 
-export function resolveClaudeSettingsPaths(
+function resolveClaudeSettingsPaths(
   scope: Scope,
   options: ClaudeSettingsReadOptions = {},
 ): ClaudeSettingsPaths {
@@ -95,7 +95,7 @@ async function readClaudeSettingsFile(
   }
 }
 
-export function mergeClaudeSettings(
+function mergeClaudeSettings(
   base: Record<string, unknown>,
   local: Record<string, unknown>,
 ): MergedClaudeSettings {
@@ -111,6 +111,13 @@ export function mergeClaudeSettings(
   };
 }
 
+/**
+ * Reads and shallow-merges a scope's Claude `settings.json` and
+ * `settings.local.json` (local takes precedence per known section). A
+ * missing file is treated as empty with no diagnostic; a malformed file (or
+ * any other read failure) is reported as a diagnostic and also treated as
+ * empty rather than failing the read.
+ */
 export async function loadMergedClaudeSettingsForScope(
   scope: Scope,
   options: ClaudeSettingsReadOptions = {},

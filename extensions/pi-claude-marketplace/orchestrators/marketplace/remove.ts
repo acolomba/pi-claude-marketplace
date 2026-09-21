@@ -42,7 +42,7 @@
 //   3. POST-STATE cleanup (after guard returns):
 //        - invalidate marketplace names and the target plugin-index cache
 //        - per-plugin data dirs (always)
-//        - marketplace data dir + GitHub clone dir (ONLY when failedPlugins.length === 0; MR-7)
+//        - marketplace data dir + clone dir (github/url sources; ONLY when failedPlugins.length === 0; MR-7)
 //        - cleanup failures are SWALLOWED silently per D-18-01.
 //   4. Compose user-visible output via one `notify(opts.ctx, opts.pi, ...)` call.
 //
@@ -55,7 +55,8 @@ import path from "node:path";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deleteMarketplaceConfigEntryWithCascade } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { loadState } from "../../persistence/state-io.ts";
+import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
@@ -171,9 +172,10 @@ async function removePath(pathPromise: Promise<string>): Promise<void> {
   // Nothing surfaces these cleanup failures to the user.
   try {
     await rm(await pathPromise, { recursive: true, force: true });
-  } catch {
+  } catch (err) {
     // Cleanup is a hygienic concern, not part of the state contract.
     // Per D-18-01: never the primary user-facing failure path.
+    hookDebugLog(`post-remove path cleanup failed: ${errorMessage(err)}`);
   }
 }
 
@@ -226,6 +228,17 @@ async function resolveScopeOrFailedOutcome(
 }
 
 /**
+ * One plugin whose unstage cascade failed, as accumulated by the remove flow
+ * and read by `emitPartialFailure`. Named once so the accumulator, the
+ * cascade bundle and the lock-body bundle all carry the declaration the
+ * composer reads rather than four structural spellings of it.
+ */
+interface FailedPluginCascade {
+  readonly name: string;
+  readonly cause: Error;
+}
+
+/**
  * RECON-03: route the partial-failure (≥1 plugin cascade failure) arm to
  * either a typed orchestrated outcome OR the standalone notify() row.
  * Extracted from `removeMarketplace` to keep its cognitive complexity
@@ -236,7 +249,7 @@ function emitPartialFailure(args: {
   orchestrated: boolean;
   resolvedScope: Scope;
   successfullyUnstaged: readonly string[];
-  failedPlugins: readonly { name: string; cause: Error }[];
+  failedPlugins: readonly FailedPluginCascade[];
 }): RemoveMarketplaceOutcome | undefined {
   const { opts, orchestrated, resolvedScope, successfullyUnstaged, failedPlugins } = args;
   if (orchestrated) {
@@ -307,7 +320,7 @@ async function cascadePluginsInPlace(args: {
   readonly locations: ScopedLocations;
   readonly cascade: typeof cascadeUnstagePlugin;
   readonly successfullyUnstaged: string[];
-  readonly failedPlugins: { name: string; cause: Error }[];
+  readonly failedPlugins: FailedPluginCascade[];
 }): Promise<void> {
   const { record, marketplace, locations, cascade, successfullyUnstaged, failedPlugins } = args;
   for (const [pluginName, plugin] of Object.entries(record.plugins)) {
@@ -436,7 +449,7 @@ async function runRemoveLockBody(args: {
   readonly orchestrated: boolean;
   readonly cascade: typeof cascadeUnstagePlugin;
   readonly successfullyUnstaged: string[];
-  readonly failedPlugins: { name: string; cause: Error }[];
+  readonly failedPlugins: FailedPluginCascade[];
   readonly cfgInvalidSentinel: Error;
 }): Promise<RecordedSourceKind | undefined> {
   const {
@@ -497,13 +510,11 @@ async function runRemoveLockBody(args: {
 }
 
 /**
- * Local alias for the in-state marketplace row -- the `record` shape passed
- * through the cascade and write-back helpers.
+ * The in-state marketplace row -- the `record` shape passed through the
+ * cascade and write-back helpers. Indexed off the persistence schema so the
+ * row cannot drift from what `state.json` actually holds.
  */
-interface ExtensionMarketplaceRow {
-  source: unknown;
-  plugins: Record<string, ExtensionPluginRow>;
-}
+type ExtensionMarketplaceRow = ExtensionState["marketplaces"][string];
 
 /**
  * Resolve the target scope/locations or surface the missing-marketplace
@@ -607,8 +618,9 @@ async function runPostRemoveCleanup(args: {
   try {
     await completionCache.invalidateMarketplaceNames(locations.marketplaceNamesCacheFile, scope);
     await completionCache.dropMarketplaceCache(await locations.pluginCacheFile(name), scope, name);
-  } catch {
+  } catch (err) {
     // D-18-01: cache hygiene is never the primary user-facing path.
+    hookDebugLog(`post-remove cache invalidation failed: ${errorMessage(err)}`);
   }
 
   for (const cleaned of args.successfullyUnstaged) {
@@ -627,8 +639,9 @@ async function runPostRemoveCleanup(args: {
 
   try {
     await garbageCollectPluginClones(locations);
-  } catch {
+  } catch (err) {
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+    hookDebugLog(`post-remove plugin-clone GC failed: ${errorMessage(err)}`);
   }
 }
 
@@ -696,7 +709,7 @@ export async function removeMarketplace(
   const configBasename = path.basename(targetConfigPath);
 
   // Per-plugin tracking accumulators captured by the guard closure.
-  const failedPlugins: { name: string; cause: Error }[] = [];
+  const failedPlugins: FailedPluginCascade[] = [];
   const successfullyUnstaged: string[] = []; // plugins whose cascade returned ok:true
   let sourceKindAtRecord: RecordedSourceKind | undefined;
 
@@ -704,7 +717,7 @@ export async function removeMarketplace(
   // invalid config. The catch arm BELOW maps it to the structured failed row.
   // Using a throw (rather than a captured boolean) keeps no-unnecessary-
   // condition lint clean and structurally guarantees tx.save() is NOT called.
-  const CFG_INVALID = new Error("cfg-invalid-sentinel");
+  const cfgInvalidSentinel = new Error("cfg-invalid-sentinel");
 
   try {
     await withLockedStateTransaction(locations, async (tx) => {
@@ -717,14 +730,14 @@ export async function removeMarketplace(
         cascade,
         successfullyUnstaged,
         failedPlugins,
-        cfgInvalidSentinel: CFG_INVALID,
+        cfgInvalidSentinel,
       });
       if (sk !== undefined) {
         sourceKindAtRecord = sk;
       }
     });
   } catch (err) {
-    if (err !== CFG_INVALID) {
+    if (err !== cfgInvalidSentinel) {
       throw err;
     }
 

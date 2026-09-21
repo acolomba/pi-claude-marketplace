@@ -1,5 +1,10 @@
 # ai harnesses
+# third-party skills; scripts/init.sh fetches the latest version of each
 /.agents/skills/herdr/
+/.agents/skills/humanizer/
+/.agents/skills/simple-english/
+# fetch record for the skills above, not a version pin (see CONTRIBUTING.md)
+/skills-lock.json
 
 # pi
 /.pi/git/
@@ -29,6 +34,8 @@
 /.claude/package.json
 /.claude/scripts/*
 /.claude/skills/herdr
+/.claude/skills/humanizer
+/.claude/skills/simple-english
 /.claude/skills/spike-findings-*/
 
 # codex

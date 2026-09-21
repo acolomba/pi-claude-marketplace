@@ -22,8 +22,9 @@ import { createManifestCache } from "./manifest-cache.ts";
  * MM-1: `marketplace.json` shape. Required: string `name`, array `plugins`.
  * Optional: boolean `strict` (default true per MM-5), `owner.name`.
  *
- * The `strict` field controls resolver behavior (resolveStrict vs
- * resolveLoose) per MM-5/MM-6/MM-7; the schema only validates presence.
+ * The schema only validates the `strict` field's presence and type. No
+ * consumer branches on it: `resolveStrict` is the one resolution path, so a
+ * manifest declaring `strict: false` resolves exactly like one that omits it.
  */
 const MARKETPLACE_SCHEMA = Type.Object({
   name: Type.String(),
@@ -110,7 +111,7 @@ async function loadMarketplaceManifestUncached(manifestPath: string): Promise<Ma
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch (err) {
+  } catch (err: unknown) {
     throw new InvalidMarketplaceManifestError(
       `marketplace.json is not valid JSON: ${String(err)}`,
       {

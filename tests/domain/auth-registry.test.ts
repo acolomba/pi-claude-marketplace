@@ -4,7 +4,6 @@ import { describe, test } from "node:test";
 import {
   findProviderForHost,
   GITHUB_PROVIDER,
-  GITLAB_PROVIDER,
   type GitAuthProvider,
 } from "../../extensions/pi-claude-marketplace/domain/auth-registry.ts";
 
@@ -63,7 +62,7 @@ describe("GITHUB_PROVIDER", () => {
   });
 });
 
-describe("GITLAB_PROVIDER", () => {
+describe("GitLab provider lookup", () => {
   test("exposes the complete GitLab descriptor", () => {
     // arrange
     const expectedDescriptor = {
@@ -79,15 +78,17 @@ describe("GITLAB_PROVIDER", () => {
     };
 
     // act
+    const gitlabProvider = findProviderForHost("gitlab.com");
+    assert.ok(gitlabProvider !== undefined);
     const descriptor = {
-      id: GITLAB_PROVIDER.id,
-      host: { name: "gitlab.com", matches: GITLAB_PROVIDER.hostMatch("gitlab.com") },
-      deviceCodeUrl: GITLAB_PROVIDER.deviceCodeUrl,
-      tokenUrl: GITLAB_PROVIDER.tokenUrl,
-      clientId: GITLAB_PROVIDER.clientId,
-      scope: GITLAB_PROVIDER.scope,
+      id: gitlabProvider.id,
+      host: { name: "gitlab.com", matches: gitlabProvider.hostMatch("gitlab.com") },
+      deviceCodeUrl: gitlabProvider.deviceCodeUrl,
+      tokenUrl: gitlabProvider.tokenUrl,
+      clientId: gitlabProvider.clientId,
+      scope: gitlabProvider.scope,
       credentialsByEnvironment: {
-        GITLAB_TOKEN: GITLAB_PROVIDER.credentialFrom("GITLAB_TOKEN"),
+        GITLAB_TOKEN: gitlabProvider.credentialFrom("GITLAB_TOKEN"),
       },
     };
 
@@ -106,17 +107,6 @@ describe("findProviderForHost", () => {
 
     // assert
     assert.strictEqual(provider, GITHUB_PROVIDER);
-  });
-
-  test("returns the GitLab provider for gitlab.com", () => {
-    // arrange
-    const host = "gitlab.com";
-
-    // act
-    const provider = findProviderForHost(host);
-
-    // assert
-    assert.strictEqual(provider, GITLAB_PROVIDER);
   });
 
   const hostileHosts = [
@@ -154,8 +144,10 @@ describe("findProviderForHost", () => {
     const gitlabHost = "gitlab.com";
 
     // act
+    const gitlabProvider = findProviderForHost(gitlabHost);
+    assert.ok(gitlabProvider !== undefined);
     const githubClaimsGitLab = GITHUB_PROVIDER.hostMatch(gitlabHost);
-    const gitlabClaimsGitHub = GITLAB_PROVIDER.hostMatch(githubHost);
+    const gitlabClaimsGitHub = gitlabProvider.hostMatch(githubHost);
 
     // assert
     assert.strictEqual(githubClaimsGitLab, false);

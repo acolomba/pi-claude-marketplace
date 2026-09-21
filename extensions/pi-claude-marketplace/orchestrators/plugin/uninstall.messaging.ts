@@ -8,7 +8,6 @@ import {
   type ContentReason,
   type PluginFailedMessage,
   type PluginUninstalledMessage,
-  type Reason,
 } from "../../shared/notification-types.ts";
 
 import type { CommandContext, MarketplaceRows, RenderFn } from "../../shared/notify-context.ts";
@@ -23,21 +22,12 @@ import type { Scope } from "../../shared/types.ts";
  * central in `shared/notification-grammar.ts` (D-11) and is CALLED here, never duplicated.
  */
 
-/**
- * D-05-11 / D-06-06: the command-private reasons owned by `uninstall`. Both
- * are meaningful only to this flow: `dependents unsatisfied` marks a removal
- * that went through while other installed plugins in the scope still declared
- * the target, and `dependency pruned` marks a dependency record `--prune`
- * swept out after the named plugin. Both are members of the closed `Reason`
- * set; the pin below rejects a typo at compile time.
- */
-// `_ReasonInSet<R extends Reason> = R` pins the private reasons to the closed
-// `Reason` set as it derives `UninstallPrivateReason`: an out-of-set literal
-// violates the `extends Reason` constraint -- a TS2344 compile error here, with
-// no runtime footprint.
-type _ReasonInSet<R extends Reason> = R;
-// fallow-ignore-next-line private-type-leak -- `_ReasonInSet` is the compile-time membership guard; exporting that helper would widen the command's public reason vocabulary.
-export type UninstallPrivateReason = _ReasonInSet<"dependency pruned" | "dependents unsatisfied">;
+// D-05-11 / D-06-06: the command-private reasons owned by `uninstall` are
+// `dependents unsatisfied` (a removal that went through while other installed
+// plugins in the scope still declared the target) and `dependency pruned` (a
+// dependency record `--prune` swept out after the named plugin). Each row
+// constant below pins its literals to the closed `Reason` set with
+// `satisfies readonly ContentReason[]`, so a typo is a compile error.
 
 /**
  * uninstall's private status set: a success `uninstalled` row or a `failed`

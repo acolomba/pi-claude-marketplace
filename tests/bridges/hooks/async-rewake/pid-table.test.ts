@@ -5,8 +5,6 @@ import path from "node:path";
 import { test, type TestContext } from "node:test";
 
 import {
-  ASYNC_REWAKE_PID_TABLE_VERSION,
-  ASYNC_REWAKE_PIDS_FILENAME,
   pidTablePath,
   readPidTable,
   unlinkPidTable,
@@ -135,8 +133,6 @@ test("writes, reads, and unlinks one scoped PID table without aliasing the calle
   const finalState = await stat(tablePath).catch(filesystemErrorCode);
 
   // assert
-  assert.strictEqual(ASYNC_REWAKE_PIDS_FILENAME, "async-rewake-pids.json");
-  assert.strictEqual(ASYNC_REWAKE_PID_TABLE_VERSION, 1);
   assert.strictEqual(tablePath, expectedTablePath);
   assert.strictEqual(writeCompletion, undefined);
   assert.deepStrictEqual(storedEntries, expectedEntries);

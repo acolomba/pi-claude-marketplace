@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { translate } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts";
+import { translateUserPromptSubmit } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts";
 
 import type { UserPromptSubmitStdin } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts";
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
@@ -41,7 +41,7 @@ test("emits the complete UserPromptSubmit envelope with the prompt text", () => 
   const expectedKeys = ["session_id", "transcript_path", "cwd", "hook_event_name", "prompt"];
 
   // act
-  const promptPayload = translate(event, context);
+  const promptPayload = translateUserPromptSubmit(event, context);
 
   // assert
   assert.deepStrictEqual(promptPayload, expectedPayload);
@@ -82,7 +82,7 @@ test("preserves a multi-line prompt in the complete UserPromptSubmit envelope", 
   const expectedKeys = ["session_id", "transcript_path", "cwd", "hook_event_name", "prompt"];
 
   // act
-  const promptPayload = translate(event, context);
+  const promptPayload = translateUserPromptSubmit(event, context);
 
   // assert
   assert.deepStrictEqual(promptPayload, expectedPayload);
@@ -123,7 +123,7 @@ test("preserves an empty prompt in the complete UserPromptSubmit envelope", () =
   const expectedKeys = ["session_id", "transcript_path", "cwd", "hook_event_name", "prompt"];
 
   // act
-  const promptPayload = translate(event, context);
+  const promptPayload = translateUserPromptSubmit(event, context);
 
   // assert
   assert.deepStrictEqual(promptPayload, expectedPayload);
@@ -164,7 +164,7 @@ test("preserves a multi-byte prompt in the complete UserPromptSubmit envelope", 
   const expectedKeys = ["session_id", "transcript_path", "cwd", "hook_event_name", "prompt"];
 
   // act
-  const promptPayload = translate(event, context);
+  const promptPayload = translateUserPromptSubmit(event, context);
 
   // assert
   assert.deepStrictEqual(promptPayload, expectedPayload);

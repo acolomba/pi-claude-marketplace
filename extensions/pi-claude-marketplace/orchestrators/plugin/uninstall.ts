@@ -25,8 +25,10 @@
 //   D-19-01 -- the underlying rm() still runs, only the user-visible
 //   warning surface is gone. The same cleanup then runs once per removed
 //   member with the same `keepData` (D-05-09).
-//   PU-8 reload hint: computed by notify() from PluginUninstalledMessage
-//  (uninstalled is in the state-changing variant set).
+//   PU-8 reload hint: set explicitly on the row (severity: "info",
+//   needsReload: true, D-03/D-06) because uninstalled is a realized,
+//   state-changing transition; notify() aggregates it into the cascade's
+//   overall trailer.
 //
 // Each outcome arm emits one notify() call. The success arm's blocks are the
 // named plugin's marketplace first and one block per other marketplace that
@@ -284,7 +286,14 @@ async function readDeclarers(args: {
   return { snapshot: result, dependents: findDependents(args.key, result.index) };
 }
 
-const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
+/**
+ * The one concrete binding of uninstall's semantic transaction contract.
+ * `orchestrators/plugin/operations.ts` is its single consumer: three of the six
+ * members are steps of the uninstall algorithm itself and stay private to this
+ * module, so the bound object -- not its parts -- is what the composition owner
+ * imports (D-03).
+ */
+export const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
   cascadeUnstagePlugin,
   commitPluginRemoval,
   loadTargetConfig: loadConfig,
@@ -558,20 +567,15 @@ function buildMemberFailedRow(member: IndexedRecord, cause: Error): PluginFailed
 async function removeDependencyMember(args: {
   readonly member: IndexedRecord;
   readonly locations: ScopedLocations;
-  readonly scope: Scope;
   readonly keepData: boolean;
   readonly cascade: typeof cascadeUnstagePlugin;
   readonly transaction: UninstallTransaction;
 }): Promise<PrunedMember> {
-  const { member, scope } = args;
+  const { member } = args;
   const marketplace = member.marketplace.name;
   const outcome = await args.cascade(member.plugin, marketplace, args.locations, member.record);
   if (outcome.ok) {
-    args.transaction.commitPluginRemoval(member.marketplace, {
-      scope,
-      marketplace,
-      plugin: member.plugin,
-    });
+    args.transaction.commitPluginRemoval(member.marketplace, { plugin: member.plugin });
     return {
       marketplace,
       plugin: member.plugin,
@@ -619,7 +623,6 @@ async function sweepOrphans(args: {
   readonly snapshot: DeclarationSnapshot;
   readonly primaryKey: string;
   readonly locations: ScopedLocations;
-  readonly scope: Scope;
   readonly keepData: boolean;
   readonly cascade: typeof cascadeUnstagePlugin;
   readonly transaction: UninstallTransaction;
@@ -711,7 +714,7 @@ async function finalizePrunedMembers(args: {
  */
 function commitPluginRemoval(
   mp: { plugins: Record<string, unknown> },
-  ids: { readonly scope: Scope; readonly marketplace: string; readonly plugin: string },
+  ids: { readonly plugin: string },
 ): void {
   // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- mp.plugins is a dynamic-key Record<string, ...>.
   delete mp.plugins[ids.plugin];
@@ -818,8 +821,11 @@ async function runPostUninstallCleanup({
       scope,
       marketplace,
     );
-  } catch {
+  } catch (err) {
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+    hookDebugLog(
+      `uninstall: completion-cache drop failed for ${plugin}@${marketplace}: ${errorMessage(err)}`,
+    );
   }
 
   // IN-04: the preserving branch resolves no name-derived path at all, so the
@@ -837,15 +843,19 @@ async function runPostUninstallCleanup({
 
     try {
       await rm(dataDir, { recursive: true, force: true });
-    } catch {
+    } catch (err) {
       // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+      hookDebugLog(
+        `uninstall: plugin data dir removal failed for ${plugin}@${marketplace}: ${errorMessage(err)}`,
+      );
     }
   }
 
   try {
     await garbageCollectPluginClones(locations);
-  } catch {
+  } catch (err) {
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+    hookDebugLog(`uninstall: clone GC failed for ${plugin}@${marketplace}: ${errorMessage(err)}`);
   }
 }
 
@@ -1092,7 +1102,7 @@ async function uninstallPluginWithTransaction(
         return;
       }
 
-      transaction.commitPluginRemoval(mp, { scope, marketplace, plugin });
+      transaction.commitPluginRemoval(mp, { plugin });
 
       if (!orchestrated) {
         await transaction.sweepConfigLayers(locations, plugin, marketplace);
@@ -1110,7 +1120,6 @@ async function uninstallPluginWithTransaction(
             snapshot,
             primaryKey,
             locations,
-            scope,
             keepData,
             cascade,
             transaction,
@@ -1201,9 +1210,10 @@ async function uninstallPluginWithTransaction(
     transaction,
   });
 
-  // PU-8 reload hint: computed by notify from the
-  // PluginUninstalledMessage status (uninstalled is in the state-changing
-  // variant set). The reload-hint trigger is per-variant status, not
+  // PU-8 reload hint: set explicitly on the row below (severity: "info",
+  // needsReload: true, D-03/D-06) because uninstall is a realized,
+  // state-changing transition; notify() aggregates each row's fields into
+  // the cascade's overall trailer -- a per-variant-status decision, not a
   // per-cascade resource count. Control reaches this point only when
   // alreadyGone is false (early-returned above) AND the catch did not
   // intercept a cascade failure (early-returned via `emitCascadeFailure`),
@@ -1289,12 +1299,4 @@ export function createUninstallPlugin(
   }
 
   return configuredUninstallPlugin;
-}
-
-/** Production uninstall operation bound to the root lifecycle routing owner. */
-export function createNodeUninstallPlugin(
-  hooksRouting: UninstallHooksRouting,
-  completionCache: CompletionCache,
-): UninstallPluginOperation {
-  return createUninstallPlugin(REAL_UNINSTALL_TRANSACTION, hooksRouting, completionCache);
 }

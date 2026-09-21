@@ -20,7 +20,7 @@
 //     pluginId under two different marketplaces in the same scope occupies
 //     two distinct entries.
 //
-//   - `routingTable`: `Map<BucketAEvent, ReadonlyArray<RoutingEntry>>` whose
+//   - `routingTable`: `Map<BucketAEvent, readonly RoutingEntry[]>` whose
 //     keyset stays pinned to `BUCKET_A_EVENTS` -- every bucket is pre-
 //     populated to `[]` after each rebuild rather than appearing and
 //     disappearing with the cache. Cross-plugin entries are sorted by
@@ -170,11 +170,9 @@ async function readAndCachePluginHooksWith(
 
 /**
  * Factory: build the `before_agent_start` handler closure registered on
- * Pi at `registerHooksBridge` time. Each closure captures `capturedEpoch`
- * the same way the composite hook handlers do; on epoch mismatch the
- * closure short-circuits to `undefined` and does NOT drain the live
- * buffer (zombie defense -- a stale closure from a prior bridge load
- * must not consume the new session's pending context).
+ * Pi at `registerHooksBridge` time. The registration wrapper checks its
+ * captured generation synchronously before invoking this closure. A stale
+ * registration returns undefined without draining the live context buffer.
  *
  * Drain semantics:
  *   - empty buffer -> returns undefined (no systemPrompt mutation, no
@@ -191,18 +189,13 @@ async function readAndCachePluginHooksWith(
  * Claude Code's SessionStart semantics where the injected text is added
  * to the session prompt once at session boot.
  */
-export function createBeforeAgentStartHandler(
+function createBeforeAgentStartHandler(
   runtime: HooksRuntime,
-  capturedGeneration: number,
 ): (
   event: BeforeAgentStartEvent,
   ctx: ExtensionContext,
 ) => Promise<BeforeAgentStartEventResult | undefined> {
   return (event) => {
-    if (capturedGeneration !== runtime.currentGeneration()) {
-      return Promise.resolve(undefined);
-    }
-
     const pendingContext = runtime.drainPendingSessionStartContext();
     if (pendingContext.length === 0) {
       return Promise.resolve(undefined);
@@ -410,12 +403,12 @@ function flattenPluginIntoBuckets(
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * Result of the hydrate pass for a single scope: the loaded state AND the
- * fully-constructed ScopedLocations. registerHooksBridge needs both to
- * call rebuildRoutingTables() per scope after hydrate completes.
+ * Result of the hydrate pass for a single scope: the fully-constructed
+ * ScopedLocations. registerHooksBridge needs it to call
+ * rebuildRoutingTables() per scope after hydrate completes; the state the
+ * pass loaded is consumed inside the pass and not carried back out.
  */
 interface HydratedScope {
-  readonly state: ExtensionState;
   readonly loc: ScopedLocations;
 }
 
@@ -456,12 +449,25 @@ export interface HooksHydrationDeps extends HooksFileReader {
   readonly loadState: (extensionRoot: string) => Promise<ExtensionState>;
 }
 
+/**
+ * The options every hooks-bridge registration entry point takes.
+ *
+ * One declaration rather than four matching spellings, so `cwd` and
+ * `executor` each resolve every read to a single home. `executor` is the
+ * injection seam documented on `registerHooksBridgeWith`: the sole
+ * production caller omits it and runs on the `dispatchHookExec` default.
+ */
+export interface RegisterHooksBridgeOptions {
+  readonly cwd: string;
+  readonly executor?: HookExecutor;
+}
+
 /** Hooks hydration operations bound to one required state reader. */
 export interface HooksHydration {
   readonly hydrateProjectScopeForCwd: (cwd: string) => Promise<void>;
   readonly registerHooksBridge: (
     pi: ExtensionAPI,
-    opts: { ctx: ExtensionContext; cwd: string; executor?: HookExecutor },
+    opts: RegisterHooksBridgeOptions,
   ) => Promise<void>;
 }
 
@@ -500,10 +506,7 @@ function bindRegistrationCallback<Args extends readonly unknown[], Result>(
  * silent omission here is the correct factory-time disposition.
  */
 async function hydrateCacheFromDisk(
-  opts: {
-    ctx: ExtensionContext;
-    cwd: string;
-  },
+  opts: RegisterHooksBridgeOptions,
   reader: HooksHydrationDeps,
   routingState: EventRouterRoutingState,
   generationIsCurrent: GenerationGuard,
@@ -531,7 +534,7 @@ async function hydrateCacheFromDisk(
     // homedir-rooted paths so opts.cwd is the right "current project"
     // anchor for path globs.
     await hydrateScopeFromState(state, loc, opts.cwd, reader, routingState, generationIsCurrent);
-    hydrated.push({ state, loc });
+    hydrated.push({ loc });
   }
 
   return hydrated;
@@ -811,7 +814,7 @@ async function registerHooksBridgeWith(
   runtime: HooksRuntime,
   reader: HooksHydrationDeps,
   pi: ExtensionAPI,
-  opts: { ctx: ExtensionContext; cwd: string; executor?: HookExecutor },
+  opts: RegisterHooksBridgeOptions,
 ): Promise<void> {
   const routingState = createRoutingStateOperations(runtime);
   const capturedGeneration = runtime.advanceGeneration();
@@ -965,7 +968,7 @@ async function registerHooksBridgeWith(
   // turn.
   pi.on(
     "before_agent_start",
-    bind((generation) => createBeforeAgentStartHandler(runtime, generation)),
+    bind(() => createBeforeAgentStartHandler(runtime)),
   );
   // Settle-time turn-boundary dispatch: agent_end caches the run's
   // last-assistant message; agent_settled reads it and gates on stopReason
@@ -1004,10 +1007,7 @@ export function createHooksHydration(
         return;
       }
     },
-    async registerHooksBridge(
-      pi: ExtensionAPI,
-      opts: { ctx: ExtensionContext; cwd: string; executor?: HookExecutor },
-    ): Promise<void> {
+    async registerHooksBridge(pi: ExtensionAPI, opts: RegisterHooksBridgeOptions): Promise<void> {
       await registerHooksBridgeWith(runtime, reader, pi, opts);
     },
   };

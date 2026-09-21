@@ -1,7 +1,8 @@
 // Strict-mode resolver coverage. 1:1 mapping between PR-2 cases and tests
-// (9 tests for the 9 cases). Plus PR-3 multi, PR-4 implicit-by-convention
-// (positive + negative), RESV-01 dependencies, PR-6 requireInstallable
-// narrowing/throwing, and one MM-5 happy path.
+// (12 tests covering 8 of the 9 cases -- case 5 has no dedicated test).
+// Plus PR-3 multi, PR-4 implicit-by-convention (positive + negative),
+// RESV-01 dependencies, PR-6 requireInstallable narrowing/throwing, and one
+// MM-5 happy path.
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
@@ -11,7 +12,6 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
-  resolveLoose,
   requirePartialInstallable,
   requireInstallable,
   resolveStrict,
@@ -27,65 +27,55 @@ import type {
   ResolvedPluginUnavailable,
 } from "../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
-for (const { mode, resolve } of [
-  { mode: "strict", resolve: resolveStrict },
-  { mode: "loose", resolve: resolveLoose },
-]) {
-  test(`${mode} resolution rejects invalid dependencies in the selected manifest`, async (t) => {
-    // arrange
-    const temporaryMarketplace = await mkdtemp(path.join(os.tmpdir(), "invalid-dependencies-"));
-    t.after(() => rm(temporaryMarketplace, { recursive: true, force: true }));
-    const pluginRoot = path.join(temporaryMarketplace, "host");
-    await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
-    await writeFile(
-      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-      '{"dependencies":["keeper","foo@~1.0.0"]}',
-    );
-    await writeFile(path.join(pluginRoot, "plugin.json"), '{"dependencies":["fallback"]}');
+test("strict resolution rejects invalid dependencies in the selected manifest", async (t) => {
+  // arrange
+  const temporaryMarketplace = await mkdtemp(path.join(os.tmpdir(), "invalid-dependencies-"));
+  t.after(() => rm(temporaryMarketplace, { recursive: true, force: true }));
+  const pluginRoot = path.join(temporaryMarketplace, "host");
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    '{"dependencies":["keeper","foo@~1.0.0"]}',
+  );
+  await writeFile(path.join(pluginRoot, "plugin.json"), '{"dependencies":["fallback"]}');
 
-    // act
-    const resolved = await resolve(
-      { name: "host", source: "./host", dependencies: ["entry"] },
-      { marketplaceRoot: temporaryMarketplace },
-    );
+  // act
+  const resolved = await resolveStrict(
+    { name: "host", source: "./host", dependencies: ["entry"] },
+    { marketplaceRoot: temporaryMarketplace },
+  );
 
-    // assert
-    assert.deepStrictEqual(resolved, {
-      state: "unavailable",
-      installable: false,
-      name: "host",
-      notes: ["malformed plugin.json: dependencies.1: Invalid input"],
-    });
+  // assert
+  assert.deepStrictEqual(resolved, {
+    state: "unavailable",
+    installable: false,
+    name: "host",
+    notes: ["malformed plugin.json: dependencies.1: Invalid input"],
   });
-}
+});
 
-for (const { mode, resolve } of [
-  { mode: "strict", resolve: resolveStrict },
-  { mode: "loose", resolve: resolveLoose },
-]) {
-  test(`${mode} resolution reports the isolated marketplace-entry dependencies defect ahead of an unrelated bad source`, async () => {
-    // arrange -- domain/manifest.ts::normalizeDependencyEntries keeps the
-    // malformed `dependencies` value on the entry it isolates; the resolver
-    // must report THAT defect even when the entry's `source` is independently
-    // unclassifiable.
-    const context = resolveContext(marketplaceRoot, {});
-    const entry = pluginEntry({
-      source: 42,
-      dependencies: ["foo@~1.0.0"],
-    });
-
-    // act
-    const resolved = await resolve(entry, context);
-
-    // assert
-    assert.deepStrictEqual(resolved, {
-      state: "unavailable",
-      installable: false,
-      name: "p1",
-      notes: ["malformed marketplace entry: dependencies.0: Invalid input"],
-    });
+test("strict resolution reports the isolated marketplace-entry dependencies defect ahead of an unrelated bad source", async () => {
+  // arrange -- domain/manifest.ts::normalizeDependencyEntries keeps the
+  // malformed `dependencies` value on the entry it isolates; the resolver
+  // must report THAT defect even when the entry's `source` is independently
+  // unclassifiable.
+  const context = resolveContext(marketplaceRoot, {});
+  const entry = pluginEntry({
+    source: 42,
+    dependencies: ["foo@~1.0.0"],
   });
-}
+
+  // act
+  const resolved = await resolveStrict(entry, context);
+
+  // assert
+  assert.deepStrictEqual(resolved, {
+    state: "unavailable",
+    installable: false,
+    name: "p1",
+    notes: ["malformed marketplace entry: dependencies.0: Invalid input"],
+  });
+});
 
 test("resolveStrict lets a valid dependencies declaration fall through to ordinary preflight", async () => {
   // arrange -- the malformed-dependencies check fires only on a declaration
@@ -1874,10 +1864,18 @@ test("PR-6 requireInstallable on not-installable throws with 'is not installable
     () => {
       requireInstallable(resolvedPlugin);
     },
-    (error: unknown) =>
-      error instanceof Error &&
-      error.message.includes('Plugin "p1" is not installable') &&
-      error.message.includes("source dir does not exist"),
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError, "must throw PluginShapeError");
+      assert.strictEqual(error.plugin, "p1");
+      assert.strictEqual(error.shape.kind, "not-installable");
+      if (error.shape.kind === "not-installable") {
+        assert.deepStrictEqual(error.shape.reasons, [
+          `source dir does not exist: ${pathUnderMarketplace("./missing")}`,
+        ]);
+      }
+
+      return true;
+    },
   );
 });
 
@@ -1893,8 +1891,11 @@ test("PR-6 requireInstallable(resolvedPlugin, 'update') throws with 'is no longe
     () => {
       requireInstallable(resolvedPlugin, "update");
     },
-    (error: unknown) =>
-      error instanceof Error && error.message.includes("is no longer installable"),
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError, "must throw PluginShapeError");
+      assert.strictEqual(error.shape.kind, "no-longer-installable");
+      return true;
+    },
   );
 });
 
@@ -2012,10 +2013,18 @@ test("RSTATE-04 requirePartialInstallable throws on unavailable with 'is not ins
     () => {
       requirePartialInstallable(resolvedPlugin);
     },
-    (error: unknown) =>
-      error instanceof Error &&
-      error.message.includes('Plugin "p1" is not installable') &&
-      error.message.includes("source dir does not exist"),
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError, "must throw PluginShapeError");
+      assert.strictEqual(error.plugin, "p1");
+      assert.strictEqual(error.shape.kind, "not-installable");
+      if (error.shape.kind === "not-installable") {
+        assert.deepStrictEqual(error.shape.reasons, [
+          `source dir does not exist: ${pathUnderMarketplace("./missing")}`,
+        ]);
+      }
+
+      return true;
+    },
   );
 });
 
@@ -2031,8 +2040,11 @@ test("RSTATE-04 requirePartialInstallable(resolvedPlugin, 'update') throws with 
     () => {
       requirePartialInstallable(resolvedPlugin, "update");
     },
-    (error: unknown) =>
-      error instanceof Error && error.message.includes("is no longer installable"),
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError, "must throw PluginShapeError");
+      assert.strictEqual(error.shape.kind, "no-longer-installable");
+      return true;
+    },
   );
 });
 
@@ -2658,7 +2670,7 @@ test("PR-2(1) object source with an unrecognized discriminator -> unavailable, r
   );
 });
 
-// Component-path union, default-enabled, loose-mode, and type-boundary contracts.
+// Component-path union, default-enabled, and type-boundary contracts.
 
 test("COMP-01 (a) default skills/ only, no manifest field -> ['skills']", async () => {
   // arrange
@@ -2921,29 +2933,6 @@ test("MANF-03 declared skill subdirectories stay distinct from the conventional 
   }
 });
 
-test("MANF-03 loose mode normalizes entry-declared paths too", async () => {
-  // arrange
-  const localRoot = pathUnderMarketplace("./local");
-  const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
-
-  // act
-  const resolvedPlugin = await resolveLoose(
-    pluginEntry({ source: "./local", skills: ["./skills/", "skills"] }),
-    context,
-  );
-
-  // assert
-  assert.strictEqual(
-    resolvedPlugin.state,
-    "installable",
-    `notes: ${resolvedPlugin.notes.join(" / ")}`,
-  );
-
-  if (resolvedPlugin.state === "installable") {
-    assert.deepStrictEqual(resolvedPlugin.componentPaths.skills, ["skills"]);
-  }
-});
-
 test("MANF-03 an escaping component path is refused naming the raw declared spelling", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
@@ -2964,7 +2953,7 @@ test("MANF-03 an escaping component path is refused naming the raw declared spel
   );
 });
 
-test("MM-6 entry.skills declared -> installable with skills", async () => {
+test("MM-5 entry.skills declared -> installable with skills", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(marketplaceRoot, {
@@ -2973,7 +2962,7 @@ test("MM-6 entry.skills declared -> installable with skills", async () => {
   });
 
   // act
-  const resolvedPlugin = await resolveLoose(
+  const resolvedPlugin = await resolveStrict(
     pluginEntry({ source: "./local", skills: "skills" }),
     context,
   );
@@ -2986,76 +2975,11 @@ test("MM-6 entry.skills declared -> installable with skills", async () => {
   );
 
   if (resolvedPlugin.state === "installable") {
-    // D-07 array shape (loose mode is entry-only with no convention probe).
     assert.deepStrictEqual(resolvedPlugin.componentPaths.skills, ["skills"]);
     assert.ok(resolvedPlugin.supported.includes("skills"));
   }
 });
 
-test("MM-6 entry.skills absent but manifest declares skills -> conflict notInstallable", async () => {
-  // arrange
-  const localRoot = pathUnderMarketplace("./local");
-  const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
-  const context = resolveContext(marketplaceRoot, {
-    [localRoot]: "dir",
-    [manifestPath]: { contents: JSON.stringify({ name: "p1", skills: "skills" }) },
-    [path.join(localRoot, "skills")]: "dir",
-  });
-
-  // act
-  const resolvedPlugin = await resolveLoose(pluginEntry({ source: "./local" }), context);
-
-  // assert
-  assert.strictEqual(resolvedPlugin.state, "unavailable");
-  assert.ok(
-    resolvedPlugin.notes.some(
-      (n) => n.includes("component declarations conflict") && n.includes("skills"),
-    ),
-    `notes: ${resolvedPlugin.notes.join(" / ")}`,
-  );
-});
-
-test("MM-6 entry + manifest both absent + <pluginRoot>/skills exists -> installable WITHOUT skills (no implicit-by-convention in loose)", async () => {
-  // arrange
-  const localRoot = pathUnderMarketplace("./local");
-  const context = resolveContext(marketplaceRoot, {
-    [localRoot]: "dir",
-    [path.join(localRoot, "skills")]: "dir",
-  });
-
-  // act
-  const resolvedPlugin = await resolveLoose(pluginEntry({ source: "./local" }), context);
-
-  // assert
-  assert.strictEqual(
-    resolvedPlugin.state,
-    "installable",
-    `notes: ${resolvedPlugin.notes.join(" / ")}`,
-  );
-
-  if (resolvedPlugin.state === "installable") {
-    // D-07 array shape: empty array (no implicit-by-convention in loose mode).
-    assert.deepStrictEqual(
-      resolvedPlugin.componentPaths.skills,
-      [],
-      "no implicit-by-convention in loose mode",
-    );
-    assert.ok(!resolvedPlugin.supported.includes("skills"));
-  }
-});
-
-// ──────────────────────────────────────────────────────────────────────────
-// DFEN-02: install-time enablement in loose mode
-// ──────────────────────────────────────────────────────────────────────────
-
-// D-101-08: structurally the same shape as the MM-6 conflict test above -- a
-// manifest declaration with a silent entry -- but the outcome inverts, because
-// the loose-mode conflict rule is closed-set by construction. It iterates the
-// three supported component-path kinds plus `mcpServers`; `defaultEnabled` is
-// metadata and belongs to none of those sets, exactly as `description` and
-// `version` have never been conflict material. Nothing in the code special-cases
-// this, so this test is the only thing that would notice if a later edit widened
-// the conflict machinery to iterate keys instead of a closed tuple.
 test("DFEN-02 manifest-only defaultEnabled with a silent entry -> resolves carrying false, not a conflict", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
@@ -3066,7 +2990,7 @@ test("DFEN-02 manifest-only defaultEnabled with a silent entry -> resolves carry
   });
 
   // act
-  const resolvedPlugin = await resolveLoose(pluginEntry({ source: "./local" }), context);
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
 
   // assert
   assert.notStrictEqual(
@@ -3082,12 +3006,7 @@ test("DFEN-02 manifest-only defaultEnabled with a silent entry -> resolves carry
   assert.strictEqual(resolvedPlugin.defaultEnabled, false);
 });
 
-// D-101-04: the four precedence shapes, each asserted against the literal the
-// strict-mode suite asserts for the same inputs. The expected value is spelled
-// out rather than obtained by cross-calling the other mode, so a divergence
-// reads directly in the failure output. Both modes take the value from the one
-// shared computation, so the evaluation order is mode-independent.
-test("DFEN-02 loose: entry false + manifest true -> carries false (entry wins)", async () => {
+test("DFEN-02 strict: entry false + manifest true -> carries false (entry wins)", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
@@ -3097,7 +3016,7 @@ test("DFEN-02 loose: entry false + manifest true -> carries false (entry wins)",
   });
 
   // act
-  const resolvedPlugin = await resolveLoose(
+  const resolvedPlugin = await resolveStrict(
     pluginEntry({ source: "./local", defaultEnabled: false }),
     context,
   );
@@ -3107,7 +3026,7 @@ test("DFEN-02 loose: entry false + manifest true -> carries false (entry wins)",
   assert.strictEqual(resolvedPlugin.defaultEnabled, false);
 });
 
-test("DFEN-02 loose: entry true + manifest false -> carries true (entry wins both ways)", async () => {
+test("DFEN-02 strict: entry true + manifest false -> carries true (entry wins both ways)", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
@@ -3117,7 +3036,7 @@ test("DFEN-02 loose: entry true + manifest false -> carries true (entry wins bot
   });
 
   // act
-  const resolvedPlugin = await resolveLoose(
+  const resolvedPlugin = await resolveStrict(
     pluginEntry({ source: "./local", defaultEnabled: true }),
     context,
   );
@@ -3127,21 +3046,19 @@ test("DFEN-02 loose: entry true + manifest false -> carries true (entry wins bot
   assert.strictEqual(resolvedPlugin.defaultEnabled, true);
 });
 
-test("DFEN-02 loose: absent at both declaration sites -> carries true", async () => {
+test("DFEN-02 strict: absent at both declaration sites -> carries true", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
 
   // act
-  const resolvedPlugin = await resolveLoose(pluginEntry({ source: "./local" }), context);
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
   requirePartialInstallable(resolvedPlugin);
 
   // assert
   assert.strictEqual(resolvedPlugin.defaultEnabled, true);
 });
 
-// The manifest-only cell again, read as a parity row rather than as the
-// non-conflict proof above: the value the entry never declared still carries.
-test("DFEN-02 loose: manifest-only declaration -> carries the manifest value", async () => {
+test("DFEN-02 strict: manifest-only declaration -> carries the manifest value", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
@@ -3152,7 +3069,7 @@ test("DFEN-02 loose: manifest-only declaration -> carries the manifest value", a
   });
 
   // act
-  const resolvedPlugin = await resolveLoose(
+  const resolvedPlugin = await resolveStrict(
     pluginEntry({ source: "./local", skills: "skills" }),
     context,
   );
@@ -3162,12 +3079,7 @@ test("DFEN-02 loose: manifest-only declaration -> carries the manifest value", a
   assert.strictEqual(resolvedPlugin.defaultEnabled, false);
 });
 
-// D-101-01 / D-101-04: the partial arm in loose mode, with the value coming
-// from the manifest fallback rather than the entry -- the strict-mode sibling
-// covers the entry side. `themes` is an unsupported kind, so it degrades the
-// plugin without a structural defect; it is not a component-path kind, so it is
-// not loose-mode conflict material either.
-test("DFEN-02 loose: partially-available arm carries the manifest-resolved defaultEnabled", async () => {
+test("DFEN-02 strict: partially-available arm carries the manifest-resolved defaultEnabled", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
@@ -3177,7 +3089,7 @@ test("DFEN-02 loose: partially-available arm carries the manifest-resolved defau
   });
 
   // act
-  const resolvedPlugin = await resolveLoose(
+  const resolvedPlugin = await resolveStrict(
     pluginEntry({ source: "./local", themes: "./themes" }),
     context,
   );
@@ -3192,58 +3104,13 @@ test("DFEN-02 loose: partially-available arm carries the manifest-resolved defau
   assert.strictEqual(resolvedPlugin.defaultEnabled, false);
 });
 
-// ──────────────────────────────────────────────────────────────────────────
-// MM-7: mcpServers entry-only
-// ──────────────────────────────────────────────────────────────────────────
-
-test("MM-7 entry.mcpServers absent + manifest.mcpServers present -> conflict notInstallable", async () => {
-  // arrange
-  const localRoot = pathUnderMarketplace("./local");
-  const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
-  const context = resolveContext(marketplaceRoot, {
-    [localRoot]: "dir",
-    [manifestPath]: {
-      contents: JSON.stringify({ name: "p1", mcpServers: { srv: { command: "x" } } }),
-    },
-  });
-
-  // act
-  const resolvedPlugin = await resolveLoose(pluginEntry({ source: "./local" }), context);
-
-  // assert
-  assert.strictEqual(resolvedPlugin.state, "unavailable");
-  assert.ok(
-    resolvedPlugin.notes.some((n) => n.includes("mcpServers") && n.includes("conflict")),
-    `notes: ${resolvedPlugin.notes.join(" / ")}`,
-  );
-});
-
-test("MM-7 entry.mcpServers absent + standalone .mcp.json present -> conflict notInstallable", async () => {
-  // arrange
-  const localRoot = pathUnderMarketplace("./local");
-  const context = resolveContext(marketplaceRoot, {
-    [localRoot]: "dir",
-    [path.join(localRoot, ".mcp.json")]: { contents: JSON.stringify({ srv: {} }) },
-  });
-
-  // act
-  const resolvedPlugin = await resolveLoose(pluginEntry({ source: "./local" }), context);
-
-  // assert
-  assert.strictEqual(resolvedPlugin.state, "unavailable");
-  assert.ok(
-    resolvedPlugin.notes.some((n) => n.includes("mcpServers") && n.includes("conflict")),
-    `notes: ${resolvedPlugin.notes.join(" / ")}`,
-  );
-});
-
-test("MM-7 entry.mcpServers present + valid -> installable with mcpServers populated", async () => {
+test("MM-5 entry.mcpServers present + valid -> installable with mcpServers populated", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
 
   // act
-  const resolvedPlugin = await resolveLoose(
+  const resolvedPlugin = await resolveStrict(
     pluginEntry({ source: "./local", mcpServers: { srv1: { command: "node" } } }),
     context,
   );
@@ -3260,32 +3127,12 @@ test("MM-7 entry.mcpServers present + valid -> installable with mcpServers popul
   }
 });
 
-test("D-03 entry.mcpServers string reference in loose mode -> unavailable (not resolved, not malformed)", async () => {
-  // arrange
-  // Loose mode does not resolve the strict-mode string-reference feature; it
-  // degrades honestly rather than mislabeling the string as a malformed map.
-  const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
-
-  // act
-  const resolvedPlugin = await resolveLoose(
-    pluginEntry({ source: "./local", mcpServers: "./x.mcp.json" }),
-    context,
-  );
-
-  // assert
-  assert.strictEqual(resolvedPlugin.state, "unavailable");
-  assert.ok(
-    resolvedPlugin.notes.some((n) => n.includes("string reference") && n.includes("loose mode")),
-    `notes: ${resolvedPlugin.notes.join(" / ")}`,
-  );
-});
-
-test("MM-7 entry.mcpServers malformed (non-object) in loose mode -> unavailable + malformed mcpServers note", async () => {
+test("MM-5 entry.mcpServers malformed (non-object) in strict mode -> unavailable + malformed mcpServers note", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
 
   // act
-  const resolvedPlugin = await resolveLoose(
+  const resolvedPlugin = await resolveStrict(
     pluginEntry({ source: "./local", mcpServers: 42 }),
     context,
   );
@@ -3298,31 +3145,22 @@ test("MM-7 entry.mcpServers malformed (non-object) in loose mode -> unavailable 
   );
 });
 
-// ──────────────────────────────────────────────────────────────────────────
-// PR-3 + RESV-01 in loose mode (same semantics as strict)
-// ──────────────────────────────────────────────────────────────────────────
-
-test("PR-3 loose: entry declares unsupported component -> notInstallable", async () => {
+test("PR-3 strict: entry declares unsupported component -> notInstallable", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
 
   // act
-  const resolvedPlugin = await resolveLoose(
+  const resolvedPlugin = await resolveStrict(
     pluginEntry({ source: "./local", themes: ["dark"] }),
     context,
   );
-  // D-64-06: unsupported component kind, no structural defect -> unsupported.
 
   // assert
   assert.strictEqual(resolvedPlugin.state, "partially-available");
   assert.ok(resolvedPlugin.notes.some((n) => n === "contains themes"));
 });
 
-// HOOK-01 loose: hooks/hooks.json present + parseable -> installable with
-// hooks supported. Mirrors the strict-mode admission path because the
-// convention-file discovery is mode-agnostic (it does not depend on
-// entry-vs-manifest declaration semantics).
-test("HOOK-01 loose: hooks/hooks.json present + parseable -> installable WITH hooks in supported", async () => {
+test("HOOK-01 strict: hooks/hooks.json present + parseable -> installable WITH hooks in supported", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(marketplaceRoot, {
@@ -3335,7 +3173,7 @@ test("HOOK-01 loose: hooks/hooks.json present + parseable -> installable WITH ho
   });
 
   // act
-  const resolvedPlugin = await resolveLoose(pluginEntry({ source: "./local" }), context);
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
 
   // assert
   assert.strictEqual(
@@ -3350,9 +3188,7 @@ test("HOOK-01 loose: hooks/hooks.json present + parseable -> installable WITH ho
   }
 });
 
-// D-57-04 loose: malformed hooks/hooks.json flips installable: false with
-// parse-failure detail.
-test("D-57-04 loose: hooks/hooks.json present + parse-fails -> notInstallable + parse-detail note", async () => {
+test("D-57-04 strict: hooks/hooks.json present + parse-fails -> notInstallable + parse-detail note", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(marketplaceRoot, {
@@ -3361,7 +3197,7 @@ test("D-57-04 loose: hooks/hooks.json present + parse-fails -> notInstallable + 
   });
 
   // act
-  const resolvedPlugin = await resolveLoose(pluginEntry({ source: "./local" }), context);
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
 
   // assert
   assert.strictEqual(resolvedPlugin.state, "unavailable");
@@ -3371,14 +3207,12 @@ test("D-57-04 loose: hooks/hooks.json present + parse-fails -> notInstallable + 
   );
 });
 
-// HOOK-01 loose regression guard: no declaration + no convention file ->
-// installable: true and hooks NOT in supported.
-test("HOOK-01 loose: no hooks declared and no hooks/hooks.json -> installable WITHOUT hooks in supported", async () => {
+test("HOOK-01 strict: no hooks declared and no hooks/hooks.json -> installable WITHOUT hooks in supported", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
 
   // act
-  const resolvedPlugin = await resolveLoose(pluginEntry({ source: "./local" }), context);
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
 
   // assert
   assert.strictEqual(resolvedPlugin.state, "installable");
@@ -3389,7 +3223,7 @@ test("HOOK-01 loose: no hooks declared and no hooks/hooks.json -> installable WI
 });
 
 for (const scenario of unsupportedConventionScenarios) {
-  test(`PR-4 loose discovers the unsupported ${scenario.kind} default location`, async () => {
+  test(`PR-4 strict discovers the unsupported ${scenario.kind} default location`, async () => {
     // arrange
     const localRoot = pathUnderMarketplace(`./local-${scenario.kind}`);
     const context = resolveContext(marketplaceRoot, {
@@ -3398,7 +3232,7 @@ for (const scenario of unsupportedConventionScenarios) {
     });
 
     // act
-    const resolvedPlugin = await resolveLoose(
+    const resolvedPlugin = await resolveStrict(
       pluginEntry({ source: `./local-${scenario.kind}` }),
       context,
     );
@@ -3416,9 +3250,7 @@ for (const scenario of unsupportedConventionScenarios) {
   });
 }
 
-// D-90-06 loose: a bin/ dir on disk resolves installable (runtime-honored via
-// the PENV-01 PATH ledger), not partially-available.
-test("D-90-06 loose: bin/ dir on disk -> installable, no bin contains-note", async () => {
+test("D-90-06 strict: bin/ dir on disk -> installable, no bin contains-note", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(marketplaceRoot, {
@@ -3427,7 +3259,7 @@ test("D-90-06 loose: bin/ dir on disk -> installable, no bin contains-note", asy
   });
 
   // act
-  const resolvedPlugin = await resolveLoose(pluginEntry({ source: "./local" }), context);
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
 
   // assert
   assert.strictEqual(
@@ -3441,12 +3273,12 @@ test("D-90-06 loose: bin/ dir on disk -> installable, no bin contains-note", asy
   );
 });
 
-test("RESV-01 loose: a valid dependencies declaration leaves the entry installable with no note", async () => {
+test("RESV-01 strict: a valid dependencies declaration leaves the entry installable with no note", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
 
   // act
-  const resolvedPlugin = await resolveLoose(
+  const resolvedPlugin = await resolveStrict(
     pluginEntry({ source: "./local", dependencies: ["other@^1.0.0"] }),
     context,
   );
@@ -3456,11 +3288,7 @@ test("RESV-01 loose: a valid dependencies declaration leaves the entry installab
   assert.deepStrictEqual(resolvedPlugin.notes, []);
 });
 
-// ──────────────────────────────────────────────────────────────────────────
-// MM-6 happy path (loose)
-// ──────────────────────────────────────────────────────────────────────────
-
-test("MM-6 loose happy path: entry declares skills and commands -> installable with both supported", async () => {
+test("MM-5 declared-path happy path: entry declares skills and commands -> installable with both supported", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(marketplaceRoot, {
@@ -3470,7 +3298,7 @@ test("MM-6 loose happy path: entry declares skills and commands -> installable w
   });
 
   // act
-  const resolvedPlugin = await resolveLoose(
+  const resolvedPlugin = await resolveStrict(
     pluginEntry({ source: "./local", skills: "skills", commands: "commands" }),
     context,
   );
@@ -3483,19 +3311,13 @@ test("MM-6 loose happy path: entry declares skills and commands -> installable w
   );
 
   if (resolvedPlugin.state === "installable") {
-    // D-07 array shape.
     assert.deepStrictEqual(resolvedPlugin.componentPaths.skills, ["skills"]);
     assert.deepStrictEqual(resolvedPlugin.componentPaths.commands, ["commands"]);
     assert.deepStrictEqual(resolvedPlugin.supported.sort(), ["commands", "skills"]);
   }
 });
 
-// ──────────────────────────────────────────────────────────────────────────
-// D-07: loose mode accepts top-level arrays in entry-only fields with first-
-// wins dedup; no implicit-by-convention probing.
-// ──────────────────────────────────────────────────────────────────────────
-
-test("D-07 loose: entry.skills as multi-element array preserves declared order with dedup", async () => {
+test("D-07 strict: entry.skills as multi-element array preserves declared order with dedup", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(marketplaceRoot, {
@@ -3505,7 +3327,7 @@ test("D-07 loose: entry.skills as multi-element array preserves declared order w
   });
 
   // act
-  const resolvedPlugin = await resolveLoose(
+  const resolvedPlugin = await resolveStrict(
     pluginEntry({ source: "./local", skills: ["a", "b", "a"] }),
     context,
   );
@@ -3518,57 +3340,16 @@ test("D-07 loose: entry.skills as multi-element array preserves declared order w
   );
 
   if (resolvedPlugin.state === "installable") {
-    // First-wins dedup; declared order preserved.
     assert.deepStrictEqual(resolvedPlugin.componentPaths.skills, ["a", "b"]);
   }
 });
 
-// ──────────────────────────────────────────────────────────────────────────
-// RSTATE-02 / D-64-07: structural precedence (loose mode)
-// ──────────────────────────────────────────────────────────────────────────
-
-// Loose mode: a manifest/standalone mcpServers conflict (structural) plus an
-// entry-declared unsupported kind (themes) resolves `unavailable` -- the
-// structural defect wins over the unsupported-component signal.
-test("RSTATE-02 loose: structural conflict + unsupported kind -> unavailable (structural precedence)", async () => {
-  // arrange
-  const localRoot = pathUnderMarketplace("./local");
-  const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
-  const context = resolveContext(marketplaceRoot, {
-    [localRoot]: "dir",
-    [manifestPath]: {
-      contents: JSON.stringify({ name: "p1", mcpServers: { srv: { command: "x" } } }),
-    },
-  });
-
-  // act
-  const resolvedPlugin = await resolveLoose(
-    pluginEntry({ source: "./local", themes: ["dark"] }),
-    context,
-  );
-
-  // assert
-  assert.strictEqual(resolvedPlugin.state, "unavailable");
-  assert.ok(
-    resolvedPlugin.notes.some((n) => n.includes("mcpServers") && n.includes("conflict")),
-    `structural note missing; got: ${resolvedPlugin.notes.join(" / ")}`,
-  );
-  assert.ok(
-    resolvedPlugin.notes.includes("contains themes"),
-    `unsupported note missing; got: ${resolvedPlugin.notes.join(" / ")}`,
-  );
-});
-
-// ──────────────────────────────────────────────────────────────────────────
-// RSTATE-04 / D-64-04: requirePartialInstallable gate (loose mode)
-// ──────────────────────────────────────────────────────────────────────────
-
-test("RSTATE-04 loose: requirePartialInstallable admits installable and exposes pluginRoot", async () => {
+test("RSTATE-04 strict: requirePartialInstallable admits installable and exposes pluginRoot", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
 
   // act
-  const resolvedPlugin: ResolvedPlugin = await resolveLoose(
+  const resolvedPlugin: ResolvedPlugin = await resolveStrict(
     pluginEntry({ source: "./local" }),
     context,
   );
@@ -3579,12 +3360,12 @@ test("RSTATE-04 loose: requirePartialInstallable admits installable and exposes 
   assert.strictEqual(typeof resolvedPlugin.pluginRoot, "string");
 });
 
-test("RSTATE-04 loose: requirePartialInstallable admits unsupported and exposes pluginRoot", async () => {
+test("RSTATE-04 strict: requirePartialInstallable admits unsupported and exposes pluginRoot", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
 
   // act
-  const resolvedPlugin: ResolvedPlugin = await resolveLoose(
+  const resolvedPlugin: ResolvedPlugin = await resolveStrict(
     pluginEntry({ source: "./local", themes: ["dark"] }),
     context,
   );
@@ -3595,12 +3376,12 @@ test("RSTATE-04 loose: requirePartialInstallable admits unsupported and exposes 
   assert.strictEqual(typeof resolvedPlugin.pluginRoot, "string");
 });
 
-test("RSTATE-04 loose: requirePartialInstallable throws on unavailable", async () => {
+test("RSTATE-04 strict: requirePartialInstallable throws on unavailable", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, {});
 
   // act
-  const resolvedPlugin = await resolveLoose(pluginEntry({ source: "./missing" }), context);
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./missing" }), context);
 
   // assert
   assert.strictEqual(resolvedPlugin.state, "unavailable");
@@ -3608,14 +3389,14 @@ test("RSTATE-04 loose: requirePartialInstallable throws on unavailable", async (
     () => {
       requirePartialInstallable(resolvedPlugin);
     },
-    (error: unknown) =>
-      error instanceof Error && error.message.includes('Plugin "p1" is not installable'),
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError, "must throw PluginShapeError");
+      assert.strictEqual(error.plugin, "p1");
+      assert.strictEqual(error.shape.kind, "not-installable");
+      return true;
+    },
   );
 });
-
-// ──────────────────────────────────────────────────────────────────────────
-// RES-01: exact materializability, ordering, and public error boundaries
-// ──────────────────────────────────────────────────────────────────────────
 
 test("resolveStrict returns the complete installable true arm", async () => {
   // arrange
@@ -3939,7 +3720,7 @@ test("resolveStrict falls through a non-directory wrapper to the bare manifest",
 });
 
 for (const code of ["EACCES", "ELOOP", undefined]) {
-  test(`resolveStrict rejects a manifest stat failure with code ${String(code)}`, async () => {
+  test(`resolveStrict propagates a manifest stat failure with code ${String(code)} (not wrapped as malformed)`, async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
     const wrappedManifest = path.join(localRoot, ".claude-plugin", "plugin.json");
@@ -3958,16 +3739,16 @@ for (const code of ["EACCES", "ELOOP", undefined]) {
       readFileText: () => Promise.resolve('{"defaultEnabled":false}'),
     };
 
-    // act
-    const resolved = await resolveStrict(pluginEntry(), context);
-
-    // assert
-    assert.deepStrictEqual(resolved, {
-      state: "unavailable",
-      installable: false,
-      name: "p1",
-      notes: ["malformed plugin.json: stat refused"],
-    });
+    // act & assert: the stat failure reaches the caller's probe classifier
+    // unchanged, and the bare sibling is never consulted (D-01-07).
+    await assert.rejects(
+      () => resolveStrict(pluginEntry(), context),
+      (error: unknown) =>
+        error instanceof Error &&
+        error.message === "stat refused" &&
+        "code" in error &&
+        error.code === code,
+    );
   });
 }
 
@@ -4029,7 +3810,7 @@ test("resolveStrict reports a root-level manifest validation error", async () =>
   );
 });
 
-test("resolveStrict reports a non-Error manifest read rejection", async () => {
+test("resolveStrict propagates a non-Error manifest read rejection (not wrapped as malformed)", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./manifest-read-rejection");
   const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
@@ -4054,19 +3835,11 @@ test("resolveStrict reports a non-Error manifest read rejection", async () => {
     },
   };
 
-  // act
-  const resolvedPlugin = await resolveStrict(
-    pluginEntry({ source: "./manifest-read-rejection" }),
-    context,
+  // act & assert
+  await assert.rejects(
+    () => resolveStrict(pluginEntry({ source: "./manifest-read-rejection" }), context),
+    (error: unknown) => error === manifestReadFailure,
   );
-
-  // assert
-  assert.deepStrictEqual(resolvedPlugin, {
-    state: "unavailable",
-    installable: false,
-    name: "p1",
-    notes: ["malformed plugin.json: manifest read failure"],
-  });
 });
 
 test("resolveStrict unwraps a standalone mcpServers document", async () => {
@@ -4100,7 +3873,7 @@ test("resolveStrict unwraps a standalone mcpServers document", async () => {
   });
 });
 
-test("resolveStrict reports a non-Error standalone mcp read rejection", async () => {
+test("resolveStrict propagates a non-Error standalone mcp read rejection (not wrapped as malformed)", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./mcp-read-rejection");
   const mcpPath = path.join(localRoot, ".mcp.json");
@@ -4125,19 +3898,11 @@ test("resolveStrict reports a non-Error standalone mcp read rejection", async ()
     },
   };
 
-  // act
-  const resolvedPlugin = await resolveStrict(
-    pluginEntry({ source: "./mcp-read-rejection" }),
-    context,
+  // act & assert
+  await assert.rejects(
+    () => resolveStrict(pluginEntry({ source: "./mcp-read-rejection" }), context),
+    (error: unknown) => error === mcpReadFailure,
   );
-
-  // assert
-  assert.deepStrictEqual(resolvedPlugin, {
-    state: "unavailable",
-    installable: false,
-    name: "p1",
-    notes: ["malformed mcpServers (.mcp.json): standalone mcp read failure"],
-  });
 });
 
 test("requireInstallable classifies an update of the partial true arm", async () => {
@@ -4258,8 +4023,10 @@ test("MANF-04 a malformed bare plugin.json is reported rather than skipped", asy
 
 // D-01-09: a bare `"file"` map value exists for statKind but rejects for
 // readFileText -- present and unreadable. Reporting it as an absence would
-// resolve the plugin installable with a null manifest.
-test("D-01-09 an unreadable plugin.json reports malformed rather than absent", async () => {
+// resolve the plugin installable with a null manifest; the read failure
+// propagates unchanged instead, so the caller's probe classifier can name its
+// failure class (the hooks.json EACCES precedent above).
+test("D-01-09 an unreadable plugin.json propagates rather than reading as absent", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./unreadable-bare");
   const context = resolveContext(marketplaceRoot, {
@@ -4267,14 +4034,10 @@ test("D-01-09 an unreadable plugin.json reports malformed rather than absent", a
     [path.join(localRoot, "plugin.json")]: "file",
   });
 
-  // act
-  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./unreadable-bare" }), context);
-
-  // assert
-  assert.strictEqual(resolvedPlugin.state, "unavailable");
-  assert.ok(
-    resolvedPlugin.notes.some((n) => n.includes("malformed plugin.json")),
-    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  // act & assert
+  await assert.rejects(
+    () => resolveStrict(pluginEntry({ source: "./unreadable-bare" }), context),
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "ENOENT",
   );
 });
 
@@ -4293,35 +4056,35 @@ test("repeated strict resolution is observationally identical", async () => {
   assert.deepStrictEqual(secondResolution, firstResolution);
 });
 
-test("parallel strict and loose resolution keep independent deterministic outcomes", async () => {
+test("parallel strict resolution keep independent deterministic outcomes", async () => {
   // arrange
   const strictContext = resolveContext(marketplaceRoot, {
     [pathUnderMarketplace("./strict")]: "dir",
     [path.join(pathUnderMarketplace("./strict"), "skills")]: "dir",
   });
-  const looseContext = resolveContext(marketplaceRoot, {
-    [pathUnderMarketplace("./loose")]: "dir",
+  const declaredContext = resolveContext(marketplaceRoot, {
+    [pathUnderMarketplace("./declared")]: "dir",
   });
 
   // act
-  const [strictResolution, looseResolution] = await Promise.all([
+  const [strictResolution, declaredResolution] = await Promise.all([
     resolveStrict(pluginEntry({ name: "strict", source: "./strict" }), strictContext),
-    resolveLoose(
-      pluginEntry({ name: "loose", source: "./loose", commands: ["first", "second"] }),
-      looseContext,
+    resolveStrict(
+      pluginEntry({ name: "declared", source: "./declared", commands: ["first", "second"] }),
+      declaredContext,
     ),
   ]);
 
   // assert
   assert.strictEqual(strictResolution.state, "installable");
-  assert.strictEqual(looseResolution.state, "installable");
-  if (strictResolution.state === "installable" && looseResolution.state === "installable") {
+  assert.strictEqual(declaredResolution.state, "installable");
+  if (strictResolution.state === "installable" && declaredResolution.state === "installable") {
     assert.deepStrictEqual(strictResolution.componentPaths, {
       skills: ["skills"],
       commands: [],
       agents: [],
     });
-    assert.deepStrictEqual(looseResolution.componentPaths, {
+    assert.deepStrictEqual(declaredResolution.componentPaths, {
       skills: [],
       commands: ["first", "second"],
       agents: [],

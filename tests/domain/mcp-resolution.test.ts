@@ -338,63 +338,68 @@ test("propagates an existing reference read failure", async () => {
   );
 });
 
-test("classifies a malformed standalone document with a non-Error rejection", async () => {
+test("propagates a standalone document read failure with a non-Error rejection", async () => {
   // arrange
   const { resolveStrictMcp } =
     await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
 
-  // act
-  const dirty = await resolveStrictMcp(
-    { entry: {}, manifest: null, pluginRoot: "/plugins/alpha", resolution },
-    {
-      statKind: () => Promise.resolve("file"),
-      readFileText: () =>
-        new Promise<string>((_resolve, reject) => {
-          Reflect.apply(reject, undefined, ["read failure"]);
-        }),
-    },
-  );
-
-  // assert
-  assert.deepStrictEqual(
-    { dirty, resolution },
-    {
-      dirty: true,
-      resolution: {
-        notes: ["malformed mcpServers (.mcp.json): read failure"],
-        mcpServers: {},
-      },
-    },
+  // act & assert
+  await assert.rejects(
+    () =>
+      resolveStrictMcp(
+        { entry: {}, manifest: null, pluginRoot: "/plugins/alpha", resolution },
+        {
+          statKind: () => Promise.resolve("file"),
+          readFileText: () =>
+            new Promise<string>((_resolve, reject) => {
+              Reflect.apply(reject, undefined, ["read failure"]);
+            }),
+        },
+      ),
+    (error: unknown) => error === "read failure",
   );
 });
 
-test("classifies a malformed standalone document with an Error rejection", async () => {
+test("standalone document EACCES propagates (not wrapped as malformed mcpServers)", async () => {
   // arrange
   const { resolveStrictMcp } =
     await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
+  const readFailure = Object.assign(new Error("denied"), { code: "EACCES" });
+
+  // act & assert
+  await assert.rejects(
+    () =>
+      resolveStrictMcp(
+        { entry: {}, manifest: null, pluginRoot: "/plugins/alpha", resolution },
+        {
+          statKind: () => Promise.resolve("file"),
+          readFileText: () => Promise.reject(readFailure),
+        },
+      ),
+    (error: unknown) => error === readFailure,
+  );
+});
+
+test("classifies malformed JSON content in a standalone document", async () => {
+  // arrange
+  const { resolveStrictMcp } =
+    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
+  const pluginRoot = "/plugins/alpha";
+  const resolution = emptyResolution();
 
   // act
   const dirty = await resolveStrictMcp(
-    { entry: {}, manifest: null, pluginRoot: "/plugins/alpha", resolution },
-    {
-      statKind: () => Promise.resolve("file"),
-      readFileText: () => Promise.reject(new Error("read failure")),
-    },
+    { entry: {}, manifest: null, pluginRoot, resolution },
+    mcpFiles({ [path.join(pluginRoot, ".mcp.json")]: { contents: "{ not json" } }),
   );
 
   // assert
-  assert.deepStrictEqual(
-    { dirty, resolution },
-    {
-      dirty: true,
-      resolution: {
-        notes: ["malformed mcpServers (.mcp.json): read failure"],
-        mcpServers: {},
-      },
-    },
-  );
+  assert.strictEqual(dirty, true);
+  assert.strictEqual(resolution.notes.length, 1);
+  assert.ok(resolution.notes[0]?.startsWith("malformed mcpServers (.mcp.json):"));
+  assert.deepStrictEqual(resolution.mcpServers, {});
 });
 
 test("classifies a wrapped malformed map like an inline malformed map", async () => {
@@ -445,21 +450,24 @@ test("classifies a wrapped malformed map like an inline malformed map", async ()
   );
 });
 
-test("resolves valid loose entry MCP without filesystem access", async () => {
+test("resolves valid inline entry MCP without filesystem access", async () => {
   // arrange
-  const { resolveLooseMcp } =
+  const { resolveStrictMcp } =
     await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
 
   // act
-  const dirty = await resolveLooseMcp(
+  const dirty = await resolveStrictMcp(
     {
       entry: { mcpServers: { alpha: {} } },
       manifest: null,
       pluginRoot: "/plugins/alpha",
       resolution,
     },
-    () => Promise.reject(new Error("must not inspect standalone MCP")),
+    {
+      statKind: () => Promise.reject(new Error("must not inspect standalone MCP")),
+      readFileText: () => Promise.reject(new Error("must not read standalone MCP")),
+    },
   );
 
   // assert
@@ -472,105 +480,18 @@ test("resolves valid loose entry MCP without filesystem access", async () => {
   );
 });
 
-test("reports manifest and standalone loose MCP without an entry as one conflict", async () => {
+test("treats fully absent strict MCP as empty", async () => {
   // arrange
-  const { resolveLooseMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
-  const manifestResolution = emptyResolution();
-  const standaloneResolution = emptyResolution();
-
-  // act
-  const manifestDirty = await resolveLooseMcp(
-    {
-      entry: {},
-      manifest: { mcpServers: { alpha: {} } },
-      pluginRoot: "/plugins/manifest",
-      resolution: manifestResolution,
-    },
-    () => Promise.resolve(null),
-  );
-  const standaloneDirty = await resolveLooseMcp(
-    {
-      entry: {},
-      manifest: null,
-      pluginRoot: "/plugins/standalone",
-      resolution: standaloneResolution,
-    },
-    (candidate) => Promise.resolve(candidate === "/plugins/standalone/.mcp.json" ? "file" : null),
-  );
-
-  // assert
-  const conflictResolution = {
-    notes: [
-      "component declarations conflict: manifest/standalone mcpServers without entry-level declaration",
-    ],
-    mcpServers: {},
-  };
-  assert.deepStrictEqual(
-    { manifestDirty, manifestResolution, standaloneDirty, standaloneResolution },
-    {
-      manifestDirty: true,
-      manifestResolution: conflictResolution,
-      standaloneDirty: true,
-      standaloneResolution: conflictResolution,
-    },
-  );
-});
-
-test("treats fully absent loose MCP as empty", async () => {
-  // arrange
-  const { resolveLooseMcp } =
+  const { resolveStrictMcp } =
     await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
   const resolution = emptyResolution();
 
   // act
-  const dirty = await resolveLooseMcp(
+  const dirty = await resolveStrictMcp(
     { entry: {}, manifest: null, pluginRoot: "/plugins/alpha", resolution },
-    () => Promise.resolve(null),
+    mcpFiles({}),
   );
 
   // assert
   assert.deepStrictEqual({ dirty, resolution }, { dirty: false, resolution: emptyResolution() });
-});
-
-test("distinguishes loose string references from malformed inline values", async () => {
-  // arrange
-  const { resolveLooseMcp } =
-    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
-  const referenceResolution = emptyResolution();
-  const malformedResolution = emptyResolution();
-
-  // act
-  const referenceDirty = await resolveLooseMcp(
-    {
-      entry: { mcpServers: "servers.json" },
-      manifest: null,
-      pluginRoot: "/plugins/alpha",
-      resolution: referenceResolution,
-    },
-    () => Promise.resolve(null),
-  );
-  const malformedDirty = await resolveLooseMcp(
-    {
-      entry: { mcpServers: 42 },
-      manifest: null,
-      pluginRoot: "/plugins/alpha",
-      resolution: malformedResolution,
-    },
-    () => Promise.resolve(null),
-  );
-
-  // assert
-  assert.deepStrictEqual(
-    { referenceDirty, referenceResolution, malformedDirty, malformedResolution },
-    {
-      referenceDirty: true,
-      referenceResolution: {
-        notes: ['unsupported mcpServers string reference in loose mode: "servers.json"'],
-        mcpServers: {},
-      },
-      malformedDirty: true,
-      malformedResolution: { notes: ["malformed mcpServers"], mcpServers: {} },
-    },
-  );
 });

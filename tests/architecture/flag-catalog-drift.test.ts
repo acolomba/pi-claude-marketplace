@@ -9,7 +9,7 @@
 // Four reconciliations:
 //
 //   (a) Completion consistency: the labels emitted by `getArgumentCompletions`
-//       for `<verb> -` -- every catalog verb (derived from CATALOG_VERBS, so a
+//       for `<verb> -` -- every catalog verb (from the independent EXPECTED_CATALOG_VERBS inventory, so a
 //       new verb cannot be silently omitted) plus the `ls` alias -- with the
 //       global `--scope` excluded, MUST equal the catalog's complete=true
 //       names for that verb (exact set, sorted).
@@ -53,27 +53,30 @@ import test from "node:test";
 
 import { getArgumentCompletions } from "../../extensions/pi-claude-marketplace/edge/completions/provider.ts";
 import {
-  CATALOG_VERBS,
+  isCatalogVerb,
   completionFlagEntries,
   parseFlagNames,
 } from "../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
-import { TOP_LEVEL_USAGE } from "../../extensions/pi-claude-marketplace/edge/router.ts";
+import {
+  MARKETPLACE_SUBCOMMANDS,
+  MARKETPLACE_USAGE,
+  TOP_LEVEL_SUBCOMMANDS,
+  TOP_LEVEL_USAGE,
+} from "../../extensions/pi-claude-marketplace/edge/router.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { LocationsResolver } from "../../extensions/pi-claude-marketplace/edge/completions/data.ts";
 import type { CatalogVerb } from "../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
+import type { MarketplaceStateRecordLike } from "../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 
 // The flag-completion branch never consults the resolver (it returns before any
 // state/manifest load), so an empty stub resolver is sufficient.
 const EMPTY_RESOLVER: LocationsResolver = {
-  marketplaceNamesCachePath(scope: Scope): string {
-    return `/nonexistent/${scope}/marketplace-names.json`;
-  },
   pluginCachePath(scope: Scope, marketplace: string): Promise<string> {
     return Promise.resolve(`/nonexistent/${scope}/${marketplace}.json`);
   },
-  loadStateForScope(): Promise<{ marketplaces: Record<string, { manifestPath?: string }> }> {
+  loadStateForScope(): Promise<{ marketplaces: Record<string, MarketplaceStateRecordLike> }> {
     return Promise.resolve({ marketplaces: {} });
   },
   loadManifestForMarketplace(): Promise<readonly never[]> {
@@ -81,13 +84,40 @@ const EMPTY_RESOLVER: LocationsResolver = {
   },
 };
 
-// Every catalog verb (derived from CATALOG_VERBS -- a new verb cannot be
-// silently omitted here) plus the `ls` completion alias, which maps to the
+// Every independently declared catalog verb (the router inventory check below
+// detects any reachable command omitted here) plus the `ls` completion alias, which maps to the
 // `list` catalog key. The completion head is what the user types; the catalog
 // key is what governs its per-verb flags.
+const EXPECTED_CATALOG_VERBS = [
+  "install",
+  "update",
+  "list",
+  "info",
+  "uninstall",
+  "reinstall",
+  "fetch",
+  "enable",
+  "disable",
+  "pending",
+  "import",
+  "bootstrap",
+  "browse",
+  "help",
+  "marketplace help",
+  "marketplace add",
+  "marketplace remove",
+  "marketplace info",
+  "marketplace list",
+  "marketplace update",
+  "marketplace autoupdate",
+  "marketplace noautoupdate",
+] as const;
+
 const COMPLETION_HEADS: { head: string; verb: CatalogVerb }[] = [
-  ...CATALOG_VERBS.map((verb) => ({ head: verb, verb })),
+  ...EXPECTED_CATALOG_VERBS.map((verb) => ({ head: verb, verb })),
   { head: "ls", verb: "list" },
+  { head: "marketplace ls", verb: "marketplace list" },
+  { head: "marketplace rm", verb: "marketplace remove" },
 ];
 
 function sorted(values: Iterable<string>): string[] {
@@ -104,7 +134,7 @@ test("catalog vs completion: per-verb complete-set equals emitted labels (scope 
     const emitted = items.map((i) => i.label).filter((l) => l !== "--scope");
     const catalogComplete = completionFlagEntries(verb).map((e) => e.name);
 
-    assert.deepEqual(
+    assert.deepStrictEqual(
       sorted(emitted),
       sorted(catalogComplete),
       `Flag drift for "${head}": completion labels ${JSON.stringify(sorted(emitted))} != catalog complete-set ${JSON.stringify(sorted(catalogComplete))}. Update edge/flag-catalog.ts in the same change.`,
@@ -136,22 +166,91 @@ const HANDLER_ACCEPTED_PARSE_SETS: Record<CatalogVerb, readonly string[]> = {
   pending: [],
   import: [],
   bootstrap: [],
+  // The documentation/navigation verbs parse no flag of their own, and
+  // completions/provider.ts keeps the global `--scope` off them too.
+  browse: [],
+  help: [],
+  "marketplace help": [],
+  "marketplace add": ["--local"],
+  "marketplace remove": ["--local"],
+  "marketplace info": [],
+  "marketplace list": [],
+  "marketplace update": [],
+  "marketplace autoupdate": ["--local"],
+  "marketplace noautoupdate": ["--local"],
 };
 
-test("catalog vs handlers: every verb's parse-set matches the ordered handler-accepted pin", () => {
-  assert.deepEqual(
-    sorted(Object.keys(HANDLER_ACCEPTED_PARSE_SETS)),
-    sorted(CATALOG_VERBS),
-    "HANDLER_ACCEPTED_PARSE_SETS must cover every catalog verb exactly.",
-  );
+function assertFlagSet(observed: Iterable<string>, expected: readonly string[]): void {
+  assert.deepStrictEqual(sorted(observed), expected);
+}
 
-  for (const verb of CATALOG_VERBS) {
-    assert.deepEqual(
-      sorted(parseFlagNames(verb)),
-      HANDLER_ACCEPTED_PARSE_SETS[verb],
-      `Parse-set drift for "${verb}": the catalog's parse bits no longer match what the handler accepts. Update the handler wiring and this pin in the same change.`,
+for (const verb of EXPECTED_CATALOG_VERBS) {
+  test(`catalog parse flags for ${verb} match the independent handler contract`, () => {
+    // arrange
+    const expected = HANDLER_ACCEPTED_PARSE_SETS[verb];
+
+    // act
+    const accepted = parseFlagNames(verb);
+
+    // assert
+    assertFlagSet(accepted, expected);
+  });
+}
+
+test("catalog and alias completions cover the complete router inventory", () => {
+  // arrange
+  const routerHeads = [
+    ...TOP_LEVEL_SUBCOMMANDS.filter((verb) => verb !== "marketplace"),
+    ...MARKETPLACE_SUBCOMMANDS.map((verb) => `marketplace ${verb}`),
+  ];
+
+  // act
+  const catalogHeads = COMPLETION_HEADS.map(({ head }) => head);
+
+  // assert
+  assert.deepStrictEqual(sorted(catalogHeads), sorted(routerHeads));
+  assert.deepStrictEqual(
+    sorted(Object.keys(HANDLER_ACCEPTED_PARSE_SETS)),
+    sorted(EXPECTED_CATALOG_VERBS),
+  );
+  assert.deepStrictEqual(
+    EXPECTED_CATALOG_VERBS.map((verb) => isCatalogVerb(verb)),
+    Array.from({ length: EXPECTED_CATALOG_VERBS.length }, () => true),
+  );
+});
+
+for (const { observed, label } of [
+  { observed: [], label: "missing --local" },
+  { observed: ["--bogus", "--local"], label: "unexpected --bogus" },
+]) {
+  test(`flag drift comparison rejects a planted ${label}`, () => {
+    // arrange
+    const expected = ["--local"];
+
+    // act & assert
+    assert.throws(
+      () => {
+        assertFlagSet(observed, expected);
+      },
+      (error: unknown) => {
+        assert.ok(error instanceof assert.AssertionError);
+        assert.deepStrictEqual(error.actual, observed);
+        assert.deepStrictEqual(error.expected, ["--local"]);
+        assert.strictEqual(error.code, "ERR_ASSERTION");
+        return true;
+      },
     );
-  }
+  });
+}
+
+test("flag drift comparison accepts the benign complete set", () => {
+  // arrange
+  const observed = new Set(["--local"]);
+
+  // act & assert
+  assert.doesNotThrow(() => {
+    assertFlagSet(observed, ["--local"]);
+  });
 });
 
 // Reconciliation (d): how the top-level help block treats each verb's
@@ -183,20 +282,39 @@ const TOP_LEVEL_USAGE_FLAGS: Record<
   pending: { documented: [], omitted: [] },
   import: { documented: [], omitted: [] },
   bootstrap: { documented: [], omitted: [] },
+  browse: { documented: [], omitted: [] },
+  help: { documented: [], omitted: [] },
+  "marketplace help": { documented: [], omitted: [] },
+  "marketplace add": { documented: [], omitted: ["--local"] },
+  "marketplace remove": { documented: [], omitted: ["--local"] },
+  "marketplace info": { documented: [], omitted: [] },
+  "marketplace list": { documented: [], omitted: [] },
+  "marketplace update": { documented: [], omitted: [] },
+  "marketplace autoupdate": { documented: [], omitted: ["--local"] },
+  "marketplace noautoupdate": { documented: [], omitted: ["--local"] },
 };
 
 /**
- * The one `TOP_LEVEL_USAGE` line that describes `verb` -- the indented entry
- * whose first token is the verb itself. The header line and the trailing
- * `marketplace ...` line describe no catalog verb, so neither can match.
+ * The one usage line that describes `verb` -- the indented entry whose first
+ * token is the verb itself. A top-level verb reads `TOP_LEVEL_USAGE`; a
+ * `marketplace <sub>` verb reads `MARKETPLACE_USAGE` by its sub-verb, except
+ * `marketplace help`, which that block does not list and which `TOP_LEVEL_USAGE`
+ * documents on its `help [marketplace]` line. The header lines describe no
+ * catalog verb, so none can match.
  */
 function usageLineFor(verb: CatalogVerb): string {
-  const lines = TOP_LEVEL_USAGE.split("\n").filter((line) => line.startsWith(`  ${verb} `));
-  assert.equal(lines.length, 1, `TOP_LEVEL_USAGE must hold exactly one "${verb}" line.`);
+  const [block, head] =
+    verb.startsWith("marketplace ") && verb !== "marketplace help"
+      ? [MARKETPLACE_USAGE, verb.slice("marketplace ".length)]
+      : [TOP_LEVEL_USAGE, verb === "marketplace help" ? "help" : verb];
+  const lines = block
+    .split("\n")
+    .filter((line) => line === `  ${head}` || line.startsWith(`  ${head} `));
+  assert.equal(lines.length, 1, `the usage block must hold exactly one "${verb}" line.`);
   return lines[0] ?? "";
 }
 
-for (const verb of CATALOG_VERBS) {
+for (const verb of EXPECTED_CATALOG_VERBS) {
   test(`catalog vs help text: every completable "${verb}" flag is documented or deliberately omitted`, () => {
     // arrange
     const { documented, omitted } = TOP_LEVEL_USAGE_FLAGS[verb];

@@ -32,7 +32,7 @@ import type { ExtensionState } from "../persistence/state-io.ts";
  * (`asAbsolutePluginRoot`) and drop such records instead of letting them
  * reach `process.env.PATH`.
  */
-export function collectBinDirs(state: ExtensionState): string[] {
+function collectBinDirs(state: ExtensionState): string[] {
   const dirs: string[] = [];
   for (const [mpName, mp] of Object.entries(state.marketplaces)) {
     for (const [pluginName, rec] of Object.entries(mp.plugins)) {

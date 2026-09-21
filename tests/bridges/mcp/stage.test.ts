@@ -7,7 +7,6 @@ import {
   abortPreparedMcp,
   commitPreparedMcp,
   finalizeMcpReplacement,
-  MalformedMcpServersError,
   prepareStageMcpServers,
   replacePreparedMcp,
   rollbackMcpReplacement,
@@ -64,17 +63,19 @@ describe("prepareStageMcpServers", () => {
     assert.strictEqual(await pathExists(locations.mcpJsonPath), false);
   });
 
-  test("ignores an ambient user MCP server during project staging", async (t) => {
-    // arrange
-    await createHermeticEnvironment(t, "mcp-stage-ambient-");
+  test("rejects a project server that collides with an ambient user-scope MCP server", async (t) => {
+    // arrange -- same hermetic environment for both the ambient user-scope
+    // file and the project scope, so the ambient file lands in the exact
+    // pi-user-scope collision slot the project stage checks (MC-4).
+    const { cwd } = await createHermeticEnvironment(t, "mcp-stage-ambient-");
     const ambientMcpPath = locationsFor("user", "/ambient-cwd").mcpJsonPath;
     const ambientBytes = '{"mcpServers":{"ambient":{"command":"host-only"}}}\n';
     await mkdir(path.dirname(ambientMcpPath), { recursive: true });
     await writeFile(ambientMcpPath, ambientBytes);
-    const { cwd, locations } = await createProjectScope(t, "mcp-stage-isolated-");
+    const locations = locationsFor("project", cwd);
 
     // act
-    const prepared = await prepareStageMcpServers({
+    const collision = await prepareStageMcpServers({
       locations,
       cwd,
       marketplaceName: "catalog",
@@ -82,13 +83,28 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       servers: { ambient: { command: "case-owned" } },
-    });
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
 
     // assert
-    assert.strictEqual(prepared.kind, "staged");
+    assert.ok(collision instanceof McpServerCollisionError);
+    assert.deepStrictEqual(
+      {
+        name: collision.name,
+        message: collision.message,
+        serverName: collision.serverName,
+        owningPath: collision.owningPath,
+      },
+      {
+        name: "McpServerCollisionError",
+        message: `Refusing to stage MCP server "ambient": already exists in ${ambientMcpPath}.`,
+        serverName: "ambient",
+        owningPath: ambientMcpPath,
+      },
+    );
     assert.strictEqual(await readFile(ambientMcpPath, "utf8"), ambientBytes);
-
-    abortPreparedMcp(prepared);
   });
 
   test("replaces owned servers and preserves complete foreign content", async (t) => {
@@ -227,6 +243,41 @@ describe("prepareStageMcpServers", () => {
     });
   });
 
+  test("reports a malformed stored JSON on the AS-8 noop path without touching it", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-malformed-noop-");
+    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+    await writeFile(locations.mcpJsonPath, "{");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: {},
+    });
+
+    // assert
+    assert.strictEqual(prepared.kind, "noop");
+    if (prepared.kind !== "noop") {
+      return;
+    }
+
+    assert.deepStrictEqual(prepared.result, {
+      stagedNames: [],
+      recorded: [],
+      warnings: [
+        `existing mcp.json at ${locations.mcpJsonPath} is malformed; it was left untouched`,
+      ],
+    });
+    assert.strictEqual(Object.isFrozen(prepared.result.warnings), true);
+    await commitPreparedMcp(prepared);
+    assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), "{");
+  });
+
   for (const { description, storedValue, valueKind } of [
     { description: "a null", storedValue: "null", valueKind: "null" },
     { description: "a string", storedValue: '"foreign"', valueKind: "string" },
@@ -255,21 +306,20 @@ describe("prepareStageMcpServers", () => {
             servers: { server: { url: "https://mcp.example.test" } },
           }),
         (error: unknown) => {
-          assert.strictEqual(error instanceof MalformedMcpServersError, true);
-          if (!(error instanceof MalformedMcpServersError)) {
-            return false;
-          }
+          assert.ok(error instanceof Error);
+          assert.ok("mcpJsonPath" in error);
+          assert.ok("valueKind" in error);
 
           assert.deepStrictEqual(
             {
-              constructor: error.constructor,
+              constructorName: error.constructor.name,
               name: error.name,
               message: error.message,
               mcpJsonPath: error.mcpJsonPath,
               valueKind: error.valueKind,
             },
             {
-              constructor: MalformedMcpServersError,
+              constructorName: "MalformedMcpServersError",
               name: "MalformedMcpServersError",
               message: `mcpServers at ${locations.mcpJsonPath} must be an object; received ${valueKind}.`,
               mcpJsonPath: locations.mcpJsonPath,

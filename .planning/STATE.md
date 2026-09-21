@@ -845,7 +845,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 | 260907-uzb | FMBOM-01: strip leading UTF-8 BOM at skill and agent frontmatter read sites | 2026-09-08 | fb54c5d7 | [260907-uzb-fmbom-01-strip-leading-utf-8-bom-at-skil](./quick/260907-uzb-fmbom-01-strip-leading-utf-8-bom-at-skil/) |
 | 260909-g1l | correct UDISP-01 backlog entry and add bare plugin.json manifest-path entry | 2026-09-09 | 9a8f740b | [260909-g1l-correct-udisp-01-backlog-entry-and-add-b](./quick/260909-g1l-correct-udisp-01-backlog-entry-and-add-b/) |
 | 260917-cqc | Tighten dependents guard on unusable own manifest (IN-05); accept unreadable token (IN-06) | 2026-09-17 | fda3bc8e | [260917-cqc-tighten-dependents-guard-on-unusable-own](./quick/260917-cqc-tighten-dependents-guard-on-unusable-own/) |
-| 260917-g97 | Resolve window #32: the cold-git `(remote)` info row renders its entry-declared dependencies line (D-01-32) | 2026-09-17 | 975e6236 | [260917-g97-resolve-window-32-give-the-componentsres](./quick/260917-g97-resolve-window-32-give-the-componentsres/) |
+| 260917-g97 | Resolve window #59 (#32 before the 2026-09-20 merge from main renumbered it): the cold-git `(remote)` info row renders its entry-declared dependencies line (D-01-32) | 2026-09-17 | 975e6236 | [260917-g97-resolve-window-32-give-the-componentsres](./quick/260917-g97-resolve-window-32-give-the-componentsres/) |
 | 260917-hfp | Clear the phase 5 review nits IN-01, IN-02, IN-03, IN-07, IN-08; IN-04 carried to BACKLOG `PRUNE-GUARD-MR-01` | 2026-09-17 | 97c9ce14 | [260917-hfp-clear-the-phase-5-review-nits-in-01-in-0](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/) |
 
 ## Deferred Items
