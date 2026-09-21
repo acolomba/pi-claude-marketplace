@@ -162,7 +162,7 @@ Parity with the upstream enable/disable rules. Today `enable` and `disable`
 know nothing about plugin dependencies, and the cascade leaves a disabled,
 already-installed dependency disabled (RESV-05; BACKLOG ENBL-DEP-01).
 
-- [ ] **EDEP-01**: `enable <plugin>` also enables the plugin's declared
+- [x] **EDEP-01**: `enable <plugin>` also enables the plugin's declared
   dependencies, transitively, in the same scope, and lists them.
 - [ ] **EDEP-02**: `disable <plugin>` is refused while an enabled installed
   plugin in the scope declares it; the refusal names the dependents and gives
@@ -277,7 +277,7 @@ this milestone.
 | TAGS-01 | Phase 7 | Complete |
 | TAGS-02 | Phase 7 | Complete |
 | TAGS-03 | Phase 7 | Complete |
-| EDEP-01 | Phase 8 | Pending |
+| EDEP-01 | Phase 8 | Complete |
 | EDEP-02 | Phase 8 | Pending |
 | EDEP-03 | Phase 8 | Pending |
 | MISS-01 | Phase 9 | Pending |
