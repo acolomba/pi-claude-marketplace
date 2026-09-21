@@ -5,7 +5,7 @@ status: "test-backlog milestone shipped — PR #202"
 stopped_at: PR #202 green at 100% Sonar coverage (2026-09-20)
 last_updated: "2026-09-20T23:12:43.440Z"
 last_activity: 2026-09-20
-last_activity_desc: post-close coverage fix landed on PR #202; pin file empty
+last_activity_desc: quick task 260920-qx0 removed the no-op --local from marketplace info/list/update
 state_head: a0015aa3a2991a143e9dd3ed9dcfa25df91c35f4
 milestone_name: test-backlog
 progress:
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 Phase: Milestone test-backlog complete
 Plan: —
 Status: test-backlog milestone shipped — PR #202
-Last activity: 2026-09-20 — PR #202 pushed and green; Sonar's 99.1% new-code reading fixed to 100.0% (see the MILESTONES.md post-close note)
+Last activity: 2026-09-20 — Completed quick task 260920-qx0: `--local` rejected on marketplace info/list/update (it was a no-op on all three merged-read verbs)
 
 ### test-backlog closeout: `override_closeout`
 
@@ -125,6 +125,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
+| 260920-qx0 | Reject `--local` on the merged-read marketplace verbs (info, list, update) | 2026-09-20 | f2fbd402 | complete | [260920-qx0-remove-local-from-marketplace-info](./quick/260920-qx0-remove-local-from-marketplace-info/) |
 
 ## Session Continuity
 
