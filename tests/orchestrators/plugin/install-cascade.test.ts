@@ -1932,6 +1932,7 @@ test("CR-07: a toReEnable member absent from its own manifest fails closed with 
     record.enabled = false;
     record.provenance = "dependency";
   }
+
   const locations = locationsFor("project", environment.cwd);
 
   // act

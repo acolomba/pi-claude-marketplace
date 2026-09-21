@@ -1090,6 +1090,9 @@ async function resolveTransitiveReEnableSet(
   };
 }
 
+type FoldFailure = Extract<DependencyClosureResult, { readonly ok: false }>;
+type FoldNotFoundFailure = Extract<FoldFailure, { readonly reason: "not-found" }>;
+
 /**
  * `folded` fails only when a DIRECT child of the synthetic root -- one of
  * `discovered.values()` -- is itself absent from its own marketplace
@@ -1099,11 +1102,8 @@ async function resolveTransitiveReEnableSet(
  * runtime check here.
  */
 function assertFoldedNotFoundFromSyntheticChild(
-  _folded: Extract<DependencyClosureResult, { readonly ok: false }>,
-): asserts _folded is Extract<
-  DependencyClosureResult,
-  { readonly ok: false; readonly reason: "not-found" }
-> {
+  _folded: FoldFailure,
+): asserts _folded is FoldNotFoundFailure {
   // Evidence-backed type narrowing only; the invariant is established by the caller.
 }
 
