@@ -1140,6 +1140,47 @@ describe("commitPreparedWorkflows", () => {
     assert.strictEqual(path.basename(lostCopy), path.basename(survivingCopy));
   });
 
+  test("refuses a saved directory that has been replaced by a symbolic link", async (t) => {
+    // arrange
+    const { locations } = await createWorkflowScope(t, "workflows-commit-saved-symlink-");
+    const pluginRoot = await createPluginRoot(t, "workflows-commit-saved-symlink-source-");
+    const outsideDir = await createPluginRoot(t, "workflows-commit-saved-outside-");
+    const workflowsDir = await createWorkflowsDir(pluginRoot);
+    await writeWorkflowScript(workflowsDir, "greet.js", GREET_SOURCE);
+    const placed: (readonly string[])[] = [];
+    const prepared = stagedPreparation(
+      await prepareStageWorkflows({
+        locations,
+        pluginName: PLUGIN_NAME,
+        resolved: resolvedPlugin(pluginRoot, ["workflows"]),
+      }),
+    );
+    // The saved directory is the one segment under the engine's storage root
+    // that `workflowArtifactPath` trusts as its own boundary and so never
+    // lstats. `mkdir` with `recursive: true` follows a link planted there, and
+    // the rename that follows it would land the envelope wherever it points.
+    await mkdir(path.dirname(locations.workflowsSavedDir), { recursive: true });
+    await symlink(outsideDir, locations.workflowsSavedDir, "dir");
+
+    // act
+    const error = await commitPreparedWorkflows(prepared, {
+      onPlaced: (names) => placed.push(names),
+    }).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    const outsideEntries = await readdir(outsideDir);
+
+    // assert
+    assert.ok(error instanceof SymlinkRefusedError);
+    assert.strictEqual(error.linkPath, locations.workflowsSavedDir);
+    // Nothing was written through the link, and the staging tree the refusal
+    // left behind was cleaned up rather than followed.
+    assert.deepStrictEqual(outsideEntries, []);
+    assert.strictEqual(await pathIsPresent(prepared.stagingRoot), false);
+    assert.deepStrictEqual(placed, [[]]);
+  });
+
   test("refuses a displaced directory that has been replaced by a symbolic link", async (t) => {
     // arrange
     const { locations } = await createWorkflowScope(t, "workflows-commit-displaced-symlink-");

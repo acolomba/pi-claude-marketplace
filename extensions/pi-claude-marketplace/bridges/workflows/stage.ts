@@ -421,6 +421,19 @@ export async function commitPreparedWorkflows(
   const displaced: DisplacedMove[] = [];
 
   try {
+    // WPTH-04: the same anchor the staging root takes above, for its sibling.
+    // `workflowArtifactPath` trusts `workflowsSavedDir` as its own boundary, so
+    // nothing else lstats the `saved` segment (or the `projects/<key>` levels
+    // above it), and `mkdir` with `recursive: true` follows a link planted at
+    // any of them. Anchoring on the engine's storage ROOT walks every one of
+    // those segments, and the check runs BEFORE the `mkdir` for the reason the
+    // staging check does: a refusal after the write refuses nothing.
+    await assertPathInside(
+      prepared.locations.workflowsHomeDir,
+      prepared.locations.workflowsSavedDir,
+      "workflows saved directory",
+    );
+
     // Lazy-create: for project scope this creates the `projects/<key>/saved`
     // levels too. The engine's own directory helper does the same, so we are
     // not racing it into an inconsistent state.
