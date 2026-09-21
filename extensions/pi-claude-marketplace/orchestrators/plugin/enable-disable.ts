@@ -618,6 +618,19 @@ async function resolveEnableCascade(
 interface EnableCascadeRun {
   readonly rows: EnableCascadeMemberRow[];
   readonly materialized: Set<string>;
+  readonly hydratable: EnableCascadeHydratableMember[];
+}
+
+/**
+ * WR-02: what hydrating a re-enabled member's hooks into the routing cache
+ * needs to know about it, mirroring `install-flow.ts::HydratableMember`.
+ */
+interface EnableCascadeHydratableMember {
+  readonly key: string;
+  readonly name: string;
+  readonly marketplace: string;
+  readonly pluginRoot: string;
+  readonly hooksConfigPath: string | undefined;
 }
 
 /**
@@ -669,6 +682,13 @@ function buildEnableCascadeMemberPhase(
       assertRecordedStateLedgerInstalled(result);
       run.materialized.add(member.key);
       const summary = result.summary;
+      run.hydratable.push({
+        key: member.key,
+        name: member.name,
+        marketplace: member.marketplace,
+        pluginRoot: summary.resolved.pluginRoot,
+        hooksConfigPath: summary.resolved.hooksConfigPath,
+      });
       run.rows.push({
         status: "installed",
         name: member.key,
@@ -762,10 +782,15 @@ async function runEnableCascadeMembers(
   state: ExtensionState,
   members: readonly EnableCascadeMember[],
 ): Promise<
-  | { readonly ok: true; readonly rows: readonly EnableCascadeMemberRow[]; readonly wrote: boolean }
+  | {
+      readonly ok: true;
+      readonly rows: readonly EnableCascadeMemberRow[];
+      readonly wrote: boolean;
+      readonly hydratable: readonly EnableCascadeHydratableMember[];
+    }
   | { readonly ok: false; readonly error: Error }
 > {
-  const run: EnableCascadeRun = { rows: [], materialized: new Set() };
+  const run: EnableCascadeRun = { rows: [], materialized: new Set(), hydratable: [] };
   const phases: Phase<EnableCascadeRun>[] = [];
   for (const member of members) {
     if (member.disposition !== "re-enabled") {
@@ -794,7 +819,7 @@ async function runEnableCascadeMembers(
     return { ok: false, error: result.error };
   }
 
-  return { ok: true, rows: run.rows, wrote: phases.length > 0 };
+  return { ok: true, rows: run.rows, wrote: phases.length > 0, hydratable: run.hydratable };
 }
 
 /**
@@ -869,6 +894,7 @@ type EnableCascadeStepResult =
       readonly kind: "ran";
       readonly rows: readonly EnableCascadeMemberRow[];
       readonly needsSave: boolean;
+      readonly hydratable: readonly EnableCascadeHydratableMember[];
     };
 
 /**
@@ -918,7 +944,12 @@ async function runEnableCascadeStep(args: {
     };
   }
 
-  return { kind: "ran", rows: materialized.rows, needsSave: materialized.wrote };
+  return {
+    kind: "ran",
+    rows: materialized.rows,
+    needsSave: materialized.wrote,
+    hydratable: materialized.hydratable,
+  };
 }
 
 /** Either a terminal outcome to return immediately, or the branch's own outcome to continue post-processing. */
@@ -1268,6 +1299,53 @@ async function addCachedHooksAfterSave(
 }
 
 /**
+ * WR-02: publish every re-enabled cascade member's hooks config into the
+ * routing cache after state and config are durable, mirroring
+ * `install-flow.ts::hydrateInstalledHooks` for every install cascade member.
+ * A member re-enabled through `buildEnableCascadeMemberPhase` has its
+ * `hooks.json` on disk and no routing entry until the next `/reload`
+ * otherwise -- the enable cascade is the one cascade whose re-enabled
+ * members did not already reach this. Every mutation is non-fatal
+ * (state.json already records the enable as successful), so a throw routes
+ * through `hookDebugLog` rather than surfacing as `(failed)`.
+ */
+async function hydrateReEnabledMemberHooks(
+  hooksRouting: EnableDisableHooksRouting,
+  opts: EnableDisablePluginOptions,
+  scope: Scope,
+  members: readonly EnableCascadeHydratableMember[],
+): Promise<void> {
+  const withHooks = members.filter((member) => member.hooksConfigPath !== undefined);
+  if (withHooks.length === 0) {
+    return;
+  }
+
+  for (const member of withHooks) {
+    try {
+      await hooksRouting.readAndCachePluginHooks({
+        cwd: opts.cwd,
+        hooksJsonPath: path.join(member.pluginRoot, member.hooksConfigPath ?? ""),
+        logPrefix: "enable",
+        marketplace: member.marketplace,
+        plugin: member.name,
+        resolvedSource: asAbsolutePluginRoot(member.pluginRoot),
+        scope,
+      });
+    } catch (cacheErr) {
+      hookDebugLog(
+        `enable: post-save cache/routing mutation failed for ${member.key}: ${errorMessage(cacheErr)}`,
+      );
+    }
+  }
+
+  try {
+    hooksRouting.rebuildRoutingTables();
+  } catch (cacheErr) {
+    hookDebugLog(`enable: post-save routing rebuild failed: ${errorMessage(cacheErr)}`);
+  }
+}
+
+/**
  * The REAL state-record shape (the exact type
  * `cascadeUnstagePlugin` requires), aliased for readability. No local
  * structural mirror -- a schema field rename surfaces as a compile error in
@@ -1589,12 +1667,14 @@ async function setPluginEnabledWithTransaction(
 
         let cascadeNeedsSave = false;
         let reEnabledMemberKeys: readonly string[] = [];
+        let reEnabledHydratable: readonly EnableCascadeHydratableMember[] = [];
         if (cascadeStep.kind === "ran") {
           enableCascadeRows = cascadeStep.rows;
           cascadeNeedsSave = cascadeStep.needsSave;
           reEnabledMemberKeys = cascadeStep.rows
             .filter((row) => row.status === "installed")
             .map((row) => row.name);
+          reEnabledHydratable = cascadeStep.hydratable;
         }
 
         // EDEP-02: refuse a disable while an installed and ENABLED plugin in
@@ -1637,6 +1717,7 @@ async function setPluginEnabledWithTransaction(
               reEnabledMemberKeys,
             );
             await tx.save();
+            await hydrateReEnabledMemberHooks(hooksRouting, opts, scope, reEnabledHydratable);
           }
 
           return idempotentOutcome;
@@ -1685,6 +1766,7 @@ async function setPluginEnabledWithTransaction(
 
         await tx.save();
         await addCachedHooksAfterSave(hooksRouting, opts, scope, branchOutcome);
+        await hydrateReEnabledMemberHooks(hooksRouting, opts, scope, reEnabledHydratable);
         dropCachedHooksAfterSave(hooksRouting, opts, scope, removeRoutesAfterSave, "", true);
 
         return branchOutcome;

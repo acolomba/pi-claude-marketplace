@@ -5095,6 +5095,48 @@ test("EDEP-01: a member's undo tolerates the record vanishing from the snapshot 
   });
 });
 
+test("WR-02: a re-enabled member's hooks are hydrated into the routing cache with no /reload", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    await mkdir(path.join(mpRoot, "plugins", "b", "hooks"), { recursive: true });
+    await writeFile(
+      path.join(mpRoot, "plugins", "b", "hooks", "hooks.json"),
+      JSON.stringify({
+        PreToolUse: [{ hooks: [{ command: "echo b-hook", type: "command" }], matcher: "" }],
+      }),
+    );
+    const runtime = createHooksRuntime();
+    const hooksRouting = createHooksRouting(runtime, { readHooksJson });
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      REAL_ENABLE_DISABLE_TRANSACTION,
+      hooksRouting,
+    );
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert: the route is live with no /reload, proving the member's
+    // hooks.json reached the routing cache during THIS command.
+    assert.deepStrictEqual(
+      runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
+      ["echo b-hook"],
+    );
+  });
+});
+
 test("EDEP-01: a member's undo folds a partial unstage failure into the record it puts back to disabled", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
