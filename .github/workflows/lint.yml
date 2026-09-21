@@ -52,7 +52,7 @@ jobs:
           persist-credentials: false
 
       - name: Run fallow audit
-        uses: fallow-rs/fallow@30167b42257ded3bef683f6c91b4aa4017a1ff59 # v3.25.0
+        uses: fallow-rs/fallow@adff2c9f20fe769e2e093b2e99ee09723f6310bd # v3.27.0
         with:
           command: audit
           format: github-annotations

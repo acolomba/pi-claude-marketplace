@@ -7,6 +7,7 @@
   - Only `.js` files are workflow scripts, as in Claude Code. The `workflows` manifest field can name a single `.js` file as well as a directory.
   - A skill that names a sibling workflow as `plugin:workflow` gets the installed name in its staged copy, the same way it already does for a sibling skill.
   - The extension now depends on `acorn` to read the metadata that a workflow script declares.
+- Internal: upgraded fallow to 3.27, promoted its warn-default dependency and suppression rules to errors, moved the stdio ban into a rule pack, and wired its agent surfaces through `scripts/init.sh`. (#204)
 - Every `/claude:plugin` verb now rejects an unknown flag or an extra argument before it does any work. (#202)
   - `--local` is accepted only by the verbs that write configuration. Marketplace `info`, `list`, and `update` read both configuration files and write neither, so they now reject it.
   - Agent names now keep the complete source name. Update and reinstall migrate agents that an earlier version named with a shortened form.

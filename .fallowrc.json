@@ -1,5 +1,7 @@
 {
   "entry": ["extensions/pi-claude-marketplace/index.ts"],
+  "rulePacks": ["rule-packs/architecture.json"],
+  "ignorePatterns": [".pi/**", ".planning/**"],
   "production": {
     "deadCode": true,
     "health": false,
@@ -143,67 +145,7 @@
         "from": "shared",
         "allow": ["platform"]
       }
-    ],
-    "calls": {
-      "forbidden": [
-        {
-          "from": "entry",
-          "callee": ["process.stdout.*", "process.stderr.*"]
-        },
-        {
-          "from": "edge",
-          "callee": ["process.stdout.*", "process.stderr.*"]
-        },
-        {
-          "from": "orchestrators",
-          "callee": ["process.stdout.*", "process.stderr.*"]
-        },
-        {
-          "from": "bridges-agents",
-          "callee": ["process.stdout.*", "process.stderr.*"]
-        },
-        {
-          "from": "bridges-commands",
-          "callee": ["process.stdout.*", "process.stderr.*"]
-        },
-        {
-          "from": "bridges-mcp",
-          "callee": ["process.stdout.*", "process.stderr.*"]
-        },
-        {
-          "from": "bridges-skills",
-          "callee": ["process.stdout.*", "process.stderr.*"]
-        },
-        {
-          "from": "bridges-hooks",
-          "callee": ["process.stdout.*", "process.stderr.*"]
-        },
-        {
-          "from": "bridges-workflows",
-          "callee": ["process.stdout.*", "process.stderr.*"]
-        },
-        {
-          "from": "domain",
-          "callee": ["process.stdout.*", "process.stderr.*"]
-        },
-        {
-          "from": "transaction",
-          "callee": ["process.stdout.*", "process.stderr.*"]
-        },
-        {
-          "from": "persistence",
-          "callee": ["process.stdout.*", "process.stderr.*"]
-        },
-        {
-          "from": "platform",
-          "callee": ["process.stdout.*", "process.stderr.*"]
-        },
-        {
-          "from": "shared",
-          "callee": ["process.stdout.*", "process.stderr.*"]
-        }
-      ]
-    }
+    ]
   },
   "duplicates": {
     "ignoredClones": ["dup:cc950b18:2", "dup:6d8c002d:2"],
@@ -211,6 +153,14 @@
   },
   "includeEntryExports": true,
   "rules": {
-    "private-type-leaks": "error"
+    "private-type-leaks": "error",
+    "unused-dev-dependencies": "error",
+    "unused-optional-dependencies": "error",
+    "type-only-dependencies": "error",
+    "test-only-dependencies": "error",
+    "dev-dependencies-in-production": "error",
+    "stale-suppressions": "error",
+    "require-suppression-reason": "error",
+    "policy-violation": "error"
   }
 }
