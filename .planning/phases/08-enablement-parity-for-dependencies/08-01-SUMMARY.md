@@ -268,3 +268,10 @@ None - no external service configuration required.
 
 *Phase: 08-enablement-parity-for-dependencies*
 *Completed: 2026-09-21*
+
+## Self-Check: PASSED
+
+- Created/modified files verified present on disk (`enable-disable.ts`, `enable-disable.messaging.ts`, `notification-types.ts`, `notify-reasons.ts`, `docs/output-catalog.md`, `docs/plugin-enablement.md`, all listed test files, `scripts/check-unused-type-members.contracts.json`).
+- Commit hashes verified present in `git log --oneline --all`: `40bcedd7`, `40018978`, `64f3a5c2`, `ed2bc82c`.
+- Acceptance criteria re-run: `node --test` over the full verification block (211 cases), `npm run typecheck`, `npx eslint`, `npx fallow dead-code` + `fallow health`, `npm run lint:type-members`, and `npm run test:coverage:direct:commit` (`enable-disable.ts` 100% lines/branches/functions when its own paired test runs alone) all pass on the final committed tree.
+- `REASONS.length === 60` and `REASONS.at(-1) === "dependency enabled"` confirmed via `tests/architecture/notify-closed-set-locks.test.ts` and `tests/architecture/compat-01-no-expansion.test.ts`.
