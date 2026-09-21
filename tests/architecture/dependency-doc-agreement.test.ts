@@ -239,10 +239,50 @@ test("RESV-06 the failure table names each reason exactly once", async () => {
   );
 });
 
-test("RESV-06 the skip section names the reason a left-alone dependency's row carries", async () => {
+test("EDEP-03 the already-installed section names the reasons a re-enabled dependency's row carries", async () => {
+  // arrange: a member already installed and DISABLED is re-materialized
+  // through its own record and renders an `installed` row, not a skip --
+  // driven through the REAL composer, never as a literal in this test body.
+  const rows = composeCascadeMemberRows({
+    scope: "user",
+    rootKey: ROOT_KEY,
+    rootRow: ROOT_ROW,
+    installed: [
+      {
+        key: DEPENDENCY_KEY,
+        version: "1.0.0",
+        declaresAgents: false,
+        declaresMcp: false,
+        fellBackToCurrentCopy: false,
+        reEnabledFromRecord: true,
+      },
+    ],
+    alreadyInstalled: [],
+    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+  });
+  const reEnabled = rows.find(
+    (row): row is Extract<CascadeMsg, { readonly status: "installed" }> =>
+      row.status === "installed" && row.name === DEPENDENCY_KEY,
+  );
+  assert.ok(reEnabled !== undefined, "the re-enabled member still renders an installed row");
+
+  // act
+  const section = await readDocSection("## What happens to a dependency you already installed");
+
+  // assert
+  assert.deepStrictEqual(
+    (reEnabled.reasons ?? []).filter((reason) => !section.includes(reason)),
+    [],
+    `${DOC_REL}: the re-enabled dependency's row carries reasons the section never names`,
+  );
+});
+
+test("RESV-06 the already-installed section still names the reason a left-alone dependency's row carries", async () => {
   // arrange: the skip is not a failure, so it is absent from the failure table
   // by design -- which leaves its token undocumented unless the section that
-  // describes the skip names it.
+  // describes the skip names it. The section still describes this case (the
+  // recorded version is checked against the constraint either way), so the
+  // gate keeps this half too.
   const rows = composeCascadeMemberRows({
     scope: "user",
     rootKey: ROOT_KEY,

@@ -3094,24 +3094,50 @@ Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
   renderer carve-out removed).
 -->
 
-## ENBL-DEP-01: a cascade enables a disabled, already-installed dependency
+## ~~ENBL-DEP-01: a cascade enables a disabled, already-installed dependency~~ -- CLOSED
 
-Surfaced by the v1.20 Phase 4 code review (2026-09-16). Operator rule stated
-during that review: a plugin that is asked for -- by name, or by another
-plugin's dependency declaration -- becomes enabled; nothing needs to remember
-that it happened. Phase 4 applied the by-name half (`install <dep>` on a
-`"dependency"` record promotes AND enables it). The cascade half is still the
-Phase 3 policy: RESV-05 checks an already-installed, disabled dependency and
-leaves it as it was, reporting `{already installed, dependency disabled}` at
-`warning` (`docs/plugin-enablement.md` § "Where the two differ"). Upstream
-Claude Code writes `enabled: true` for a required dependency at install time.
+**CLOSED 2026-09-21** by v1.20 Phase 8 (EDEP-01, EDEP-03), plans 08-01 and
+08-03. Both halves of the operator rule now hold: a plugin asked for by
+name (Phase 4) OR by another plugin's dependency declaration (this phase)
+becomes enabled, with nothing left for the user to remember to do.
 
-Scope when picked up: the cascade's RESV-05 arm enables the disabled member
-through the existing enable branch instead of skipping it; retire the
-`dependency disabled` skip row (a catalog removal: fixture, both contract
-constants, length lock, both enumeration pins); rewrite the
-`plugin-enablement.md` divergence paragraph; a decision record superseding
-the Phase 3 policy.
+Walking the "Scope when picked up" list against what actually closed it:
+
+- **"the cascade's RESV-05 arm enables the disabled member through the
+  existing enable branch instead of skipping it"** -- closed on BOTH call
+  sites. 08-01's `enable <plugin>` resolves its own declared dependency
+  closure and re-materializes every installed-and-disabled member through
+  its record (`orchestrators/plugin/enable-disable.ts::buildEnableCascadeMemberPhase`).
+  08-03's `install <plugin>` cascade does the same for an already-installed,
+  disabled member it meets mid-closure
+  (`orchestrators/plugin/install-cascade.ts::buildReEnableMemberPhase`,
+  `partitionAlreadyInstalled`) -- RESV-05's general (enabled) case is
+  otherwise untouched.
+- **"retire the `dependency disabled` skip row (a catalog removal: fixture,
+  both contract constants, length lock, both enumeration pins)"** -- closed
+  by 08-03: the token is gone from `REASONS`, `notify-reasons.ts`'s
+  `CommandPrivateReason`, the closed-set length lock, and both enumeration
+  pins (`compat-01-no-expansion.test.ts`, `notification-types.test.ts`);
+  `docs/output-catalog.md`'s `dependency-cascade-disabled-skip` state is
+  replaced by `install-cascade-dependency-enabled`, and its fixture swapped
+  to match.
+- **"rewrite the `plugin-enablement.md` divergence paragraph"** -- closed by
+  08-03: the "A plugin required by another active plugin is not enabled on
+  its behalf" divergence is gone from `docs/plugin-enablement.md`; the new
+  "A dependency's own enablement" section states the current behavior for
+  both call sites, and `docs/dependency-resolution.md`'s already-installed
+  section states the same for install's side, gated by
+  `tests/architecture/dependency-doc-agreement.test.ts` driving the real
+  composer against both.
+- **"a decision record superseding the Phase 3 policy"** -- D-08-02 (the
+  `{dependency enabled}` token) and this phase's `<threat_model>` entries
+  (T-08-10..13) are that record; RESV-05's own module comment in
+  `install-cascade.ts` is updated in place to state the narrowed invariant.
+
+`DEPS-STATUS-01` stays open. It is a different report surfaced by the same
+review, about a plugin's OWN status reflecting a partially-supported
+dependency -- not about enablement, and not upstream parity. Nothing in
+this closure pulls it in.
 
 ## DEPS-STATUS-01: dependency status propagates to the dependent
 

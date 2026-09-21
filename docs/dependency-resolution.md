@@ -109,11 +109,7 @@ The already-installed check does not depend on any of this. It reads the version
 
 This extension does not install a dependency again when the target scope already has it. It still checks the recorded version against the effective constraint. A recorded version that does not satisfy the constraint is a conflict, and the install fails.
 
-A disabled plugin still counts as installed. Its record and its reserved names stay, but its files are off disk. So this extension does not install it again, and it does not enable it for you either. Enablement is always your decision. The install goes ahead and the dependency's row says `{already installed, dependency disabled}`, which raises the message to a warning. To make the dependency work, enable it yourself.
-
-```text
-/claude:plugin enable <plugin>@<marketplace>
-```
+A disabled plugin still counts as installed. Its record and its reserved names stay, but its files are off disk. So this extension does not install it again -- but it no longer leaves it inert either. The install turns it back on through that same record: its files return to disk, and the dependency's row says `{already installed, dependency enabled}`. The desired-state configuration is not touched by this -- no config file gains a key for the dependency; the write reaches the installation record alone.
 
 Some plugins carry no real semantic version. This extension then records a content hash (`hash-` and 12 hexadecimal characters) or a git object name (`sha-` and 12 hexadecimal characters). Such a value goes through the same normalization as any other recorded version, with no special case. A hexadecimal string can yield a misleading version number this way. This behavior matches Claude Code and is a deliberate choice (D-03-04).
 
@@ -253,6 +249,6 @@ Nothing is left half-installed. After you fix the cause, run the same command ag
 
 ## Further reading
 
-- [`docs/plugin-enablement.md`](plugin-enablement.md) -- what decides whether an installed plugin is enabled, including why a plugin required by another one is not enabled on its behalf.
+- [`docs/plugin-enablement.md`](plugin-enablement.md) -- what decides whether an installed plugin is enabled, including how a plugin required by another one is turned on through its own record.
 - [`README.md` -- Configuration files](../README.md#configuration-files) -- the user-facing introduction to `claude-plugins.json` and `claude-plugins.local.json`, the files that name the plugins you asked for.
 - [Claude Code plugins reference](https://code.claude.com/docs/en/plugins-reference) -- the upstream field reference for `dependencies`.
