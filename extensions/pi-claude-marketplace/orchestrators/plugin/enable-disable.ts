@@ -810,6 +810,57 @@ function assertFailedPhasesHasError(
   // Evidence-backed type narrowing only; the invariant is established by the callee.
 }
 
+/**
+ * CR-01: a re-enabled member whose key the target-scope config ALREADY
+ * declares with `enabled: false` is the same divergence D-04-07 corrects for
+ * the root. The disable verb writes exactly that entry, and EDEP-02 mandates
+ * `disable A` (the dependent) then `disable B` (the dependency), so both
+ * writes land; leaving `B`'s entry at `enabled: false` after `enable A`
+ * re-enables `B` through its record hands the reload the row asks for a
+ * `disable B` to plan (`plan.ts::classifyDeclaredPlugin` reads the config
+ * truth). Only an EXISTING `enabled: false` entry is patched to `true`,
+ * through the same declaring-file selection the root uses
+ * (`selectConfigWriteTarget`) -- a member the config does not mention at all
+ * is left untouched (D-04-02: the config names only what the user asked for
+ * by name). Called only once BOTH the members' ledger AND the root's own
+ * branch have succeeded, alongside the root's own `writeEnabledFlagBack` --
+ * a config write is not undone by `runPhases`, so patching it any earlier
+ * would leave the file changed under a state.json the root's own failure
+ * then leaves unsaved.
+ */
+async function writeReEnabledMemberConfigEntries(
+  transaction: EnableDisableTransaction,
+  opts: EnableDisablePluginOptions,
+  locations: ScopedLocations,
+  state: ExtensionState,
+  reEnabledKeys: readonly string[],
+): Promise<void> {
+  for (const key of reEnabledKeys) {
+    const at = key.indexOf("@");
+    const plugin = key.slice(0, at);
+    const marketplace = key.slice(at + 1);
+    const selection = await transaction.selectConfigWriteTarget({
+      locations,
+      local: opts.local,
+      key,
+    });
+    if (selection.kind !== "selected" || selection.current.plugins?.[key]?.enabled !== false) {
+      continue;
+    }
+
+    await transaction.writeConfigEntries({
+      current: selection.current,
+      sibling: selection.sibling,
+      state,
+      marketplace,
+      plugin,
+      targetConfigPath: selection.targetConfigPath,
+      scopeRoot: locations.scopeRoot,
+      pluginPatch: { enabled: true },
+    });
+  }
+}
+
 /** The EDEP-01 cascade step's outcome, for the transaction closure to act on. */
 type EnableCascadeStepResult =
   | { readonly kind: "skipped" }
@@ -1537,9 +1588,13 @@ async function setPluginEnabledWithTransaction(
         }
 
         let cascadeNeedsSave = false;
+        let reEnabledMemberKeys: readonly string[] = [];
         if (cascadeStep.kind === "ran") {
           enableCascadeRows = cascadeStep.rows;
           cascadeNeedsSave = cascadeStep.needsSave;
+          reEnabledMemberKeys = cascadeStep.rows
+            .filter((row) => row.status === "installed")
+            .map((row) => row.name);
         }
 
         // EDEP-02: refuse a disable while an installed and ENABLED plugin in
@@ -1571,7 +1626,16 @@ async function setPluginEnabledWithTransaction(
             // EDEP-01: the root is a no-op, but the cascade materialized real
             // state for at least one dependency -- persist it (NFR-3): a
             // materialized member's artifacts must not survive on disk with
-            // no matching state.json entry.
+            // no matching state.json entry. `reEnabledMemberKeys` is only
+            // ever non-empty here for a standalone call: `runEnableCascadeStep`
+            // skips the cascade entirely for `orchestrated`.
+            await writeReEnabledMemberConfigEntries(
+              transaction,
+              opts,
+              locations,
+              state,
+              reEnabledMemberKeys,
+            );
             await tx.save();
           }
 
@@ -1610,6 +1674,13 @@ async function setPluginEnabledWithTransaction(
         // only standalone commands author declarations.
         if (!orchestrated) {
           await writeEnabledFlagBack(transaction, write, selection, state);
+          await writeReEnabledMemberConfigEntries(
+            transaction,
+            opts,
+            locations,
+            state,
+            reEnabledMemberKeys,
+          );
         }
 
         await tx.save();

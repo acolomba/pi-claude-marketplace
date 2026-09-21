@@ -34,6 +34,8 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { createApplyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import { planReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
+import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -4759,6 +4761,76 @@ test("EDEP-01: row order follows the canonical comparator even when the root is 
   });
 });
 
+test("CR-01: a re-enabled member's config entry saying enabled: false is overwritten to true", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { configPath } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    // The exact hazard: `disable b` (after `disable a`, per EDEP-02's mandated
+    // order) writes `{ enabled: false }` for `b` into the config. `enable a`
+    // must overwrite it, not leave it for the next reload to plan a disable.
+    await mkdir(path.dirname(configPath), { recursive: true });
+    await writeFile(
+      configPath,
+      JSON.stringify({ schemaVersion: 1, plugins: { "b@official": { enabled: false } } }),
+      "utf8",
+    );
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    const stateAfter = await loadState(locationsFor("user", cwd).extensionRoot);
+    assert.equal(stateAfter.marketplaces.official?.plugins.a?.enabled, true);
+    assert.equal(stateAfter.marketplaces.official?.plugins.b?.enabled, true);
+    const cfg = (await readConfig(configPath)) as { plugins?: Record<string, unknown> };
+    assert.deepEqual(cfg.plugins?.["b@official"], { enabled: true });
+    const merged = (await loadMergedScopeConfig(locationsFor("user", cwd))).merged;
+    assert.deepEqual(planReconcile(merged, stateAfter, "user"), emptyReconcilePlan("user"));
+  });
+});
+
+test("CR-01: a member with NO config entry stays untouched", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath, configPath } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert: the root "a" is what the user named, so it gets its own
+    // config entry (pre-existing D-04-07 promotion behavior) -- but D-04-02
+    // still holds for the dependency "b", which the config never mentions.
+    const cfg = (await readConfig(configPath)) as { plugins?: Record<string, unknown> };
+    assert.deepEqual(cfg.plugins, { "a@official": { enabled: true } });
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins.b!.enabled, true);
+  });
+});
+
 test("EDEP-01: an idempotent root still enables a disabled dependency and reports both rows", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
@@ -4803,6 +4875,46 @@ test("EDEP-01: an idempotent root still enables a disabled dependency and report
     );
     const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
     assert.equal(state.marketplaces.official!.plugins.b!.enabled, true);
+  });
+});
+
+test("CR-01: a re-enabled member's config entry is overwritten even when the root is idempotent", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { configPath } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: true },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    await mkdir(path.dirname(configPath), { recursive: true });
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        plugins: { "a@official": { enabled: true }, "b@official": { enabled: false } },
+      }),
+      "utf8",
+    );
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert: the root stays idempotent, but `b`'s config entry is still
+    // overwritten -- CR-01 does not depend on the root itself changing state.
+    const stateAfter = await loadState(locationsFor("user", cwd).extensionRoot);
+    assert.equal(stateAfter.marketplaces.official?.plugins.b?.enabled, true);
+    const cfg = (await readConfig(configPath)) as { plugins?: Record<string, unknown> };
+    assert.deepEqual(cfg.plugins?.["b@official"], { enabled: true });
+    const merged = (await loadMergedScopeConfig(locationsFor("user", cwd))).merged;
+    assert.deepEqual(planReconcile(merged, stateAfter, "user"), emptyReconcilePlan("user"));
   });
 });
 
