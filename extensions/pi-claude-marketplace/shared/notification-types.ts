@@ -679,9 +679,8 @@ export interface PluginInfoComponentsResolved {
     readonly skills?: readonly string[];
     /**
      * WFLW-04: carries the generated `<plugin>:<name>` of every ADMITTED
-     * script -- both the named arm and the stem-fallback arm, because an
-     * envelope is written for both and listing only the named arm would make
-     * this surface disagree with what install puts on disk.
+     * script -- the one arm an envelope is written for, so this surface
+     * agrees with what install puts on disk.
      */
     readonly workflows?: readonly string[];
   };

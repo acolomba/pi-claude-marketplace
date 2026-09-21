@@ -55,6 +55,7 @@ import {
 import { loadMarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
@@ -5336,8 +5337,8 @@ test("D-141-03: an agents hygiene warning rides notes in orchestrated mode and n
 //
 // The families below are the `WorkflowOutcomeSite` union
 // (`bridges/workflows/discover.ts`) measured member by member, not a shorter
-// list of the interesting ones: `gate`, `skipped`, `refused`,
-// `stem-fallback`, `read` and `inspect`. Every one of them rides the single
+// list of the interesting ones: `gate`, `skipped`, `refused`, `read`,
+// `oversize` and `inspect`. Every one of them rides the single
 // `handles.workflows.result.warnings` array, so a verb that drops that array
 // drops all six at once.
 //
@@ -5363,11 +5364,13 @@ const WORKFLOW_FAMILY_SCRIPTS: readonly { readonly sourceName: string; readonly 
     sourceName: "cc-roll",
     body: 'export const meta = { name: "roll", description: "rolls" };\nMath.random();\n',
   },
-  // stem-fallback: a `meta` with no name at all, so no command name is readable.
+  // skipped, differently: a `meta` with no name at all, so no command name is readable.
   {
-    sourceName: "dd-stem",
+    sourceName: "dd-nameless",
     body: 'export const meta = { description: "a helper with no name" };\n',
   },
+  // oversize: one byte past the cap Claude Code's loader imposes.
+  { sourceName: "ee-big", body: "/".repeat(WORKFLOW_SCRIPT_MAX_BYTES + 1) },
   // ff-fine earns no warning.
   { sourceName: "ff-fine", body: 'export const meta = { name: "fine", description: "fine" };\n' },
 ];
@@ -5391,8 +5394,9 @@ const EXPECTED_FAMILY_LINES: readonly string[] = [
   'workflow script "aa-gate.js" in "workflows" was installed but the engine will refuse to load it: the engine refuses at its check 9 -- `meta.description` must be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array of objects each carrying a string `title`) must match those shapes wherever they are declared',
   'workflow script "bb-helper.js" in "workflows" was not installed: bb-helper.js declares no `meta`, so there is nothing to install',
   'workflow script "cc-roll.js" in "workflows" was refused: cc-roll.js calls `Math.random`, which the workflow engine refuses as nondeterministic',
-  'workflow script "dd-stem.js" in "workflows" was installed but will not run: the engine loads a command only from a literal `meta.name` with a non-empty `meta.description`, and this script declares no readable name',
+  'workflow script "dd-nameless.js" in "workflows" was not installed: dd-nameless.js declares no string-literal `meta.name`, so there is no command to install',
   'workflow script "ee-bad.js" in "workflows" could not be read and was skipped: the file is not valid UTF-8, so its bytes cannot be copied verbatim',
+  `workflow script "ee-big.js" in "workflows" was not installed: the file is ${(WORKFLOW_SCRIPT_MAX_BYTES + 1).toString()} bytes and Claude Code loads a plugin workflow script only up to ${WORKFLOW_SCRIPT_MAX_BYTES.toString()} bytes`,
 ];
 
 /**
@@ -5456,13 +5460,12 @@ test("WGATE-01 / D-115-05: a standalone reinstall renders every workflow discove
       // Then the whole block, byte for byte -- the header, the blank-line
       // separator and the line order, none of which the filter above sees.
       //
-      // The header counts the lines and claims no disposal, because two of the
-      // five components below it WERE installed -- one that the host engine
-      // will refuse to load, and one that runs under a name it does not
-      // declare. It is shared by install, update and reinstall.
+      // The header counts the lines and claims no disposal, because one of the
+      // six components below it WAS installed -- the one the host engine will
+      // refuse to load. It is shared by install, update and reinstall.
       assert.equal(
         diagnostic.message,
-        `Plugin "hello" reinstalled; 5 declared components have notes.\n\n${EXPECTED_FAMILY_LINES.join("\n")}`,
+        `Plugin "hello" reinstalled; 6 declared components have notes.\n\n${EXPECTED_FAMILY_LINES.join("\n")}`,
       );
       // WGATE-03: the row itself states no gate. The channel is a second
       // notification precisely so the row is free of it.

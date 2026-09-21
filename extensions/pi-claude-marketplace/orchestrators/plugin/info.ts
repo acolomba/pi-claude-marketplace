@@ -788,10 +788,9 @@ function advisoryFields(notes: readonly string[]): { notes?: readonly string[] }
  * yielding the generated `<plugin>:<name>` of every ADMITTED script, sorted,
  * beside the preview-tense advisory for every script that earned one.
  *
- * BOTH admitted arms are listed. `stem-fallback` is admitted -- an envelope is
- * written for it -- so omitting it would make this surface disagree with what
- * install puts on disk. The caveat that the engine will not load it rides its
- * own discovery warning and is not repeated on the name.
+ * Only the `named` arm is listed, because it is the only arm an envelope is
+ * written for, so this surface agrees with what install puts on disk. A gate
+ * caveat rides its own discovery warning and is not repeated on the name.
  *
  * The names are taken off the verdict rather than recomposed: the generated
  * name has one composer (`domain/workflow-script.ts`), which owns the
@@ -825,7 +824,7 @@ async function previewWorkflows(
     names: sortComponentNames(
       discovered
         .map((record) => record.verdict)
-        .filter((verdict) => verdict.outcome === "named" || verdict.outcome === "stem-fallback")
+        .filter((verdict) => verdict.outcome === "named")
         .map((verdict) => verdict.generatedName),
     ),
     warnings: warnings.map((warning) => redactAbsolutePaths(warning)),

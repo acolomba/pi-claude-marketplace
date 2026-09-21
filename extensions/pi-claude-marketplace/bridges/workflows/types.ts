@@ -71,16 +71,17 @@ export type WorkflowOutcomeTense = "install" | "preview";
  * `read` and `inspect` are separate members because they are separate CALL
  * SITES one step apart on the same file: `inspect` is the `lstat` that decides
  * whether the entry is a plain script, and nothing has been read when it fails.
- * `skipped`, `refused` and `stem-fallback` are verdict arms and carry the
- * decision layer's own reason verbatim.
+ * `oversize` is answered by that same `lstat` but is a skip, not a failure: the
+ * entry is a plain script that Claude Code would not load. `skipped` and
+ * `refused` are verdict arms and carry the decision layer's own reason
+ * verbatim.
  *
  * WGATE-01: `gate` is the one site that states an ADMITTED fact with no defect
  * of this bridge's own behind it -- the envelope IS written and the command IS
  * registered, and the caveat is the host engine's own refusal to load the script
  * at invocation.
  */
-export type WorkflowOutcomeSite =
-  "skipped" | "refused" | "stem-fallback" | "read" | "inspect" | "gate";
+export type WorkflowOutcomeSite = "skipped" | "refused" | "read" | "inspect" | "oversize" | "gate";
 
 /** Return shape: `{ discovered, warnings }`. */
 export interface DiscoverPluginWorkflowsResult {

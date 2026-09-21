@@ -68,13 +68,13 @@ import type { AdmittedWorkflow } from "../../domain/workflow-script.ts";
 
 const STAGING_LABEL = "workflows staging directory";
 
-/** The two verdict arms that carry a `generatedName`, and so the two that stage. */
+/** The one verdict arm that carries a `generatedName`, and so the one that stages. */
 function admittedVerdict(
   discovered: DiscoveredWorkflow,
 ): (AdmittedWorkflow & { readonly source: string }) | undefined {
   const { verdict } = discovered;
 
-  if (verdict.outcome !== "named" && verdict.outcome !== "stem-fallback") {
+  if (verdict.outcome !== "named") {
     return undefined;
   }
 

@@ -29,6 +29,7 @@ import {
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
@@ -10737,7 +10738,7 @@ test("WGATE-01 / WGATE-03: installing the same gate-warned plugin twice warns on
 //
 // The families are the `WorkflowOutcomeSite` union
 // (`bridges/workflows/discover.ts`) measured member by member -- `gate`,
-// `skipped`, `refused`, `stem-fallback`, `read` and `inspect` -- and all six
+// `skipped`, `refused`, `read`, `oversize` and `inspect` -- and all six
 // ride the one array the workflows prepare returns. `inspect` is the only one
 // that cannot share a directory with the rest: it fires when `lstat` fails on
 // an entry `readdir` returned, which needs the directory's execute bit cleared,
@@ -10752,9 +10753,11 @@ const WORKFLOW_DISCOVERY_FAMILY_SCRIPTS: readonly {
   { sourceName: "alpha-gate", body: WORKFLOW_GATE_SCRIPT },
   { sourceName: "beta-helper", body: "export function helper() {\n  return 1;\n}\n" },
   {
-    sourceName: "delta-stem",
+    sourceName: "delta-nameless",
     body: 'export const meta = { description: "a helper with no name" };\n',
   },
+  // oversize: one byte past the cap Claude Code's loader imposes.
+  { sourceName: "eta-big", body: "/".repeat(WORKFLOW_SCRIPT_MAX_BYTES + 1) },
   {
     sourceName: "gamma-roll",
     body: 'export const meta = { name: "roll", description: "rolls" };\nMath.random();\n',
@@ -10768,8 +10771,9 @@ const WORKFLOW_DISCOVERY_FAMILY_SCRIPTS: readonly {
 const EXPECTED_DISCOVERY_FAMILY_LINES: readonly string[] = [
   'workflow script "alpha-gate.js" in "workflows" was installed but the engine will refuse to load it: the engine refuses at its check 9 -- `meta.description` must be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array of objects each carrying a string `title`) must match those shapes wherever they are declared',
   'workflow script "beta-helper.js" in "workflows" was not installed: beta-helper.js declares no `meta`, so there is nothing to install',
-  'workflow script "delta-stem.js" in "workflows" was installed but will not run: the engine loads a command only from a literal `meta.name` with a non-empty `meta.description`, and this script declares no readable name',
+  'workflow script "delta-nameless.js" in "workflows" was not installed: delta-nameless.js declares no string-literal `meta.name`, so there is no command to install',
   'workflow script "epsilon-bad.js" in "workflows" could not be read and was skipped: the file is not valid UTF-8, so its bytes cannot be copied verbatim',
+  `workflow script "eta-big.js" in "workflows" was not installed: the file is ${(WORKFLOW_SCRIPT_MAX_BYTES + 1).toString()} bytes and Claude Code loads a plugin workflow script only up to ${WORKFLOW_SCRIPT_MAX_BYTES.toString()} bytes`,
   'workflow script "gamma-roll.js" in "workflows" was refused: gamma-roll.js calls `Math.random`, which the workflow engine refuses as nondeterministic',
 ];
 
@@ -10813,13 +10817,12 @@ test("WGATE-01 / D-115-05: a standalone install renders every workflow discovery
       // Then the whole block, byte for byte -- the header, the blank-line
       // separator and the line order, none of which the filter above sees.
       //
-      // The header counts the lines and claims no disposal, because two of the
-      // five components below it WERE installed -- one that the host engine
-      // will refuse to load, and one that runs under a name it does not
-      // declare. It is shared by install, update and reinstall.
+      // The header counts the lines and claims no disposal, because one of the
+      // six components below it WAS installed -- the one the host engine will
+      // refuse to load. It is shared by install, update and reinstall.
       assert.equal(
         diagnostic.message,
-        `Plugin "hello" installed; 5 declared components have notes.\n\n${EXPECTED_DISCOVERY_FAMILY_LINES.join("\n")}`,
+        `Plugin "hello" installed; 6 declared components have notes.\n\n${EXPECTED_DISCOVERY_FAMILY_LINES.join("\n")}`,
       );
       // NFR-9: the temporary marketplace root never reaches the user.
       assert.ok(!diagnostic.message.includes(cwd), diagnostic.message);

@@ -2,10 +2,16 @@
 //
 // Bridge primitive: enumerate flat script files under each declared
 // `componentPaths.workflows` entry (WBRG-02 -- non-recursive, ignore
-// non-scripts), read each one, and hand it to `domain/workflow-script.ts` for
-// a verdict. Returns a deterministic `DiscoveredWorkflow[]` -- every verdict
-// arm, not just the admitted ones -- plus a `warnings[]` channel for WBRG-03
-// soft-fails.
+// non-scripts), or the one script a declared entry names directly, read each
+// one, and hand it to `domain/workflow-script.ts` for a verdict. Returns a
+// deterministic `DiscoveredWorkflow[]` -- every verdict arm, not just the
+// admitted ones -- plus a `warnings[]` channel for WBRG-03 soft-fails.
+//
+// A declared entry may name a directory or a single `.js` file, which is the
+// shape Claude Code's plugin loader accepts: it `stat`s each manifest path and
+// scans a directory or loads a file. Both arms run one candidate through the
+// same per-entry pipeline, so a script declared by path is judged exactly as
+// one found in a directory.
 //
 // The name comes from the script's own `meta.name`, so unlike the other
 // component kinds discovery MUST read each candidate's body. Those bytes are
@@ -31,15 +37,16 @@
 // and renders strings taken out of them, so an uncontained directory is a
 // disclosure of arbitrary file contents rather than a listing of names.
 
-import { lstat, readFile } from "node:fs/promises";
+import fs from "node:fs/promises";
 import path from "node:path";
 
 import {
   admitWorkflowScript,
   forMessage,
-  WORKFLOW_SCRIPT_EXTENSIONS,
+  WORKFLOW_SCRIPT_MAX_BYTES,
+  WORKFLOW_SCRIPT_SUFFIX,
 } from "../../domain/workflow-script.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import { errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
@@ -54,17 +61,27 @@ import type { WorkflowGate, WorkflowVerdict } from "../../domain/workflow-script
 import type { Dirent } from "node:fs";
 
 /**
- * WBRG-02: the suffix test runs against the LOWERCASED entry name, because a
- * case-insensitive filesystem reports `Thing.JS` as stored and the stem rule
- * in `domain/workflow-script.ts` strips its suffix the same way. The filter and
- * the stem rule must admit the same set, or a file the filter admits keeps its
- * suffix inside the command name.
+ * The entry shape both discovery arms feed the per-candidate pipeline: a
+ * `readdir` dirent for the directory arm, and a synthesized one for a declared
+ * file. Only the two members the filter reads are required.
+ */
+type CandidateEntry = Pick<Dirent, "name" | "isFile">;
+
+/**
+ * Whether a candidate is a workflow script this bridge will read, decided in the
+ * order the filter can answer cheapest.
+ *
+ * The suffix test is EXACT -- `.js`, in that case -- because that is the test
+ * Claude Code's loader applies (`name.endsWith(".js")`), and admitting a wider
+ * set would install commands the plugin does not have upstream.
  *
  * Dotfiles, directories, symlinks and non-script suffixes are all excluded by
  * the dirent filter, before the `lstat`, so the scan stays flat and reads
  * nothing it will not decide. The `lstat` re-asks the symlink question against
  * the live filesystem rather than the `readdir` snapshot -- see the module
- * header for why both layers are here.
+ * header for why both layers are here -- and answers the size question from the
+ * same call: an entry above `WORKFLOW_SCRIPT_MAX_BYTES` is a per-file skip
+ * carrying its size, never read.
  *
  * WBRG-03: the `lstat` rides the same per-file soft-fail channel as the
  * `readFile` below it. Both IO calls land on the same file one step apart, so
@@ -73,21 +90,28 @@ import type { Dirent } from "node:fs";
  */
 async function isWorkflowScriptFile(
   dir: string,
-  entry: Dirent,
-): Promise<{ ok: true; admit: boolean } | { ok: false; reason: string }> {
-  const lowered = entry.name.toLowerCase();
-
+  entry: CandidateEntry,
+): Promise<
+  | { ok: true; admit: true }
+  | { ok: true; admit: false; oversize?: number }
+  | { ok: false; reason: string }
+> {
   if (
     entry.name.startsWith(".") ||
     !entry.isFile() ||
-    !WORKFLOW_SCRIPT_EXTENSIONS.some((ext) => lowered.endsWith(ext))
+    !entry.name.endsWith(WORKFLOW_SCRIPT_SUFFIX)
   ) {
     return { ok: true, admit: false };
   }
 
   try {
-    const stat = await lstat(path.join(dir, entry.name));
-    return { ok: true, admit: !stat.isSymbolicLink() };
+    const stats = await fs.lstat(path.join(dir, entry.name));
+    // A symlink is refused silently, as the dirent filter above already did for
+    // the entry `readdir` reported; only a plain file can be oversize.
+    const plain = !stats.isSymbolicLink();
+    const oversize = plain && stats.size > WORKFLOW_SCRIPT_MAX_BYTES;
+
+    return oversize ? { ok: true, admit: false, oversize: stats.size } : { ok: true, admit: plain };
   } catch (err) {
     return { ok: false, reason: errorMessage(err) };
   }
@@ -131,17 +155,16 @@ function softFailWarning(
  * cannot be composed without an entry here AND in the preview table below, so
  * the two tenses cannot drift apart by omission.
  *
- * WGATE-01: the `gate` phrase states the admitted fact BEFORE its caveat, the
- * way `stem-fallback` does, because the envelope is written and the command is
- * registered. A phrase shaped like the three soft-fails would report a disposal
- * that did not happen.
+ * WGATE-01: the `gate` phrase states the admitted fact BEFORE its caveat,
+ * because the envelope is written and the command is registered. A phrase
+ * shaped like the soft-fails would report a disposal that did not happen.
  */
 const INSTALL_OUTCOMES: Record<WorkflowOutcomeSite, string> = {
   skipped: "was not installed",
   refused: "was refused",
-  "stem-fallback": "was installed but will not run",
   read: "could not be read and was skipped",
   inspect: "could not be inspected and was skipped",
+  oversize: "was not installed",
   gate: "was installed but the engine will refuse to load it",
 };
 
@@ -157,9 +180,9 @@ const INSTALL_OUTCOMES: Record<WorkflowOutcomeSite, string> = {
 const PREVIEW_OUTCOMES: Record<WorkflowOutcomeSite, string> = {
   skipped: "will not be installed",
   refused: "will be refused",
-  "stem-fallback": "would be installed but will not run",
   read: "could not be read",
   inspect: "could not be inspected",
+  oversize: "will not be installed",
   gate: "would be installed but the engine will refuse to load it",
 };
 
@@ -223,6 +246,25 @@ function readFailureWarning(
 }
 
 /**
+ * A candidate above `WORKFLOW_SCRIPT_MAX_BYTES`. The reason names both numbers
+ * so the author can see how far over the file is, and attributes the bound to
+ * Claude Code, whose loader is the one that imposes it.
+ */
+function oversizeWarning(
+  fileName: string,
+  workflowsDir: string,
+  size: number,
+  tense: WorkflowOutcomeTense,
+): string {
+  return softFailWarning(
+    fileName,
+    workflowsDir,
+    outcomePhrase(tense, "oversize"),
+    `the file is ${size.toString()} bytes and Claude Code loads a plugin workflow script only up to ${WORKFLOW_SCRIPT_MAX_BYTES.toString()} bytes`,
+  );
+}
+
+/**
  * The key the source-path dedup below compares on, case-folded where the
  * platform's default filesystem is case-insensitive.
  *
@@ -253,7 +295,7 @@ async function readScriptSource(
   let raw: Buffer;
 
   try {
-    raw = await readFile(full);
+    raw = await fs.readFile(full);
   } catch (err) {
     return { ok: false, reason: errorMessage(err) };
   }
@@ -268,37 +310,6 @@ async function readScriptSource(
   }
 
   return { ok: true, source };
-}
-
-/**
- * WVAL-02: the one outcome phrase that states an ADMITTED fact before its
- * caveat. The envelope IS written, so a phrase shaped like the three soft-fails
- * above would report a refusal that did not happen.
- *
- * The reason names the missing NAME and states the description as the OTHER
- * requirement the engine imposes, never as a second observed absence: a
- * stem-fallback verdict carries a description whenever the `meta` object
- * declares one, so claiming it absent would make the row a false statement
- * about the file.
- */
-function unrunnableWarning(
-  fileName: string,
-  workflowsDir: string,
-  tense: WorkflowOutcomeTense,
-  gate: WorkflowGate | undefined,
-): string {
-  return softFailWarning(
-    fileName,
-    workflowsDir,
-    outcomePhrase(tense, "stem-fallback"),
-    "the engine loads a command only from a literal `meta.name` with a non-empty " +
-      "`meta.description`, and this script declares no readable name" +
-      // WGATE-01: ONE LINE PER FILE. A stem-fallback script that also trips a
-      // gate has both facts named inside this one reason, because a second line
-      // would say the same thing about the same file in different words, which
-      // is what makes a warning channel ignorable.
-      (gate === undefined ? "" : `; ${GATE_REASONS[gate]}`),
-  );
 }
 
 /**
@@ -320,20 +331,9 @@ function gateWarning(
  * WBRG-03 / WVAL-03 / WGATE-01: the warning a verdict earns, or `undefined` for
  * a `named` verdict the host engine will load.
  *
- * The `stem-fallback` arm earns a row despite being admitted, because every
- * shape reaching it names a command the engine will refuse to load: WNAM-02
- * falls back to the file stem precisely when no literal `meta.name` was
- * readable, and the engine's own metadata validation admits nothing else. The
- * `named` arm earns one when the script carries a gate, which is the same fact
- * about a script whose name WAS readable. The envelope is still written and the
- * record still returned either way, so both rows are caveats rather than
- * refusals.
- *
- * ONE LINE PER FILE, stated here because it is a rule and not an accident of
- * arm ordering: a `stem-fallback` script that ALSO carries a gate has both facts
- * named inside the single reason `unrunnableWarning` composes, never on a second
- * line beside it. Two lines saying the same thing about the same file in
- * different words is what teaches a reader to skip the channel.
+ * The `named` arm earns a row only when the script carries a gate: the envelope
+ * is still written and the record still returned, so that row is a caveat
+ * rather than a refusal. ONE LINE PER FILE.
  *
  * The verdict's own `reason` is rendered verbatim and never paraphrased. The
  * decision layer is where a raw-text match is attributed to code, to a comment
@@ -355,10 +355,6 @@ function verdictWarning(
     );
   }
 
-  if (verdict.outcome === "stem-fallback") {
-    return unrunnableWarning(verdict.fileName, workflowsDir, tense, verdict.gate);
-  }
-
   if (verdict.gate === undefined) {
     return undefined;
   }
@@ -367,8 +363,9 @@ function verdictWarning(
 }
 
 /**
- * WBRG-02 / WBRG-03: walk every declared workflows directory, decide each
- * script, and return the FULL verdict array.
+ * WBRG-02 / WBRG-03: walk every declared workflows entry -- a directory, or
+ * one script named directly -- decide each script, and return the FULL verdict
+ * array.
  *
  * Three deliberate divergences from the commands analog:
  *
@@ -396,7 +393,9 @@ function verdictWarning(
  * guard every file in it would be discovered twice and collide with itself,
  * failing a well-formed plugin. Identical paths are silently collapsed rather
  * than warned about, because nothing is wrong with such a manifest. See
- * `pathDedupKey` for why the comparison is case-folded on some platforms.
+ * `pathDedupKey` for why the comparison is case-folded on some platforms. The
+ * same set covers a script declared by path AND found under a declared
+ * directory, which Claude Code's loader also collapses to one.
  */
 export async function discoverPluginWorkflows(input: {
   pluginName: string;
@@ -415,20 +414,20 @@ export async function discoverPluginWorkflows(input: {
   const seenPaths = new Set<string>();
 
   for (const workflowsRel of input.resolved.componentPaths.workflows) {
-    const workflowsDir = path.resolve(input.resolved.pluginRoot, workflowsRel);
+    const declared = path.resolve(input.resolved.pluginRoot, workflowsRel);
     // NFR-10: `path.resolve` honors an absolute declared path outright, so the
     // containment check is what makes a declared `/etc` a refusal rather than
     // a walk. Loud by design (PathContainmentError) -- a declared path that
     // escapes the plugin root is a defect of the manifest, not of one file.
     await assertPathInside(
       input.resolved.pluginRoot,
-      workflowsDir,
+      declared,
       `workflows component path "${workflowsRel}"`,
     );
 
-    const scan = await scanWorkflowsDirectory({
+    const scan = await scanDeclaredPath({
       pluginName: input.pluginName,
-      workflowsDir,
+      declared,
       seenPaths,
       tense: input.tense,
     });
@@ -443,62 +442,133 @@ export async function discoverPluginWorkflows(input: {
   };
 }
 
+/** What one declared entry's records and warnings are collected into. */
+interface ScanAccumulator {
+  readonly discovered: DiscoveredWorkflow[];
+  readonly warnings: string[];
+}
+
+/**
+ * One declared entry: a directory is scanned flat, a regular file is run
+ * through the per-candidate pipeline as the single entry of its parent
+ * directory, and anything else yields nothing.
+ *
+ * No symlink question is asked here: `assertPathInside` has already refused a
+ * declared path with a symlink segment, so what `stat` classifies is a real
+ * directory or a real file.
+ *
+ * ENOENT is the one answer that describes the declared path rather than the
+ * machine -- absent, so the plugin declares no scripts there -- and it is the
+ * only failure the containment check above lets through: that check `lstat`s
+ * every segment down to the declared path itself, tolerates ENOENT on the
+ * leaf, and rethrows everything else, ENOTDIR included. Every other errno
+ * propagates here too: a read that may be unreliable must not quietly install
+ * a subset of the plugin.
+ */
+async function scanDeclaredPath(input: {
+  pluginName: string;
+  declared: string;
+  seenPaths: Set<string>;
+  tense: WorkflowOutcomeTense;
+}): Promise<ScanAccumulator> {
+  const acc: ScanAccumulator = { discovered: [], warnings: [] };
+
+  let stats;
+  try {
+    stats = await fs.stat(input.declared);
+  } catch (err) {
+    if (isErrnoException(err) && err.code === "ENOENT") {
+      return acc;
+    }
+
+    throw err;
+  }
+
+  if (stats.isDirectory()) {
+    await scanWorkflowsDirectory({ ...input, workflowsDir: input.declared, acc });
+  } else if (stats.isFile()) {
+    await scanCandidate({
+      ...input,
+      workflowsDir: path.dirname(input.declared),
+      entry: { name: path.basename(input.declared), isFile: () => true },
+      acc,
+    });
+  }
+
+  return acc;
+}
+
 /** One declared workflows directory's records and warnings, in file order. */
 async function scanWorkflowsDirectory(input: {
   pluginName: string;
   workflowsDir: string;
   seenPaths: Set<string>;
   tense: WorkflowOutcomeTense;
-}): Promise<{ discovered: DiscoveredWorkflow[]; warnings: string[] }> {
-  const { pluginName, workflowsDir, seenPaths, tense } = input;
-
-  const discovered: DiscoveredWorkflow[] = [];
-  const warnings: string[] = [];
-  const entries = await readDirEntriesTolerant(workflowsDir);
+  acc: ScanAccumulator;
+}): Promise<void> {
+  const entries = await readDirEntriesTolerant(input.workflowsDir);
 
   // Deterministic ordering for stable warning messages and test assertions.
   const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
 
   for (const entry of sorted) {
-    const candidate = await isWorkflowScriptFile(workflowsDir, entry);
+    await scanCandidate({ ...input, entry });
+  }
+}
 
-    if (!candidate.ok) {
-      warnings.push(
-        readFailureWarning(entry.name, workflowsDir, candidate.reason, tense, "inspect"),
-      );
-      continue;
-    }
+/**
+ * The per-candidate pipeline both arms share: filter, dedup by source path,
+ * read, decide, and append the record and its warning (if any) to `acc`.
+ */
+async function scanCandidate(input: {
+  pluginName: string;
+  workflowsDir: string;
+  entry: CandidateEntry;
+  seenPaths: Set<string>;
+  tense: WorkflowOutcomeTense;
+  acc: ScanAccumulator;
+}): Promise<void> {
+  const { pluginName, workflowsDir, entry, seenPaths, tense, acc } = input;
+  const candidate = await isWorkflowScriptFile(workflowsDir, entry);
 
-    if (!candidate.admit) {
-      continue;
-    }
-
-    const full = path.join(workflowsDir, entry.name);
-    const key = pathDedupKey(full);
-
-    if (seenPaths.has(key)) {
-      continue;
-    }
-
-    seenPaths.add(key);
-
-    const read = await readScriptSource(full);
-
-    if (!read.ok) {
-      warnings.push(readFailureWarning(entry.name, workflowsDir, read.reason, tense, "read"));
-      continue;
-    }
-
-    const source = read.source;
-    const verdict = admitWorkflowScript(pluginName, entry.name, source);
-    const warning = verdictWarning(verdict, workflowsDir, tense);
-
-    if (warning !== undefined) {
-      warnings.push(warning);
-    }
-
-    discovered.push({ verdict, scriptFile: full, source });
+  if (!candidate.ok) {
+    acc.warnings.push(
+      readFailureWarning(entry.name, workflowsDir, candidate.reason, tense, "inspect"),
+    );
+    return;
   }
 
-  return { discovered, warnings };
+  if (!candidate.admit) {
+    if (candidate.oversize !== undefined) {
+      acc.warnings.push(oversizeWarning(entry.name, workflowsDir, candidate.oversize, tense));
+    }
+
+    return;
+  }
+
+  const full = path.join(workflowsDir, entry.name);
+  const key = pathDedupKey(full);
+
+  if (seenPaths.has(key)) {
+    return;
+  }
+
+  seenPaths.add(key);
+
+  const read = await readScriptSource(full);
+
+  if (!read.ok) {
+    acc.warnings.push(readFailureWarning(entry.name, workflowsDir, read.reason, tense, "read"));
+    return;
+  }
+
+  const source = read.source;
+  const verdict = admitWorkflowScript(pluginName, entry.name, source);
+  const warning = verdictWarning(verdict, workflowsDir, tense);
+
+  if (warning !== undefined) {
+    acc.warnings.push(warning);
+  }
+
+  acc.discovered.push({ verdict, scriptFile: full, source });
 }

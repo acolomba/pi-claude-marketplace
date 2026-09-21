@@ -4,14 +4,13 @@ import { describe, test } from "node:test";
 import {
   admitWorkflowScript,
   assertNoWorkflowNameCollisions,
-  WORKFLOW_SCRIPT_EXTENSIONS,
+  WORKFLOW_SCRIPT_SUFFIX,
   type AdmittedWorkflow,
   type NamedWorkflow,
   type RefusedCause,
   type RefusedWorkflow,
   type SkippedCause,
   type SkippedWorkflow,
-  type StemFallbackWorkflow,
   type WorkflowGate,
   type WorkflowVerdict,
 } from "../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
@@ -46,10 +45,7 @@ function admission(verdict: WorkflowVerdict): Admission {
   return {
     outcome: verdict.outcome,
     metaName: verdict.outcome === "named" ? verdict.metaName : undefined,
-    generatedName:
-      verdict.outcome === "named" || verdict.outcome === "stem-fallback"
-        ? verdict.generatedName
-        : undefined,
+    generatedName: verdict.outcome === "named" ? verdict.generatedName : undefined,
   };
 }
 
@@ -66,11 +62,10 @@ interface SkipRow {
   readonly cause: SkippedCause;
 }
 
-interface StemRow {
+interface NoLiteralNameRow {
   readonly shape: string;
   readonly fileName: string;
   readonly source: string;
-  readonly generatedName: string;
 }
 
 interface UnsafeNameRow {
@@ -82,11 +77,6 @@ interface DeterminismRow {
   readonly placement: string;
   readonly source: string;
   readonly cause: RefusedCause;
-}
-
-interface StemDropRow {
-  readonly fileName: string;
-  readonly stem: string;
 }
 
 interface EncodingRow {
@@ -110,15 +100,14 @@ interface GateReading {
 function gateReading(verdict: WorkflowVerdict): GateReading {
   return {
     outcome: verdict.outcome,
-    gate:
-      verdict.outcome === "named" || verdict.outcome === "stem-fallback" ? verdict.gate : undefined,
+    gate: verdict.outcome === "named" ? verdict.gate : undefined,
   };
 }
 
 interface GateRow {
   readonly shape: string;
   readonly source: string;
-  readonly outcome: "named" | "stem-fallback";
+  readonly outcome: "named";
   readonly gate: WorkflowGate | undefined;
 }
 
@@ -227,7 +216,7 @@ return 1;
     // arrange
     // `evaluateLiteral` joins the quasis of a template with no substitutions and
     // throws only when there is at least one, so the engine reads this name.
-    // Stem-naming it would misname a command the engine can already load.
+    // Skipping it would drop a command the engine can already load.
     const source = `export const meta = { name: \`deploy\`, description: "d" };\n`;
     const expectedVerdict = {
       outcome: "named",
@@ -471,67 +460,74 @@ export const meta = { name: 'oops'
     assert.deepStrictEqual(nonAdmission(verdict), expectedVerdict);
   });
 
-  for (const { shape, fileName, source, generatedName } of [
+  for (const { shape, fileName, source } of [
     {
       shape: "meta declares a description but no name key",
       fileName: "drafter.workflow.js",
       source: `export const meta = { description: "d" };\n`,
-      generatedName: "acme:drafter.workflow",
     },
     {
       shape: "the name is a template literal carrying a substitution",
       fileName: "shipper.js",
       source: `export const meta = { name: \`a\${chosen}b\` };\n`,
-      generatedName: "acme:shipper",
     },
     {
       shape: "the name is a string concatenation",
       fileName: "joiner.js",
       source: `export const meta = { name: "never" + "-evaluated" };\n`,
-      generatedName: "acme:joiner",
     },
     {
       shape: "the name is a numeric literal",
       fileName: "numbered.js",
       source: `export const meta = { name: 42 };\n`,
-      generatedName: "acme:numbered",
     },
     {
       shape: "the name is a bare identifier",
       fileName: "ident.js",
       source: `export const meta = { name: chosenName };\n`,
-      generatedName: "acme:ident",
     },
-  ] satisfies readonly StemRow[]) {
-    test(`falls back to the file stem when ${shape}`, () => {
+  ] satisfies readonly NoLiteralNameRow[]) {
+    test(`skips the file rather than naming it after its stem when ${shape}`, () => {
       // arrange
       const expectedVerdict = {
-        outcome: "stem-fallback",
-        metaName: undefined,
-        generatedName,
-      } satisfies Admission;
+        outcome: "skipped",
+        cause: "no-literal-name",
+      } satisfies NonAdmission;
 
       // act
       const verdict = admitWorkflowScript("acme", fileName, source);
 
       // assert
-      assert.deepStrictEqual(admission(verdict), expectedVerdict);
+      assert.deepStrictEqual(nonAdmission(verdict), expectedVerdict);
     });
   }
 
-  test("refuses this file alone when the stem it falls back to is itself unusable", () => {
+  test("skips a nameless script before the determinism screen, as Claude Code drops it before reading the body", () => {
     // arrange
-    const source = `export const meta = { description: "d" };\n`;
-    const expectedVerdict = { outcome: "refused", cause: "unsafe-name" } satisfies NonAdmission;
+    const source = `export const meta = { description: "d" };\nconst t = Date.now();\n`;
+    const expectedVerdict = { outcome: "skipped", cause: "no-literal-name" } satisfies NonAdmission;
 
     // act
-    const verdict = admitWorkflowScript("acme", "weekly report.js", source);
+    const verdict = admitWorkflowScript("acme", "drafter.workflow.js", source);
 
     // assert
     assert.deepStrictEqual(nonAdmission(verdict), expectedVerdict);
   });
 
-  test("refuses an empty string name, which is neither a stem fallback nor a skip", () => {
+  test("names the skip reason after the missing literal name", () => {
+    // arrange
+    const source = `export const meta = { description: "d" };\n`;
+    const expectedReason =
+      "drafter.workflow.js declares no string-literal `meta.name`, so there is no command to install";
+
+    // act
+    const verdict = admitWorkflowScript("acme", "drafter.workflow.js", source);
+
+    // assert
+    assert.strictEqual(verdict.outcome === "skipped" ? verdict.reason : undefined, expectedReason);
+  });
+
+  test("refuses an empty string name, which is a declared literal and so not a skip", () => {
     // arrange
     const source = `export const meta = { name: "" };\n`;
     const expectedVerdict = { outcome: "refused", cause: "unsafe-name" } satisfies NonAdmission;
@@ -582,7 +578,7 @@ export const meta = { name: 'oops'
   for (const { placement, source, cause } of [
     {
       placement: "in executable code",
-      source: `export const meta = { description: "d" };
+      source: `export const meta = { name: "drafter", description: "d" };
 const stamped = Date.now();
 `,
       cause: "determinism-code",
@@ -590,21 +586,21 @@ const stamped = Date.now();
     {
       placement: "only inside a line comment",
       source: `// Header: we avoid Date.now() for resume safety.
-export const meta = { description: "d" };
+export const meta = { name: "drafter", description: "d" };
 `,
       cause: "determinism-comment",
     },
     {
       placement: "only inside a string literal",
       source: `const help = "Math.random is avoided on purpose";
-export const meta = { description: "d" };
+export const meta = { name: "drafter", description: "d" };
 `,
       cause: "determinism-string",
     },
     {
       placement: "only inside a regular-expression literal",
       source: `const stamp = /Date.now/;
-export const meta = { description: "d" };
+export const meta = { name: "drafter", description: "d" };
 `,
       cause: "determinism-string",
     },
@@ -612,7 +608,7 @@ export const meta = { description: "d" };
       placement: "straddling the boundary between a comment and code",
       source: `// beware new
 Date();
-export const meta = { description: "d" };
+export const meta = { name: "drafter", description: "d" };
 `,
       cause: "determinism-split",
     },
@@ -632,7 +628,7 @@ export const meta = { description: "d" };
   test("lets the first executable match decide a script that also mentions the token elsewhere", () => {
     // arrange
     const source = `// we avoid Date.now() here
-export const meta = { description: "d" };
+export const meta = { name: "mixed", description: "d" };
 const stamped = Date.now();
 `;
     const expectedVerdict = {
@@ -734,9 +730,9 @@ export const meta = { name: "ship" };
     {
       threat: "a newline in the file name that reaches a refusal, which would forge an output line",
       fileName: "ok.js\nInstalled 5 workflows\n",
-      source: `export const meta = { description: "d" };\n`,
+      source: `export const meta = {\n`,
       outcome: "refused",
-      cause: "unsafe-name",
+      cause: "unparseable",
       escaped: "\\u{a}",
     },
     {
@@ -962,15 +958,6 @@ export const meta = { name: "ship" };
       gate: "meta-not-pure-literal",
     },
     {
-      // The one gate row whose verdict is NOT `named`: a substituted template
-      // denies the script a readable name, so the stem names the command AND the
-      // engine refuses the same value at its literal check.
-      shape: "substitutes into its template-literal name",
-      source: "export const meta = { name: `ship-${suffix}`, description: 'd' };\n",
-      outcome: "stem-fallback",
-      gate: "meta-not-pure-literal",
-    },
-    {
       shape: "declares no description",
       source: `export const meta = { name: "ship" };\n`,
       outcome: "named",
@@ -1163,21 +1150,19 @@ export const meta = { name: "ship" };
     });
   }
 
-  test("settles a meta object literal with zero properties as a stem fallback carrying the field gate", () => {
-    // arrange -- the key set IS readable and simply declares nothing, which is
-    // the stem fallback's own arm; the missing description is what the engine
-    // refuses.
+  test("skips a meta object literal with zero properties without reading a gate off it", () => {
+    // arrange -- the key set IS readable and simply declares no name, and a
+    // skipped script carries no gate by type: nothing is installed for it, so
+    // there is no command the engine could refuse.
     const source = `export const meta = {};\n`;
-    const expectedVerdict = {
-      outcome: "stem-fallback",
-      gate: "meta-fields-invalid",
-    } satisfies GateReading;
+    const expectedVerdict = { outcome: "skipped", gate: undefined } satisfies GateReading;
 
     // act
     const verdict = admitWorkflowScript("acme", "ship.js", source);
 
     // assert
     assert.deepStrictEqual(gateReading(verdict), expectedVerdict);
+    assert.strictEqual(Object.hasOwn(verdict, "gate"), false);
   });
 
   test("gives a gate-warned script the same generated name as the same script without the gate", () => {
@@ -1393,7 +1378,7 @@ describe("assertNoWorkflowNameCollisions", () => {
     );
   });
 
-  test("collides a named verdict with a stem-fallback one, because both carry a name", () => {
+  test("collides two named verdicts whose declared names generate one command", () => {
     // arrange
     const named = {
       outcome: "named",
@@ -1401,12 +1386,13 @@ describe("assertNoWorkflowNameCollisions", () => {
       metaName: "ship",
       generatedName: "acme:ship",
     } satisfies NamedWorkflow;
-    const stemFallback = {
-      outcome: "stem-fallback",
+    const elided = {
+      outcome: "named",
       fileName: "ship.js",
+      metaName: "acme-ship",
       generatedName: "acme:ship",
-    } satisfies StemFallbackWorkflow;
-    const verdicts = [named, stemFallback] satisfies readonly AdmittedWorkflow[];
+    } satisfies NamedWorkflow;
+    const verdicts = [named, elided] satisfies readonly AdmittedWorkflow[];
 
     // act & assert
     assert.throws(
@@ -1526,43 +1512,15 @@ describe("assertNoWorkflowNameCollisions", () => {
   });
 });
 
-describe("fileStem", () => {
-  test("lists the script suffixes the stem drops, in declaration order", () => {
+describe("WORKFLOW_SCRIPT_SUFFIX", () => {
+  test("is the one exact suffix Claude Code's loader admits", () => {
     // arrange
-    const expectedExtensions = [".js", ".mjs", ".cjs"];
+    const expectedSuffix = ".js";
 
     // act
-    const extensions = [...WORKFLOW_SCRIPT_EXTENSIONS];
+    const suffix: string = WORKFLOW_SCRIPT_SUFFIX;
 
     // assert
-    assert.deepStrictEqual(extensions, expectedExtensions);
+    assert.strictEqual(suffix, expectedSuffix);
   });
-
-  // The stem is private to the admission: it surfaces only as the command half
-  // of a stem-fallback name, so each row drives a nameless script through the
-  // public admission and reads the stem back out of the generated name.
-  for (const { fileName, stem } of [
-    { fileName: "drafter.js", stem: "drafter" },
-    { fileName: "drafter.mjs", stem: "drafter" },
-    { fileName: "drafter.cjs", stem: "drafter" },
-    { fileName: "Drafter.JS", stem: "Drafter" },
-    { fileName: "drafter.workflow.js", stem: "drafter.workflow" },
-    { fileName: "README.md", stem: "README.md" },
-    { fileName: "drafter.js.txt", stem: "drafter.js.txt" },
-  ] satisfies readonly StemDropRow[]) {
-    test(`derives ${JSON.stringify(stem)} from ${JSON.stringify(fileName)}`, () => {
-      // arrange
-      const expectedVerdict = {
-        outcome: "stem-fallback",
-        metaName: undefined,
-        generatedName: `acme:${stem}`,
-      } satisfies Admission;
-
-      // act
-      const verdict = admitWorkflowScript("acme", fileName, "export const meta = {};\n");
-
-      // assert
-      assert.deepStrictEqual(admission(verdict), expectedVerdict);
-    });
-  }
 });

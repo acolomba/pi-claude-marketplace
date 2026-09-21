@@ -41,7 +41,7 @@ const GREET_SOURCE =
 const SHOUT_SOURCE = 'export const meta = { name: "shout", description: "shouts" };\n';
 const WAVE_SOURCE = 'export const meta = { name: "wave", description: "waves" };\n';
 const UNDESCRIBED_SOURCE = 'export const meta = { name: "quiet" };\n';
-const STEM_FALLBACK_SOURCE = 'export const meta = { description: "loud" };\n';
+const NAMELESS_SOURCE = 'export const meta = { description: "loud" };\n';
 const NO_META_SOURCE = "export function help() {\n  return 1;\n}\n";
 const GREET_REVISED_SOURCE =
   'export const meta = { name: "greet", description: "says hi again" };\n';
@@ -318,17 +318,16 @@ describe("prepareStageWorkflows", () => {
     assert.strictEqual(Object.hasOwn(parsedEnvelope, "description"), false);
   });
 
-  test("stages the stem-fallback envelope and carries its caveat row through", async (t) => {
+  test("stages no envelope for a nameless script and carries its skip row through", async (t) => {
     // arrange
-    const { locations } = await createWorkflowScope(t, "workflows-stage-stem-");
-    const pluginRoot = await createPluginRoot(t, "workflows-stem-source-");
+    const { locations } = await createWorkflowScope(t, "workflows-stage-nameless-");
+    const pluginRoot = await createPluginRoot(t, "workflows-nameless-source-");
     const workflowsDir = await createWorkflowsDir(pluginRoot);
-    await writeWorkflowScript(workflowsDir, "aaa-quiet.js", STEM_FALLBACK_SOURCE);
+    await writeWorkflowScript(workflowsDir, "aaa-quiet.js", NAMELESS_SOURCE);
     await writeWorkflowScript(workflowsDir, "greet.js", GREET_SOURCE);
-    const expectedCaveat =
-      `workflow script "aaa-quiet.js" in "${workflowsDir}" was installed but will not run: ` +
-      "the engine loads a command only from a literal `meta.name` with a non-empty " +
-      "`meta.description`, and this script declares no readable name";
+    const expectedSkip =
+      `workflow script "aaa-quiet.js" in "${workflowsDir}" was not installed: ` +
+      "aaa-quiet.js declares no string-literal `meta.name`, so there is no command to install";
 
     // act
     const prepared = stagedPreparation(
@@ -338,17 +337,15 @@ describe("prepareStageWorkflows", () => {
         resolved: resolvedPlugin(pluginRoot, ["workflows"]),
       }),
     );
-    const fallbackEnvelopeExists = await pathIsPresent(
-      path.join(prepared.stagingRoot, "acme:aaa-quiet.json"),
-    );
+    const stagedEnvelopes = (await readdir(prepared.stagingRoot)).sort();
 
     // assert
     assert.deepStrictEqual(prepared.result, {
-      stagedNames: ["acme:aaa-quiet", "acme:greet"],
-      warnings: [expectedCaveat],
+      stagedNames: ["acme:greet"],
+      warnings: [expectedSkip],
       unownedNames: [],
     });
-    assert.strictEqual(fallbackEnvelopeExists, true);
+    assert.deepStrictEqual(stagedEnvelopes, ["acme:greet.json"]);
   });
 
   test("rejects a generated-name collision before any envelope is written", async (t) => {

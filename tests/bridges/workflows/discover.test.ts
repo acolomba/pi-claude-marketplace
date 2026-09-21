@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import fs, { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import { discoverPluginWorkflows } from "../../../extensions/pi-claude-marketplace/bridges/workflows/discover.ts";
-import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
+import {
+  PathContainmentError,
+  SymlinkRefusedError,
+} from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type {
   DiscoveredWorkflow,
@@ -17,7 +21,7 @@ import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-ma
 const NAMED_GREET = 'export const meta = { name: "greet", description: "greets" };\n';
 const NAMED_SHOUT = 'export const meta = { name: "shout", description: "shouts" };\n';
 const NAMED_WAVE = 'export const meta = { name: "wave", description: "waves" };\n';
-const STEM_FALLBACK = 'export const meta = { description: "loud" };\n';
+const NAMELESS = 'export const meta = { description: "loud" };\n';
 const NONLITERAL_NAME =
   'const other = "computed";\nexport const meta = { name: other, description: "d" };\n';
 const NO_META = "export function help() {\n  return 1;\n}\n";
@@ -27,15 +31,13 @@ const NONDETERMINISTIC =
 // before the `meta` export, so the engine stops at its check 3.
 const GATED_NAMED =
   'const helper = 1;\nexport const meta = { name: "greet", description: "greets" };\n';
-// A substituted template name: unreadable, so the verdict is `stem-fallback`,
-// and not a plain literal either, so the engine stops at its check 8.
-const GATED_TEMPLATE_NAME = 'export const meta = { name: `greet${1}`, description: "d" };\n';
+// A substituted template name: unreadable, so the script is skipped before any
+// gate is read off it.
+const TEMPLATE_NAME = 'export const meta = { name: `greet${1}`, description: "d" };\n';
 const CHECK_3_REASON =
   "the engine refuses at its check 3 -- `export const meta = ...` must be the first statement in the script";
-const CHECK_8_REASON =
-  "the engine refuses at its check 8 -- every value inside `meta` must be a plain literal, so no spread, computed key, key written as anything but an identifier, string or number, method, accessor, reserved key name (`__proto__`, `constructor`, `prototype`), array hole, substituted template or computed expression";
-const UNRUNNABLE_REASON =
-  "the engine loads a command only from a literal `meta.name` with a non-empty `meta.description`, and this script declares no readable name";
+const NO_LITERAL_NAME_REASON = (fileName: string): string =>
+  `${fileName} declares no string-literal \`meta.name\`, so there is no command to install`;
 
 async function createPluginRoot(t: TestContext, prefix: string): Promise<string> {
   const pluginRoot = await mkdtemp(path.join(tmpdir(), prefix));
@@ -94,8 +96,9 @@ test("returns no workflows when a declared workflows directory is absent", async
   assert.deepStrictEqual(discovery, { discovered: [], warnings: [] });
 });
 
-test("returns no workflows when a declared workflows path is a file", async (t) => {
-  // arrange
+test("returns no workflows when a declared workflows path is a file without the script suffix", async (t) => {
+  // arrange -- Claude Code loads a declared FILE only when its name ends in
+  // `.js`; a bare `workflows` file is neither a directory to scan nor a script.
   const pluginRoot = await createPluginRoot(t, "workflow-discover-notdir-");
   await writeFile(path.join(pluginRoot, "workflows"), NAMED_GREET);
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
@@ -109,6 +112,132 @@ test("returns no workflows when a declared workflows path is a file", async (t) 
 
   // assert
   assert.deepStrictEqual(discovery, { discovered: [], warnings: [] });
+});
+
+test("discovers the one script a declared workflows path names directly", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-file-path-");
+  const customDir = path.join(pluginRoot, "custom");
+  const scriptFile = path.join(customDir, "greet.workflow.js");
+  await mkdir(customDir);
+  await writeFile(scriptFile, NAMED_GREET);
+  // A sibling in the same directory is NOT discovered: the declared entry names
+  // one file, not its parent directory.
+  await writeFile(path.join(customDir, "shout.js"), NAMED_SHOUT);
+  const resolved = resolvedPlugin(pluginRoot, ["custom/greet.workflow.js"]);
+  const expectedRecords: DiscoveredWorkflow[] = [
+    {
+      verdict: {
+        outcome: "named",
+        fileName: "greet.workflow.js",
+        metaName: "greet",
+        generatedName: "acme:greet",
+        description: "greets",
+      },
+      scriptFile,
+      source: NAMED_GREET,
+    },
+  ];
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery.discovered, expectedRecords);
+  assert.deepStrictEqual(discovery.warnings, []);
+});
+
+test("judges a script declared by path exactly as one found in a directory", async (t) => {
+  // arrange -- the declared file is a helper module with no `meta`, so it earns
+  // the same skip line, naming its parent directory, that the directory arm
+  // composes.
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-file-path-skip-");
+  const customDir = path.join(pluginRoot, "custom");
+  await mkdir(customDir);
+  await writeFile(path.join(customDir, "helper.js"), NO_META);
+  const resolved = resolvedPlugin(pluginRoot, ["custom/helper.js"]);
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery.warnings, [
+    `workflow script "helper.js" in "${customDir}" was not installed: helper.js declares no \`meta\`, so there is nothing to install`,
+  ]);
+  assert.deepStrictEqual(
+    discovery.discovered.map((record) => record.verdict.outcome),
+    ["skipped"],
+  );
+});
+
+test("discovers a script once when it is declared by path and also sits in a declared directory", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-file-path-dedup-");
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  await mkdir(workflowsDir);
+  await writeFile(path.join(workflowsDir, "greet.js"), NAMED_GREET);
+  const resolved = resolvedPlugin(pluginRoot, ["workflows/greet.js", "workflows"]);
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    discovery.discovered.map(
+      (record) => record.verdict.outcome === "named" && record.verdict.generatedName,
+    ),
+    ["acme:greet"],
+  );
+  assert.deepStrictEqual(discovery.warnings, []);
+});
+
+test("refuses a declared workflows path that is a symlink to a script, as a defect of the manifest", async (t) => {
+  // arrange -- the containment check that guards every declared path refuses
+  // a symlink segment before the file arm classifies it, so a linked script
+  // is the same loud manifest defect a linked directory is (NFR-10), not a
+  // silent per-file skip.
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-file-path-symlink-");
+  await writeFile(path.join(pluginRoot, "real.js"), NAMED_GREET);
+  await symlink(path.join(pluginRoot, "real.js"), path.join(pluginRoot, "link.js"));
+  const resolved = resolvedPlugin(pluginRoot, ["link.js"]);
+
+  // act & assert
+  await assert.rejects(
+    discoverPluginWorkflows({ pluginName: "acme", resolved, tense: "install" }),
+    SymlinkRefusedError,
+  );
+});
+
+test("propagates a stat failure on a declared path that is not an absence", async (t) => {
+  // arrange -- the containment check `lstat`s the declared path first and lets
+  // only ENOENT through, so a `stat` that fails any other way is a read the
+  // walk cannot trust, and it is injected rather than staged on disk.
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-file-path-eio-");
+  await writeFile(path.join(pluginRoot, "greet.js"), NAMED_GREET);
+  const statError = Object.assign(new Error("input/output error"), { code: "EIO" });
+  t.mock.method(fs, "stat", (): Promise<never> => Promise.reject(statError));
+  const resolved = resolvedPlugin(pluginRoot, ["greet.js"]);
+
+  // act & assert
+  await assert.rejects(
+    discoverPluginWorkflows({ pluginName: "acme", resolved, tense: "install" }),
+    (error: unknown) => {
+      assert.strictEqual((error as NodeJS.ErrnoException).code, "EIO");
+      return true;
+    },
+  );
 });
 
 test("rejects a declared workflows directory the process cannot read", async (t) => {
@@ -234,26 +363,65 @@ test("silently excludes dotfiles, directories and unadmitted suffixes", async (t
   assert.deepStrictEqual(discovery.warnings, []);
 });
 
-test("admits an uppercase script suffix and strips it from the fallback name", async (t) => {
-  // arrange
-  const pluginRoot = await createPluginRoot(t, "workflow-discover-uppercase-");
+for (const fileName of ["Loud.JS", "loud.mjs", "loud.cjs"]) {
+  test(`ignores ${fileName}, a suffix Claude Code's loader does not admit`, async (t) => {
+    // arrange -- the loader's test is an exact `endsWith(".js")`, so a file
+    // that installed here under any other suffix would be a command the plugin
+    // does not have upstream.
+    const pluginRoot = await createPluginRoot(t, "workflow-discover-suffix-");
+    const workflowsDir = path.join(pluginRoot, "workflows");
+    await mkdir(workflowsDir);
+    await writeFile(path.join(workflowsDir, fileName), NAMED_GREET);
+    const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
+
+    // act
+    const discovery = await discoverPluginWorkflows({
+      pluginName: "acme",
+      resolved,
+      tense: "install",
+    });
+
+    // assert
+    assert.deepStrictEqual(discovery, { discovered: [], warnings: [] });
+  });
+}
+
+test("skips a script above the byte cap Claude Code's loader imposes, without reading it", async (t) => {
+  // arrange -- one byte over the bound, and well-formed, so the only reason
+  // to skip it is its size.
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-oversize-");
   const workflowsDir = path.join(pluginRoot, "workflows");
-  const scriptFile = path.join(workflowsDir, "Loud.JS");
   await mkdir(workflowsDir);
-  await writeFile(scriptFile, STEM_FALLBACK);
+  const padding = "/".repeat(WORKFLOW_SCRIPT_MAX_BYTES + 1 - NAMED_GREET.length);
+  await writeFile(path.join(workflowsDir, "big.js"), `${NAMED_GREET}${padding}`);
+  await writeFile(path.join(workflowsDir, "greet.js"), NAMED_GREET);
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
-  const expectedRecords: DiscoveredWorkflow[] = [
-    {
-      verdict: {
-        outcome: "stem-fallback",
-        fileName: "Loud.JS",
-        generatedName: "acme:Loud",
-        description: "loud",
-      },
-      scriptFile,
-      source: STEM_FALLBACK,
-    },
-  ];
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
+
+  // assert -- the oversize file is neither read nor recorded; its sibling is.
+  assert.deepStrictEqual(discovery.warnings, [
+    `workflow script "big.js" in "${workflowsDir}" was not installed: the file is ${(WORKFLOW_SCRIPT_MAX_BYTES + 1).toString()} bytes and Claude Code loads a plugin workflow script only up to ${WORKFLOW_SCRIPT_MAX_BYTES.toString()} bytes`,
+  ]);
+  assert.deepStrictEqual(
+    discovery.discovered.map((record) => record.verdict.fileName),
+    ["greet.js"],
+  );
+});
+
+test("admits a script exactly at the byte cap", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-at-cap-");
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  await mkdir(workflowsDir);
+  const padding = "/".repeat(WORKFLOW_SCRIPT_MAX_BYTES - NAMED_GREET.length);
+  await writeFile(path.join(workflowsDir, "big.js"), `${NAMED_GREET}${padding}`);
+  const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
   // act
   const discovery = await discoverPluginWorkflows({
@@ -263,9 +431,31 @@ test("admits an uppercase script suffix and strips it from the fallback name", a
   });
 
   // assert
-  assert.deepStrictEqual(discovery.discovered, expectedRecords);
+  assert.deepStrictEqual(discovery.warnings, []);
+  assert.deepStrictEqual(
+    discovery.discovered.map((record) => record.verdict.outcome),
+    ["named"],
+  );
+});
+
+test("states an oversize script in the preview tense", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-oversize-preview-");
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  await mkdir(workflowsDir);
+  await writeFile(path.join(workflowsDir, "big.js"), "/".repeat(WORKFLOW_SCRIPT_MAX_BYTES + 1));
+  const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "preview",
+  });
+
+  // assert
   assert.deepStrictEqual(discovery.warnings, [
-    `workflow script "Loud.JS" in "${workflowsDir}" was installed but will not run: the engine loads a command only from a literal \`meta.name\` with a non-empty \`meta.description\`, and this script declares no readable name`,
+    `workflow script "big.js" in "${workflowsDir}" will not be installed: the file is ${(WORKFLOW_SCRIPT_MAX_BYTES + 1).toString()} bytes and Claude Code loads a plugin workflow script only up to ${WORKFLOW_SCRIPT_MAX_BYTES.toString()} bytes`,
   ]);
 });
 
@@ -724,13 +914,12 @@ test("returns records in sorted entry order regardless of write order", async (t
   assert.deepStrictEqual(discovery.warnings, []);
 });
 
-test("warns that a script declaring no name was installed but will not run", async (t) => {
+test("skips a script declaring no name and says so, installing its named sibling", async (t) => {
   // arrange
-  const pluginRoot = await createPluginRoot(t, "workflow-discover-stem-no-name-");
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-no-name-");
   const workflowsDir = path.join(pluginRoot, "workflows");
-  const fallbackScript = path.join(workflowsDir, "aaa-quiet.js");
   await mkdir(workflowsDir);
-  await writeFile(fallbackScript, STEM_FALLBACK);
+  await writeFile(path.join(workflowsDir, "aaa-quiet.js"), NAMELESS);
   await writeFile(path.join(workflowsDir, "greet.js"), NAMED_GREET);
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
@@ -743,16 +932,16 @@ test("warns that a script declaring no name was installed but will not run", asy
 
   // assert
   assert.deepStrictEqual(discovery.warnings, [
-    `workflow script "aaa-quiet.js" in "${workflowsDir}" was installed but will not run: the engine loads a command only from a literal \`meta.name\` with a non-empty \`meta.description\`, and this script declares no readable name`,
+    `workflow script "aaa-quiet.js" in "${workflowsDir}" was not installed: ${NO_LITERAL_NAME_REASON("aaa-quiet.js")}`,
   ]);
   assert.deepStrictEqual(
     discovery.discovered.map((record) => record.verdict),
     [
       {
-        outcome: "stem-fallback",
+        outcome: "skipped",
         fileName: "aaa-quiet.js",
-        generatedName: "acme:aaa-quiet",
-        description: "loud",
+        reason: NO_LITERAL_NAME_REASON("aaa-quiet.js"),
+        cause: "no-literal-name",
       },
       {
         outcome: "named",
@@ -765,13 +954,14 @@ test("warns that a script declaring no name was installed but will not run", asy
   );
 });
 
-test("warns the same way when the declared name is present but not a literal", async (t) => {
-  // arrange
-  const pluginRoot = await createPluginRoot(t, "workflow-discover-stem-nonliteral-");
+test("skips the same way when the declared name is present but not a literal, reading no gate", async (t) => {
+  // arrange -- the script also declares a statement before its `meta` export,
+  // which would be a check-3 gate on a named script. Nothing is installed for
+  // a skipped one, so no gate is read and the one line names the skip alone.
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-nonliteral-");
   const workflowsDir = path.join(pluginRoot, "workflows");
-  const fallbackScript = path.join(workflowsDir, "computed.js");
   await mkdir(workflowsDir);
-  await writeFile(fallbackScript, NONLITERAL_NAME);
+  await writeFile(path.join(workflowsDir, "computed.js"), NONLITERAL_NAME);
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
   // act
@@ -781,22 +971,18 @@ test("warns the same way when the declared name is present but not a literal", a
     tense: "install",
   });
 
-  // assert -- WGATE-01: ONE line for the file. The script also declares a
-  // statement before its `meta` export, so the engine stops at its check 3, and
-  // that gate is named inside the unrunnable reason rather than on a second line
-  // repeating the same fact about the same file.
+  // assert
   assert.deepStrictEqual(discovery.warnings, [
-    `workflow script "computed.js" in "${workflowsDir}" was installed but will not run: the engine loads a command only from a literal \`meta.name\` with a non-empty \`meta.description\`, and this script declares no readable name; the engine refuses at its check 3 -- \`export const meta = ...\` must be the first statement in the script`,
+    `workflow script "computed.js" in "${workflowsDir}" was not installed: ${NO_LITERAL_NAME_REASON("computed.js")}`,
   ]);
   assert.deepStrictEqual(
     discovery.discovered.map((record) => record.verdict),
     [
       {
-        outcome: "stem-fallback",
+        outcome: "skipped",
         fileName: "computed.js",
-        generatedName: "acme:computed",
-        description: "d",
-        gate: "meta-not-first-export",
+        reason: NO_LITERAL_NAME_REASON("computed.js"),
+        cause: "no-literal-name",
       },
     ],
   );
@@ -872,12 +1058,12 @@ test("states a refused script in the preview tense", async (t) => {
   ]);
 });
 
-test("states a stem-fallback script in the preview tense and keeps its reason", async (t) => {
+test("states a nameless script in the preview tense and keeps its reason", async (t) => {
   // arrange
-  const pluginRoot = await createPluginRoot(t, "workflow-discover-preview-stem-");
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-preview-nameless-");
   const workflowsDir = path.join(pluginRoot, "workflows");
   await mkdir(workflowsDir);
-  await writeFile(path.join(workflowsDir, "quiet.js"), STEM_FALLBACK);
+  await writeFile(path.join(workflowsDir, "quiet.js"), NAMELESS);
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
   // act
@@ -889,7 +1075,7 @@ test("states a stem-fallback script in the preview tense and keeps its reason", 
 
   // assert
   assert.deepStrictEqual(discovery.warnings, [
-    `workflow script "quiet.js" in "${workflowsDir}" would be installed but will not run: the engine loads a command only from a literal \`meta.name\` with a non-empty \`meta.description\`, and this script declares no readable name`,
+    `workflow script "quiet.js" in "${workflowsDir}" will not be installed: ${NO_LITERAL_NAME_REASON("quiet.js")}`,
   ]);
 });
 
@@ -1058,13 +1244,15 @@ test("WGATE-01: states one gate line in both tenses, differing only in the outco
   ]);
 });
 
-test("WGATE-01: warns once, naming the engine check, for a stem-fallback script whose name is a substituted template", async (t) => {
-  // arrange
+test("WGATE-01: names no engine check on a script skipped for a substituted template name", async (t) => {
+  // arrange -- the same value would trip the engine's check 8 on a named
+  // script, but a skipped script has no command for the engine to refuse, so
+  // the one line names the skip and nothing else.
   const pluginRoot = await createPluginRoot(t, "workflow-discover-gate-template-");
   const workflowsDir = path.join(pluginRoot, "workflows");
   const templateScript = path.join(workflowsDir, "greeter.js");
   await mkdir(workflowsDir);
-  await writeFile(templateScript, GATED_TEMPLATE_NAME);
+  await writeFile(templateScript, TEMPLATE_NAME);
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
 
   // act
@@ -1074,24 +1262,20 @@ test("WGATE-01: warns once, naming the engine check, for a stem-fallback script 
     tense: "install",
   });
 
-  // assert -- ONE line, and it still names the check. "One line" satisfied by
-  // dropping the gate name would lose the whole content of the warning, so the
-  // reason tail is part of the compared value rather than a separate presence
-  // check.
+  // assert
   assert.deepStrictEqual(discovery.warnings, [
-    `workflow script "greeter.js" in "${workflowsDir}" was installed but will not run: ${UNRUNNABLE_REASON}; ${CHECK_8_REASON}`,
+    `workflow script "greeter.js" in "${workflowsDir}" was not installed: ${NO_LITERAL_NAME_REASON("greeter.js")}`,
   ]);
   assert.deepStrictEqual(discovery.discovered, [
     {
       verdict: {
-        outcome: "stem-fallback",
+        outcome: "skipped",
         fileName: "greeter.js",
-        generatedName: "acme:greeter",
-        description: "d",
-        gate: "meta-not-pure-literal",
+        reason: NO_LITERAL_NAME_REASON("greeter.js"),
+        cause: "no-literal-name",
       },
       scriptFile: templateScript,
-      source: GATED_TEMPLATE_NAME,
+      source: TEMPLATE_NAME,
     },
   ]);
 });

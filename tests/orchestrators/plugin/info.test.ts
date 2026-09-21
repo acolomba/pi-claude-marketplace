@@ -7265,8 +7265,9 @@ test("an available path plugin renders sorted dependencies after its inventory",
 // listing -- a workflow command is named by its own `meta.name`.
 // ---------------------------------------------------------------------------
 
+const WORKFLOW_NAMED_ALPHA = 'export const meta = { name: "alpha", description: "alphas" };\n';
 const WORKFLOW_NAMED_ZETA = 'export const meta = { name: "zeta", description: "zetas" };\n';
-const WORKFLOW_STEM_FALLBACK = 'export const meta = { description: "quiet" };\n';
+const WORKFLOW_NAMELESS = 'export const meta = { description: "quiet" };\n';
 const WORKFLOW_NO_META = "export function help() {\n  return 1;\n}\n";
 
 async function seedWorkflowScripts(
@@ -7281,16 +7282,16 @@ async function seedWorkflowScripts(
   }
 }
 
-test("WFLW-04: an installed plugin lists both admitted workflow arms, sorted, after its skills", async () => {
+test("WFLW-04: an installed plugin lists its admitted workflows, sorted, after its skills, and reports a nameless one as a skip", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const mpRoot = await seedFooInstalled(home, cwd);
-    // `quiet.js` declares no readable name, so the stem names its command. The
-    // envelope IS written for it, which is why the line lists it beside the
-    // named arm.
+    // `quiet.js` declares no readable name, so no envelope is written for it
+    // and it is absent from the line; its own advisory row reports why.
     await seedWorkflowScripts(mpRoot, "foo", {
+      "alpha.js": WORKFLOW_NAMED_ALPHA,
       "zeta.js": WORKFLOW_NAMED_ZETA,
-      "quiet.js": WORKFLOW_STEM_FALLBACK,
+      "quiet.js": WORKFLOW_NAMELESS,
     });
     const { ctx, pi, notifications } = makeCtx();
 
@@ -7307,10 +7308,9 @@ test("WFLW-04: an installed plugin lists both admitted workflow arms, sorted, af
           "    agents: a1\n" +
           "    commands: c1\n" +
           "    skills: s1\n" +
-          "    workflows: foo:quiet, foo:zeta\n" +
-          '    note: workflow script "quiet.js" in "workflows" would be installed but will not ' +
-          "run: the engine loads a command only from a literal `meta.name` with a non-empty " +
-          "`meta.description`, and this script declares no readable name",
+          "    workflows: foo:alpha, foo:zeta\n" +
+          '    note: workflow script "quiet.js" in "workflows" will not be installed: ' +
+          "quiet.js declares no string-literal `meta.name`, so there is no command to install",
       },
     ]);
   });

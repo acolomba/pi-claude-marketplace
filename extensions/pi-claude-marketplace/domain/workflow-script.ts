@@ -93,19 +93,18 @@ export interface NamedWorkflow {
   readonly gate?: WorkflowGate;
 }
 
-/** WNAM-02: no readable `meta.name`, so the file stem names the command. */
-export interface StemFallbackWorkflow {
-  readonly outcome: "stem-fallback";
-  readonly fileName: string;
-  readonly generatedName: string;
-  readonly description?: string;
-  /** WGATE-01: as on `NamedWorkflow` -- the gate, or absent. */
-  readonly gate?: WorkflowGate;
-}
-
-/** WNAM-03: nothing to install -- the script declares no usable metadata. */
+/**
+ * WNAM-03: nothing to install -- the script declares no usable metadata.
+ *
+ * `no-literal-name` is the `meta` whose key set IS readable and which declares
+ * no string-literal `name`: absent, or an identifier, a call, a member
+ * expression, a number, a substituted template. Claude Code skips such a script
+ * with an "invalid meta" warning and registers no command for it, and the host
+ * engine's `validateMeta` refuses it at first run, so a stem-named command
+ * would be one neither runtime answers to.
+ */
 export type SkippedCause =
-  "no-meta" | "meta-not-object-literal" | "meta-spread" | "meta-computed-key";
+  "no-meta" | "meta-not-object-literal" | "meta-spread" | "meta-computed-key" | "no-literal-name";
 
 /** WNAM-04 / WVAL-01: the script is installable-shaped but must not be admitted. */
 export type RefusedCause =
@@ -130,11 +129,10 @@ export interface RefusedWorkflow {
   readonly cause: RefusedCause;
 }
 
-export type WorkflowVerdict =
-  NamedWorkflow | StemFallbackWorkflow | SkippedWorkflow | RefusedWorkflow;
+export type WorkflowVerdict = NamedWorkflow | SkippedWorkflow | RefusedWorkflow;
 
-/** The two arms that carry a `generatedName`, and so the two a collision can involve. */
-export type AdmittedWorkflow = NamedWorkflow | StemFallbackWorkflow;
+/** The one arm that carries a `generatedName`, and so the only one a collision can involve. */
+export type AdmittedWorkflow = NamedWorkflow;
 
 interface ParsedScript {
   readonly ast: Program;
@@ -146,8 +144,8 @@ interface ParsedScript {
 /**
  * WNAM-01: decide one script's fate from `(pluginName, fileName, source)` alone.
  *
- * The caller passes the file NAME, never a pre-computed stem, so "the name this
- * command would otherwise get" is derived in exactly one place.
+ * The file NAME is carried on every verdict so a warning can name the file; it
+ * never contributes to the command name, which comes from `meta.name` alone.
  *
  * The PLUGIN name is checked before anything else, and it throws rather than
  * refusing. It is a defect of the SET, like the WNAM-05 collision: it
@@ -206,6 +204,14 @@ export function admitWorkflowScript(
     return skippedVerdict(fileName, metaName.cause);
   }
 
+  // Settled BEFORE the determinism screen, like the other skips: Claude Code
+  // drops a script with unreadable meta before it looks at the body, and a
+  // refusal naming the blocklist would describe a file no command is installed
+  // for either way.
+  if (metaName.kind === "no-literal") {
+    return skippedVerdict(fileName, "no-literal-name");
+  }
+
   const violation = findDeterminismViolation(fileName, source, parsed);
 
   if (violation !== undefined) {
@@ -215,14 +221,10 @@ export function admitWorkflowScript(
   const read = readMetaString(meta.elements, "description");
   const description = read.kind === "literal" ? read.value : undefined;
   // WGATE-01: read the gate AFTER both refusal arms have been settled and
-  // BEFORE either admitted verdict is built. Earlier would mean reading gates
+  // BEFORE the admitted verdict is built. Earlier would mean reading gates
   // off a script that is about to be refused, and a refusal carries no gate by
   // type (WGATE-03/WGATE-04).
   const gate = readEngineGate(parsed.ast, meta.elements);
-
-  if (metaName.kind === "no-literal") {
-    return stemFallbackVerdict(pluginName, fileName, description, gate);
-  }
 
   return namedVerdict(pluginName, fileName, metaName.value, description, gate);
 }
@@ -270,18 +272,17 @@ export function assertNoWorkflowNameCollisions(verdicts: readonly WorkflowVerdic
   }
 }
 
-/** Only the two arms that carry a `generatedName` can take part in a collision. */
+/** Only the arm that carries a `generatedName` can take part in a collision. */
 function isAdmitted(verdict: WorkflowVerdict): verdict is AdmittedWorkflow {
-  return verdict.outcome === "named" || verdict.outcome === "stem-fallback";
+  return verdict.outcome === "named";
 }
 
 /**
- * WNAM-03: the four unreadable-`meta` shapes carry distinct causes because they
- * are distinct facts about the script, but they share one argument for skipping
- * rather than stem-naming: the declared name cannot be read, and a stem fallback
- * would install a possibly-wrong command name -- the precise failure WNAM-01
- * exists to prevent. The stem fallback is reserved for a `meta` whose KEY SET is
- * readable and which simply declares no literal name.
+ * WNAM-03: the five skip shapes carry distinct causes because they are distinct
+ * facts about the script, but they share one argument for skipping rather than
+ * naming the command after the file: the declared name cannot be read, and a
+ * name the script does not declare is a command neither Claude Code nor the
+ * host engine would register -- the precise failure WNAM-01 exists to prevent.
  */
 function skippedVerdict(fileName: string, kind: SkippedCause): SkippedWorkflow {
   return {
@@ -297,6 +298,7 @@ const SKIPPED_REASONS: Readonly<Record<SkippedCause, (fileName: string) => strin
   "meta-not-object-literal": metaNotObjectLiteralReason,
   "meta-spread": metaSpreadReason,
   "meta-computed-key": metaComputedKeyReason,
+  "no-literal-name": noLiteralNameReason,
 };
 
 function namedVerdict(
@@ -323,74 +325,22 @@ function namedVerdict(
 }
 
 /**
- * WNAM-02: `meta` is a readable object literal, but its `name` is absent or is
- * not statically known text -- an identifier, a substituted template, a member
- * expression, a call, a number. That value is classified by node type and never
- * resolved, so the file stem names the command instead.
- *
- * A stem-named command is installable but not necessarily RUNNABLE. The engine's
- * `validateMeta` demands a `meta.name` AND a `meta.description` that both
- * resolve to non-empty strings, and every shape reaching this arm fails at least
- * the name half -- so the command this registers reports a validation error the
- * first time anyone runs it. Narrowing the fallback to the shapes the engine can
- * load would mean replicating its structural rules here, which the module header
- * declines for the good reason that an engine upgrade may drop them; and the
- * `description` half cannot be judged from `meta.name` alone anyway. Telling the
- * user belongs to the bridge that writes the envelope, and it does:
- * `bridges/workflows/discover.ts::unrunnableWarning` composes one `warnings[]`
- * line for every script reaching this arm, in the caller's tense, and names the
- * engine gate inside that same line when the verdict's `gate` field carries one
- * (WGATE-01). So the arm reports itself rather than registering a dead command
- * in silence.
+ * The one script suffix a workflow file may carry, matched exactly: Claude Code
+ * admits a plugin workflow only when its name `endsWith(".js")`, so an `.mjs`,
+ * a `.cjs` or a `Thing.JS` that installed here would be a command the plugin
+ * does not have upstream. Exported because the discovery filter is the reader.
  */
-function stemFallbackVerdict(
-  pluginName: string,
-  fileName: string,
-  description: string | undefined,
-  gate: WorkflowGate | undefined,
-): StemFallbackWorkflow | RefusedWorkflow {
-  const generated = generateOrRefuse(pluginName, fileName, fileStem(fileName));
-
-  if (!("generatedName" in generated)) {
-    return generated;
-  }
-
-  return {
-    outcome: "stem-fallback",
-    fileName,
-    generatedName: generated.generatedName,
-    ...(description === undefined ? {} : { description }),
-    ...(gate === undefined ? {} : { gate }),
-  };
-}
+export const WORKFLOW_SCRIPT_SUFFIX = ".js";
 
 /**
- * WNAM-02: the suffixes a workflow script may carry, and so the suffixes the
- * stem drops. Exported because the stem rule and the discovery filter must admit
- * the same set: a file the filter admits but this list does not know keeps its
- * suffix inside the command name.
+ * The bytes above which Claude Code skips a plugin workflow script. Read from
+ * the 2.1.267 binary: its loader reads each candidate through a capped reader
+ * and skips one that "exceeds 524288 bytes" with a warning. Replicated as a
+ * skip, not because anything on the Pi side needs the bound, but because a
+ * script above it is a command the plugin does not have upstream. Exported
+ * because the discovery filter is the reader.
  */
-export const WORKFLOW_SCRIPT_EXTENSIONS = [".js", ".mjs", ".cjs"] as const;
-
-/**
- * The name a workflow gets when its own `meta` does not supply one: the file
- * name with its script suffix removed and nothing else stripped. `.workflow` is
- * part of the stem, which is exactly why WNAM-01 prefers the declared name --
- * `drafter.workflow.js` stem-names to `<plugin>:drafter.workflow`.
- *
- * The suffix is matched without regard to case. A case-insensitive filesystem
- * reports the name as it was stored, so a `Thing.JS` that the discovery filter
- * admits would otherwise carry `.JS` into the command name.
- *
- * Derived here, from the file NAME the caller passes, so the fallback name is
- * computed in one place rather than by each caller.
- */
-function fileStem(fileName: string): string {
-  const lowered = fileName.toLowerCase();
-  const suffix = WORKFLOW_SCRIPT_EXTENSIONS.find((ext) => lowered.endsWith(ext));
-
-  return suffix === undefined ? fileName : fileName.slice(0, -suffix.length);
-}
+export const WORKFLOW_SCRIPT_MAX_BYTES = 524_288;
 
 /**
  * WNAM-06 / WVAL-02: `generatedWorkflowName` throws on a name RN-2 or the
@@ -404,8 +354,8 @@ function fileStem(fileName: string): string {
  * same reason, so what reaches this catch is always a defect of the name the
  * FILE supplies.
  *
- * `declaredName` is the text the name is BUILT FROM -- the declared `meta.name`
- * or, for a stem fallback, the file stem. Everywhere else in this module
+ * `declaredName` is the text the name is BUILT FROM -- the declared `meta.name`.
+ * Everywhere else in this module
  * `source` is the untrusted script TEXT, and both are `string`, so a swap would
  * compile. In a module whose contract is that script text never becomes a name,
  * the two must not share one parameter name.
@@ -620,8 +570,7 @@ function parseScript(source: string): ParsedScript | undefined {
 /**
  * The `meta` lookup keeps "no `meta` declarator at all" and "`meta` declared as
  * something other than an object literal" apart, because WNAM-03 reports them as
- * distinct causes even though both end in `skipped`. The two are also the only
- * shapes that must NOT reach the stem fallback -- see `skippedVerdict`.
+ * distinct causes even though both end in `skipped` -- see `skippedVerdict`.
  */
 type MetaLookup =
   | { readonly kind: "object-literal"; readonly elements: readonly MetaElement[] }
@@ -718,11 +667,11 @@ function metaPropertyKey(p: Property): string | undefined {
 }
 
 /**
- * WNAM-01 / WNAM-02: what one `meta` key resolves to, decided by the same rules
- * the evaluated object obeys.
+ * WNAM-01: what one `meta` key resolves to, decided by the same rules the
+ * evaluated object obeys.
  *
- * `literal` and `no-literal` differ only in the message they produce downstream;
- * `opaque` is the arm that separates a stem fallback from a skip.
+ * `no-literal` and `opaque` both end in a skip; they are kept apart because they
+ * are different facts about the script, and the skip names which one.
  */
 type MetaRead =
   | { readonly kind: "literal"; readonly value: string }
@@ -740,9 +689,7 @@ type MetaRead =
  * A spread makes every key that follows it unknowable -- it can introduce a key
  * that was never written and overwrite one that was. That is why the scan
  * carries spreads instead of filtering them out, and why the answer is `opaque`
- * rather than a guess. WNAM-02's stem fallback is not the right answer there:
- * the fallback exists for a `meta` whose key set IS readable and simply carries
- * no literal name, whereas a spread hides the key set itself -- the same
+ * rather than a guess: a spread hides the key set itself -- the same
  * unknown-shape situation as `meta = someFactory()`, which WNAM-03 skips. A
  * spread BEFORE the last literal occurrence is harmless, because last-wins means
  * the literal overwrites whatever the spread contributed.
@@ -793,9 +740,8 @@ function readMetaString(elements: readonly MetaElement[], key: string): MetaRead
  * even one substitution is refused a name rather than evaluated.
  *
  * Leaving the template form out is not the safe direction. The engine reads
- * `` name: `deploy` `` as "deploy", so treating it as unreadable would stem-name
- * the command after its file -- silently, and exactly the misnaming WNAM-01
- * exists to prevent.
+ * `` name: `deploy` `` as "deploy", so treating it as unreadable would skip a
+ * script both runtimes load.
  *
  * `cooked` and not `raw`: they differ the moment the text carries an escape
  * (`a\nb` cooks to a newline), and `cooked` is the one the engine reads. Acorn
@@ -1021,8 +967,8 @@ function isLiteralArray(
  *
  * The `description`, `model` and `phases` arms only. "meta must be an object" is
  * already a `meta-not-object-literal` skip and an empty `meta.name` an
- * `unsafe-name` refusal, neither of which reaches a gate reading; a `meta` with
- * no readable name at all is reported by the bridge's own stem-fallback caveat.
+ * `unsafe-name` refusal, and a `meta` with no readable name a `no-literal-name`
+ * skip, none of which reaches a gate reading.
  *
  * `model` and `phases` are judged only when DECLARED, because the engine admits
  * a `meta` that declares neither.
@@ -1140,6 +1086,10 @@ function metaSpreadReason(fileName: string): string {
 
 function metaComputedKeyReason(fileName: string): string {
   return `${forMessage(fileName)} declares \`meta\` with a computed key that can supply or overwrite its \`name\`, so the name cannot be read without running the script`;
+}
+
+function noLiteralNameReason(fileName: string): string {
+  return `${forMessage(fileName)} declares no string-literal \`meta.name\`, so there is no command to install`;
 }
 
 function unsafeNameReason(fileName: string, message: string): string {
