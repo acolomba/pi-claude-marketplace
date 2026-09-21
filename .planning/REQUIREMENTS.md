@@ -167,7 +167,7 @@ already-installed dependency disabled (RESV-05; BACKLOG ENBL-DEP-01).
 - [x] **EDEP-02**: `disable <plugin>` is refused while an enabled installed
   plugin in the scope declares it; the refusal names the dependents and gives
   the one command that disables them together.
-- [ ] **EDEP-03**: Installing or enabling a plugin enables an already-installed,
+- [x] **EDEP-03**: Installing or enabling a plugin enables an already-installed,
   disabled dependency through its record -- the desired-state config never
   names a dependency (D-04-02) -- and reports it on the row; the
   `{already installed, dependency disabled}` skip is retired.
@@ -279,7 +279,7 @@ this milestone.
 | TAGS-03 | Phase 7 | Complete |
 | EDEP-01 | Phase 8 | Complete |
 | EDEP-02 | Phase 8 | Complete |
-| EDEP-03 | Phase 8 | Pending |
+| EDEP-03 | Phase 8 | Complete |
 | MISS-01 | Phase 9 | Pending |
 | MISS-02 | Phase 9 | Pending |
 | UPDT-01 | Phase 10 | Pending |
