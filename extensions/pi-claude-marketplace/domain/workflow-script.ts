@@ -1064,7 +1064,7 @@ function metaValue(elements: readonly MetaElement[], key: string): Property["val
 export function forMessage(text: string): string {
   return text.replaceAll(
     /[\p{Cc}\p{Cf}]/gu,
-    (character) => `\\u{${Number(character.codePointAt(0)).toString(16)}}`,
+    (character) => String.raw`\u{${Number(character.codePointAt(0)).toString(16)}}`,
   );
 }
 
