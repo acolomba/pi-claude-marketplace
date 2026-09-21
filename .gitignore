@@ -92,8 +92,6 @@ pnpm-debug.log*
 
 # package artifacts
 *.tgz
-# except the maintained producer delivery, which package.json installs
-!vendor/coverage/*.tgz
 
 # tmp
 /tmp/

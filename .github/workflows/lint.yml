@@ -16,13 +16,7 @@ concurrency:
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
-    # `pre-commit run --all-files` runs the `npm-coverage-unit` and
-    # `npm-coverage-risk` hooks. No bundle exists on a fresh runner, so the
-    # producer runs the unit suite once here (about eight minutes locally) and
-    # the consumer reads the bundle it published. The job reuses nothing from
-    # ci.yml: an accepted bundle binds one tree and one runtime, and nothing
-    # here can verify another job's artifact (D-10).
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7

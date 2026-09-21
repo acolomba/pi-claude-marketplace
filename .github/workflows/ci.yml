@@ -59,10 +59,9 @@ jobs:
   check:
     name: npm run check (Node 24)
     runs-on: ubuntu-latest
-    # The chain runs one full unit run under V8 coverage (the verified
-    # capture, about eight minutes locally) and the CRAP gate after its older
-    # members. The ceiling is sized for a slower runner, not for the measured
-    # time.
+    # The chain runs one full unit run under V8 coverage (about eight minutes
+    # locally) after its older members. The ceiling is sized for a slower
+    # runner, not for the measured time.
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -79,19 +78,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
-      # METRIC-01 / D-05. The capture's Istanbul map comes from the vendored
-      # producer, and an accepted bundle binds the runtime that made it. The
-      # local measurement was made on another Node, so this job proves the
-      # installed producer's provenance and its conformance corpus on this
-      # runner's Node 24 before the chain accepts any artifact from it.
-      - name: Qualify the coverage producer on this runtime
-        run: |
-          npm run coverage:producer:build -- --verify
-          npm run coverage:producer:check
-
       - name: Run full check pipeline
-        # NFR-6: typecheck + ESLint + fallow + Prettier + the verified unit
-        # capture + the CRAP gate + integration tests + the member gates
+        # NFR-6: typecheck + ESLint + fallow + Prettier + the unit suite at
+        # 100% coverage + integration tests + the member gates
         run: npm run check
 
   integration-tests:
