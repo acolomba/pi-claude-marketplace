@@ -877,6 +877,116 @@ function partitionAlreadyInstalled(
 }
 
 /**
+ * A key no real declaration is expected to collide with: a distinctive
+ * plugin/marketplace name pair, both halves passing the ordinary
+ * `TOKEN_PATTERN` allowlist (`domain/dependencies.ts`) so `splitKey`
+ * resolves it like any other key. Not a reserved namespace -- a scope whose
+ * marketplace is literally named `cr04-synthetic-marketplace` would collide
+ * with it, which this module accepts as a documented, vanishingly unlikely
+ * risk rather than adding a reservation mechanism for one internal walk.
+ */
+const TRANSITIVE_REENABLE_SYNTHETIC_ROOT_KEY =
+  "cr04-synthetic-reenable-root@cr04-synthetic-marketplace";
+
+/**
+ * CR-04: `toReEnable`'s re-enable arm is not transitive on its own. The
+ * closure walk stops at ANY already-installed hit (`collectInstalledKeys`
+ * includes disabled records, and `walkDependencyEdge` returns WITHOUT
+ * recursing on a hit), so a `toReEnable` member's OWN disabled dependencies
+ * are never visited by the closure that found it -- LOAD-01 then holds it
+ * back down again on the very next pass.
+ *
+ * For each `toReEnable` member this resolves its OWN closure with an EMPTY
+ * `installedKeys` set, mirroring `enable-disable.ts::resolveEnableCascade`'s
+ * identical technique, to discover every transitively reachable member and
+ * keep the ones that are themselves installed-and-disabled. The whole
+ * discovered set is then folded into ONE globally post-ordered list through
+ * a single further walk from a synthetic root that "declares" every
+ * discovered member -- reusing the walk's own tested post-order and diamond
+ * dedup rather than a hand-rolled merge of several independently-ordered
+ * sub-closures. The synthetic root is exempt from the marketplace-known and
+ * already-installed guards exactly as every real root is (`domain/
+ * dependency-closure.ts`'s `isRoot` exemption), so it needs no entry in
+ * `knownMarketplaces` and no state record.
+ *
+ * A failure resolving any member's own closure propagates as the cascade's
+ * own closure failure (fail-closed, D-05-07 precedent): a disabled
+ * dependency reachable from the plugin being installed is not a fact this
+ * install may silently leave unexplored.
+ */
+async function resolveTransitiveReEnableSet(
+  state: ExtensionState,
+  lookup: ClosureLookup,
+  knownMarketplaces: ReadonlySet<string>,
+  toReEnable: readonly ClosureMember[],
+): Promise<DependencyClosureResult> {
+  if (toReEnable.length === 0) {
+    return { ok: true, closure: [], alreadyInstalled: [] };
+  }
+
+  const discovered = new Map<string, ClosureMember>(
+    toReEnable.map((member) => [member.key, member]),
+  );
+  const queue: ClosureMember[] = [...toReEnable];
+  for (let member = queue.shift(); member !== undefined; member = queue.shift()) {
+    const sub = await resolveDependencyClosure({
+      rootKey: member.key,
+      lookup,
+      installedKeys: new Set<string>(),
+      knownMarketplaces,
+    });
+    if (!sub.ok) {
+      return sub;
+    }
+
+    for (const candidate of sub.closure) {
+      if (candidate.key === member.key || discovered.has(candidate.key)) {
+        continue;
+      }
+
+      if (recordedDisabled(state, candidate)) {
+        discovered.set(candidate.key, candidate);
+        queue.push(candidate);
+      }
+    }
+  }
+
+  if (discovered.size === toReEnable.length) {
+    // No member's own closure surfaced a transitively disabled dependency
+    // beyond the direct set the caller already found in the walk's own
+    // post order -- nothing to re-fold.
+    return { ok: true, closure: toReEnable, alreadyInstalled: [] };
+  }
+
+  const folded = await resolveDependencyClosure({
+    rootKey: TRANSITIVE_REENABLE_SYNTHETIC_ROOT_KEY,
+    lookup: (subject) =>
+      subject.key === TRANSITIVE_REENABLE_SYNTHETIC_ROOT_KEY
+        ? Promise.resolve({
+            kind: "found" as const,
+            dependencies: [...discovered.values()].map((member) => ({
+              name: member.name,
+              marketplace: member.marketplace,
+            })),
+          })
+        : lookup(subject),
+    installedKeys: new Set<string>(),
+    knownMarketplaces,
+  });
+  if (!folded.ok) {
+    return folded;
+  }
+
+  return {
+    ok: true,
+    closure: folded.closure.filter(
+      (member) => member.key !== TRANSITIVE_REENABLE_SYNTHETIC_ROOT_KEY,
+    ),
+    alreadyInstalled: [],
+  };
+}
+
+/**
  * `partitionAlreadyInstalled` places a member in `toReEnable` only when
  * `recordedDisabled` has already proved its record exists and is disabled.
  * Evidence-backed type narrowing only; the invariant is established by the
@@ -1095,8 +1205,23 @@ export async function runInstallCascade(
     options.state,
     closure.alreadyInstalled,
   );
+  // CR-04: `toReEnable` alone is not transitive -- fold in every disabled
+  // member reachable FROM those members that the outer walk's
+  // already-installed wall hid.
+  const transitiveReEnable = await resolveTransitiveReEnableSet(
+    options.state,
+    options.lookup,
+    options.knownMarketplaces,
+    toReEnable,
+  );
+  if (!transitiveReEnable.ok) {
+    return { kind: "closure-failed", failure: transitiveReEnable };
+  }
+
   const phases: readonly Phase<CascadeRun>[] = [
-    ...toReEnable.map((member) => buildReEnableMemberPhase(options, seam, transaction, member)),
+    ...transitiveReEnable.closure.map((member) =>
+      buildReEnableMemberPhase(options, seam, transaction, member),
+    ),
     ...constraints.members.map((member) => buildMemberPhase(options, seam, transaction, member)),
   ];
   // RESV-05 / RESV-06: projected from the walk's own left-alone list, not from

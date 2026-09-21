@@ -1817,6 +1817,56 @@ test("EDEP-03 a disabled already-installed dependency's record ends enabled, mat
   assert.strictEqual(bar.fellBackToCurrentCopy, false);
 });
 
+test("CR-04: a depth-2 disabled dependency chain re-enables transitively", async (t) => {
+  // arrange: `foo` declares `bar`; `bar` declares `baz`. Both `bar` and
+  // `baz` are pre-installed and disabled, so the outer walk's
+  // already-installed wall stops at `bar` and never reaches `baz` on its
+  // own -- the exact truncation CR-04 closes.
+  const environment = await createHermeticEnvironment(t, "install-cascade-cr04-transitive-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo"], {
+    preinstalled: ["bar", "baz"],
+  });
+  const bar = state.marketplaces[MARKETPLACE]?.plugins.bar;
+  const baz = state.marketplaces[MARKETPLACE]?.plugins.baz;
+  assert.ok(bar !== undefined && baz !== undefined, "the fixture pre-installs both dependencies");
+  bar.enabled = false;
+  bar.provenance = "dependency";
+  baz.enabled = false;
+  baz.provenance = "dependency";
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar" }],
+      [`bar@${MARKETPLACE}`]: [{ name: "baz" }],
+      [`baz@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`, `baz@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert: both records end enabled, and both appear in the materialized
+  // member list re-enabled through their own record.
+  assert.strictEqual(cascade.kind, "installed");
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.enabled, true);
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.baz?.enabled, true);
+  const barMember =
+    cascade.kind === "installed" &&
+    cascade.members.find((member) => member.key === `bar@${MARKETPLACE}`);
+  const bazMember =
+    cascade.kind === "installed" &&
+    cascade.members.find((member) => member.key === `baz@${MARKETPLACE}`);
+  assert.ok(barMember, "bar appears in the materialized member list");
+  assert.ok(bazMember, "baz appears in the materialized member list");
+  assert.strictEqual(barMember.reEnabledFromRecord, true);
+  assert.strictEqual(bazMember.reEnabledFromRecord, true);
+});
+
 test("EDEP-03 a re-enabled dependency keeps its provenance at dependency", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-cascade-reenable-provenance-");
