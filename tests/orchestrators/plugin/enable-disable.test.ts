@@ -5168,6 +5168,74 @@ test("WR-02: a re-enabled member's hooks are hydrated into the routing cache wit
   });
 });
 
+test("CR-03: a root ledger failure AFTER a member materialized unwinds the member too", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange: "a" declares "b"; both disabled. "b" materializes cleanly
+    // (it is the cascade's own phase, ahead of the root's in post order),
+    // and THEN "a"'s own ledger call -- the merged ledger's last phase --
+    // rejects. Before CR-03, "b"'s materialization ran in its own separate
+    // ledger, already committed by the time the root's runEnableBranch call
+    // failed; the caller returned without saving, leaving "b"'s artifacts
+    // on disk with state.json still disabled. Merging the root into the
+    // same runPhases ledger as the members is what makes this failure
+    // unwind "b" too.
+    const { statePath, scopeRoot } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    const failure = new Error("a's own ledger failed");
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async runInstallLedger(state, locations, options, capture) {
+        if (options.plugin === "a") {
+          return rejectUnknown(failure);
+        }
+
+        return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert: "b"'s staged skill is off disk again -- the real, observable
+    // proof the unwind ran, since this path never saves and state.json is
+    // byte-for-byte the seed either way (CR-05 precedent).
+    await assert.rejects(
+      stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b:s1")),
+      { code: "ENOENT" },
+      "b's staged skill is off disk again",
+    );
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ a v1.0.0 (failed)",
+        "    cause: a's own ledger failed",
+      ].join("\n"),
+    );
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins.a!.enabled, false);
+    assert.equal(state.marketplaces.official!.plugins.b!.enabled, false);
+  });
+});
+
 test("CR-05: a member's undo folds a partial unstage failure and rethrows it as a rollback partial", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
