@@ -98,8 +98,12 @@ const EXPECTED_SECTION_COUNT = 20;
 // EDEP-01 / EDEP-03: +1 state for the enable cascade's own multi-row block --
 // a declared dependency re-enabled through its own record, carrying the new
 // `{dependency enabled}` token on an `installed` row (218 -> 219).
-const EXPECTED_STATE_COUNT = 219;
-const EXPECTED_UTF8_BYTES = 29_939;
+// EDEP-02: +1 state for the disable refusal -- an installed and ENABLED
+// plugin in the same scope still declares the target, so the disable is
+// refused with the new `{dependents remain}` token and a plain-English
+// cause line naming the dependents and the order (219 -> 220).
+const EXPECTED_STATE_COUNT = 220;
+const EXPECTED_UTF8_BYTES = 30_104;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -388,7 +392,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 219 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 220 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

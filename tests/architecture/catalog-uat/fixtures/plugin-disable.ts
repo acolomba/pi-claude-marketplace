@@ -64,6 +64,33 @@ export const PLUGIN_DISABLE_FIXTURES: FixtureMap = {
       },
     },
 
+    // EDEP-02: disable is refused while an installed and ENABLED plugin in
+    // the same scope still declares the target. Nothing is unstaged; the
+    // cause line names the target and the sorted dependents and states the
+    // disable order (D-08-01).
+    "disable-refused-dependents": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "shared-lib",
+                reasons: ["dependents remain"],
+                cause: new Error("Disable helper@official first, then shared-lib@official."),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "disable-invalid-config": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",

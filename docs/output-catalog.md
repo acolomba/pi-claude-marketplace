@@ -60,7 +60,7 @@ This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ct
 
 ### Reasons rendering
 
-Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 60-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only block is the dependency-cascade vocabulary -- `{no matching version}`, `{version conflict}`, `{constraint too complex}`, `{invalid version constraint}`, `{dependency marketplace not added}`, `{dependency cycle}`, `{dependency failed}`, `{dependency disabled}`, `{dependency promoted}`, `{dependency pruned}`, `{dependency unsatisfied}`, `{dependency version unsatisfied}`, `{dependents unsatisfied}`, `{dependency current copy}` and `{dependency enabled}` -- which sits after uninstall's data-disposition marker `{data kept}`.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 61-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only block is the dependency-cascade vocabulary -- `{no matching version}`, `{version conflict}`, `{constraint too complex}`, `{invalid version constraint}`, `{dependency marketplace not added}`, `{dependency cycle}`, `{dependency failed}`, `{dependency disabled}`, `{dependency promoted}`, `{dependency pruned}`, `{dependency unsatisfied}`, `{dependency version unsatisfied}`, `{dependents unsatisfied}`, `{dependency current copy}`, `{dependency enabled}` and `{dependents remain}` -- which sits after uninstall's data-disposition marker `{data kept}`.
 
 Structural `unavailable` rows derive reasons from resolver notes through `narrowResolverNotes`. Partial rows derive typed unsupported kinds through `narrowUnsupportedKinds`. The typed `workflows` kind uses the second path.
 
@@ -3270,6 +3270,20 @@ Fresh disable -- a previously-enabled plugin's artifacts are unstaged via `casca
 ```
 
 Idempotent no-op -- the plugin is already disabled (the state record carries `enabled: false`). Plugin row = `PluginSkippedMessage` carrying `reasons: ["already disabled"]`; `already disabled` is in `BENIGN_REASONS`, so the cascade routes to `info` severity. No reload-hint.
+
+### Refused -- an enabled plugin still declares it (EDEP-02)
+
+<!-- catalog-state: disable-refused-dependents -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ shared-lib (failed) {dependents remain}
+    cause: Disable helper@official first, then shared-lib@official.
+```
+
+Triggered when `disable <plugin>@<marketplace>` names a plugin that another installed AND ENABLED plugin in the SAME scope still declares as a dependency. Unlike `uninstall` (LOAD-03 / D-06-06), the disable is REFUSED -- nothing is unstaged, `tx.save` is never called, and state.json's mtime is unchanged. The declarer set is the scope's own (D-05-05): only installed records whose OWN record is currently enabled count (`persistence/state-io.ts::isRecordedButDisabled` narrows `buildScopeDeclarationIndex`'s D-05-04 disabled-declarers-included index down to the ENABLED ones), because a disabled declarer holds its declaration (D-05-04) but is not active, so the condition this guard asks about -- an ENABLED installed plugin still needs this one -- is false for it. A declarer one scope over never blocks (D-05-05): only the target scope's own state is consulted. The row carries the new `{dependents remain}` reason and `error` severity with no reload-hint -- the operation was NOT carried out, which is what keeps this token out of the `dependents unsatisfied` group (that token's subject is a removal that WENT THROUGH, on a success row). The `cause:` trailer is a plain-English instruction naming the target and the sorted dependents and stating the order (D-08-01): `disable` accepts exactly one `<plugin>@<marketplace>` target, so upstream's chained-command template is not available here. Two or more dependents are named sorted and comma-joined (`Disable alpha@official, zeta@official first, then shared-lib@official.`); an unrenderable name (T-08-06: a plugin name may carry a quote, comma, space or bidi control per `domain/name.ts::assertSafeName`) collapses the list to a count (`Disable 2 other plugins first, then shared-lib@official.`) rather than let a hostile name forge the sentence. A record whose declarations cannot be established refuses with `{unreadable}` instead, fail-closed exactly as the uninstall guard does (D-05-07) -- the cause line names the declarer and never an absolute path. A disabled declarer, an other-scope declarer, or no declarer at all leaves the disable proceeding exactly as the `disable-fresh` state above, byte for byte.
 
 ### Marketplace not added
 
