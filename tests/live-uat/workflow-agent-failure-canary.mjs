@@ -47,14 +47,12 @@
 // verifier records `human_needed` rather than a silent pass. Never skip-and-pass.
 
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
-import { mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-/** The engine package resolved out of the scratch prefix. */
-const ENGINE_PACKAGE = "@quintinshaw/pi-dynamic-workflows";
+import { CanaryExit, createEngineScratch } from "./engine-scratch.mjs";
 
 /**
  * The log line the engine emits when a recoverable agent failure exhausts its
@@ -66,25 +64,10 @@ const INDUCED_FAILURE_MARKER = "AGENT_EXECUTION_ERROR";
 /** Negative control B: flip the primary expectation and nothing else. */
 const INVERT = process.argv.includes("--invert");
 
-/** Thrown for every routed exit whose reason has already been printed. */
-class CanaryExit extends Error {}
-
-function pass(msg) {
-  console.log(`[wf-agent-canary] PASS: ${msg}`);
-}
-
-/**
- * The engine could not be resolved, or the sandbox is not a sandbox. Nothing
- * has been created and the engine has not been imported.
- */
-function liveEngineRequired(reason, detail) {
-  console.error(`\n[wf-agent-canary] LIVE ENGINE REQUIRED: ${reason}`);
-  if (detail !== undefined) {
-    console.error(`  ${detail}`);
-  }
-  console.error(`\nSee tests/live-uat/README.md for the scratch-install route.`);
-  throw new CanaryExit(reason);
-}
+const { pass, resolveEngine, assertSandboxContainment } = createEngineScratch(
+  "wf-agent-canary",
+  "Run: PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/wf-agent PI_WORKFLOW_ENGINE_ROOT=... node tests/live-uat/workflow-agent-failure-canary.mjs",
+);
 
 /**
  * The marker is absent, so no verdict may be read. What that absence supports
@@ -122,83 +105,6 @@ function nothingWasMeasured(logs) {
 }
 
 /**
- * Resolve the engine's scratch prefix, then read BOTH the version and the entry
- * point out of the engine's OWN manifest. Never hard-code either: the grade
- * published downstream must name the version the run actually observed, and a
- * literal entry path silently bypasses the layout the package declares. A
- * missing entry is an unmet precondition, so it is routed as one rather than
- * left to surface as an `ERR_MODULE_NOT_FOUND` stack.
- */
-async function resolveEngine() {
-  const root = process.env.PI_WORKFLOW_ENGINE_ROOT;
-  if (root === undefined || root.trim() === "") {
-    liveEngineRequired(
-      "PI_WORKFLOW_ENGINE_ROOT is unset.",
-      "It must name the node_modules of a scratch install of the engine.",
-    );
-  }
-  const manifestPath = path.join(root, ENGINE_PACKAGE, "package.json");
-  let manifest;
-  try {
-    manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  } catch (err) {
-    liveEngineRequired(
-      `the engine manifest is unreadable at ${manifestPath}.`,
-      String(err?.message ?? err),
-    );
-  }
-  if (typeof manifest.version !== "string") {
-    liveEngineRequired(`the engine manifest at ${manifestPath} carries no version.`);
-  }
-  const entry = path.join(root, ENGINE_PACKAGE, manifest.main ?? "dist/index.js");
-  if (!existsSync(entry)) {
-    liveEngineRequired(
-      `the engine entry point is missing at ${entry}.`,
-      "The scratch install may be incomplete, or the engine changed its published layout.",
-    );
-  }
-  return { entry, version: manifest.version };
-}
-
-/** The only agent-state root this driver will hand to the engine. */
-const SANDBOX_ROOT = path.resolve(process.cwd(), "tmp", "pi-uat");
-
-/**
- * Refuse to run against anything but the disposable sandbox, BEFORE creating
- * anything and before the engine is imported. Two independent reasons: the
- * engine writes into whatever agent-state directory it is handed, and the
- * operator's real one is where their provider credentials live -- reaching them
- * would both spend money and silently un-measure this driver.
- *
- * The comparison is on RESOLVED paths, never on the raw string. A substring
- * test is a smell test rather than containment: `.../tmp/pi-uat/../../elsewhere`
- * carries the substring, survives `existsSync`, and names a directory outside
- * the sandbox -- which is then created and handed to third-party code. The
- * trailing separator matters for the same reason: a sibling `tmp/pi-uat-backup`
- * is not a child of `tmp/pi-uat`.
- */
-function assertSandboxContainment() {
-  const agentDir = process.env.PI_CODING_AGENT_DIR;
-  if (agentDir === undefined || agentDir.trim() === "") {
-    liveEngineRequired(
-      "PI_CODING_AGENT_DIR is unset.",
-      "Run: PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/wf-agent PI_WORKFLOW_ENGINE_ROOT=... node tests/live-uat/workflow-agent-failure-canary.mjs",
-    );
-  }
-  const resolved = path.resolve(agentDir);
-  if (resolved !== SANDBOX_ROOT && !resolved.startsWith(SANDBOX_ROOT + path.sep)) {
-    liveEngineRequired(
-      `PI_CODING_AGENT_DIR (${agentDir} -> ${resolved}) is not inside ${SANDBOX_ROOT}.`,
-      "Refusing to hand the engine an agent-state directory outside the disposable sandbox.",
-    );
-  }
-  if (!existsSync(resolved)) {
-    liveEngineRequired(`PI_CODING_AGENT_DIR (${agentDir} -> ${resolved}) does not exist.`);
-  }
-  return resolved;
-}
-
-/**
  * One `agent()` call, wrapped so the workflow body reports the OBSERVABLE:
  * whether the promise resolved and whether the resolved value was `null`.
  */
@@ -226,7 +132,9 @@ return { rows: rows.length, survivors: rows.filter(Boolean).length };
 
 async function main() {
   const { entry, version } = await resolveEngine();
-  const sandboxRoot = assertSandboxContainment();
+  const sandboxRoot = assertSandboxContainment(
+    "Refusing to hand the engine an agent-state directory outside the disposable sandbox.",
+  );
 
   console.log(`[wf-agent-canary] engine ${version}`);
 
@@ -257,7 +165,9 @@ async function main() {
 
     // ---- A0 + A1: a recoverable failure, induced by the absence of credentials.
     const recoverable = requireInducedFailure(await drive(agentCallScript(`agent("ping")`)));
-    pass(`A0: the agent call failed as induced, so this run measured something (engine ${version})`);
+    pass(
+      `A0: the agent call failed as induced, so this run measured something (engine ${version})`,
+    );
 
     // A1 -- the measurement. Compare through `structuredClone`: the engine runs
     // script bodies in a separate realm and injects no host built-ins, so the
