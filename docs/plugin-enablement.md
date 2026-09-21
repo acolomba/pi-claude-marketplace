@@ -41,9 +41,15 @@ Where a closure member is ALREADY installed but its record is DISABLED, the inst
 
 Neither path writes an explicit `enabled` value into the configuration file for a dependency: the desired-state configuration still names only what the user asked for by name (D-04-02), so the write reaches the installation record alone. Claude Code's own second override, quoted verbatim from [the upstream plugins reference](https://code.claude.com/docs/en/plugins-reference), retrieved 2026-08-15, states that "when a plugin is required by another one that is active, Claude Code writes `true` for it at install or enable time." This extension reaches the same observable outcome -- the dependency is live -- through the installation record rather than through an explicit config write. Note that this is a plugin author's own `dependencies` declaration, an unrelated concept from the soft-dependency companion extensions the notification rows name with the same word.
 
+Both cascades run for the standalone command only, not for a config-declared (reconcile-driven) enable -- see [Only the standalone `enable` command lifts a disabled dependency](#only-the-standalone-enable-command-lifts-a-disabled-dependency) below.
+
 ## Divergences and documented absences
 
 The behaviors below are deliberate divergences from Claude Code or documented absences. Each is the single citable home for a caveat that the sections above mark with a pointer -- the caveat text is not duplicated elsewhere.
+
+### Only the standalone `enable` command lifts a disabled dependency
+
+The enable cascade (EDEP-01) and the install cascade's re-enable arm (EDEP-03) both run for the standalone `enable`/`install` commands only. Setting `A: {}` in `claude-plugins.json` and reloading enables `A` alone: if `A`'s declared dependency `B` is disabled, `B` stays disabled and the SAME reconcile pass holds `A` back down as `dependencyDisabled` (LOAD-01) -- the config-declared enable does not reach the outcome the standalone command does. `orchestrators/reconcile/dependency-verdict.ts` only ever holds a record DOWN; nothing on that path lifts one, so a disabled dependency stays disabled until the user runs `enable <plugin>` (or `install <plugin>`) by hand. The reconcile-driven `disable` side has the opposite asymmetry deliberately: `disable`'s own dependents guard (EDEP-02) is skipped for orchestrated calls, because `dependency-verdict.ts`'s own LOAD-02 propagation disables a dependency chain in dependents-before-dependencies order and would deadlock against a guard written for the standalone command.
 
 ### The pre-install claim is read from the marketplace entry alone
 
