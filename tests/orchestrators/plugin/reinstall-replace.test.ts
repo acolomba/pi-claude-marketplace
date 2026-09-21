@@ -145,6 +145,7 @@ function replacementInput(pluginRoot = "/plugin"): ReplaceReinstalledPluginInput
       resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
     } as unknown as ReplaceReinstalledPluginInput["oldRecord"],
     agentsDirs: [],
+    workflowNames: [],
   };
 }
 

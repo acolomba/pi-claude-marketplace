@@ -318,10 +318,14 @@ export async function prepareStageSkills(
         content = augmentSkillDescription(content, parsed.frontmatter, parsed.body, skillVars);
       }
 
-      // SKTK-01: retarget same-plugin `<plugin>:<skill>` references (both
-      // arms -- a degraded skill's body is prose too). Runs before SK-4
-      // substitution so the PARSE-02 backstop validates the final bytes.
-      content = rewriteSkillTokens(content, pluginName, generatedNames);
+      // SKTK-01: retarget same-plugin `<plugin>:<skill>` and
+      // `<plugin>:<workflow>` references (both arms -- a degraded skill's body
+      // is prose too). Runs before SK-4 substitution so the PARSE-02 backstop
+      // validates the final bytes.
+      content = rewriteSkillTokens(content, pluginName, {
+        skills: generatedNames,
+        workflows: input.knownWorkflowNames,
+      });
       content = substituteClaudeVars(content, skillVars);
       await writeFile(skillMdPath, content, "utf8");
 

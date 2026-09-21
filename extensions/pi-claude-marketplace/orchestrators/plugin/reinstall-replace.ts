@@ -135,6 +135,8 @@ export interface ReplaceReinstalledPluginInput {
   readonly pluginDataDir: string;
   readonly oldRecord: PluginInstallRecord;
   readonly agentsDirs: readonly string[];
+  /** SKTK-01: the workflow names the skills bridge retargets sibling references onto. */
+  readonly workflowNames: readonly string[];
 }
 
 /** Physical bridge operations consumed by the atomic replacement schedule. */
@@ -403,6 +405,7 @@ async function prepareAllHandles(
       pluginDataDir: input.pluginDataDir,
       resolved: input.installable,
       previousSkillNames: input.oldRecord.resources.skills,
+      knownWorkflowNames: input.workflowNames,
       cwd: input.cwd,
     });
     handles.commands = await operations.prepareStageCommands(ops, {

@@ -10733,6 +10733,52 @@ test("WGATE-01 / WGATE-03: installing the same gate-warned plugin twice warns on
   assert.equal((first.notifications[1]?.message ?? "").split("\n").length, 3);
 });
 
+test("SKTK-01: a skill that names a sibling workflow by its upstream spelling is staged naming the installed command", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-skill-workflow-token-"));
+    try {
+      // arrange -- the workflow's `meta.name` repeats the plugin prefix, so it
+      // installs as `hello:audit` while the skill, written for Claude Code,
+      // says `hello:hello-audit`. The skills phase runs before the workflows
+      // phase, so the name it retargets onto comes from the pre-ledger preview.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [
+          {
+            sourceName: "tool",
+            body: "Run /hello:hello-audit first, then /hello:hello-ghost.\n",
+          },
+        ],
+        workflows: [
+          {
+            sourceName: "audit.workflow",
+            body: 'export const meta = { name: "hello-audit", description: "audits" };\n',
+          },
+        ],
+      });
+      const { ctx, pi } = makeCtx({ toolNames: ["workflow_control"] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert -- the staged skill names the command the session has; the
+      // reference to a workflow the plugin does not ship stays verbatim.
+      const staged = await readFile(
+        path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md"),
+        "utf8",
+      );
+      assert.ok(staged.includes("Run /hello:audit first, then /hello:hello-ghost."), staged);
+      assert.ok(!staged.includes("hello:hello-audit"), staged);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // WGATE-01 / D-115-05: every workflow discovery family on a standalone install
 //

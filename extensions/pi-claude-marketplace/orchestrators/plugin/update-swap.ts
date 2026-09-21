@@ -242,6 +242,7 @@ async function prepareUpdateHandles(
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
   agentsDirs: readonly string[],
+  workflowNames: readonly string[],
 ): Promise<PrepHandles> {
   const { plugin, marketplace, cwd, locations } = args;
   const { installable, record } = preflight;
@@ -256,6 +257,7 @@ async function prepareUpdateHandles(
       pluginDataDir,
       resolved: installable,
       previousSkillNames: record.resources.skills,
+      knownWorkflowNames: workflowNames,
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
     });
@@ -1271,6 +1273,7 @@ export async function swapPluginUpdate(
     args,
     preflight,
     generatedNames.agentsDirs,
+    generatedNames.workflows,
   );
 
   // ─── Phase 2a: pre-commit intent-mark (TR-04) ─────────────────────────────

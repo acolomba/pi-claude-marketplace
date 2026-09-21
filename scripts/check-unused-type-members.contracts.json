@@ -130,28 +130,28 @@
       "filter": "extensions/pi-claude-marketplace/bridges/mcp/types.ts:94:22"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:517:51",
+      "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:521:51",
       "owner": "replacement",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within SkillsReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:517:22"
+      "filter": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:521:22"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:564:45",
+      "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:568:45",
       "owner": "requireSkillsReplacementInternals.replacement",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within SkillsReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:564:16"
+      "filter": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:568:16"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:576:46",
+      "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:580:46",
       "owner": "rollbackSkillsReplacementInternal.prepared",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within PreparedSkillsStaging by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:576:13"
+      "filter": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:580:13"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:66:32",
@@ -162,12 +162,12 @@
       "filter": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:66:3"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/skills/types.ts:116:55",
+      "id": "extensions/pi-claude-marketplace/bridges/skills/types.ts:125:55",
       "owner": "SkillsReplacementNoop.prepared",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within PreparedSkillsStaging by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/skills/types.ts:116:22"
+      "filter": "extensions/pi-claude-marketplace/bridges/skills/types.ts:125:22"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:29:48",
@@ -410,12 +410,12 @@
       "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:58:29"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1133:3",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1136:3",
       "owner": "FailedRunPhasesResult",
       "key": "ok",
       "category": "type-refinement",
       "purpose": "Narrows ok at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1132:30"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1135:30"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:108:78",

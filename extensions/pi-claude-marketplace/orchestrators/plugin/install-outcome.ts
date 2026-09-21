@@ -700,6 +700,9 @@ async function runInstallLedgerBody(
         pluginRoot: c.resolved.pluginRoot,
         pluginDataDir: c.pluginDataDir,
         resolved: c.resolved,
+        // SKTK-01: the workflows phase runs after this one, so the names come
+        // from the pre-ledger preview rather than from a staged result.
+        knownWorkflowNames: generatedNames.workflows,
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: c.cwd,
       });

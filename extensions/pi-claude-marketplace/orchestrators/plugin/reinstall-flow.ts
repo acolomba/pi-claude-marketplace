@@ -756,6 +756,7 @@ async function runLockedReinstall(
       pluginDataDir,
       oldRecord: oldSnapshot,
       agentsDirs: generated.agentsDirs,
+      workflowNames: generated.workflows,
     },
     transaction.replaceOperations,
   );
