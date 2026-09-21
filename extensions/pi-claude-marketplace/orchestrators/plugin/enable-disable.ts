@@ -96,6 +96,7 @@ import {
   emitMarketplaceNotAdded,
   missIsNotInstalled,
   enableRowDependencies,
+  overwriteDisabledMemberEntries,
   resolveCrossScopePluginTarget,
   type selectDeclaringConfigWriteTarget,
   type CrossScopePluginResolution,
@@ -864,29 +865,26 @@ function buildEnableCascadeMemberPhase(
 }
 
 /**
- * CR-03: the root's OWN fresh enable, as the LAST phase of the SAME
- * `runPhases` ledger the cascade's members run in. Before this, the members
- * materialized in their own separate ledger and the root ran afterward
- * through `runEnableBranch`; a root failure after the members committed
- * left their artifacts on disk with no state save (NFR-3 violation, the
- * file's own former "Known gap" comment). Sharing one ledger means a root
- * failure unwinds the members too, and a member failure unwinds a root that
- * already committed -- `runPhases`'s reverse-order undo covers both
- * directions because both are phases of the same array.
+ * CR-03: the root's own fresh enable is the LAST phase of the SAME
+ * `runPhases` ledger the cascade's members run in, so a failure in either
+ * direction unwinds both: a root failure unwinds the members too, and a
+ * member failure unwinds a root that already committed --
+ * `runPhases`'s reverse-order undo covers both directions because both are
+ * phases of the same array (NFR-3: a materialized member's artifacts never
+ * survive on disk with no matching state.json entry).
  *
  * `do` calls `materializeEnableRoot` -- the same call `runEnableBranch`
  * makes for `disable` and for an orchestrated enable -- but does NOT catch
  * its throw: the throw IS this phase's failure signal, and `runPhases`
  * reads it to unwind every phase before this one.
  *
- * NO `undo`. This phase is unconditionally the LAST in the array
- * (`runEnableCascadeWithRoot` pushes it after every member phase), and
- * `runPhases` calls `undo` only from its own `catch` -- reached exclusively
- * when a `do` THROWS. If this phase's `do` throws, `run.root` was never
- * assigned, so there is nothing to unstage. If it succeeds, `runPhases`
- * returns success directly with no phase after this one left to fail, so
- * `undo` is never invoked on a root that DID materialize. A real unstage
- * body here could never execute either branch.
+ * WR-08: `undo` puts the root back to disabled, gated on `run.root` (the
+ * sentinel `do` sets only once materialization completes -- a `Phase.undo`
+ * cannot assume its `do` ran to completion). This phase is no longer
+ * unconditionally last: `runEnableCascadeWithRoot` pushes WR-08's own config
+ * phase after it, so a throw from THAT phase reaches back here through
+ * `runPhases`'s reverse-order undo, and the root's own materialized install
+ * must unwind exactly like a member's.
  */
 function buildEnableRootPhase(
   transaction: EnableDisableTransaction,
@@ -915,6 +913,20 @@ function buildEnableRootPhase(
         run.rollbackPartials.push(...capture.rollbackPartials);
         throw err;
       }
+    },
+    undo: async (run) => {
+      if (run.root === undefined) {
+        return;
+      }
+
+      await unstageBackToDisabled(
+        transaction,
+        locations,
+        state,
+        opts.marketplace,
+        opts.plugin,
+        rootKey,
+      );
     },
   };
 }
@@ -1009,6 +1021,45 @@ function enableCascadeRollbackPartials(
 }
 
 /**
+ * WR-08: the config write(s) that overwrite a member's -- and, on the
+ * fresh-root path, the root's own -- stale `enabled: false` entry, as the
+ * FINAL phase of the SAME ledger the cascade's members (and, on that path,
+ * the root) already ran in. Before this phase existed, both writes ran AFTER
+ * `runPhases` had already returned `ok` and BEFORE `tx.save()`; a throw there
+ * (an EACCES on the config file, for instance) propagated past the ledger
+ * with every member's -- and the root's -- artifacts already materialized on
+ * disk and no state save to record them (NFR-3 violation). As a phase, the
+ * same throw now unwinds every phase before it through `runPhases`'s own
+ * reverse-order undo, exactly like any other phase failure. `undo` is
+ * omitted: a throw from a config write leaves no partial write this module
+ * can observe to unwind, so there is nothing for `runPhases`'s catch to call
+ * back into for this phase.
+ */
+function buildEnableCascadeConfigPhase(
+  transaction: EnableDisableTransaction,
+  locations: ScopedLocations,
+  state: ExtensionState,
+  rootWrite?: {
+    readonly write: EnabledFlagWriteTarget;
+    readonly selection: SelectedConfigWriteTarget;
+  },
+): Phase<EnableCascadeRun> {
+  return {
+    name: "config",
+    do: async (run) => {
+      if (rootWrite !== undefined) {
+        await writeEnabledFlagBack(transaction, rootWrite.write, rootWrite.selection, state);
+      }
+
+      const reEnabledMemberKeys = run.rows
+        .filter((row) => row.status === "installed")
+        .map((row) => row.name);
+      await writeReEnabledMemberConfigEntries(transaction, locations, state, reEnabledMemberKeys);
+    },
+  };
+}
+
+/**
  * Materialize every `"re-enabled"` member through its own record, all or
  * nothing: driven through `runPhases` so a member failure unwinds every
  * member this command already turned on -- the same all-or-nothing stance
@@ -1045,6 +1096,11 @@ async function runEnableCascadeMembers(
     state,
     members,
   );
+  const wrote = phases.length > 0;
+  if (wrote) {
+    phases.push(buildEnableCascadeConfigPhase(transaction, locations, state));
+  }
+
   const result = await runPhases(phases, run);
   if (!result.ok) {
     assertFailedPhasesHasError(result);
@@ -1055,14 +1111,15 @@ async function runEnableCascadeMembers(
     };
   }
 
-  return { ok: true, rows: run.rows, wrote: phases.length > 0, hydratable: run.hydratable };
+  return { ok: true, rows: run.rows, wrote, hydratable: run.hydratable };
 }
 
 /**
  * CR-03: materialize the cascade's re-enable members AND the root's own
- * fresh enable in ONE `runPhases` ledger -- the root's phase runs LAST, so
- * the members are live before the plugin that needs them, and a failure
- * anywhere unwinds every phase, members and root alike.
+ * fresh enable in ONE `runPhases` ledger -- the root's phase runs LAST, and
+ * WR-08's config phase (the root's own flag flip plus every member's stale
+ * entry) runs LAST OF ALL, so a failure anywhere unwinds every phase before
+ * it, members and root alike.
  */
 async function runEnableCascadeWithRoot(args: {
   readonly transaction: EnableDisableTransaction;
@@ -1073,6 +1130,8 @@ async function runEnableCascadeWithRoot(args: {
   readonly installed: InstalledPluginRecord;
   readonly members: readonly EnableCascadeMember[];
   readonly rootKey: string;
+  readonly write: EnabledFlagWriteTarget;
+  readonly selection: SelectedConfigWriteTarget;
 }): Promise<
   | {
       readonly ok: true;
@@ -1086,7 +1145,8 @@ async function runEnableCascadeWithRoot(args: {
       readonly rollbackPartials: readonly RollbackPartial[];
     }
 > {
-  const { transaction, opts, scope, locations, state, installed, members, rootKey } = args;
+  const { transaction, opts, scope, locations, state, installed, members, rootKey, write, selection } =
+    args;
   const { run, phases } = buildEnableCascadeMemberPhases(
     transaction,
     opts,
@@ -1096,6 +1156,9 @@ async function runEnableCascadeWithRoot(args: {
     members,
   );
   phases.push(buildEnableRootPhase(transaction, opts, scope, locations, state, installed, rootKey));
+  phases.push(
+    buildEnableCascadeConfigPhase(transaction, locations, state, { write, selection }),
+  );
   const result = await runPhases(phases, run);
   if (!result.ok) {
     assertFailedPhasesHasError(result);
@@ -1137,54 +1200,34 @@ function assertFailedPhasesHasError(
 }
 
 /**
- * CR-01: a re-enabled member whose key the target-scope config ALREADY
- * declares with `enabled: false` is the same divergence D-04-07 corrects for
- * the root. The disable verb writes exactly that entry, and EDEP-02 mandates
- * `disable A` (the dependent) then `disable B` (the dependency), so both
- * writes land; leaving `B`'s entry at `enabled: false` after `enable A`
- * re-enables `B` through its record hands the reload the row asks for a
- * `disable B` to plan (`plan.ts::classifyDeclaredPlugin` reads the config
- * truth). Only an EXISTING `enabled: false` entry is patched to `true`,
- * through the same declaring-file selection the root uses
- * (`selectConfigWriteTarget`) -- a member the config does not mention at all
- * is left untouched (D-04-02: the config names only what the user asked for
- * by name). Called only once BOTH the members' ledger AND the root's own
- * branch have succeeded, alongside the root's own `writeEnabledFlagBack` --
- * a config write is not undone by `runPhases`, so patching it any earlier
- * would leave the file changed under a state.json the root's own failure
- * then leaves unsaved.
+ * CR-01 / CR-06: a re-enabled member whose key the target-scope config
+ * ALREADY declares with `enabled: false` is the same divergence D-04-07
+ * corrects for the root. The disable verb writes exactly that entry, and
+ * EDEP-02 mandates `disable A` (the dependent) then `disable B` (the
+ * dependency), so both writes land; leaving `B`'s entry at `enabled: false`
+ * after `enable A` re-enables `B` through its record hands the reload the
+ * row asks for a `disable B` to plan (`plan.ts::classifyDeclaredPlugin`
+ * reads the config truth). `overwriteDisabledMemberEntries` selects each
+ * member's file by DECLARATION ALONE, not by the flag the caller typed for
+ * the root, so a base-file entry is found even under `--local`. Called only
+ * once BOTH the members' ledger AND the root's own branch have succeeded,
+ * alongside the root's own `writeEnabledFlagBack` -- a config write is not
+ * undone by `runPhases`, so patching it any earlier would leave the file
+ * changed under a state.json the root's own failure then leaves unsaved.
  */
 async function writeReEnabledMemberConfigEntries(
   transaction: EnableDisableTransaction,
-  opts: EnableDisablePluginOptions,
   locations: ScopedLocations,
   state: ExtensionState,
   reEnabledKeys: readonly string[],
 ): Promise<void> {
-  for (const key of reEnabledKeys) {
-    const at = key.indexOf("@");
-    const plugin = key.slice(0, at);
-    const marketplace = key.slice(at + 1);
-    const selection = await transaction.selectConfigWriteTarget({
-      locations,
-      local: opts.local,
-      key,
-    });
-    if (selection.kind !== "selected" || selection.current.plugins?.[key]?.enabled !== false) {
-      continue;
-    }
-
-    await transaction.writeConfigEntries({
-      current: selection.current,
-      sibling: selection.sibling,
-      state,
-      marketplace,
-      plugin,
-      targetConfigPath: selection.targetConfigPath,
-      scopeRoot: locations.scopeRoot,
-      pluginPatch: { enabled: true },
-    });
-  }
+  await overwriteDisabledMemberEntries({
+    locations,
+    state,
+    keys: reEnabledKeys,
+    select: transaction.selectConfigWriteTarget,
+    write: transaction.writeConfigEntries,
+  });
 }
 
 /** The EDEP-01 cascade step's outcome, for the transaction closure to act on. */
@@ -1839,22 +1882,14 @@ async function settleIdempotentEnableCascade(args: {
   }
 
   if (materialized.wrote) {
-    // EDEP-01: the root is a no-op, but the cascade materialized real state
-    // for at least one dependency -- persist it (NFR-3): a materialized
+    // EDEP-01 / WR-08: the root is a no-op, but the cascade materialized real
+    // state for at least one dependency -- persist it (NFR-3): a materialized
     // member's artifacts must not survive on disk with no matching
-    // state.json entry. Only ever non-empty here for a standalone call:
-    // `resolveEnableCascadeStep` skips the cascade entirely for
+    // state.json entry. `runEnableCascadeMembers` already ran the member
+    // config write-back as the ledger's own final phase, so only the save and
+    // the hook hydration remain. Only ever reached here for a standalone
+    // call: `resolveEnableCascadeStep` skips the cascade entirely for
     // `orchestrated`.
-    const reEnabledMemberKeys = materialized.rows
-      .filter((row) => row.status === "installed")
-      .map((row) => row.name);
-    await writeReEnabledMemberConfigEntries(
-      transaction,
-      opts,
-      locations,
-      state,
-      reEnabledMemberKeys,
-    );
     await tx.save();
     await hydrateReEnabledMemberHooks(hooksRouting, opts, scope, materialized.hydratable);
   }
@@ -1909,6 +1944,8 @@ async function runFreshEnableCascadeWithRoot(args: {
     installed,
     members: cascadeMembers,
     rootKey,
+    write,
+    selection,
   });
   if (!merged.ok) {
     return {
@@ -1922,11 +1959,10 @@ async function runFreshEnableCascadeWithRoot(args: {
     };
   }
 
-  const reEnabledMemberKeys = merged.rows
-    .filter((row) => row.status === "installed")
-    .map((row) => row.name);
-  await writeEnabledFlagBack(transaction, write, selection, state);
-  await writeReEnabledMemberConfigEntries(transaction, opts, locations, state, reEnabledMemberKeys);
+  // WR-08: `runEnableCascadeWithRoot` already ran both config writes --
+  // the root's own flag flip and every member's stale entry -- as the
+  // ledger's own final phase, so only the save and the post-save hook work
+  // remain.
   await tx.save();
   await addCachedHooksAfterSave(hooksRouting, opts, scope, merged.root);
   await hydrateReEnabledMemberHooks(hooksRouting, opts, scope, merged.hydratable);

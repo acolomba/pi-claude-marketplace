@@ -4848,6 +4848,51 @@ test("CR-01: a re-enabled member's config entry saying enabled: false is overwri
   });
 });
 
+test("CR-06: enable a --local overwrites a base-file stale entry for a re-enabled member", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange: "b"'s stale `enabled: false` entry lives in the BASE file --
+    // the flagless `disable b` shape -- while `enable a --local` targets the
+    // LOCAL file for "a"'s own write. The member's file must still be found
+    // by declaration, not by the root's own `--local` flag.
+    const { configPath } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    await mkdir(path.dirname(configPath), { recursive: true });
+    await writeFile(
+      configPath,
+      JSON.stringify({ schemaVersion: 1, plugins: { "b@official": { enabled: false } } }),
+      "utf8",
+    );
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+      local: true,
+    });
+
+    // assert
+    const stateAfter = await loadState(locationsFor("user", cwd).extensionRoot);
+    assert.equal(stateAfter.marketplaces.official?.plugins.a?.enabled, true);
+    assert.equal(stateAfter.marketplaces.official?.plugins.b?.enabled, true);
+    const baseCfg = (await readConfig(configPath)) as { plugins?: Record<string, unknown> };
+    assert.deepEqual(baseCfg.plugins?.["b@official"], { enabled: true });
+    const localCfg = (await readConfig(
+      locationsFor("user", cwd).configLocalJsonPath,
+    )) as { plugins?: Record<string, unknown> };
+    assert.deepEqual(localCfg.plugins, { "a@official": { enabled: true } });
+    const merged = (await loadMergedScopeConfig(locationsFor("user", cwd))).merged;
+    assert.deepEqual(planReconcile(merged, stateAfter, "user"), emptyReconcilePlan("user"));
+  });
+});
+
 test("CR-01: a member with NO config entry stays untouched", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
@@ -5512,6 +5557,61 @@ test("CR-03: a root ledger failure AFTER a member materialized unwinds the membe
         "    cause: a's own ledger failed",
       ].join("\n"),
     );
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins.a!.enabled, false);
+    assert.equal(state.marketplaces.official!.plugins.b!.enabled, false);
+  });
+});
+
+test("WR-08: a config-write throw after the merged ledger commits unwinds the member and the root too", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange: "a" declares "b"; both disabled. Both materialize cleanly
+    // through the merged ledger (member then root), and THEN the config
+    // phase's own write -- the ledger's final phase -- rejects. Both the
+    // member's and the root's artifacts must unwind; state.json is
+    // byte-for-byte the seed either way (this path never saves).
+    const { statePath, scopeRoot } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    const failure = new Error("config write denied");
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      writeConfigEntries() {
+        return rejectUnknown(failure);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert: both "b"'s and "a"'s staged skills are off disk again.
+    await assert.rejects(
+      stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b:s1")),
+      { code: "ENOENT" },
+      "b's staged skill is off disk again",
+    );
+    await assert.rejects(
+      stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "a:s1")),
+      { code: "ENOENT" },
+      "a's staged skill is off disk again",
+    );
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(failed\)/);
+    assert.match(notifications[0]!.message, /config write denied/);
     const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
     assert.equal(state.marketplaces.official!.plugins.a!.enabled, false);
     assert.equal(state.marketplaces.official!.plugins.b!.enabled, false);
