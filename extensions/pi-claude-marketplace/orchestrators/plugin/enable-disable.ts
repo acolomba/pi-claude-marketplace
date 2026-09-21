@@ -1145,8 +1145,18 @@ async function runEnableCascadeWithRoot(args: {
       readonly rollbackPartials: readonly RollbackPartial[];
     }
 > {
-  const { transaction, opts, scope, locations, state, installed, members, rootKey, write, selection } =
-    args;
+  const {
+    transaction,
+    opts,
+    scope,
+    locations,
+    state,
+    installed,
+    members,
+    rootKey,
+    write,
+    selection,
+  } = args;
   const { run, phases } = buildEnableCascadeMemberPhases(
     transaction,
     opts,
@@ -1156,9 +1166,7 @@ async function runEnableCascadeWithRoot(args: {
     members,
   );
   phases.push(buildEnableRootPhase(transaction, opts, scope, locations, state, installed, rootKey));
-  phases.push(
-    buildEnableCascadeConfigPhase(transaction, locations, state, { write, selection }),
-  );
+  phases.push(buildEnableCascadeConfigPhase(transaction, locations, state, { write, selection }));
   const result = await runPhases(phases, run);
   if (!result.ok) {
     assertFailedPhasesHasError(result);
