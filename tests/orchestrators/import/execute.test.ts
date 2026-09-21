@@ -2975,13 +2975,14 @@ async function seedDisabledDependencyRecord(
 
 test("D-04-07: promotes a disabled dependency the imported settings name and declares it enabled", async (t) => {
   // arrange
-  // The first import's cascade records `dep`, and `seedDisabledDependencyRecord`
-  // then takes it off disk and declares `{ enabled: false }` for it. The second
-  // import names `dep`, which is the user asking for it by name: the promotion
-  // re-materializes the record, and the post-pass writes the enable path's own
-  // `{ enabled: true }` over the seeded entry. A bare key merged over
-  // that entry would leave `enabled: false` in the file and hand the reload the
-  // row asks for a disable to plan.
+  // The first import's cascade records `dep`. `seedDisabledDependencyRecord`
+  // then takes it off disk, and the base config file is seeded directly with
+  // `{ enabled: false }` for it -- the entry the disable verb would have
+  // written. The second import names `dep`, which is the user asking for it
+  // by name: the promotion re-materializes the record, and the post-pass
+  // writes the enable path's own `{ enabled: true }` over the seeded entry. A
+  // bare key merged over that entry would leave `enabled: false` in the file
+  // and hand the reload the row asks for a disable to plan.
   const { cwd, project } = await createHermeticScopes(t, "promotes-disabled-dependency");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 4);
   const marketplaceRoot = path.join(cwd, "fixture-mp");
@@ -3049,10 +3050,25 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
     marketplace: "fixture-mp",
     skillDir,
   });
+  await writeUnder(
+    project.configJsonPath,
+    configBytes({
+      marketplaces: { "fixture-mp": { source: marketplaceRoot } },
+      plugins: { "sample@fixture-mp": {}, "dep@fixture-mp": { enabled: false } },
+    }),
+  );
   const dependencyBefore = (await loadState(project.extensionRoot)).marketplaces["fixture-mp"]
     ?.plugins["dep"];
   assert.strictEqual(dependencyBefore?.provenance, "dependency");
   assert.strictEqual(dependencyBefore.enabled, false, "the seeded record is disabled");
+  assert.strictEqual(
+    await readFile(project.configJsonPath, "utf8"),
+    configBytes({
+      marketplaces: { "fixture-mp": { source: marketplaceRoot } },
+      plugins: { "sample@fixture-mp": {}, "dep@fixture-mp": { enabled: false } },
+    }),
+    "and declared the disable in the base file",
+  );
   await assert.rejects(stat(skillDir), { code: "ENOENT" }, "and took its skill off disk");
 
   // act
@@ -3065,8 +3081,9 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
   // assert
   // The record is the one the cascade wrote, enabled again and
   // promoted, with its update time moved; the skill is back on disk; the
-  // declaration is the enable path's own; and the reload the row asks for
-  // finds nothing to plan.
+  // declaration is the enable path's own, overwriting the seeded
+  // `{ enabled: false }` entry; and the reload the row asks for finds
+  // nothing to plan.
   assert.deepStrictEqual(secondResult, expectedSecondResult);
   const stateAfter = await loadState(project.extensionRoot);
   const promoted = stateAfter.marketplaces["fixture-mp"]?.plugins["dep"];

@@ -5897,13 +5897,21 @@ test("D-04-07: a --local promotion of a disabled dependency writes the enable pa
   await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-disabled-local-"));
     try {
-      // arrange: the disable verb stamped `{ enabled: false }` in the base
-      // file. A bare local key would replace that entry wholesale (CFG-02) and
-      // enable the plugin by omission; the promotion enables it on purpose and
-      // says so in the file it writes.
+      // arrange: `disableSeededDependency` disables orchestrated (RECON-03
+      // skips the config write-back), so the base file's `{ enabled: false }`
+      // for the dependency -- the state a real `disable --local` shadowing
+      // hazard starts from -- is seeded directly here. A bare local key would
+      // replace that entry wholesale (CFG-02) and enable the plugin by
+      // omission; the promotion enables it on purpose and says so in the file
+      // it writes.
       const locations = locationsFor("project", cwd);
       const { ctx, pi } = await seedDependencyInstalled(cwd, installPlugin);
       await disableSeededDependency(cwd, hooksRouting, { ctx, pi });
+      await writeFile(
+        locations.configJsonPath,
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-src"\n    }\n  },\n  "plugins": {\n    "hello@mp": {},\n    "some-other-plugin@mp": {\n      "enabled": false\n    }\n  }\n}\n',
+        "utf8",
+      );
       const baseBefore = await readFile(locations.configJsonPath, "utf8");
 
       // act
