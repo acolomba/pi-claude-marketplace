@@ -109,7 +109,11 @@ import type {
   runInstallLedger,
 } from "./install-outcome.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
-import type { ClosureLookup, ClosureMember, DependencyClosureResult } from "../../domain/dependency-closure.ts";
+import type {
+  ClosureLookup,
+  ClosureMember,
+  DependencyClosureResult,
+} from "../../domain/dependency-closure.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
@@ -498,7 +502,9 @@ type ClosureCycleFailure = Extract<ClosureFailure, { readonly reason: "cycle" }>
  * invariant is established by `resolveEnableCascade`'s lookup and
  * `knownMarketplaces` construction, not by a runtime check here.
  */
-function assertOnlyCycleReachable(_failure: ClosureFailure): asserts _failure is ClosureCycleFailure {
+function assertOnlyCycleReachable(
+  _failure: ClosureFailure,
+): asserts _failure is ClosureCycleFailure {
   // Evidence-backed type narrowing only; the invariant is established by the caller.
 }
 
@@ -859,10 +865,28 @@ async function dispatchBranch(args: {
   readonly enable: boolean;
   readonly tx: { readonly save: () => Promise<void> };
 }): Promise<BranchDispatchResult> {
-  const { transaction, hooksRouting, opts, scope, locations, state, mp, plugin, installed, enable, tx } =
-    args;
+  const {
+    transaction,
+    hooksRouting,
+    opts,
+    scope,
+    locations,
+    state,
+    mp,
+    plugin,
+    installed,
+    enable,
+    tx,
+  } = args;
   if (enable) {
-    const branchOutcome = await runEnableBranch(transaction, opts, scope, locations, state, installed);
+    const branchOutcome = await runEnableBranch(
+      transaction,
+      opts,
+      scope,
+      locations,
+      state,
+      installed,
+    );
     return { kind: "continue", branchOutcome, removeRoutesAfterSave: false };
   }
 
@@ -1817,7 +1841,8 @@ function dispatchOutcome(args: {
   /** EDEP-01: the enable cascade's classified member rows; empty for `disable`. */
   readonly cascadeRows: readonly EnableCascadeMemberRow[];
 }): void {
-  const { ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome, cascadeRows } = args;
+  const { ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome, cascadeRows } =
+    args;
   // SEV-01: the single sanctioned companion probe, taken once here -- the same
   // one `notify()` uses to render the `{requires pi-...}` markers -- and passed
   // down to the pure row composer, which holds no Pi reference of its own.

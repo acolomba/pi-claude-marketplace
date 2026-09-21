@@ -4119,8 +4119,19 @@ function edepCascadeRecord(opts: {
 }): {
   version: string;
   resolvedSource: string;
-  compatibility: { installable: boolean; notes: string[]; supported: string[]; unsupported: string[] };
-  resources: { skills: string[]; prompts: string[]; agents: string[]; mcpServers: string[]; hooks: string[] };
+  compatibility: {
+    installable: boolean;
+    notes: string[];
+    supported: string[];
+    unsupported: string[];
+  };
+  resources: {
+    skills: string[];
+    prompts: string[];
+    agents: string[];
+    mcpServers: string[];
+    hooks: string[];
+  };
   enabled: boolean;
   provenance: "explicit";
   installedAt: string;
@@ -4217,7 +4228,11 @@ async function seedEnableCascadeFixture(
         marketplaceRoot: officialRoot,
         manifestPath: officialManifestPath,
         plugins: {
-          helper: edepCascadeRecord({ resolvedSource: helperRoot, version: "1.0.0", enabled: false }),
+          helper: edepCascadeRecord({
+            resolvedSource: helperRoot,
+            version: "1.0.0",
+            enabled: false,
+          }),
         },
       },
       tools: {
@@ -4399,8 +4414,10 @@ async function seedEdepGraph(
   const mpRoot = path.join(home, "official-src");
   await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
 
-  const pluginRecords: Record<string, ReturnType<typeof edepCascadeRecord> & { dependencyDisabled?: true }> =
-    {};
+  const pluginRecords: Record<
+    string,
+    ReturnType<typeof edepCascadeRecord> & { dependencyDisabled?: true }
+  > = {};
   const manifestPlugins: unknown[] = [];
   for (const plugin of plugins) {
     const pluginRoot = path.join(mpRoot, "plugins", plugin.name);

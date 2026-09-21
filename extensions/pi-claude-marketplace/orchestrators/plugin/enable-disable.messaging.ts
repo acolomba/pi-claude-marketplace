@@ -152,7 +152,10 @@ export function composeEnableCascadeRows(args: {
 }): readonly EnableMsg[] {
   const rows: EnableMsg[] = [args.rootRow, ...args.members];
   return [...rows].sort((a, b) =>
-    compareByNameThenScope({ name: a.name, scope: args.scope }, { name: b.name, scope: args.scope }),
+    compareByNameThenScope(
+      { name: a.name, scope: args.scope },
+      { name: b.name, scope: args.scope },
+    ),
   );
 }
 
