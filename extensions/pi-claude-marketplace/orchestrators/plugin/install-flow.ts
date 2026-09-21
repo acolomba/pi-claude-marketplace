@@ -517,8 +517,9 @@ async function lookupCascadeDependencies(
  * The catch needs the DISCRIMINANT, not a rendered string, because RESV-06's
  * row names the failing dependency and the reason it failed -- neither of which
  * survives a `throw new Error(text)`. The sink carries it across the lock
- * closure boundary the same way `marketplaceAbsent` and `configInvalid` already
- * carry their own verdicts.
+ * closure boundary the same way `capture` carries the rollback partials: both
+ * are written BEFORE the rethrow, which is why neither can ride the closure's
+ * `InstallTransactionOutcome` return.
  */
 interface CascadeFailureSink {
   subject?: CascadeFailureSubject;
@@ -1159,6 +1160,53 @@ function handleCascadeThrow(args: {
 }
 
 /**
+ * Outcome of the `withLockedStateTransaction` closure in
+ * `installPluginWithTransaction`, mirroring the `SetEnabledOutcome` pattern
+ * `enable-disable.ts` uses for its own locked-transaction closure: one typed
+ * return instead of several `let`/`const` captures the closure writes to and
+ * the post-guard code reads back out, so a forgotten arm is a compile error
+ * rather than a runtime `undefined`.
+ *
+ * - `"invalid-config"` -- WB-01 / CFG-03 / T-56-03-04: the targeted config
+ *   file (or, on the flagless path, the local file) could not be read.
+ *   `configBasename`, set by the closure as a side effect for the same
+ *   reason `enable-disable.ts` keeps its own copy of that `let` (T-53-02-02),
+ *   carries the file name for the failed row composed after the lock closes.
+ * - `"marketplace-absent"` -- ATTR-01 / ATTR-08 / M1: marketplace-existence
+ *   is a PRECONDITION, not a plugin-row property. The CMP-2..4 source
+ *   resolution missed (the marketplace is absent in the target scope AND the
+ *   CMP-3 user fallback also missed), so the failure subject is the
+ *   MARKETPLACE, not the plugin -- distinct from M2 (plugin absent from a
+ *   PRESENT manifest), which stays `{not in manifest}` on the plugin row.
+ * - `"promoted"` -- D-04-07: a recorded dependency the user has now named was
+ *   promoted instead of cascaded. State was saved and any hooks hydrated
+ *   inside the lock; the row is the whole report.
+ * - `"disable-cascade-failed"` -- D-102-02: the ledger succeeded and landed
+ *   disabled (DFEN-04), then the disable cascade itself failed. The shrunken
+ *   record is already saved inside the lock; `cause` is the cascade's own
+ *   error, surfaced as the existing install failure row.
+ * - `"installed"` -- the realized install. `landedDisabled` is the DFEN-04 /
+ *   D-102-01 verdict: true when the plugin installed with `enabled: false`
+ *   because the caller opted in, both physical config files were silent on
+ *   `enabled`, and the plugin's own resolved declaration says false.
+ *   `members` and `alreadyInstalled` are the cascade's closure (RESV-06), one
+ *   row each in the post-guard block; both are empty for a plugin that
+ *   declares nothing, so its block stays the single row it always was.
+ */
+type InstallTransactionOutcome =
+  | { kind: "invalid-config" }
+  | { kind: "marketplace-absent" }
+  | { kind: "promoted"; promotion: PromotionOutcome }
+  | { kind: "disable-cascade-failed"; cause: Error }
+  | {
+      kind: "installed";
+      installCtx: InstallLedgerSummary;
+      landedDisabled: boolean;
+      members: readonly CascadeMemberOutcome[];
+      alreadyInstalled: readonly CascadeSkippedMember[];
+    };
+
+/**
  * PI-1..15 entrypoint. The function never re-throws -- failures surface
  * via a single `notify()` call carrying a `PluginFailedMessage`
  * (Pattern S-1 single chokepoint, IL-2 lint gate). Standalone-mode emits
@@ -1203,10 +1251,6 @@ async function installPluginWithTransaction(
     unstagePlugin: cascadeUnstagePlugin,
   });
 
-  // Post-guard composition data. The guard closure populates this on its sole
-  // installed result; marketplace/config misses and every throw return before
-  // post-guard composition, so there is no clean path that can read it first.
-  let installCtx!: InstallLedgerSummary;
   // Captured-on-throw context for the catch block (populated by
   // `runInstallLedger` BEFORE its rethrow). `capture.rollbackPartials`
   // mirrors the ledger's RollbackPartial[] and populates
@@ -1218,40 +1262,9 @@ async function installPluginWithTransaction(
   // version at throw time (undefined when the throw pre-dated
   // `deriveInstallVersion`).
   const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
-  // RESV-06: the cascade's own outcome, lifted out of the lock closure so the
-  // post-guard composition can render one row per closure member without
-  // re-entering it. Both lists start empty, which is the shape a plugin that
-  // declares nothing produces -- so the single-plugin block stays byte-frozen
-  // through the same composer.
+  // RESV-06: where the cascade leaves the failing dependency for the catch
+  // block, so the failure block names it rather than the plugin the user typed.
   const cascadeFailure: CascadeFailureSink = {};
-  let cascadeMembers: readonly CascadeMemberOutcome[] = [];
-  let cascadeSkipped: readonly CascadeSkippedMember[] = [];
-  // ATTR-01 / ATTR-08 / M1: marketplace-existence is a PRECONDITION, not a
-  // plugin-row property. When the CMP-2..4 source resolution misses (the
-  // marketplace is absent in the target scope AND the CMP-3 user fallback
-  // also misses), the failure subject is the MARKETPLACE, not the plugin.
-  // The guard sets this sentinel and returns WITHOUT mutating state; the
-  // post-guard branch emits the standalone `marketplace-not-added` variant
-  // (standalone mode) or returns the failed outcome (orchestrated mode).
-  // This is distinct from M2 (plugin absent from a PRESENT manifest), which
-  // stays `{not in manifest}` on the plugin row.
-  let marketplaceAbsent = false;
-  // WB-01 / CFG-03: invalid-config sentinel; populated inside the guard so
-  // the post-guard branch emits the failed row with a basename-only cause.
-  let configInvalid = false;
-  // DFEN-04 / D-102-01: the install-disabled verdict and, on D-102-02's failure
-  // window, the disable cascade's cause. Both are decided inside the lock --
-  // the config precedence read and the resolved `defaultEnabled` are only
-  // legible there -- and read by the post-guard row / outcome composition.
-  // Carried on an object rather than two bare `let`s so the guard closure's
-  // writes stay visible to the post-guard reads without a narrowing override at
-  // every site.
-  const disabledInstall: { landed: boolean; cascadeError?: Error } = { landed: false };
-  let removeDisabledRoutesAfterSave = false;
-  // D-04-07: what a promotion did, set inside the lock and read by the
-  // post-guard row; absent on every path that ran the cascade. Carried on an
-  // object for the same reason `disabledInstall` is.
-  const promotion: { outcome: PromotionOutcome | undefined } = { outcome: undefined };
 
   // WB-01: target-path selection happens ONCE, and both write arms below read
   // that one decision, so they cannot drift onto different files. The
@@ -1285,6 +1298,7 @@ async function installPluginWithTransaction(
   // construction, so they read one binding rather than three literals.
   const rootKey = `${plugin}@${marketplace}`;
 
+  let outcome: InstallTransactionOutcome;
   try {
     // D-02 outer guard around the guard-FREE ledger body (CR-01): the lock
     // and the load/save lifecycle live HERE; `runInstallLedger` mutates the
@@ -1295,370 +1309,390 @@ async function installPluginWithTransaction(
     // state.json -- `withStateGuard` saved unconditionally on closure
     // return, bumping state.json's mtime on every abort, diverging from the
     // documented no-save abort discipline the sibling commands follow.
-    await transaction.withLockedStateTransaction(locations, async (tx) => {
-      // D-103-16: ONE selection, made before anything reads a config path, so
-      // the CFG-03 load, the DFEN-05 precedence read and BOTH write arms below
-      // address the same physical file. It runs inside the lock because it
-      // READS the local config -- the WB-01 discipline that sibling reads
-      // happen fresh under the lock the write also holds.
-      //
-      // `targetIsLocal` comes back from the selector rather than being
-      // re-derived here: `resolveInstallDeclaredEnabled` picks the effective ENTRY by
-      // physical-file IDENTITY before it reads that entry's `enabled` field, so
-      // labelling the selected file with the caller's flag instead of with its
-      // own identity swaps which of `current` and the sibling is treated as the
-      // local file. Under a local declaration and no flag that inversion reads
-      // the base file's bare entry as the effective one, reports `enabled`
-      // absent, fires the landed-disabled verdict against the user's explicit
-      // `enabled: true`, and then stamps `enabled: false` over it (a DFEN-05
-      // violation). The selector computed the locality; asking it is exact
-      // where any second derivation is a chance to disagree.
-      const selection = await selectDeclaringConfigWriteTarget({
-        locations,
-        local: opts.local,
-        key: rootKey,
-      });
+    outcome = await transaction.withLockedStateTransaction(
+      locations,
+      async (tx): Promise<InstallTransactionOutcome> => {
+        // D-103-16: ONE selection, made before anything reads a config path, so
+        // the CFG-03 load, the DFEN-05 precedence read and BOTH write arms below
+        // address the same physical file. It runs inside the lock because it
+        // READS the local config -- the WB-01 discipline that sibling reads
+        // happen fresh under the lock the write also holds.
+        //
+        // `targetIsLocal` comes back from the selector rather than being
+        // re-derived here: `resolveInstallDeclaredEnabled` picks the effective ENTRY by
+        // physical-file IDENTITY before it reads that entry's `enabled` field, so
+        // labelling the selected file with the caller's flag instead of with its
+        // own identity swaps which of `current` and the sibling is treated as the
+        // local file. Under a local declaration and no flag that inversion reads
+        // the base file's bare entry as the effective one, reports `enabled`
+        // absent, fires the landed-disabled verdict against the user's explicit
+        // `enabled: true`, and then stamps `enabled: false` over it (a DFEN-05
+        // violation). The selector computed the locality; asking it is exact
+        // where any second derivation is a chance to disagree.
+        const selection = await selectDeclaringConfigWriteTarget({
+          locations,
+          local: opts.local,
+          key: rootKey,
+        });
 
-      const state = tx.state;
-      // CFG-03 / T-56-03-04: abort BEFORE any state mutation. The
-      // basename-only message prevents an absolute-path information leak.
-      // NO tx.save() -- state.json bytes and mtime are untouched.
-      //
-      // The arm covers the TARGETED file being unreadable and, on the flagless
-      // path, the local file being unreadable while the base file is fine: the
-      // local file is what DECIDES the destination there, so an unreadable one
-      // leaves the destination unknown. Naming that file in a row the user can
-      // act on beats writing to the file CFG-02 would then shadow.
-      if (selection.kind === "unreadable") {
-        configBasename = path.basename(selection.filePath);
-        configInvalid = true;
-        return;
-      }
+        const state = tx.state;
+        // CFG-03 / T-56-03-04: abort BEFORE any state mutation. The
+        // basename-only message prevents an absolute-path information leak.
+        // NO tx.save() -- state.json bytes and mtime are untouched.
+        //
+        // The arm covers the TARGETED file being unreadable and, on the flagless
+        // path, the local file being unreadable while the base file is fine: the
+        // local file is what DECIDES the destination there, so an unreadable one
+        // leaves the destination unknown. Naming that file in a row the user can
+        // act on beats writing to the file CFG-02 would then shadow.
+        if (selection.kind === "unreadable") {
+          configBasename = path.basename(selection.filePath);
+          return { kind: "invalid-config" };
+        }
 
-      // DFEN-05: the TARGET physical config, parsed ONCE by the selector and
-      // shared by the precedence gate below and the write-back further down --
-      // as is the sibling, so one operation reads each file once and no two
-      // decisions can rest on different bytes of the same file. Never a merged
-      // view -- `config-write-back.ts` is forbidden from importing
-      // `config-merge.ts`, and serializing a merged view back would copy the
-      // local file's entries into the base file (SPLIT-02).
-      const { targetConfigPath, targetIsLocal, current, sibling } = selection;
-      configBasename = path.basename(targetConfigPath);
+        // DFEN-05: the TARGET physical config, parsed ONCE by the selector and
+        // shared by the precedence gate below and the write-back further down --
+        // as is the sibling, so one operation reads each file once and no two
+        // decisions can rest on different bytes of the same file. Never a merged
+        // view -- `config-write-back.ts` is forbidden from importing
+        // `config-merge.ts`, and serializing a merged view back would copy the
+        // local file's entries into the base file (SPLIT-02).
+        const { targetConfigPath, targetIsLocal, current, sibling } = selection;
+        configBasename = path.basename(targetConfigPath);
 
-      // D-04-07: a recorded dependency the user has now named is promoted
-      // here, BEFORE the cascade -- the cascade's ledger would refuse it as
-      // already installed on an arm that never saves. This is the file's
-      // second mutating arm: the promotion saves explicitly and returns.
-      promotion.outcome = await promoteDependencyRecord({
-        opts,
-        state,
-        locations,
-        orchestrated,
-        config: { current, sibling, targetConfigPath },
-        capture,
-        transaction,
-      });
-      if (promotion.outcome !== undefined) {
+        // D-04-07: a recorded dependency the user has now named is promoted
+        // here, BEFORE the cascade -- the cascade's ledger would refuse it as
+        // already installed on an arm that never saves. This is the file's
+        // second mutating arm: the promotion saves explicitly and returns.
+        const promotion = await promoteDependencyRecord({
+          opts,
+          state,
+          locations,
+          orchestrated,
+          config: { current, sibling, targetConfigPath },
+          capture,
+          transaction,
+        });
+        if (promotion !== undefined) {
+          await tx.save();
+          // Hydrated after the save like the cascade's members are; the list
+          // is empty unless the promotion re-materialized a disabled record.
+          await hydrateInstalledHooks({
+            hooksRouting,
+            scope,
+            cwd,
+            members: promotion.materialized,
+          });
+          return { kind: "promoted", promotion };
+        }
+
+        // RESV-01: the cascade, not a single ledger call. It drives the
+        // guard-free `runInstallLedger` once per closure member under THIS
+        // closure's lock -- the lock-acquiring `installPlugin` entry point is
+        // never re-entered, which `proper-lockfile` (`retries: 0`) would
+        // self-deadlock on. A plugin that declares nothing is the N=1 case and
+        // reaches the same ledger with the same options.
+        //
+        // D-03-05: every member installs into the requesting plugin's OWN
+        // `locations` and `scope`; there is no per-member scope argument and no
+        // way for a dependency to land in the other scope.
+        const cascade = await runInstallCascade({
+          state,
+          locations,
+          rootKey,
+          lookup: (subject) => lookupCascadeDependencies(state, { scope, cwd, locations }, subject),
+          // RESV-03 / CMP-3: the pin probe reads a member's source out of the
+          // marketplace record, and it must reach that record the same way the
+          // walk's own catalog read does. Reading the target snapshot directly
+          // would answer "no source" for a marketplace the CMP-3 fallback
+          // resolves, turning a resolvable constrained dependency into a
+          // `no-matching-tag` it never earned.
+          marketplaceRecordFor: async (marketplace) =>
+            (
+              await resolveInstallMarketplaceSource({
+                targetScope: scope,
+                cwd,
+                marketplace,
+                targetState: state,
+              })
+            )?.sourceRecord,
+          // RESV-03: a member whose constraint selected a release tag carries the
+          // commit that tag resolves to AND the semver that tag names, and this
+          // builder is where both enter that member's install. An unconstrained
+          // member carries neither and installs from the ref its marketplace
+          // entry names.
+          //
+          // RESV-05: recording the tag's semver rather than the git-source
+          // `sha-<12hex>` is what makes the pin readable back. The next install
+          // that constrains this dependency checks the RECORDED version against
+          // the range, and a sha form either satisfies nothing or coerces to an
+          // arbitrary digit run (D-03-04) -- so without the semver a repeat of
+          // the same command fails the constraint it had just satisfied.
+          //
+          // The caller's own `pinVersionOverride` reaches the plugin the caller
+          // NAMED and no other member. It takes absolute precedence in
+          // `deriveInstallVersion`, so copying it onto every member would record
+          // each dependency under the requesting plugin's version string.
+          ledgerOptionsFor: (member) => {
+            const isRoot = member.key === rootKey;
+            const pinVersion =
+              member.pin?.version ?? (isRoot ? opts.pinVersionOverride : undefined);
+            return buildInstallLedgerOptions(opts, {
+              scope,
+              cwd,
+              marketplace: member.marketplace,
+              plugin: member.name,
+              ...(member.pin !== undefined && { sourcePin: member.pin.oid }),
+              ...(pinVersion !== undefined && { pinVersion }),
+              // D-04-01: the root is the one member the closure walk never
+              // skips, so the key comparison alone decides provenance -- per
+              // member, independent of install order.
+              provenance: isRoot ? "explicit" : "dependency",
+            });
+          },
+          installedKeys: collectInstalledKeys(state),
+          // D-03-08: the marketplaces this install can READ. A dependency naming
+          // anything else fails the cascade; nothing here can add or clone a
+          // marketplace to satisfy one.
+          //
+          // It is the CMP-3-aware set and NOT the raw target-scope key set,
+          // because the walk's own catalog read resolves through the same
+          // project -> user fallback. Seeding the guard from the narrower set
+          // would put two notions of "reachable" in one walk, and the guard runs
+          // FIRST -- so the stricter one would win and refuse a dependency the
+          // lookup one step later resolves, under the one cascade message that
+          // carries a trust rule. Every name in this set is one the user added
+          // themselves, so that trust rule is unchanged.
+          //
+          // The requested plugin's own marketplace needs no special seeding: it
+          // is in this set whenever the ledger could resolve it, and the ledger
+          // still owns reporting the double-miss through the `marketplace-absent`
+          // arm below.
+          knownMarketplaces: await collectInstallReachableMarketplaces({
+            targetScope: scope,
+            cwd,
+            targetState: state,
+          }),
+          capture,
+          transaction,
+          ...(opts.tagProbe !== undefined && { tagProbe: opts.tagProbe }),
+          ...(opts.marketplaceTagProbe !== undefined && {
+            marketplaceTagProbe: opts.marketplaceTagProbe,
+          }),
+        });
+        const installed = unwrapCascade(cascade, capture, rootKey, cascadeFailure);
+        if (installed === undefined) {
+          // WR-04: precondition miss -- read-only in effect, NO tx.save().
+          return { kind: "marketplace-absent" };
+        }
+
+        // Success: the install context this closure just produced.
+        const installCtx = installed.root;
+
+        // DFEN-04 / DFEN-05: the install lands disabled only when all three hold
+        // -- the caller opted in, the user has stated NO opinion in EITHER of the
+        // scope's two physical config files (an explicit `enabled` wins in either
+        // direction and is never overwritten; `isDeclaredEnabled` answers "is it
+        // enabled", which is a different question), and the plugin's resolved
+        // declaration says false. `defaultEnabled` is a plain boolean on the
+        // materializable arms, so there is no `?? true` fallback to re-derive
+        // here. CFG-02: the read spans both files because a local entry replaces
+        // the base entry wholesale whatever the write target is; `current` stays
+        // the TARGET file and steers the write arms below and nothing else.
+        const declaredEnabled = resolveInstallDeclaredEnabled({
+          current,
+          sibling,
+          targetIsLocal,
+          key: rootKey,
+        });
+        const landedDisabled =
+          opts.applyDefaultEnabled === true &&
+          declaredEnabled === undefined &&
+          !installed.root.resolved.defaultEnabled;
+
+        // D-102-02: the disable cascade's cause, when it failed. Decided inside
+        // the lock and reported to the post-guard path as its own outcome arm.
+        let cascadeError: Error | undefined;
+        let removeDisabledRoutesAfterSave = false;
+        if (landedDisabled) {
+          // D-102-01: the six-phase ledger already ran and the state phase wrote
+          // `enabled: true`; the disable half runs here, after `runPhases` and
+          // before the write-back, and overwrites that value. No seventh phase,
+          // no edit to any of the six phase bodies.
+          const disableResult = await disableCascade.disableFreshInstall({
+            state,
+            locations,
+            marketplace,
+            plugin,
+          });
+          removeDisabledRoutesAfterSave = disableResult.removeRoutes;
+          if (!disableResult.ok) {
+            // D-102-02: record the cause and fall through. The fold already
+            // subtracted what DID drop, so the `tx.save()` below persists the
+            // shrunken record and the post-guard path surfaces the existing
+            // install failure row; not throwing is what keeps state.json honest
+            // about what is still on disk (NFR-3).
+            //
+            // NFR-3: falling through rather than returning early is what makes
+            // the write-back arms below stamp `enabled: false` on this path too.
+            // Saving a record while writing no declaration leaves a state neither
+            // convergence path can act on -- the entry that reached the reconcile
+            // install bucket is bare, so the planner reads declared-enabled +
+            // recorded + not-disabled and calls it steady state forever, while
+            // the plugin's artifacts are already gone from disk. The stamp turns
+            // that into the divergence the disable bucket closes on the next pass.
+            cascadeError = disableResult.cause;
+          }
+        }
+
+        // WB-01 / WR-09: write-back the plugin entry to the user-authored
+        // config. SKIPPED in orchestrated mode (reconcile derives desired
+        // state FROM the merged config; writing back would clobber a
+        // per-machine override).
+        //
+        // DFEN-04: the plugin patch carries `enabled: false` when the install
+        // landed disabled -- the first field this patch has ever carried. That
+        // includes the D-102-02 window where the disable cascade FAILED: the
+        // declaration states what the plugin should be, and it is what lets a
+        // later reconcile pass retry the disable. It stays `{}` otherwise,
+        // because the entry shape carries no other
+        // install-time field beyond the implicit declaration and D-04 keeps the
+        // "enabled" default at consume time. The patch merges over the existing
+        // entry, so no key the user already wrote is disturbed.
+        //
+        // CR-02: when the scope's MERGED config view does
+        // not declare the marketplace -- the CMP-3 user-scope fallback adopted
+        // a cloned record into THIS scope's state, but `marketplace add` only
+        // ever ran at user scope -- declare the marketplace entry in the SAME
+        // batched patch (same lock, one atomic save). Without it the plugin
+        // key is a dangling declaration: the next reconcile plans the adopted
+        // clone's REMOVAL and renders a perpetual `<marketplace not declared>`
+        // failed row (invariant 5 violation).
+        //
+        // UAT-05: the membership gate must consider BOTH physical files
+        // (base ∪ local), not just the target. A `--local` install against a
+        // base-declared marketplace must NOT re-declare it in the local file:
+        // the bare `{source}` entry would shadow the base entry wholesale
+        // (CFG-02) and silently flip merged `autoupdate`. Both files are read
+        // fresh INSIDE the lock and used for the membership test only, and an
+        // UNREADABLE sibling skips the adoption write rather than counting as a
+        // file that declares nothing.
+        if (opts.notifications?.mode !== "orchestrated") {
+          await writeAdoptingConfigEntries({
+            current,
+            sibling,
+            state,
+            marketplace,
+            plugin,
+            targetConfigPath,
+            scopeRoot: locations.scopeRoot,
+            // DFEN-04: the plugin key alone unless the install actually landed
+            // disabled, in which case the declaration carries it through.
+            // D-04-02: the cascade's dependencies are declared nowhere -- each
+            // record carries `provenance: "dependency"`, which D-04-05's
+            // reconcile exemption reads on the next reload.
+            //
+            // S4 (PR #51, CONTEXT.md S4): the helper's `adoptedSource === undefined`
+            // arms collapse -- benign (already declared) and dangerous (no string
+            // `source.raw` to synthesize from). This site therefore still writes a
+            // dangling declaration in the dangerous arm; acknowledged trade-off
+            // pending a widen of the helper's return that would route it to a
+            // (failed) row.
+            pluginPatch: { ...(landedDisabled && { enabled: false }) },
+          });
+        } else {
+          await writeOrchestratedDeclarations({
+            current,
+            targetConfigPath,
+            scopeRoot: locations.scopeRoot,
+            plugin,
+            marketplace,
+            landedDisabled,
+          });
+        }
+
+        // WR-04: one of the two mutating arms (the other is the D-04-07
+        // promotion above), and it saves explicitly. State persists AFTER the
+        // config write-back, so a write-back throw aborts the save and the
+        // state snapshot is discarded.
         await tx.save();
-        // Hydrated after the save like the cascade's members are; the list
-        // is empty unless the promotion re-materialized a disabled record.
+
+        if (removeDisabledRoutesAfterSave) {
+          disableCascade.dropRoutesAfterSave(scope, marketplace, plugin);
+        }
+
+        // WR-06 / D-59-02: hooks-bridge parsed-config cache add + routing
+        // table rebuild. Moved AFTER `tx.save()` so a write-back throw
+        // (lines above) or a tx.save throw aborts BEFORE the cache mutates.
+        // Without this ordering, a closure-throw between cache mutation and
+        // tx.save() left a phantom routing entry that the next dispatch
+        // event would fire against -- state.json had no record of the
+        // install but the parsed-config cache + routing table did, and the
+        // next `/reload` was required to clear the strand.
+        //
+        // Post-save semantics are safe: state.json now matches in-memory
+        // state, so the next `/reload`'s factory-time hydrate (D-59-03)
+        // rebuilds the cache from the SAME source of truth.  Synchronous +
+        // zero disk I/O per DISP-02; the per-plugin lock still holds for
+        // the sub-millisecond cache+rebuild.  Skipped when the plugin
+        // declares no hooks.  Read+parse failures are non-fatal: the
+        // resolver already validated the config at install-entry time, and
+        // any defensive re-parse failure routes through OBS-01 debug only.
+        //
+        // WR-03: keep the routing table in lockstep with the parsed-config
+        // cache so a standalone install (outside a reconcile cascade)
+        // starts dispatching to the new plugin's hooks immediately,
+        // without requiring `/reload` (NFR-2).
+        //
+        // WR-02: post-`tx.save()` cache+routing mutations are non-fatal --
+        // state.json already records the install as successful, so a
+        // throw here must NOT surface as `(failed)`. `/reload`'s
+        // factory-time hydrate (D-59-03) rebuilds the cache from
+        // state.json, closing any divergence. Failures route through
+        // `hookDebugLog`.
+        //
+        // DFEN-04: the requesting plugin is SKIPPED when its install landed
+        // disabled. The disable cascade above has just removed its on-disk
+        // hooks.json, so hydrating it would either re-read a deleted file or --
+        // worse -- register routing entries for a plugin the user's configuration
+        // says is disabled, giving live hook dispatch against disabled code that
+        // nothing short of the next hydrate would clear. The composed disable
+        // cascade already dropped the cache entry, which is the correct mutation
+        // on that path. A DEPENDENCY is never install-disabled, so the skip is
+        // scoped to the one member that can be.
+        //
+        // RESV-01: every member the cascade materialized is hydrated, not the
+        // requesting plugin alone. A dependency whose ledger staged a hooks.json
+        // otherwise has the file on disk and no routing entry, so its hooks stay
+        // inert until the next `/reload` -- exactly the divergence this block
+        // exists to close, reopened for the members the user did not type.
         await hydrateInstalledHooks({
           hooksRouting,
           scope,
           cwd,
-          members: promotion.outcome.materialized,
+          members: installed.members.filter(
+            (member) => !(landedDisabled && member.key === rootKey),
+          ),
         });
-        return;
-      }
 
-      // RESV-01: the cascade, not a single ledger call. It drives the
-      // guard-free `runInstallLedger` once per closure member under THIS
-      // closure's lock -- the lock-acquiring `installPlugin` entry point is
-      // never re-entered, which `proper-lockfile` (`retries: 0`) would
-      // self-deadlock on. A plugin that declares nothing is the N=1 case and
-      // reaches the same ledger with the same options.
-      //
-      // D-03-05: every member installs into the requesting plugin's OWN
-      // `locations` and `scope`; there is no per-member scope argument and no
-      // way for a dependency to land in the other scope.
-      const cascade = await runInstallCascade({
-        state,
-        locations,
-        rootKey,
-        lookup: (subject) => lookupCascadeDependencies(state, { scope, cwd, locations }, subject),
-        // RESV-03 / CMP-3: the pin probe reads a member's source out of the
-        // marketplace record, and it must reach that record the same way the
-        // walk's own catalog read does. Reading the target snapshot directly
-        // would answer "no source" for a marketplace the CMP-3 fallback
-        // resolves, turning a resolvable constrained dependency into a
-        // `no-matching-tag` it never earned.
-        marketplaceRecordFor: async (marketplace) =>
-          (
-            await resolveInstallMarketplaceSource({
-              targetScope: scope,
-              cwd,
-              marketplace,
-              targetState: state,
-            })
-          )?.sourceRecord,
-        // RESV-03: a member whose constraint selected a release tag carries the
-        // commit that tag resolves to AND the semver that tag names, and this
-        // builder is where both enter that member's install. An unconstrained
-        // member carries neither and installs from the ref its marketplace
-        // entry names.
-        //
-        // RESV-05: recording the tag's semver rather than the git-source
-        // `sha-<12hex>` is what makes the pin readable back. The next install
-        // that constrains this dependency checks the RECORDED version against
-        // the range, and a sha form either satisfies nothing or coerces to an
-        // arbitrary digit run (D-03-04) -- so without the semver a repeat of
-        // the same command fails the constraint it had just satisfied.
-        //
-        // The caller's own `pinVersionOverride` reaches the plugin the caller
-        // NAMED and no other member. It takes absolute precedence in
-        // `deriveInstallVersion`, so copying it onto every member would record
-        // each dependency under the requesting plugin's version string.
-        ledgerOptionsFor: (member) => {
-          const isRoot = member.key === rootKey;
-          const pinVersion = member.pin?.version ?? (isRoot ? opts.pinVersionOverride : undefined);
-          return buildInstallLedgerOptions(opts, {
-            scope,
-            cwd,
-            marketplace: member.marketplace,
-            plugin: member.name,
-            ...(member.pin !== undefined && { sourcePin: member.pin.oid }),
-            ...(pinVersion !== undefined && { pinVersion }),
-            // D-04-01: the root is the one member the closure walk never
-            // skips, so the key comparison alone decides provenance -- per
-            // member, independent of install order.
-            provenance: isRoot ? "explicit" : "dependency",
-          });
-        },
-        installedKeys: collectInstalledKeys(state),
-        // D-03-08: the marketplaces this install can READ. A dependency naming
-        // anything else fails the cascade; nothing here can add or clone a
-        // marketplace to satisfy one.
-        //
-        // It is the CMP-3-aware set and NOT the raw target-scope key set,
-        // because the walk's own catalog read resolves through the same
-        // project -> user fallback. Seeding the guard from the narrower set
-        // would put two notions of "reachable" in one walk, and the guard runs
-        // FIRST -- so the stricter one would win and refuse a dependency the
-        // lookup one step later resolves, under the one cascade message that
-        // carries a trust rule. Every name in this set is one the user added
-        // themselves, so that trust rule is unchanged.
-        //
-        // The requested plugin's own marketplace needs no special seeding: it
-        // is in this set whenever the ledger could resolve it, and the ledger
-        // still owns reporting the double-miss through the `marketplace-absent`
-        // arm below.
-        knownMarketplaces: await collectInstallReachableMarketplaces({
-          targetScope: scope,
-          cwd,
-          targetState: state,
-        }),
-        capture,
-        transaction,
-        ...(opts.tagProbe !== undefined && { tagProbe: opts.tagProbe }),
-        ...(opts.marketplaceTagProbe !== undefined && {
-          marketplaceTagProbe: opts.marketplaceTagProbe,
-        }),
-      });
-      const installed = unwrapCascade(cascade, capture, rootKey, cascadeFailure);
-      if (installed === undefined) {
-        // WR-04: precondition miss -- read-only in effect, NO tx.save().
-        marketplaceAbsent = true;
-        return;
-      }
-
-      // Success: lift the install context up so the post-guard path can
-      // compose the user-visible notification without re-entering the closure.
-      installCtx = installed.root;
-      cascadeMembers = installed.members;
-      cascadeSkipped = installed.alreadyInstalled;
-
-      // DFEN-04 / DFEN-05: the install lands disabled only when all three hold
-      // -- the caller opted in, the user has stated NO opinion in EITHER of the
-      // scope's two physical config files (an explicit `enabled` wins in either
-      // direction and is never overwritten; `isDeclaredEnabled` answers "is it
-      // enabled", which is a different question), and the plugin's resolved
-      // declaration says false. `defaultEnabled` is a plain boolean on the
-      // materializable arms, so there is no `?? true` fallback to re-derive
-      // here. CFG-02: the read spans both files because a local entry replaces
-      // the base entry wholesale whatever the write target is; `current` stays
-      // the TARGET file and steers the write arms below and nothing else.
-      const declaredEnabled = resolveInstallDeclaredEnabled({
-        current,
-        sibling,
-        targetIsLocal,
-        key: rootKey,
-      });
-      disabledInstall.landed =
-        opts.applyDefaultEnabled === true &&
-        declaredEnabled === undefined &&
-        !installed.root.resolved.defaultEnabled;
-
-      if (disabledInstall.landed) {
-        // D-102-01: the six-phase ledger already ran and the state phase wrote
-        // `enabled: true`; the disable half runs here, after `runPhases` and
-        // before the write-back, and overwrites that value. No seventh phase,
-        // no edit to any of the six phase bodies.
-        const disableResult = await disableCascade.disableFreshInstall({
-          state,
-          locations,
-          marketplace,
-          plugin,
-        });
-        removeDisabledRoutesAfterSave = disableResult.removeRoutes;
-        if (!disableResult.ok) {
-          // D-102-02: record the cause and fall through. The fold already
-          // subtracted what DID drop, so the `tx.save()` below persists the
-          // shrunken record and the post-guard path surfaces the existing
-          // install failure row; not throwing is what keeps state.json honest
-          // about what is still on disk (NFR-3).
-          //
-          // NFR-3: falling through rather than returning early is what makes
-          // the write-back arms below stamp `enabled: false` on this path too.
-          // Saving a record while writing no declaration leaves a state neither
-          // convergence path can act on -- the entry that reached the reconcile
-          // install bucket is bare, so the planner reads declared-enabled +
-          // recorded + not-disabled and calls it steady state forever, while
-          // the plugin's artifacts are already gone from disk. The stamp turns
-          // that into the divergence the disable bucket closes on the next pass.
-          disabledInstall.cascadeError = disableResult.cause;
+        // D-102-02: report the cascade failure to the post-guard path last --
+        // AFTER the shrunken record's tx.save() and the hooks hydration above,
+        // both of which must still run on this path (NFR-3) -- so the
+        // "installed" arm's fields never carry a value the caller should
+        // instead read off "disable-cascade-failed".
+        if (cascadeError !== undefined) {
+          return { kind: "disable-cascade-failed", cause: cascadeError };
         }
-      }
 
-      // WB-01 / WR-09: write-back the plugin entry to the user-authored
-      // config. SKIPPED in orchestrated mode (reconcile derives desired
-      // state FROM the merged config; writing back would clobber a
-      // per-machine override).
-      //
-      // DFEN-04: the plugin patch carries `enabled: false` when the install
-      // landed disabled -- the first field this patch has ever carried. That
-      // includes the D-102-02 window where the disable cascade FAILED: the
-      // declaration states what the plugin should be, and it is what lets a
-      // later reconcile pass retry the disable. It stays `{}` otherwise,
-      // because the entry shape carries no other
-      // install-time field beyond the implicit declaration and D-04 keeps the
-      // "enabled" default at consume time. The patch merges over the existing
-      // entry, so no key the user already wrote is disturbed.
-      //
-      // CR-02: when the scope's MERGED config view does
-      // not declare the marketplace -- the CMP-3 user-scope fallback adopted
-      // a cloned record into THIS scope's state, but `marketplace add` only
-      // ever ran at user scope -- declare the marketplace entry in the SAME
-      // batched patch (same lock, one atomic save). Without it the plugin
-      // key is a dangling declaration: the next reconcile plans the adopted
-      // clone's REMOVAL and renders a perpetual `<marketplace not declared>`
-      // failed row (invariant 5 violation).
-      //
-      // UAT-05: the membership gate must consider BOTH physical files
-      // (base ∪ local), not just the target. A `--local` install against a
-      // base-declared marketplace must NOT re-declare it in the local file:
-      // the bare `{source}` entry would shadow the base entry wholesale
-      // (CFG-02) and silently flip merged `autoupdate`. Both files are read
-      // fresh INSIDE the lock and used for the membership test only, and an
-      // UNREADABLE sibling skips the adoption write rather than counting as a
-      // file that declares nothing.
-      if (opts.notifications?.mode !== "orchestrated") {
-        await writeAdoptingConfigEntries({
-          current,
-          sibling,
-          state,
-          marketplace,
-          plugin,
-          targetConfigPath,
-          scopeRoot: locations.scopeRoot,
-          // DFEN-04: the plugin key alone unless the install actually landed
-          // disabled, in which case the declaration carries it through.
-          // D-04-02: the cascade's dependencies are declared nowhere -- each
-          // record carries `provenance: "dependency"`, which D-04-05's
-          // reconcile exemption reads on the next reload.
-          //
-          // S4 (PR #51, CONTEXT.md S4): the helper's `adoptedSource === undefined`
-          // arms collapse -- benign (already declared) and dangerous (no string
-          // `source.raw` to synthesize from). This site therefore still writes a
-          // dangling declaration in the dangerous arm; acknowledged trade-off
-          // pending a widen of the helper's return that would route it to a
-          // (failed) row.
-          pluginPatch: { ...(disabledInstall.landed && { enabled: false }) },
-        });
-      } else {
-        await writeOrchestratedDeclarations({
-          current,
-          targetConfigPath,
-          scopeRoot: locations.scopeRoot,
-          plugin,
-          marketplace,
-          landedDisabled: disabledInstall.landed,
-        });
-      }
-
-      // WR-04: one of the two mutating arms (the other is the D-04-07
-      // promotion above), and it saves explicitly. State persists AFTER the
-      // config write-back, so a write-back throw aborts the save and the
-      // state snapshot is discarded.
-      await tx.save();
-
-      if (removeDisabledRoutesAfterSave) {
-        disableCascade.dropRoutesAfterSave(scope, marketplace, plugin);
-      }
-
-      // WR-06 / D-59-02: hooks-bridge parsed-config cache add + routing
-      // table rebuild. Moved AFTER `tx.save()` so a write-back throw
-      // (lines above) or a tx.save throw aborts BEFORE the cache mutates.
-      // Without this ordering, a closure-throw between cache mutation and
-      // tx.save() left a phantom routing entry that the next dispatch
-      // event would fire against -- state.json had no record of the
-      // install but the parsed-config cache + routing table did, and the
-      // next `/reload` was required to clear the strand.
-      //
-      // Post-save semantics are safe: state.json now matches in-memory
-      // state, so the next `/reload`'s factory-time hydrate (D-59-03)
-      // rebuilds the cache from the SAME source of truth.  Synchronous +
-      // zero disk I/O per DISP-02; the per-plugin lock still holds for
-      // the sub-millisecond cache+rebuild.  Skipped when the plugin
-      // declares no hooks.  Read+parse failures are non-fatal: the
-      // resolver already validated the config at install-entry time, and
-      // any defensive re-parse failure routes through OBS-01 debug only.
-      //
-      // WR-03: keep the routing table in lockstep with the parsed-config
-      // cache so a standalone install (outside a reconcile cascade)
-      // starts dispatching to the new plugin's hooks immediately,
-      // without requiring `/reload` (NFR-2).
-      //
-      // WR-02: post-`tx.save()` cache+routing mutations are non-fatal --
-      // state.json already records the install as successful, so a
-      // throw here must NOT surface as `(failed)`. `/reload`'s
-      // factory-time hydrate (D-59-03) rebuilds the cache from
-      // state.json, closing any divergence. Failures route through
-      // `hookDebugLog`.
-      //
-      // DFEN-04: the requesting plugin is SKIPPED when its install landed
-      // disabled. The disable cascade above has just removed its on-disk
-      // hooks.json, so hydrating it would either re-read a deleted file or --
-      // worse -- register routing entries for a plugin the user's configuration
-      // says is disabled, giving live hook dispatch against disabled code that
-      // nothing short of the next hydrate would clear. The composed disable
-      // cascade already dropped the cache entry, which is the correct mutation
-      // on that path. A DEPENDENCY is never install-disabled, so the skip is
-      // scoped to the one member that can be.
-      //
-      // RESV-01: every member the cascade materialized is hydrated, not the
-      // requesting plugin alone. A dependency whose ledger staged a hooks.json
-      // otherwise has the file on disk and no routing entry, so its hooks stay
-      // inert until the next `/reload` -- exactly the divergence this block
-      // exists to close, reopened for the members the user did not type.
-      await hydrateInstalledHooks({
-        hooksRouting,
-        scope,
-        cwd,
-        members: cascadeMembers.filter(
-          (member) => !(disabledInstall.landed && member.key === rootKey),
-        ),
-      });
-    });
+        return {
+          kind: "installed",
+          installCtx,
+          landedDisabled,
+          members: installed.members,
+          alreadyInstalled: installed.alreadyInstalled,
+        };
+      },
+    );
   } catch (err) {
     // RESV-06: a dependency is what failed, so the block names it. Routed here
     // rather than through the single-row path below, which would report the
@@ -1710,171 +1744,170 @@ async function installPluginWithTransaction(
   // WB-01 / CFG-03 / T-56-03-04: invalid-config abort. The basename-only
   // message prevents an absolute-path information leak. No state mutation,
   // no write-back -- the closure returned before runInstallLedger ran.
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated inside the withLockedStateTransaction closure above.
-  if (configInvalid) {
-    return failedRowOutcome({
-      ctx,
-      pi,
-      marketplace,
-      scope,
-      plugin,
-      error: new Error(`Config file "${configBasename}" failed schema validation.`),
-      reasons: ["invalid manifest"],
-      orchestrated,
-    });
-  }
+  switch (outcome.kind) {
+    case "invalid-config":
+      return failedRowOutcome({
+        ctx,
+        pi,
+        marketplace,
+        scope,
+        plugin,
+        error: new Error(`Config file "${configBasename}" failed schema validation.`),
+        reasons: ["invalid manifest"],
+        orchestrated,
+      });
 
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `marketplaceAbsent` is mutated inside the withLockedStateTransaction closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
-  if (marketplaceAbsent) {
-    const cause = `Marketplace "${marketplace}" is not added in the ${scope} scope.`;
-    if (opts.notifications?.mode === "orchestrated") {
+    case "marketplace-absent": {
+      const cause = `Marketplace "${marketplace}" is not added in the ${scope} scope.`;
+      if (opts.notifications?.mode === "orchestrated") {
+        return { status: "failed", error: new Error(cause), cause };
+      }
+
+      // CMP-4 / SCOPE-01: a bare `{marketplace not added}` row is not actionable when the
+      // container lives in the OTHER scope -- the repo-bundled-marketplace case,
+      // where a default-scope (user) install misses a project-only container. One
+      // read-only probe of that scope decides which structural token the brace
+      // carries. The probe never throws and never blocks the row (see
+      // `marketplaceInOtherScope`); a `false` answer adds no field, so the row
+      // renders the plain `{marketplace not added}` brace.
+      notify(ctx, pi, {
+        kind: "marketplace-not-added",
+        name: marketplace,
+        scope,
+        ...(await crossScopeFlag({ cwd, marketplace, scope })),
+      });
       return { status: "failed", error: new Error(cause), cause };
     }
 
-    // CMP-4 / SCOPE-01: a bare `{marketplace not added}` row is not actionable when the
-    // container lives in the OTHER scope -- the repo-bundled-marketplace case,
-    // where a default-scope (user) install misses a project-only container. One
-    // read-only probe of that scope decides which structural token the brace
-    // carries. The probe never throws and never blocks the row (see
-    // `marketplaceInOtherScope`); a `false` answer adds no field, so the row
-    // renders the plain `{marketplace not added}` brace.
-    notify(ctx, pi, {
-      kind: "marketplace-not-added",
-      name: marketplace,
-      scope,
-      ...(await crossScopeFlag({ cwd, marketplace, scope })),
-    });
-    return { status: "failed", error: new Error(cause), cause };
-  }
+    // D-04-07: the promotion arm. State was saved and any hooks hydrated inside
+    // the lock, and the cascade never ran, so there are no post-commit warnings
+    // to collect; the row is the whole report.
+    case "promoted":
+      return promotedRowOutcome({
+        ctx,
+        pi,
+        marketplace,
+        scope,
+        plugin,
+        promotion: outcome.promotion,
+        orchestrated,
+      });
 
-  // D-04-07: the promotion arm. State was saved and any hooks hydrated inside
-  // the lock, and the cascade never ran, so there are no post-commit warnings
-  // to collect; the row is the whole report.
-  const promotionOutcome = promotion.outcome;
-  if (promotionOutcome !== undefined) {
-    return promotedRowOutcome({
-      ctx,
-      pi,
-      marketplace,
-      scope,
-      plugin,
-      promotion: promotionOutcome,
-      orchestrated,
-    });
-  }
+    // D-102-02: the ledger succeeded and the disable cascade then failed. The
+    // shrunken record was already saved inside the lock, so state.json describes
+    // what is still on disk. Surface the EXISTING install failure row carrying
+    // the cascade's own cause -- no new failure semantics, no new rollback
+    // composition, and no new reason token. The record stays `enabled: true` with
+    // a shrunken inventory, which is exactly what an install followed by a failed
+    // disable produces, and the config entry the write-back arms just stamped
+    // says `enabled: false` -- the divergence a later reconcile pass closes by
+    // planning the disable this one could not finish.
+    case "disable-cascade-failed": {
+      const cause = errorMessage(outcome.cause);
+      if (orchestrated) {
+        return { status: "failed", error: outcome.cause, cause };
+      }
 
-  // D-102-02: the ledger succeeded and the disable cascade then failed. The
-  // shrunken record was already saved inside the lock, so state.json describes
-  // what is still on disk. Surface the EXISTING install failure row carrying
-  // the cascade's own cause -- no new failure semantics, no new rollback
-  // composition, and no new reason token. The record stays `enabled: true` with
-  // a shrunken inventory, which is exactly what an install followed by a failed
-  // disable produces, and the config entry the write-back arms just stamped
-  // says `enabled: false` -- the divergence a later reconcile pass closes by
-  // planning the disable this one could not finish.
-  const cascadeError = disabledInstall.cascadeError;
-  if (cascadeError !== undefined) {
-    const cause = errorMessage(cascadeError);
-    if (orchestrated) {
-      return { status: "failed", error: cascadeError, cause };
+      notifyWithContext(
+        ctx,
+        pi,
+        INSTALL_CONTEXT,
+        [
+          {
+            name: marketplace,
+            scope,
+            plugins: [
+              {
+                status: "failed",
+                severity: "error" as const,
+                name: plugin,
+                reasons: [] as const,
+                cause: outcome.cause,
+              },
+            ],
+          },
+        ],
+        undefined,
+        "single",
+      );
+      return { status: "failed", error: outcome.cause, cause };
     }
 
-    notifyWithContext(
-      ctx,
-      pi,
-      INSTALL_CONTEXT,
-      [
-        {
-          name: marketplace,
-          scope,
-          plugins: [
+    case "installed": {
+      const { installCtx, landedDisabled } = outcome;
+      const postCommitWarnings = await collectPostCommitWarnings(
+        installCtx,
+        completionCache,
+        scope,
+        orchestrated,
+      );
+
+      if (!orchestrated) {
+        // RH-3 / RH-4: ONE companion probe for the whole block. The row composers
+        // and the SEV-01 severity verdicts all read this snapshot, so every row in
+        // one block describes the same host -- and the probe count the boundary
+        // fakes assert stays what a single install always made.
+        const softDepProbe = softDepStatus(pi);
+        // Success: one notify(ctx, pi, ...) call with a PluginInstalledMessage.
+        // The renderer probes companion-loaded state via softDepStatus(pi) and
+        // emits the per-row soft-dep markers automatically. The "/reload to pick
+        // up changes" trailer fires structurally on the status; the trigger
+        // ladder is per-variant, not per-resource-count (RH-1, PU-8 (b)).
+        //
+        // The PI-13 dependencies-declaration note is DROPPED per D-19-01: the
+        // PR-5 free-form prose has no clean MarketplaceNotificationMessage
+        // representation. The resolver still appends it to `installable.notes`
+        // so downstream surfaces can continue to consume it.
+        //
+        // Exactly ONE notification per install (IL-2), whichever row the install
+        // produced -- the DFEN-04 disabled row when the cascade unstaged
+        // everything, the success row otherwise.
+        //
+        // RESV-01 / RESV-05 / RESV-06: the requesting plugin's row goes through the
+        // cascade composer together with one row per closure member. A plugin that
+        // declared nothing hands the composer two empty lists, so its block is the
+        // single row it always was, byte for byte.
+        notifyWithContext(
+          ctx,
+          pi,
+          CASCADE_CONTEXT,
+          [
             {
-              status: "failed",
-              severity: "error" as const,
-              name: plugin,
-              reasons: [] as const,
-              cause: cascadeError,
+              name: marketplace,
+              scope,
+              plugins: composeCascadeMemberRows({
+                scope,
+                rootKey,
+                rootRow: landedDisabled
+                  ? disableCascade.composeDisabledRow({
+                      plugin: installCtx.plugin,
+                      version: installCtx.version,
+                      resolution: {
+                        state: installCtx.resolved.state,
+                        unsupported: installCtx.resolved.unsupported,
+                      },
+                      frontmatterDegradations: installCtx.frontmatterDegradations,
+                    })
+                  : composeInstalledRow(installCtx, softDepProbe),
+                installed: outcome.members,
+                alreadyInstalled: outcome.alreadyInstalled,
+                probe: softDepProbe,
+              }),
             },
           ],
-        },
-      ],
-      undefined,
-      "single",
-    );
-    return { status: "failed", error: cascadeError, cause };
+          undefined,
+          "single",
+        );
+        surfaceDiscoveryWarnings(ctx, {
+          plugin,
+          verb: "installed",
+          warnings: postCommitWarnings,
+        });
+      }
+
+      return installedPluginOutcome(installCtx, postCommitWarnings, landedDisabled);
+    }
   }
-
-  const postCommitWarnings = await collectPostCommitWarnings(
-    installCtx,
-    completionCache,
-    scope,
-    orchestrated,
-  );
-
-  if (!orchestrated) {
-    // RH-3 / RH-4: ONE companion probe for the whole block. The row composers
-    // and the SEV-01 severity verdicts all read this snapshot, so every row in
-    // one block describes the same host -- and the probe count the boundary
-    // fakes assert stays what a single install always made.
-    const softDepProbe = softDepStatus(pi);
-    // Success: one notify(ctx, pi, ...) call with a PluginInstalledMessage.
-    // The renderer probes companion-loaded state via softDepStatus(pi) and
-    // emits the per-row soft-dep markers automatically. The "/reload to pick
-    // up changes" trailer fires structurally on the status; the trigger
-    // ladder is per-variant, not per-resource-count (RH-1, PU-8 (b)).
-    //
-    // The PI-13 dependencies-declaration note is DROPPED per D-19-01: the
-    // PR-5 free-form prose has no clean MarketplaceNotificationMessage
-    // representation. The resolver still appends it to `installable.notes`
-    // so downstream surfaces can continue to consume it.
-    //
-    // Exactly ONE notification per install (IL-2), whichever row the install
-    // produced -- the DFEN-04 disabled row when the cascade unstaged
-    // everything, the success row otherwise.
-    //
-    // RESV-01 / RESV-05 / RESV-06: the requesting plugin's row goes through the
-    // cascade composer together with one row per closure member. A plugin that
-    // declared nothing hands the composer two empty lists, so its block is the
-    // single row it always was, byte for byte.
-    notifyWithContext(
-      ctx,
-      pi,
-      CASCADE_CONTEXT,
-      [
-        {
-          name: marketplace,
-          scope,
-          plugins: composeCascadeMemberRows({
-            scope,
-            rootKey,
-            rootRow: disabledInstall.landed
-              ? disableCascade.composeDisabledRow({
-                  plugin: installCtx.plugin,
-                  version: installCtx.version,
-                  resolution: {
-                    state: installCtx.resolved.state,
-                    unsupported: installCtx.resolved.unsupported,
-                  },
-                  frontmatterDegradations: installCtx.frontmatterDegradations,
-                })
-              : composeInstalledRow(installCtx, softDepProbe),
-            installed: cascadeMembers,
-            alreadyInstalled: cascadeSkipped,
-            probe: softDepProbe,
-          }),
-        },
-      ],
-      undefined,
-      "single",
-    );
-    surfaceDiscoveryWarnings(ctx, {
-      plugin,
-      verb: "installed",
-      warnings: postCommitWarnings,
-    });
-  }
-
-  return installedPluginOutcome(installCtx, postCommitWarnings, disabledInstall.landed);
 }
 
 /** Bind install orchestration to one required semantic transaction owner. */

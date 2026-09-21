@@ -983,20 +983,20 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:455:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:547:36",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:548:36",
       "owner": "unwrapCascade",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within InstallCascadeResult by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:547:4"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:548:4"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:948:61",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:949:61",
       "owner": "InstalledLedgerResult",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within InstallLedgerResult by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:948:30"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:949:30"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts:74:42",
