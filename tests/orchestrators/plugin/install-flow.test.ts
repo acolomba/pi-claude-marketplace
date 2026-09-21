@@ -6029,6 +6029,92 @@ test("CR-01: the install cascade's re-enable arm overwrites a stale config enabl
   });
 });
 
+test("CR-06: install hello --local overwrites a base-file stale entry for a re-enabled member", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-cr06-reenable-local-"));
+    try {
+      // arrange: identical seed to CR-01's own case, except the SECOND
+      // install (the one that re-enables "some-other-plugin") passes
+      // `local: true`. "some-other-plugin"'s stale `enabled: false` entry
+      // still lives in the BASE file -- nothing about its own declaring file
+      // changes -- so the member write must find it by declaration, not by
+      // the root's own `--local` flag.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+      const { createEnableOperation } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts");
+      await createEnableOperation(createHooksRouting(createHooksRuntime(), { readHooksJson }))({
+        ctx,
+        pi,
+        cwd,
+        scope: "project",
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+        enable: false,
+      });
+      const locations = locationsFor("project", cwd);
+      const disabledState = await loadState(locations.extensionRoot);
+      assert.equal(
+        disabledState.marketplaces["mp"]?.plugins["some-other-plugin"]?.enabled,
+        false,
+        "nothing declared it yet, so the disable stood",
+      );
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        local: true,
+      });
+
+      // assert
+      const state = await loadState(locations.extensionRoot);
+      assert.equal(state.marketplaces["mp"]?.plugins["some-other-plugin"]?.enabled, true);
+      const baseCfg = JSON.parse(await readFile(locations.configJsonPath, "utf8")) as {
+        plugins?: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(baseCfg.plugins?.["some-other-plugin@mp"], { enabled: true });
+      const localCfg = JSON.parse(await readFile(locations.configLocalJsonPath, "utf8")) as {
+        plugins?: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(localCfg.plugins, { "hello@mp": {} });
+      const { loadMergedScopeConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+      const { planReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
+      const { emptyReconcilePlan } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts");
+      const { merged } = await loadMergedScopeConfig(locations);
+      assert.deepStrictEqual(
+        planReconcile(merged, state, "project"),
+        emptyReconcilePlan("project"),
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("CR-01: the install cascade's re-enable arm leaves a member with no config entry untouched", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-cr01-reenable-no-entry-"));

@@ -18,6 +18,7 @@ import {
   MarketplaceNotAddedSignal,
   missIsNotInstalled,
   maybeWritePluginConfigBack,
+  overwriteDisabledMemberEntries,
   removePluginRecord,
   resolveCrossScopePluginTarget,
   resolveInstalledMarketplaceTarget,
@@ -1064,6 +1065,128 @@ describe("writeAdoptingConfigEntries", () => {
         await readFile(locations.configJsonPath, "utf8"),
         '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
       );
+    });
+  });
+});
+
+describe("overwriteDisabledMemberEntries", () => {
+  test("overwrites an existing enabled: false entry for a discovered key", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.configJsonPath, {
+        schemaVersion: 1,
+        plugins: { "b@mp": { enabled: false } },
+      });
+      const state = makeState({ mp: { scope: "project", plugins: {} } });
+
+      // act
+      await overwriteDisabledMemberEntries({
+        locations,
+        state,
+        keys: ["b@mp"],
+        select: selectDeclaringConfigWriteTarget,
+        write: writeAdoptingConfigEntries,
+      });
+
+      // assert
+      const cfg = JSON.parse(await readFile(locations.configJsonPath, "utf8")) as {
+        plugins?: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(cfg.plugins?.["b@mp"], { enabled: true });
+    });
+  });
+
+  test("leaves a key the config does not mention untouched -- no file is created", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      const state = makeState({ mp: { scope: "project", plugins: {} } });
+
+      // act
+      await overwriteDisabledMemberEntries({
+        locations,
+        state,
+        keys: ["b@mp"],
+        select: selectDeclaringConfigWriteTarget,
+        write: writeAdoptingConfigEntries,
+      });
+
+      // assert
+      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
+    });
+  });
+
+  test("leaves a key whose entry is already enabled untouched", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      const seeded: ScopeConfig = { schemaVersion: 1, plugins: { "b@mp": { enabled: true } } };
+      await writeConfig(locations.configJsonPath, seeded);
+      const state = makeState({ mp: { scope: "project", plugins: {} } });
+
+      // act
+      await overwriteDisabledMemberEntries({
+        locations,
+        state,
+        keys: ["b@mp"],
+        select: selectDeclaringConfigWriteTarget,
+        write: writeAdoptingConfigEntries,
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        JSON.parse(await readFile(locations.configJsonPath, "utf8")) as unknown,
+        seeded,
+      );
+    });
+  });
+
+  test("skips a key whose declaring file is unreadable", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
+      await writeFile(locations.configLocalJsonPath, "{");
+      const state = makeState({ mp: { scope: "project", plugins: {} } });
+
+      // act & assert: does not throw, and the base file is never created
+      await overwriteDisabledMemberEntries({
+        locations,
+        state,
+        keys: ["b@mp"],
+        select: selectDeclaringConfigWriteTarget,
+        write: writeAdoptingConfigEntries,
+      });
+      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
+    });
+  });
+
+  test("processes every key in the list", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.configJsonPath, {
+        schemaVersion: 1,
+        plugins: { "b@mp": { enabled: false }, "c@mp": { enabled: false } },
+      });
+      const state = makeState({ mp: { scope: "project", plugins: {} } });
+
+      // act
+      await overwriteDisabledMemberEntries({
+        locations,
+        state,
+        keys: ["b@mp", "c@mp"],
+        select: selectDeclaringConfigWriteTarget,
+        write: writeAdoptingConfigEntries,
+      });
+
+      // assert
+      const cfg = JSON.parse(await readFile(locations.configJsonPath, "utf8")) as {
+        plugins?: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(cfg.plugins?.["b@mp"], { enabled: true });
+      assert.deepStrictEqual(cfg.plugins?.["c@mp"], { enabled: true });
     });
   });
 });

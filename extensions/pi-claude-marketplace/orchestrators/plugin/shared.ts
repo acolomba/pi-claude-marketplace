@@ -816,6 +816,49 @@ export async function writeAdoptingConfigEntries(opts: {
   });
 }
 
+/**
+ * CR-06: overwrite an EXISTING `enabled: false` config entry for a cascade
+ * member re-enabled through its state record -- the divergence `disable
+ * <dep>` creates and D-04-07 already corrects for the root. The entry to
+ * overwrite is the one that EXISTS, so each member's file is selected by
+ * DECLARATION ALONE (`local: undefined`), never by the flag the caller typed
+ * for the root: with `--local` the root's own write targets the local file,
+ * but a member's `enabled: false` entry written by a flagless `disable`
+ * lives in the base file, and selecting by the root's flag would miss it.
+ * A member the config does not mention at all stays untouched (D-04-02: the
+ * config names only what the user asked for by name).
+ *
+ * Shared by the enable cascade's EDEP-01 arm and the install cascade's
+ * EDEP-03 re-enable arm, which duplicated this write verbatim before this
+ * helper existed.
+ */
+export async function overwriteDisabledMemberEntries(args: {
+  readonly locations: ScopedLocations;
+  readonly state: ExtensionState;
+  readonly keys: readonly string[];
+  readonly select: typeof selectDeclaringConfigWriteTarget;
+  readonly write: typeof writeAdoptingConfigEntries;
+}): Promise<void> {
+  for (const key of args.keys) {
+    const selection = await args.select({ locations: args.locations, local: undefined, key });
+    if (selection.kind !== "selected" || selection.current.plugins?.[key]?.enabled !== false) {
+      continue;
+    }
+
+    const at = key.indexOf("@");
+    await args.write({
+      current: selection.current,
+      sibling: selection.sibling,
+      state: args.state,
+      marketplace: key.slice(at + 1),
+      plugin: key.slice(0, at),
+      targetConfigPath: selection.targetConfigPath,
+      scopeRoot: args.locations.scopeRoot,
+      pluginPatch: { enabled: true },
+    });
+  }
+}
+
 /** CMP-5: unqualified single-plugin lifecycle operations prefer project only when both scopes match. */
 export async function resolveInstalledPluginTarget(opts: {
   readonly cwd: string;
