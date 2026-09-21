@@ -946,6 +946,50 @@ async function declarePromotedPlugin(
   });
 }
 
+/**
+ * CR-01: mirrors `enable-disable.ts::writeReEnabledMemberConfigEntries` for
+ * the install cascade's own re-enable arm (EDEP-03). A re-enabled member
+ * whose key the target-scope config ALREADY declares with `enabled: false`
+ * -- exactly what `disable <dep>` writes -- is patched to `true`, through the
+ * same declaring-file selection the root's own write-back uses
+ * (`selectDeclaringConfigWriteTarget`). A member the config does not mention
+ * at all stays untouched (D-04-02: the config names only what the user asked
+ * for by name). Called only when the install's own root write-back also
+ * runs (never orchestrated), and at the SAME point in the lock -- a config
+ * write is not undone by `runPhases`.
+ */
+async function writeReEnabledCascadeMemberConfigEntries(
+  locations: ScopedLocations,
+  local: boolean | undefined,
+  state: ExtensionState,
+  members: readonly CascadeMemberOutcome[],
+): Promise<void> {
+  for (const member of members) {
+    if (!member.reEnabledFromRecord) {
+      continue;
+    }
+
+    const selection = await selectDeclaringConfigWriteTarget({ locations, local, key: member.key });
+    if (
+      selection.kind !== "selected" ||
+      selection.current.plugins?.[member.key]?.enabled !== false
+    ) {
+      continue;
+    }
+
+    await writeAdoptingConfigEntries({
+      current: selection.current,
+      sibling: selection.sibling,
+      state,
+      marketplace: member.marketplace,
+      plugin: member.name,
+      targetConfigPath: selection.targetConfigPath,
+      scopeRoot: locations.scopeRoot,
+      pluginPatch: { enabled: true },
+    });
+  }
+}
+
 type InstalledLedgerResult = Extract<InstallLedgerResult, { readonly kind: "installed" }>;
 
 /**
@@ -1600,6 +1644,12 @@ async function installPluginWithTransaction(
             // (failed) row.
             pluginPatch: { ...(landedDisabled && { enabled: false }) },
           });
+          await writeReEnabledCascadeMemberConfigEntries(
+            locations,
+            opts.local,
+            state,
+            installed.members,
+          );
         } else {
           await writeOrchestratedDeclarations({
             current,

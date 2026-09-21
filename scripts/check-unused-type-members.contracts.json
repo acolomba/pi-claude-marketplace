@@ -1007,12 +1007,12 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:548:4"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:949:61",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:993:61",
       "owner": "InstalledLedgerResult",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within InstallLedgerResult by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:949:30"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:993:30"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:891:61",

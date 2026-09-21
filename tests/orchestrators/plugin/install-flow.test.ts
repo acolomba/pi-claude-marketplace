@@ -5947,6 +5947,88 @@ test("D-04-07: a --local promotion of a disabled dependency writes the enable pa
   });
 });
 
+test("CR-01: the install cascade's re-enable arm overwrites a stale config enabled: false entry", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-cr01-reenable-config-"));
+    try {
+      // arrange: "some-other-plugin" is installed and then disabled STANDALONE
+      // while nothing declares it, so the disable verb writes
+      // `{ enabled: false }` for it into the config -- exactly the
+      // `disable <dep>` (after `disable <dependent>`, per EDEP-02's mandated
+      // order) hazard CR-01 covers. "hello" is installed SECOND and declares
+      // "some-other-plugin", so the cascade's re-enable arm materializes it.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+      const { createEnableOperation } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts");
+      await createEnableOperation(createHooksRouting(createHooksRuntime(), { readHooksJson }))({
+        ctx,
+        pi,
+        cwd,
+        scope: "project",
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+        enable: false,
+      });
+      const locations = locationsFor("project", cwd);
+      const disabledState = await loadState(locations.extensionRoot);
+      assert.equal(
+        disabledState.marketplaces["mp"]?.plugins["some-other-plugin"]?.enabled,
+        false,
+        "nothing declared it yet, so the disable stood",
+      );
+      assert.deepStrictEqual(
+        JSON.parse(await readFile(locations.configJsonPath, "utf8")) as unknown,
+        {
+          schemaVersion: 1,
+          marketplaces: { mp: { source: "./mp-src" } },
+          plugins: { "some-other-plugin@mp": { enabled: false } },
+        },
+      );
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      const state = await loadState(locations.extensionRoot);
+      assert.equal(state.marketplaces["mp"]?.plugins["some-other-plugin"]?.enabled, true);
+      const cfg = JSON.parse(await readFile(locations.configJsonPath, "utf8")) as {
+        plugins?: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(cfg.plugins?.["some-other-plugin@mp"], { enabled: true });
+      const { loadMergedScopeConfig } =
+        await import("../../../extensions/pi-claude-marketplace/persistence/config-merge.ts");
+      const { planReconcile } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts");
+      const { emptyReconcilePlan } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts");
+      const { merged } = await loadMergedScopeConfig(locations);
+      assert.deepStrictEqual(
+        planReconcile(merged, state, "project"),
+        emptyReconcilePlan("project"),
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("D-04-07: a plugin already recorded as a direct install still fails with the already-installed refusal", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-explicit-"));
