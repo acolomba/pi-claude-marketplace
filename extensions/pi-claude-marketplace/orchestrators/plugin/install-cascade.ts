@@ -48,15 +48,20 @@
 // knowingly rather than papered over, because a guard the upstream mechanism
 // does not have would be a divergence of its own.
 //
-// D-03-07 rollback scope has two halves, and only one of them is structural.
-// A DEPENDENCY the closure skipped as already-installed never becomes a
-// `Phase`, so the reverse walk over `runPhases`'s own `executed` array cannot
-// reach its record or its artifacts, and no flag can make that safer than it
-// already is. The REQUESTED plugin is different: it is never skipped, so an
-// install of a plugin that is already recorded reaches its phase and throws
-// from inside `do`. TR-02 then runs that phase's OWN undo, which would unstage
-// the very install the throw was reporting. `Phase.undo`'s contract states the
-// remedy -- an undo cannot assume its `do` ran to completion and must gate on a
+// D-03-07 rollback scope has three parts, and only one of them is structural.
+// A DEPENDENCY the closure skipped as already-installed and LEFT ALONE never
+// becomes a `Phase`, so the reverse walk over `runPhases`'s own `executed`
+// array cannot reach its record or its artifacts, and no flag can make that
+// safer than it already is. A dependency the closure skipped as
+// already-installed but DISABLED is different (EDEP-03): it is
+// re-materialized through its own record by `buildReEnableMemberPhase`, so it
+// DOES become a `Phase`, and a failure anywhere in the cascade puts it back to
+// disabled rather than leaving it re-enabled with nothing to unwind it. The
+// REQUESTED plugin is different again: it is never skipped, so an install of
+// a plugin that is already recorded reaches its phase and throws from inside
+// `do`. TR-02 then runs that phase's OWN undo, which would unstage the very
+// install the throw was reporting. `Phase.undo`'s contract states the remedy
+// -- an undo cannot assume its `do` ran to completion and must gate on a
 // context-set sentinel -- so each phase records itself in `materialized` after
 // its ledger returns, and `undo` acts only on what it finds there.
 
@@ -70,7 +75,7 @@ import {
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
-import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
@@ -87,6 +92,7 @@ import type {
 import type {
   InstallFailureCapture,
   InstallLedgerOptions,
+  InstallLedgerResult,
   InstallLedgerSummary,
   InstallLedgerTransaction,
 } from "./install-outcome.ts";
@@ -100,7 +106,7 @@ import type { DependencyRangeIntersection } from "../../domain/dependency-range.
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
 import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
 
@@ -337,10 +343,24 @@ export interface CascadeMemberOutcome {
    * construction site into a compile error the author must answer.
    */
   readonly fellBackToCurrentCopy: boolean;
+  /**
+   * EDEP-03: whether this member was already installed and DISABLED, and this
+   * run turned it back on through its own record rather than materializing a
+   * fresh one.
+   *
+   * REQUIRED on the same D-07 rationale as `fellBackToCurrentCopy`: an
+   * optional member of a closed row shape compiles clean at every
+   * construction site that omits it, which is exactly how a new fact goes
+   * silently unreported.
+   */
+  readonly reEnabledFromRecord: boolean;
 }
 
 /**
- * One dependency RESV-05 found already present and left exactly as it was.
+ * One dependency RESV-05 found already present, ENABLED, and left exactly as
+ * it was. A disabled already-installed dependency is EDEP-03's own subcase --
+ * `partitionAlreadyInstalled` routes it to `buildReEnableMemberPhase` instead,
+ * so it never reaches this shape.
  *
  * It never becomes a `Phase`, so it has no ledger summary to project. The two
  * fields here are what a row needs to say so: the key naming it, and the
@@ -351,17 +371,6 @@ export interface CascadeMemberOutcome {
 export interface CascadeSkippedMember {
   readonly key: string;
   readonly version: string | undefined;
-  /**
-   * Whether the record the skip rests on is DISABLED.
-   *
-   * A disabled record keeps its inventory and its name reservations while its
-   * artifacts are off disk (ENBL-18 / ENBL-19), so the requesting plugin
-   * installs against a dependency that materialized nothing. RESV-05 still
-   * leaves it exactly as it was -- enablement is never decided on a
-   * dependency's behalf -- so the row is the whole remedy, and it can only be
-   * truthful if it knows this.
-   */
-  readonly disabled: boolean;
 }
 
 /** Inputs of one cascade run. */
@@ -677,13 +686,16 @@ function recordedDisabled(state: ExtensionState, member: ClosureMember): boolean
 }
 
 /**
- * RESV-05: an already-installed dependency is CHECKED and never touched.
+ * RESV-05: an already-installed dependency is CHECKED against the effective
+ * constraint before anything else touches it.
  *
- * It is not in the closure, so it never becomes a `Phase`, and no code path
- * below can reinstall it, re-pin it or re-declare it -- whether or not it
- * satisfies the constraint. The only question is whether what is already on
- * disk is acceptable, which is why no tag is ever queried for one: what COULD
- * be fetched is not the question being asked.
+ * It is not in the closure, so this function itself never re-pins or
+ * re-declares it -- whether or not it satisfies the constraint. The only
+ * question here is whether what is already on disk is acceptable, which is
+ * why no tag is ever queried for one: what COULD be fetched is not the
+ * question being asked. `partitionAlreadyInstalled` decides separately, AFTER
+ * this check passes, whether a disabled member becomes a `Phase` that
+ * re-materializes it (EDEP-03) or stays untouched (RESV-05's general case).
  *
  * A member the snapshot records no version for is left alone. It is not
  * installed in this state after all, so there is nothing for a constraint to
@@ -796,6 +808,7 @@ function buildMemberPhase(
         pluginRoot: result.summary.resolved.pluginRoot,
         hooksConfigPath: result.summary.resolved.hooksConfigPath,
         fellBackToCurrentCopy: member.fellBackToCurrentCopy ?? false,
+        reEnabledFromRecord: false,
       });
       if (member.key === options.rootKey) {
         run.root = result.summary;
@@ -832,6 +845,160 @@ function buildMemberPhase(
 
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- `plugins` is a Record<string, ...> keyed by the member's own token-checked plugin name.
       delete marketplaceRecord.plugins[member.name];
+    },
+  };
+}
+
+/**
+ * Split RESV-05's already-installed set into the disabled subset EDEP-03
+ * re-enables and the rest RESV-05 still leaves alone.
+ *
+ * Reuses `recordedDisabled` -- the exact-key lookup the constraint check
+ * already uses -- rather than re-deriving the predicate.
+ */
+function partitionAlreadyInstalled(
+  state: ExtensionState,
+  alreadyInstalled: readonly ClosureMember[],
+): {
+  readonly toReEnable: readonly ClosureMember[];
+  readonly leftAlone: readonly ClosureMember[];
+} {
+  const toReEnable: ClosureMember[] = [];
+  const leftAlone: ClosureMember[] = [];
+  for (const member of alreadyInstalled) {
+    if (recordedDisabled(state, member)) {
+      toReEnable.push(member);
+    } else {
+      leftAlone.push(member);
+    }
+  }
+
+  return { toReEnable, leftAlone };
+}
+
+/**
+ * `partitionAlreadyInstalled` places a member in `toReEnable` only when
+ * `recordedDisabled` has already proved its record exists and is disabled.
+ * Evidence-backed type narrowing only; the invariant is established by the
+ * caller.
+ */
+function assertDisabledRecordExists(
+  _record: PluginInstallRecord | undefined,
+): asserts _record is PluginInstallRecord {
+  // Evidence-backed type narrowing only; the invariant is established by the caller.
+}
+
+type InstalledLedgerResult = Extract<InstallLedgerResult, { readonly kind: "installed" }>;
+
+/**
+ * `assertDisabledRecordExists` already proved this member's marketplace slot
+ * is present in `options.state` -- the record was read out of it -- and the
+ * ledger's sole `marketplace-absent` producer rereads that identical slot
+ * synchronously, so this re-enable call path cannot produce the absent arm.
+ * Evidence-backed type narrowing only, mirroring `enable-disable.ts`'s
+ * `assertRecordedStateLedgerInstalled`; the invariant is established by the
+ * caller, not by a runtime check here.
+ */
+function assertReEnableLedgerInstalled(
+  _result: InstallLedgerResult,
+): asserts _result is InstalledLedgerResult {
+  // Evidence-backed type narrowing only; the invariant is established by the caller.
+}
+
+/**
+ * EDEP-03: one already-installed, DISABLED member's re-enable phase.
+ *
+ * Narrows RESV-05's "an already-installed dependency is CHECKED and never
+ * touched" invariant for this ONE subcase; the general already-installed case
+ * stays untouched (`buildMemberPhase` is never built for it, and it never
+ * becomes a `Phase` at all).
+ *
+ * `do` calls `seam.runInstallLedger` with the caller's own per-member options
+ * builder, overridden with `pinVersionOverride` set to the record's own
+ * recorded version and `allowExistingRecord: true` -- the same argument set
+ * `runEnableBranch` and `materializePromotedRecord` already pass, now at
+ * another call site. `provenance` is never touched here: the builder's own
+ * `"dependency"` value for a non-root member is what the ledger's state phase
+ * would write for a FRESH record, but this record already exists, and
+ * `runInstallLedger` keeps an existing record's own `provenance` regardless
+ * (D-04-02) -- only `promoteDependencyRecord`'s by-name arm flips it.
+ *
+ * `undo` puts the member BACK to disabled via `cascadeUnstagePlugin` +
+ * `toDisabledRecord`, mirroring `buildMemberPhase`'s undo rather than
+ * deleting the record: this phase re-materialized artifacts for a record that
+ * already existed, so unwinding it means restoring what it was, not removing
+ * it. An unstage that did not finish is RE-THROWN after folding what did
+ * drop, on the same D-03-07 reasoning `buildMemberPhase`'s undo states: a
+ * throw is the ledger's only partial-rollback channel, and a swallowed
+ * failure would report a clean unwind while artifacts survive on disk.
+ */
+function buildReEnableMemberPhase(
+  options: InstallCascadeOptions,
+  seam: InstallCascadeLedgerSeam,
+  transaction: InstallLedgerTransaction,
+  member: ClosureMember,
+): Phase<CascadeRun> {
+  return {
+    name: member.key,
+    do: async (run) => {
+      run.attempting = member.key;
+      const record = options.state.marketplaces[member.marketplace]?.plugins[member.name];
+      assertDisabledRecordExists(record);
+      const result = await seam.runInstallLedger(
+        options.state,
+        options.locations,
+        {
+          ...options.ledgerOptionsFor(member),
+          pinVersionOverride: record.version,
+          allowExistingRecord: true,
+          partial: !record.compatibility.installable,
+        },
+        options.capture,
+        transaction,
+      );
+      assertReEnableLedgerInstalled(result);
+
+      run.materialized.add(member.key);
+      run.members.push({
+        key: member.key,
+        name: member.name,
+        marketplace: member.marketplace,
+        requiredBy: member.requiredBy,
+        version: result.summary.version,
+        declaresAgents: result.summary.stagedAgentNames.length > 0,
+        declaresMcp: result.summary.stagedMcpServerNames.length > 0,
+        pluginRoot: result.summary.resolved.pluginRoot,
+        hooksConfigPath: result.summary.resolved.hooksConfigPath,
+        fellBackToCurrentCopy: false,
+        reEnabledFromRecord: true,
+      });
+    },
+    undo: async (run) => {
+      if (!run.materialized.has(member.key)) {
+        return;
+      }
+
+      const marketplaceRecord = options.state.marketplaces[member.marketplace];
+      const installed = marketplaceRecord?.plugins[member.name];
+      if (marketplaceRecord === undefined || installed === undefined) {
+        return;
+      }
+
+      const outcome = await seam.cascadeUnstagePlugin(
+        member.name,
+        member.marketplace,
+        options.locations,
+        installed,
+      );
+      if (!outcome.ok) {
+        applyPartialCascadeFold(installed, outcome.dropped);
+        throw outcome.cause ?? new Error(`Rollback of "${member.key}" did not complete.`);
+      }
+
+      marketplaceRecord.plugins[member.name] = toDisabledRecord(
+        installed,
+        new Date().toISOString(),
+      );
     },
   };
 }
@@ -920,20 +1087,26 @@ export async function runInstallCascade(
     members: [],
     materialized: new Set<string>(),
   };
-  const phases: readonly Phase<CascadeRun>[] = constraints.members.map((member) =>
-    buildMemberPhase(options, seam, transaction, member),
+  // EDEP-03: the disabled subset of `alreadyInstalled` re-enables through its
+  // own record; the rest stays RESV-05's untouched skip. The re-enable phases
+  // go FIRST, ahead of the closure's own members, so a dependency is live
+  // before the plugin that needs it materializes.
+  const { toReEnable, leftAlone } = partitionAlreadyInstalled(
+    options.state,
+    closure.alreadyInstalled,
   );
-  // RESV-05 / RESV-06: projected from the walk's own skip list, not from the
-  // ledger -- these members never reach a phase, so the run has nothing to
+  const phases: readonly Phase<CascadeRun>[] = [
+    ...toReEnable.map((member) => buildReEnableMemberPhase(options, seam, transaction, member)),
+    ...constraints.members.map((member) => buildMemberPhase(options, seam, transaction, member)),
+  ];
+  // RESV-05 / RESV-06: projected from the walk's own left-alone list, not from
+  // the ledger -- these members never reach a phase, so the run has nothing to
   // record about them. They are carried out of the cascade so the block can
   // report them as left alone rather than omitting them entirely.
-  const alreadyInstalled: readonly CascadeSkippedMember[] = closure.alreadyInstalled.map(
-    (member) => ({
-      key: member.key,
-      version: recordedVersionOf(options.state, member),
-      disabled: recordedDisabled(options.state, member),
-    }),
-  );
+  const alreadyInstalled: readonly CascadeSkippedMember[] = leftAlone.map((member) => ({
+    key: member.key,
+    version: recordedVersionOf(options.state, member),
+  }));
 
   return toCascadeResult(options, await transaction.runPhases(phases, run), run, alreadyInstalled);
 }

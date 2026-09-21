@@ -430,6 +430,7 @@ test("a materialized member's outcome carries what its own ledger summary report
       pluginRoot: path.join(environment.cwd, "bar-root"),
       hooksConfigPath: "hooks/hooks.json",
       fellBackToCurrentCopy: false,
+      reEnabledFromRecord: false,
     },
     {
       key: `foo@${MARKETPLACE}`,
@@ -442,6 +443,7 @@ test("a materialized member's outcome carries what its own ledger summary report
       pluginRoot: path.join(environment.cwd, "unmaterialized"),
       hooksConfigPath: undefined,
       fellBackToCurrentCopy: false,
+      reEnabledFromRecord: false,
     },
   ]);
   assert.strictEqual(
@@ -1765,44 +1767,447 @@ test("TAGS-02 a path source whose marketplace clone carries no matching release 
   );
 });
 
-test("RESV-05 a skipped dependency reports whether the record it rests on is disabled", async (t) => {
-  // arrange: `bar` predates the run and its record is DISABLED, so it keeps its
-  // inventory and its name reservations while its artifacts are off disk. The
-  // skip is still correct -- nothing here decides enablement on a dependency's
-  // behalf -- but the projection has to carry the fact, or the row that is the
-  // whole remedy cannot state it.
-  const environment = await createHermeticEnvironment(t, "install-cascade-disabled-skip-");
-  const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo"], {
-    preinstalled: ["bar", "baz"],
-  });
+/**
+ * Seed `bar` and `baz` as preinstalled, `enabled` records, then disable `bar`
+ * and set its provenance to `"dependency"` -- the shape a cascade-installed
+ * member actually carries, so a test against this fixture can tell a
+ * provenance flip from a provenance that was never touched.
+ */
+async function seedOneDisabledDependency(
+  cwd: string,
+): Promise<{ readonly state: ExtensionState; readonly disabledUpdatedAt: string }> {
+  const state = await seedMarketplace(cwd, ["bar", "baz", "foo"], { preinstalled: ["bar", "baz"] });
+  const bar = state.marketplaces[MARKETPLACE]?.plugins.bar;
+  assert.ok(bar !== undefined, "the fixture pre-installs the dependency");
+  bar.enabled = false;
+  bar.provenance = "dependency";
+  return { state, disabledUpdatedAt: bar.updatedAt };
+}
+
+test("EDEP-03 a disabled already-installed dependency's record ends enabled, materialized under the new marker", async (t) => {
+  // arrange: `bar` is disabled and pre-installed; `helper`'s own install
+  // (`foo`) declares it. The real ledger runs, so a stub could not fake the
+  // re-materialization this test proves happened.
+  const environment = await createHermeticEnvironment(t, "install-cascade-reenable-");
+  const { state } = await seedOneDisabledDependency(environment.cwd);
   const locations = locationsFor("project", environment.cwd);
-  const disabled = state.marketplaces[MARKETPLACE]?.plugins.bar;
-  assert.ok(disabled !== undefined, "the fixture pre-installs the dependency");
-  disabled.enabled = false;
 
   // act
   const cascade = await runInstallCascade({
     state,
     locations,
     rootKey: `foo@${MARKETPLACE}`,
-    lookup: catalog({
-      [`foo@${MARKETPLACE}`]: [{ name: "bar" }, { name: "baz" }],
-      [`bar@${MARKETPLACE}`]: [],
-      [`baz@${MARKETPLACE}`]: [],
-    }),
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }] }),
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
-    installedKeys: new Set([`bar@${MARKETPLACE}`, `baz@${MARKETPLACE}`]),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.enabled, true);
+  const bar =
+    cascade.kind === "installed" &&
+    cascade.members.find((member) => member.key === `bar@${MARKETPLACE}`);
+  assert.ok(bar, "the re-enabled dependency appears in the materialized member list");
+  assert.strictEqual(bar.reEnabledFromRecord, true);
+  assert.strictEqual(bar.version, "0.0.1");
+  assert.strictEqual(bar.declaresAgents, false);
+  assert.strictEqual(bar.declaresMcp, false);
+  assert.strictEqual(bar.fellBackToCurrentCopy, false);
+});
+
+test("EDEP-03 a re-enabled dependency keeps its provenance at dependency", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-cascade-reenable-provenance-");
+  const { state } = await seedOneDisabledDependency(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert: D-04-02 / A2 -- only a by-name install promotes; this is not one.
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.provenance, "dependency");
+});
+
+test("EDEP-03 re-enabling a dependency writes no entry into either config file", async (t) => {
+  // arrange: `install-cascade.ts` and `install-outcome.ts` expose no config-write
+  // seam at all, so this proves the guarantee the way it can be observed here --
+  // neither config file exists after the run.
+  const environment = await createHermeticEnvironment(t, "install-cascade-reenable-no-config-");
+  const { state } = await seedOneDisabledDependency(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.strictEqual(fs.existsSync(locations.configJsonPath), false);
+  assert.strictEqual(fs.existsSync(locations.configLocalJsonPath), false);
+});
+
+test("EDEP-03 an already-enabled already-installed dependency is left untouched", async (t) => {
+  // arrange: `baz` is the control -- an ENABLED record on the same
+  // already-installed path, so a partition that re-enabled every already-installed
+  // member regardless of state would fail here.
+  const environment = await createHermeticEnvironment(t, "install-cascade-enabled-untouched-");
+  const state = await seedMarketplace(environment.cwd, ["baz", "foo"], { preinstalled: ["baz"] });
+  const bazBefore = state.marketplaces[MARKETPLACE]?.plugins.baz;
+  assert.ok(bazBefore !== undefined, "the fixture pre-installs the dependency");
+  const bazUpdatedAt = bazBefore.updatedAt;
+  const locations = locationsFor("project", environment.cwd);
+  const calledFor: string[] = [];
+  const seam: InstallCascadeLedgerSeam = {
+    runInstallLedger: (memberState, memberLocations, options, capture, transaction) => {
+      calledFor.push(options.plugin);
+      return runInstallLedger(memberState, memberLocations, options, capture, transaction);
+    },
+    cascadeUnstagePlugin,
+  };
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "baz" }] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`baz@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam,
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(cascade.kind === "installed" && cascade.alreadyInstalled, [
+    { key: `baz@${MARKETPLACE}`, version: "0.0.1" },
+  ]);
+  assert.deepStrictEqual(calledFor, ["foo"], "no ledger call was made for the enabled dependency");
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.baz?.updatedAt, bazUpdatedAt);
+});
+
+test("EDEP-03 a re-materialization fault unwinds the whole cascade and leaves the record disabled", async (t) => {
+  // arrange: `bar`'s own re-enable ledger call throws, so `run.materialized`
+  // never records it and the phase's own `undo` gate is a no-op -- the record
+  // must be exactly what it was before this run.
+  const environment = await createHermeticEnvironment(t, "install-cascade-reenable-fault-");
+  const { state, disabledUpdatedAt } = await seedOneDisabledDependency(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  const refusal = new Error("re-enable ledger refused");
+  const seam: InstallCascadeLedgerSeam = {
+    runInstallLedger: (memberState, memberLocations, options, capture, transaction) =>
+      options.plugin === "bar"
+        ? Promise.reject(refusal)
+        : runInstallLedger(memberState, memberLocations, options, capture, transaction),
+    cascadeUnstagePlugin,
+  };
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam,
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "member-failed");
+  assert.strictEqual(cascade.kind === "member-failed" && cascade.key, `bar@${MARKETPLACE}`);
+  assert.strictEqual(
+    state.marketplaces[MARKETPLACE]?.plugins.foo,
+    undefined,
+    "the root plugin never installed",
+  );
+  const bar = state.marketplaces[MARKETPLACE]?.plugins.bar;
+  assert.ok(bar !== undefined, "the dependency's own record still exists");
+  assert.strictEqual(bar.enabled, false);
+  assert.strictEqual(
+    bar.updatedAt,
+    disabledUpdatedAt,
+    "the record was never touched, not re-disabled",
+  );
+});
+
+test("EDEP-03 the root's own ledger fault AFTER a successful re-enable puts the dependency back to disabled", async (t) => {
+  // arrange: `bar` re-enables for real, then `foo`'s (the root's) own ledger
+  // throws -- the reverse walk must reach `bar`'s phase and re-disable it.
+  const environment = await createHermeticEnvironment(t, "install-cascade-reenable-root-fault-");
+  const { state } = await seedOneDisabledDependency(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  const refusal = new Error("root ledger refused");
+  const seam: InstallCascadeLedgerSeam = {
+    runInstallLedger: (memberState, memberLocations, options, capture, transaction) =>
+      options.plugin === "foo"
+        ? Promise.reject(refusal)
+        : runInstallLedger(memberState, memberLocations, options, capture, transaction),
+    cascadeUnstagePlugin,
+  };
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam,
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "member-failed");
+  const bar = state.marketplaces[MARKETPLACE]?.plugins.bar;
+  assert.ok(bar !== undefined, "the dependency's own record still exists");
+  assert.strictEqual(
+    bar.enabled,
+    false,
+    "the reverse walk put the re-enabled member back to disabled",
+  );
+  assert.strictEqual(bar.provenance, "dependency");
+});
+
+test("EDEP-03 an undo whose re-enabled member's record is gone by rollback time removes nothing and does not throw", async (t) => {
+  // arrange: the fake ledger reports `bar` re-enabled and then removes its own
+  // record as a side effect -- mirroring `buildMemberPhase`'s own "wrote no
+  // record" undo case -- so the undo's early-return guard runs against a
+  // snapshot carrying nothing to remove.
+  const environment = await createHermeticEnvironment(t, "install-cascade-reenable-undo-gone-");
+  const { state } = await seedOneDisabledDependency(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  const refusal = new Error("root ledger refused");
+  const unstaged: string[] = [];
+  const seam: InstallCascadeLedgerSeam = {
+    runInstallLedger: (memberState, _memberLocations, options) => {
+      if (options.plugin !== "bar") {
+        return Promise.reject(refusal);
+      }
+
+      const marketplaceRecord = memberState.marketplaces[MARKETPLACE];
+      delete marketplaceRecord?.plugins.bar;
+      return Promise.resolve({
+        kind: "installed",
+        summary: unmaterializedSummary(locations, environment.cwd, closureMember("bar")),
+      });
+    },
+    cascadeUnstagePlugin: (plugin, marketplace, memberLocations, installed) => {
+      unstaged.push(`${plugin}@${marketplace}`);
+      return cascadeUnstagePlugin(plugin, marketplace, memberLocations, installed);
+    },
+  };
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam,
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "member-failed");
+  assert.deepStrictEqual(
+    unstaged,
+    [],
+    "nothing was unstaged for a member with no record to remove",
+  );
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar, undefined);
+});
+
+const REENABLE_UNSTAGE_DENIED = new Error("unstage denied");
+const REENABLE_UNSTAGE_INCOMPLETE = `Rollback of "bar@${MARKETPLACE}" did not complete.`;
+for (const { label, cause, expected } of [
+  {
+    label: "carrying its cause",
+    cause: REENABLE_UNSTAGE_DENIED,
+    expected: { msg: "unstage denied", cause: REENABLE_UNSTAGE_DENIED },
+  },
+  {
+    label: "carrying no cause",
+    cause: undefined,
+    expected: {
+      msg: REENABLE_UNSTAGE_INCOMPLETE,
+      cause: new Error(REENABLE_UNSTAGE_INCOMPLETE),
+    },
+  },
+]) {
+  test(`EDEP-03 an undo whose re-enabled member's own unstage does not finish, ${label}, surfaces a rollback partial without throwing`, async (t) => {
+    // arrange: `bar` re-enables for real, `foo`'s ledger then throws, and
+    // `bar`'s own unstage reports failure -- the undo must RETHROW after
+    // folding what did drop (D-03-07 / T-08-10), not swallow the failure.
+    const environment = await createHermeticEnvironment(t, "install-cascade-reenable-undo-fault-");
+    const { state } = await seedOneDisabledDependency(environment.cwd);
+    const locations = locationsFor("project", environment.cwd);
+    const refusal = new Error("root ledger refused");
+    const seam: InstallCascadeLedgerSeam = {
+      runInstallLedger: (memberState, memberLocations, options, capture, transaction) =>
+        options.plugin === "foo"
+          ? Promise.reject(refusal)
+          : runInstallLedger(memberState, memberLocations, options, capture, transaction),
+      cascadeUnstagePlugin: (plugin, marketplace, memberLocations, installed) =>
+        plugin === "bar"
+          ? Promise.resolve({
+              ok: false,
+              dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+              ...(cause !== undefined && { cause }),
+            })
+          : cascadeUnstagePlugin(plugin, marketplace, memberLocations, installed),
+    };
+
+    // act
+    const cascade = await runInstallCascade({
+      state,
+      locations,
+      rootKey: `foo@${MARKETPLACE}`,
+      lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }] }),
+      ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+      installedKeys: new Set([`bar@${MARKETPLACE}`]),
+      knownMarketplaces: new Set([MARKETPLACE]),
+      seam,
+    });
+
+    // assert
+    assert.strictEqual(cascade.kind, "member-failed");
+    assert.deepStrictEqual(cascade.kind === "member-failed" && cascade.rollbackPartials, [
+      { phase: `bar@${MARKETPLACE}`, msg: expected.msg, cause: expected.cause },
+    ]);
+    const bar = state.marketplaces[MARKETPLACE]?.plugins.bar;
+    assert.ok(bar !== undefined, "the record survives an unstage that did not finish");
+    assert.strictEqual(
+      bar.enabled,
+      true,
+      "still claims enabled -- the rethrow means it was never reset",
+    );
+  });
+}
+
+test("EDEP-03 a constraint conflict on a disabled already-installed member fails before anything materializes", async (t) => {
+  // arrange: `bar`'s recorded version falls outside the constraint AND it is
+  // disabled -- the constraint check still runs first and still fails the
+  // whole cascade before any phase exists, exactly as the enabled case does.
+  const environment = await createHermeticEnvironment(t, "install-cascade-reenable-conflict-");
+  const environmentCwd = environment.cwd;
+  const state = await seedMarketplace(environmentCwd, ["bar", "foo"], {
+    preinstalled: ["bar"],
+    gitSourced: ["bar"],
+    recordedVersions: { bar: "1.0.0" },
+  });
+  const bar = state.marketplaces[MARKETPLACE]?.plugins.bar;
+  assert.ok(bar !== undefined, "the fixture pre-installs the dependency");
+  bar.enabled = false;
+  const locations = locationsFor("project", environmentCwd);
+  const before = await twoScopeFootprint(environmentCwd, state);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^2.0.0" }] }),
+    ledgerOptionsFor: ledgerOptionsFor(environmentCwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.deepStrictEqual(cascade, {
+    kind: "constraint-failed",
+    failure: {
+      kind: "range-conflict",
+      why: "installed-unsatisfied",
+      key: `bar@${MARKETPLACE}`,
+      range: ">=2.0.0 <3.0.0-0",
+      recordedVersion: "1.0.0",
+    },
+  });
+  assert.deepStrictEqual(await twoScopeFootprint(environmentCwd, state), before);
+});
+
+test("EDEP-03 the re-enable phase runs before the root's own phase", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-cascade-reenable-order-");
+  const { state } = await seedOneDisabledDependency(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  const scheduled: string[] = [];
+  const transaction: InstallLedgerTransaction = {
+    runPhases: (phases, context) => {
+      scheduled.push(...phases.map((phase) => phase.name));
+      return runPhases(phases, context);
+    },
+  };
+
+  // act: `recordingLedgerSeam` reports success without performing a real
+  // install, so the inner six-phase ledger never runs its OWN `runPhases`
+  // call through this same wrapper -- what this test observes is only the
+  // cascade's own outer phase array.
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, []),
+    transaction,
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(scheduled, [`bar@${MARKETPLACE}`, `foo@${MARKETPLACE}`]);
+});
+
+test("EDEP-03 a plugin that declares nothing is byte-identical to today", async (t) => {
+  // arrange: no already-installed member at all, so the new partition never
+  // fires.
+  const environment = await createHermeticEnvironment(t, "install-cascade-reenable-no-deps-");
+  const state = await seedMarketplace(environment.cwd, ["foo"]);
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
     knownMarketplaces: new Set([MARKETPLACE]),
     seam: recordingLedgerSeam(environment.cwd, locations, []),
   });
 
-  // assert: `baz` is the control -- an enabled record on the same skip path,
-  // so a projection that reported every skip as disabled would fail here.
+  // assert
   assert.strictEqual(cascade.kind, "installed");
-  assert.deepStrictEqual(cascade.alreadyInstalled, [
-    { key: `bar@${MARKETPLACE}`, version: "0.0.1", disabled: true },
-    { key: `baz@${MARKETPLACE}`, version: "0.0.1", disabled: false },
-  ]);
+  assert.deepStrictEqual(
+    cascade.kind === "installed" && cascade.members.map((member) => member.key),
+    [`foo@${MARKETPLACE}`],
+  );
+  assert.deepStrictEqual(cascade.kind === "installed" && cascade.alreadyInstalled, []);
 });
 
 test("CMP-3 a constrained member whose marketplace the snapshot does not record resolves through the caller's lookup", async (t) => {
@@ -2051,7 +2456,7 @@ for (const { label, declared, recorded } of [
     assert.deepStrictEqual(seen, [], "what could be fetched is not the question being asked");
     assert.deepStrictEqual(
       cascade.alreadyInstalled,
-      [{ key: `bar@${MARKETPLACE}`, version: recorded, disabled: false }],
+      [{ key: `bar@${MARKETPLACE}`, version: recorded }],
       "RESV-06: a member that was left alone is reported, not omitted",
     );
     assert.deepStrictEqual(
@@ -2150,7 +2555,7 @@ test("RESV-05 an already-installed dependency the snapshot records no version fo
   // assert
   assert.strictEqual(cascade.kind, "installed");
   assert.deepStrictEqual(cascade.alreadyInstalled, [
-    { key: `bar@${MARKETPLACE}`, version: undefined, disabled: false },
+    { key: `bar@${MARKETPLACE}`, version: undefined },
   ]);
 });
 
