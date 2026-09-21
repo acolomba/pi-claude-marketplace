@@ -3,6 +3,7 @@ import {
   findManualRecoveryError,
   ManualRecoveryError,
   PluginShapeError,
+  StateLockHeldError,
 } from "../../shared/errors.ts";
 
 import { retiresWorkflowCommand } from "./shared.ts";
@@ -82,6 +83,16 @@ export function reinstallReasonsFromError(error: unknown): readonly ContentReaso
 
   if (error instanceof ManualRecoveryError) {
     return ["rollback partial"] as const;
+  }
+
+  // A held per-scope state lock is another operation in progress, not an
+  // unreadable plugin. Without this arm the message text falls through
+  // `narrowReason`'s last-resort `"unreadable"`, while the reconcile wrapper
+  // one layer up maps the same error to `"lock held"` -- one cause, two tokens
+  // from the same closed set depending on which layer caught it. `lock held`
+  // is the one word that tells the operator to retry.
+  if (error instanceof StateLockHeldError) {
+    return ["lock held"] as const;
   }
 
   if (error instanceof Error) {

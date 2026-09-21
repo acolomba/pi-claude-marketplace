@@ -8,6 +8,7 @@ import {
 import {
   ManualRecoveryError,
   PluginShapeError,
+  StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { MaterializablePlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
@@ -287,6 +288,7 @@ test("composes ordinary, typed, errno, and manual-recovery failures", () => {
     partialable: false,
   });
   const manual = new ManualRecoveryError("rollback failed", ["skills: /leak"]);
+  const lockHeld = new StateLockHeldError("user", "/tmp/scope/.state-lock");
 
   // act
   const outcome = recordReinstallOutcome({
@@ -303,6 +305,7 @@ test("composes ordinary, typed, errno, and manual-recovery failures", () => {
   assert.deepStrictEqual(reinstallReasonsFromError(missing), ["source missing"]);
   assert.deepStrictEqual(reinstallReasonsFromError(shape), ["source mismatch"]);
   assert.deepStrictEqual(reinstallReasonsFromError(manual), ["rollback partial"]);
+  assert.deepStrictEqual(reinstallReasonsFromError(lockHeld), ["lock held"]);
   assert.deepStrictEqual(outcome, {
     partition: "failed",
     name: "plugin",

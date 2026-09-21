@@ -1801,24 +1801,14 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     verifyBoundary();
   });
 
-  // ENBL-08: the pair below measures the filter against a fully LIVE fixture --
+  // ENBL-08: the cases below measure the filter against a fully LIVE fixture --
   // a readable manifest and a real strict-superset growth -- which the
   // poisoned-manifest pair cannot do, because poisoning the manifest denies the
   // growth test its input. Everything up to the re-materialize therefore runs,
-  // and the filter is the only thing that can stop the scan short of it.
-  //
-  // The observable is the per-scope state lock, held by a concurrent process for
-  // the length of the act. It is the discriminator this claim needs because
-  // `reinstallPlugin` acquires that lock BEFORE it reads the record and refuses a
-  // disabled one (`with-state-guard.ts` wraps `runLockedReinstall`): under a held
-  // lock the ENBL-05 refusal is unreachable, so it cannot stand in for the
-  // filter and produce the same silence. Reaching the re-materialize at all
-  // therefore costs a failure row and a held-open gate, and the measured zero
-  // below is a fact about the filter rather than about reinstall.
-  //
-  // It also bounds one step further downstream than the manifest read does: the
-  // lock sits after the offline resolve, so a change that resolved before
-  // filtering reddens this pair too.
+  // and the filter is the only thing that can stop the scan short of it. The
+  // enabled control promotes the same fixture, so the disabled case's silence
+  // is a fact about the filter rather than about a fixture nothing would have
+  // promoted.
   test("ENBL-08: skips a disabled record whose supported set grew", async (t) => {
     // arrange
     const { cwd, locations } = await createHermeticProjectScope(t, "disabled-partial");
@@ -2006,6 +1996,69 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     });
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), fullyPromotedScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  // The re-materialize takes the per-scope state lock itself
+  // (`runLockedReinstall`), so a concurrent process holding it fails the
+  // reinstall at the lock rather than on anything it would have read. That
+  // failure is caught INSIDE `reinstallPlugin` and returned as a `failed`
+  // outcome, and the failed arm prefers the outcome's own pre-narrowed reason
+  // over `classifyOrchestratorThrow`. Both layers must therefore agree on the
+  // token: the wrapper one layer up already says `lock held` for the same error
+  // (WR-02 above), and a row that said `unreadable` would claim the cascade
+  // could not read a plugin that nothing had trouble reading.
+  test("ENBL-08: reports a held scope lock on the re-materialize as `lock held` and holds the gate open", async (t) => {
+    // arrange -- the enabled control's fixture, under a lock another process holds.
+    const { cwd, locations } = await createHermeticProjectScope(t, "enabled-lock-held");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true, lsp: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["lspServers"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const release = await holdScopeLock(locations);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+    await release();
+
+    // assert -- one plugin-scoped failure row under the lock's own token, and
+    // no state.json row: a failed scan skips the stamp write instead of
+    // colliding with the lock a second time, so the gate stays open for the
+    // next load and the record is left exactly as seeded.
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        reason: "lock held",
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
