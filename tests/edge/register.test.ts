@@ -1621,17 +1621,17 @@ const COMMAND_ARGUMENT_CASES = [
     verb: "marketplace list",
     aliases: ["marketplace ls"],
     operand: "",
-    usage: "marketplace <list|ls> [--scope user|project] [--local]",
+    usage: "marketplace <list|ls> [--scope user|project]",
   },
   {
     verb: "marketplace info",
     operand: "official",
-    usage: "marketplace info <name> [--scope user|project] [--local]",
+    usage: "marketplace info <name> [--scope user|project]",
   },
   {
     verb: "marketplace update",
     operand: "official",
-    usage: "marketplace update [<name>] [--scope user|project] [--local]",
+    usage: "marketplace update [<name>] [--scope user|project]",
   },
   {
     verb: "marketplace autoupdate",

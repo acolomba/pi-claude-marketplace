@@ -1,7 +1,7 @@
 // edge/handlers/marketplace/update.ts
 //
 // Thin-shim handler factory for
-// `/claude:plugin marketplace update [<name>] [--scope user|project] [--local]`.
+// `/claude:plugin marketplace update [<name>] [--scope user|project]`.
 //
 // Two forms via optional positional:
 //   - bare    -> updateAllMarketplaces
@@ -9,6 +9,10 @@
 //
 // The lifecycle CompletionCache travels beside the unchanged `pluginUpdate`
 // callback. The handler creates neither owner and always supplies both.
+//
+// `update` is a merged read that never writes configuration, so a
+// write-target flag has no meaning for it and `parseCommandArgs` rejects
+// it as an unknown flag like any other (AP-5).
 
 import {
   updateAllMarketplaces,
@@ -16,25 +20,19 @@ import {
 } from "../../../orchestrators/marketplace/update.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
-import { extractLocalFlag } from "../shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { EdgeDeps } from "../../types.ts";
 
-const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|project] [--local]";
+const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|project]";
 
 export function makeMarketplaceUpdateHandler(
   pi: ExtensionAPI,
   deps: Pick<EdgeDeps, "completionCache" | "gitOps" | "pluginUpdate">,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    const localFlag = extractLocalFlag(args, ctx, USAGE);
-    if (localFlag === undefined) {
-      return;
-    }
-
     const parsed = parseCommandArgs(
-      localFlag.residualArgs,
+      args,
       {
         positional: [{ name: "name", required: false }] as const,
         usage: USAGE,

@@ -867,24 +867,12 @@ test("TC-6 routes plugin references through the required completion cache", asyn
   ]);
 });
 
-for (const verb of [
-  "add",
-  "remove",
-  "rm",
-  "info",
-  "list",
-  "ls",
-  "update",
-  "autoupdate",
-  "noautoupdate",
-]) {
+for (const verb of ["add", "remove", "rm", "autoupdate", "noautoupdate"]) {
   test(`offers local for marketplace ${verb} with its command-specific description`, async (t) => {
     // arrange
     const { resolver, completionCache } = await seedResolver(t, "marketplace-flag");
-    const readOnly = ["info", "list", "ls", "update"].includes(verb);
-    const description = readOnly
-      ? "Keep merged configuration reads; this command does not write configuration"
-      : "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json";
+    const description =
+      "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json";
 
     // act
     const suggestions = await getArgumentCompletions(
@@ -900,7 +888,7 @@ for (const verb of [
   });
 }
 
-for (const verb of ["remove", "rm", "info", "update", "autoupdate", "noautoupdate"]) {
+for (const verb of ["remove", "rm", "autoupdate", "noautoupdate"]) {
   test(`marketplace ${verb} still completes names after local`, async (t) => {
     // arrange
     const { resolver, completionCache } = await seedResolver(t, "marketplace-local-name");
@@ -927,6 +915,23 @@ for (const prefix of ["bootstrap -", "bootstrap --scope "]) {
 
     // act
     const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
+
+    // assert
+    assert.deepStrictEqual(suggestions, []);
+  });
+}
+
+for (const verb of ["info", "list", "update"]) {
+  test(`does not offer local for marketplace ${verb}`, async (t) => {
+    // arrange
+    const { resolver, completionCache } = await seedResolver(t, `marketplace-${verb}-flag`);
+
+    // act
+    const suggestions = await getArgumentCompletions(
+      `marketplace ${verb} --l`,
+      resolver,
+      completionCache,
+    );
 
     // assert
     assert.deepStrictEqual(suggestions, []);

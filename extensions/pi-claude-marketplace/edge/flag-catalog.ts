@@ -88,13 +88,6 @@ const WRITE_TARGET_FLAG_ENTRY: FlagEntry = {
   complete: true,
 };
 
-const MERGED_READ_FLAG_ENTRY: FlagEntry = {
-  name: "--local",
-  description: "Keep merged configuration reads; this command does not write configuration",
-  parse: true,
-  complete: true,
-};
-
 const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
   install: [
     // AG-7 opt-in: `--map-model` surfaces as a completion suggestion.
@@ -175,9 +168,9 @@ const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
   "marketplace help": [],
   "marketplace add": [WRITE_TARGET_FLAG_ENTRY],
   "marketplace remove": [WRITE_TARGET_FLAG_ENTRY],
-  "marketplace info": [MERGED_READ_FLAG_ENTRY],
-  "marketplace list": [MERGED_READ_FLAG_ENTRY],
-  "marketplace update": [MERGED_READ_FLAG_ENTRY],
+  "marketplace info": [],
+  "marketplace list": [],
+  "marketplace update": [],
   "marketplace autoupdate": [WRITE_TARGET_FLAG_ENTRY],
   "marketplace noautoupdate": [WRITE_TARGET_FLAG_ENTRY],
 };

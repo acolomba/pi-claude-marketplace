@@ -206,23 +206,3 @@ for (const { candidate, situation } of [
 void (true satisfies [Exclude<CatalogVerb, (typeof EXPECTED_CATALOG_VERBS)[number]>] extends [never]
   ? true
   : false);
-
-for (const verb of ["marketplace info", "marketplace list", "marketplace update"] as const) {
-  test(`${verb} describes local as retaining merged reads without configuration writes`, () => {
-    // arrange
-    const expectedEntries = [
-      {
-        name: "--local",
-        description: "Keep merged configuration reads; this command does not write configuration",
-      },
-    ];
-
-    // act
-    const entries = completionFlagEntries(verb);
-
-    // assert
-    assert.deepStrictEqual(entries, expectedEntries);
-    assert.deepStrictEqual(parseFlagNames(verb), new Set(["--local"]));
-    assert.deepStrictEqual(passThroughFlagNames(verb), []);
-  });
-}

@@ -63,7 +63,7 @@ import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /** The usage block this shim supplies, written out rather than read back. */
-const INFO_USAGE = "Usage: /claude:plugin marketplace info <name> [--scope user|project] [--local]";
+const INFO_USAGE = "Usage: /claude:plugin marketplace info <name> [--scope user|project]";
 
 /** The row the project-scope record renders as. */
 const PROJECT_ALPHA_ROW = "● alpha [project] <no autoupdate>\npath: /repo/path/alpha";
@@ -236,71 +236,71 @@ test("rejects surplus input before looking up a marketplace", async (t) => {
   verifyBoundary();
 });
 
-test("requires a marketplace name when local and scope flags are supplied", async (t) => {
-  // arrange
-  const workspace = await createHermeticWorkspace(t, "scope-target");
-  await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const infoHandler = makeMarketplaceInfoHandler(pi);
+for (const args of [
+  "--local alpha",
+  "alpha --local",
+  "alpha --scope project --local",
+  "--scope project --local",
+]) {
+  test(`info ${args} rejects the local flag as unknown`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, "local-flag");
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const infoHandler = makeMarketplaceInfoHandler(pi);
 
-  // act
-  await infoHandler("--scope project --local", ctx);
+    // act
+    await infoHandler(args, ctx);
 
-  // assert
-  assert.deepStrictEqual(notifications, [
-    {
-      message: `Missing required argument.\n\n${INFO_USAGE}`,
-      severity: "error",
-    },
-  ]);
-  verifyBoundary();
-});
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Unknown flag: "--local".\n\n${INFO_USAGE}`,
+        severity: "error",
+      },
+    ]);
+    verifyBoundary();
+  });
+}
 
 for (const { name, autoupdate } of [
   { name: "shared", autoupdate: "autoupdate" },
   { name: "local", autoupdate: "autoupdate" },
   { name: "overlap", autoupdate: "no autoupdate" },
 ]) {
-  for (const args of [
-    `${name} --scope project`,
-    `--local ${name} --scope project`,
-    `${name} --local --scope project`,
-    `${name} --scope project --local`,
-  ]) {
-    test(`info ${args} reads merged declarations without changing config bytes`, async (t) => {
-      // arrange
-      const { cwd } = await createHermeticWorkspace(t, "merged-config");
-      await seedMarketplace(cwd, "project", "shared", "/repo/shared");
-      await seedMarketplace(cwd, "project", "local", "/repo/local");
-      await seedMarketplace(cwd, "project", "overlap", "/repo/overlap");
-      const locations = locationsFor("project", cwd);
-      const sharedBytes =
-        '{ "marketplaces": { "shared": { "source": "./shared", "autoupdate": true }, "overlap": { "source": "./overlap", "autoupdate": true } } }\n';
-      const localBytes =
-        '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
-      await writeFile(locations.configJsonPath, sharedBytes);
-      await writeFile(locations.configLocalJsonPath, localBytes);
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
-        value: cwd,
-        reads: 1,
-      });
-      const handler = makeMarketplaceInfoHandler(pi);
-
-      // act
-      await handler(args, ctx);
-
-      // assert
-      assert.deepStrictEqual(notifications, [
-        { message: `● ${name} [project] <${autoupdate}>\npath: /repo/${name}` },
-      ]);
-      assert.deepStrictEqual(
-        [
-          await readFile(locations.configJsonPath, "utf8"),
-          await readFile(locations.configLocalJsonPath, "utf8"),
-        ],
-        [sharedBytes, localBytes],
-      );
-      verifyBoundary();
+  test(`info ${name} --scope project reads merged declarations without changing config bytes`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticWorkspace(t, "merged-config");
+    await seedMarketplace(cwd, "project", "shared", "/repo/shared");
+    await seedMarketplace(cwd, "project", "local", "/repo/local");
+    await seedMarketplace(cwd, "project", "overlap", "/repo/overlap");
+    const locations = locationsFor("project", cwd);
+    const sharedBytes =
+      '{ "marketplaces": { "shared": { "source": "./shared", "autoupdate": true }, "overlap": { "source": "./overlap", "autoupdate": true } } }\n';
+    const localBytes =
+      '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
+    await writeFile(locations.configJsonPath, sharedBytes);
+    await writeFile(locations.configLocalJsonPath, localBytes);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+      value: cwd,
+      reads: 1,
     });
-  }
+    const handler = makeMarketplaceInfoHandler(pi);
+
+    // act
+    await handler(`${name} --scope project`, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: `● ${name} [project] <${autoupdate}>\npath: /repo/${name}` },
+    ]);
+    assert.deepStrictEqual(
+      [
+        await readFile(locations.configJsonPath, "utf8"),
+        await readFile(locations.configLocalJsonPath, "utf8"),
+      ],
+      [sharedBytes, localBytes],
+    );
+    verifyBoundary();
+  });
 }

@@ -158,9 +158,9 @@ const HANDLER_ACCEPTED_PARSE_SETS: Record<CatalogVerb, readonly string[]> = {
   "marketplace help": [],
   "marketplace add": ["--local"],
   "marketplace remove": ["--local"],
-  "marketplace info": ["--local"],
-  "marketplace list": ["--local"],
-  "marketplace update": ["--local"],
+  "marketplace info": [],
+  "marketplace list": [],
+  "marketplace update": [],
   "marketplace autoupdate": ["--local"],
   "marketplace noautoupdate": ["--local"],
 };

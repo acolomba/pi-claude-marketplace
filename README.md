@@ -203,7 +203,7 @@ Each scope can also have a `claude-plugins.local.json` file alongside the base f
 
 The local file overrides individual entries from the base file. An entry in `claude-plugins.local.json` replaces the same-keyed entry in `claude-plugins.json` completely.
 
-For commands that write configuration, `--local` selects `claude-plugins.local.json`. Reads still combine both configuration files. Marketplace `info`, `list`, and `update` accept `--local` and keep those merged reads. They do not change either configuration file. Marketplace `update` still refreshes cached sources and installed-plugin state.
+For commands that write configuration, `--local` selects `claude-plugins.local.json`. Reads always combine both configuration files. Marketplace `update` still refreshes cached sources and installed-plugin state.
 
 ```text
 /claude:plugin install context7-plugin@context7-marketplace --local
@@ -281,7 +281,6 @@ Show details for one marketplace.
 ```text
 /claude:plugin marketplace info context7-marketplace
 /claude:plugin marketplace info context7-marketplace --scope user
-/claude:plugin marketplace info context7-marketplace --local
 ```
 
 Update one marketplace. If you omit the name, the command updates all marketplaces.

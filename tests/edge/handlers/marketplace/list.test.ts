@@ -51,7 +51,7 @@ import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /** Written out by hand; never read back off the module under test. */
-const USAGE = "Usage: /claude:plugin marketplace <list|ls> [--scope user|project] [--local]";
+const USAGE = "Usage: /claude:plugin marketplace <list|ls> [--scope user|project]";
 
 const PROJECT_ROW = "● alpha [project]";
 const USER_ROW = "● beta [user]";
@@ -175,25 +175,24 @@ for (const { row, scope } of [
   });
 }
 
-test("drops the scope-target flag as a surplus positional and honors the scope beside it", async (t) => {
-  // arrange
-  const { cwd } = await createHermeticScope(t, "scope-target");
-  await seedBothScopes(cwd);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
-    value: cwd,
-    reads: 1,
+for (const args of ["--local", "--local --scope project", "--scope project --local"]) {
+  test(`list ${args} rejects the local flag as unknown`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "local-flag");
+    await seedBothScopes(cwd);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const marketplaceListHandler = makeMarketplaceListHandler(pi);
+
+    // act
+    await marketplaceListHandler(args, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: `Unknown flag: "--local".\n\n${USAGE}`, severity: "error" },
+    ]);
+    verifyBoundary();
   });
-  const marketplaceListHandler = makeMarketplaceListHandler(pi);
-
-  // act
-  await marketplaceListHandler("--scope user --local", ctx);
-
-  // assert
-  assert.deepStrictEqual(notifications, [
-    { message: `${USER_ROW}\n\nMarketplace list: 1 success` },
-  ]);
-  verifyBoundary();
-});
+}
 
 test("reports an unrecognised scope value with the list usage block and never lists", async (t) => {
   // arrange
@@ -215,46 +214,44 @@ test("reports an unrecognised scope value with the list usage block and never li
   verifyBoundary();
 });
 
-for (const args of ["--scope project", "--local --scope project", "--scope project --local"]) {
-  test(`list ${args} keeps shared, local, and overridden entries with unchanged config bytes`, async (t) => {
-    // arrange
-    const { cwd } = await createHermeticScope(t, "merged-config");
-    await seedMarketplace(cwd, "project", "shared");
-    await seedMarketplace(cwd, "project", "local");
-    await seedMarketplace(cwd, "project", "overlap");
-    const locations = locationsFor("project", cwd);
-    const sharedBytes =
-      '{ "marketplaces": { "shared": { "source": "./shared", "autoupdate": true }, "overlap": { "source": "./overlap", "autoupdate": true } } }\n';
-    const localBytes =
-      '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
-    await writeFile(locations.configJsonPath, sharedBytes);
-    await writeFile(locations.configLocalJsonPath, localBytes);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
-      value: cwd,
-      reads: 1,
-    });
-    const handler = makeMarketplaceListHandler(pi);
-
-    // act
-    await handler(args, ctx);
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "● shared [project] <autoupdate>\n\n● local [project] <autoupdate>\n\n● overlap [project]\n\nMarketplace list: 3 successes",
-      },
-    ]);
-    assert.deepStrictEqual(
-      [
-        await readFile(locations.configJsonPath, "utf8"),
-        await readFile(locations.configLocalJsonPath, "utf8"),
-      ],
-      [sharedBytes, localBytes],
-    );
-    verifyBoundary();
+test("list --scope project keeps shared, local, and overridden entries with unchanged config bytes", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "merged-config");
+  await seedMarketplace(cwd, "project", "shared");
+  await seedMarketplace(cwd, "project", "local");
+  await seedMarketplace(cwd, "project", "overlap");
+  const locations = locationsFor("project", cwd);
+  const sharedBytes =
+    '{ "marketplaces": { "shared": { "source": "./shared", "autoupdate": true }, "overlap": { "source": "./overlap", "autoupdate": true } } }\n';
+  const localBytes =
+    '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
+  await writeFile(locations.configJsonPath, sharedBytes);
+  await writeFile(locations.configLocalJsonPath, localBytes);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    value: cwd,
+    reads: 1,
   });
-}
+  const handler = makeMarketplaceListHandler(pi);
+
+  // act
+  await handler("--scope project", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● shared [project] <autoupdate>\n\n● local [project] <autoupdate>\n\n● overlap [project]\n\nMarketplace list: 3 successes",
+    },
+  ]);
+  assert.deepStrictEqual(
+    [
+      await readFile(locations.configJsonPath, "utf8"),
+      await readFile(locations.configLocalJsonPath, "utf8"),
+    ],
+    [sharedBytes, localBytes],
+  );
+  verifyBoundary();
+});
 
 test("list rejects unknown flags before reading state", async (t) => {
   // arrange

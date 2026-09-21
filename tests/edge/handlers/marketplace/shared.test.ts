@@ -41,7 +41,7 @@ type MarketplaceRun = Parameters<typeof makeSingleNameMarketplaceHandler>[2];
 type MarketplaceRunOptions = Parameters<MarketplaceRun>[0];
 type Scope = NonNullable<MarketplaceRunOptions["scope"]>;
 
-const INFO_USAGE = "Usage: /claude:plugin marketplace info <name> [--scope user|project] [--local]";
+const INFO_USAGE = "Usage: /claude:plugin marketplace info <name> [--scope user|project]";
 const ADD_USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|project] [--local]";
 
 describe("makeSingleNameMarketplaceHandler", () => {
@@ -100,7 +100,7 @@ describe("makeSingleNameMarketplaceHandler", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Missing required argument.\n\nUsage: /claude:plugin marketplace info <name> [--scope user|project] [--local]",
+          "Missing required argument.\n\nUsage: /claude:plugin marketplace info <name> [--scope user|project]",
         severity: "error",
       },
     ]);
@@ -121,7 +121,7 @@ describe("makeSingleNameMarketplaceHandler", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Too many arguments.\n\nUsage: /claude:plugin marketplace info <name> [--scope user|project] [--local]",
+          "Too many arguments.\n\nUsage: /claude:plugin marketplace info <name> [--scope user|project]",
         severity: "error",
       },
     ]);
@@ -142,7 +142,7 @@ describe("makeSingleNameMarketplaceHandler", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Invalid --scope value: "global". Must be "user" or "project".\n\nUsage: /claude:plugin marketplace info <name> [--scope user|project] [--local]',
+          'Invalid --scope value: "global". Must be "user" or "project".\n\nUsage: /claude:plugin marketplace info <name> [--scope user|project]',
         severity: "error",
       },
     ]);
@@ -194,6 +194,25 @@ describe("makeSingleNameMarketplaceHandler", () => {
     verifyBoundary();
     verify(run);
   });
+
+  for (const args of ["--local official", "official --local"]) {
+    test(`info ${args} rejects the local flag as unknown before calling its delegate`, async () => {
+      // arrange
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+      const run = mock<MarketplaceRun>({ exactParams: true, name: "marketplace run" });
+      const handler = makeSingleNameMarketplaceHandler(pi, INFO_USAGE, run);
+
+      // act
+      await handler(args, ctx);
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        { message: `Unknown flag: "--local".\n\n${INFO_USAGE}`, severity: "error" },
+      ]);
+      verifyBoundary();
+      verify(run);
+    });
+  }
 });
 
 describe("openMarketplaceCommand", () => {

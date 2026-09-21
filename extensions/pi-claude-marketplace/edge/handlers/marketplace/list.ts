@@ -1,33 +1,31 @@
 // edge/handlers/marketplace/list.ts
 //
 // Thin-shim factory for
-// `/claude:plugin marketplace <list|ls> [--scope user|project] [--local]`.
+// `/claude:plugin marketplace <list|ls> [--scope user|project]`.
 // Also reached via the `ls` alias through edge/router.ts.
 //
 // `makeMarketplaceListHandler(pi)` factory threads `pi` down to
 // `listMarketplaces`, following the `makeAddHandler` /
 // `makeAutoupdateHandler` / `makeRemoveHandler` convention.
+//
+// `list` is a merged read that never writes configuration, so a
+// write-target flag has no meaning for it and `parseCommandArgs` rejects
+// it as an unknown flag like any other (AP-5).
 
 import { listMarketplaces } from "../../../orchestrators/marketplace/list.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
-import { extractLocalFlag } from "../shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
-const USAGE = "Usage: /claude:plugin marketplace <list|ls> [--scope user|project] [--local]";
+const USAGE = "Usage: /claude:plugin marketplace <list|ls> [--scope user|project]";
 
 export function makeMarketplaceListHandler(
   pi: ExtensionAPI,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    const localFlag = extractLocalFlag(args, ctx, USAGE);
-    if (localFlag === undefined) {
-      return;
-    }
-
     const parsed = parseCommandArgs(
-      localFlag.residualArgs,
+      args,
       {
         positional: [] as const,
         usage: USAGE,

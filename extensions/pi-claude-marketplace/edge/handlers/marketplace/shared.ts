@@ -2,7 +2,7 @@
 //
 // Shared factory for the single-`<name>`-positional marketplace edge handlers
 // (`info`). The shim parses one required `name` positional and the
-// optional `--scope` / `--local` flags, routes an argument-parsing failure through
+// optional `--scope` flag, routes an argument-parsing failure through
 // `notifyUsageError` (MSG-NC-2: the missing-required-positional path collapses
 // the duplicated usage block into "Missing required argument."), then delegate
 // to their orchestrator with `{ ctx, pi, name, cwd, scope? }`.
@@ -40,6 +40,10 @@ export type SingleNameMarketplaceRun = (opts: GetMarketplaceInfoOptions) => Prom
  * error callback + the `=== undefined` guard, then delegates to `run` with
  * `{ ctx, pi, name, cwd, scope? }`. `pi` is closed over by the caller (the
  * orchestrators require it for the RH-5 soft-dep probes).
+ *
+ * `info` is a merged read that never writes configuration, so a write-target
+ * flag has no meaning for it and `parseCommandArgs` rejects it as an unknown
+ * flag like any other (AP-5).
  */
 export function makeSingleNameMarketplaceHandler(
   pi: ExtensionAPI,
@@ -47,13 +51,8 @@ export function makeSingleNameMarketplaceHandler(
   run: SingleNameMarketplaceRun,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
-    const localFlag = extractLocalFlag(args, ctx, usage);
-    if (localFlag === undefined) {
-      return;
-    }
-
     const parsed = parseCommandArgs(
-      localFlag.residualArgs,
+      args,
       {
         positional: [{ name: "name" }] as const,
         usage,

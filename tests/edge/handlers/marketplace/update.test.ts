@@ -80,7 +80,7 @@ type PluginUpdateOutcome = Awaited<ReturnType<PluginUpdate>>;
 type GitFetchCall = ReturnType<typeof createGitOpsFake>["state"]["calls"]["fetch"][number];
 
 /** Written out by hand; never read back off the module under test. */
-const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|project] [--local]";
+const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|project]";
 
 const PROJECT_ALPHA_ROW = "● alpha [project] (skipped) {up-to-date}";
 const PROJECT_BETA_ROW = "● beta [project] (skipped) {up-to-date}";
@@ -370,35 +370,6 @@ for (const { emissions, probes, rows, scope, touched } of [
   });
 }
 
-test("accepts local without narrowing the selected scope refresh", async (t) => {
-  // arrange
-  const { cwd, networkCallCount } = await createHermeticScope(t, "scope-target");
-  const clones = await seedThreeMarketplaces(cwd);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
-    value: cwd,
-    reads: 1,
-  });
-  const git = createGitOpsFake({ boundary: "memory" });
-  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-  const marketplaceUpdateHandler = makeMarketplaceUpdateHandler(pi, {
-    completionCache: createCompletionCache(),
-    gitOps: git.gitOps,
-    pluginUpdate,
-  });
-
-  // act
-  await marketplaceUpdateHandler("--scope user --local", ctx);
-
-  // assert
-  assert.deepStrictEqual(notifications, [
-    { message: "● alpha [user] (skipped) {up-to-date}\n\nMarketplace update: 1 success" },
-  ]);
-  assert.deepStrictEqual(git.state.calls.fetch, [fetchOf(clones.userAlpha)]);
-  assert.strictEqual(networkCallCount(), 0);
-  verifyBoundary();
-  verify(pluginUpdate);
-});
-
 test("reports an unrecognised scope value with the update usage block and never updates", async (t) => {
   // arrange
   const { cwd, networkCallCount } = await createHermeticScope(t, "invalid-scope");
@@ -432,8 +403,9 @@ for (const { args, diagnostic } of [
   { args: "alpha extra", diagnostic: "Too many arguments." },
   { args: "alpha --bogus", diagnostic: 'Unknown flag: "--bogus".' },
   { args: '""', diagnostic: "Argument must not be empty." },
-  { args: "'' --local", diagnostic: "Argument must not be empty." },
-  { args: '--local " "', diagnostic: "Argument must not be empty." },
+  { args: "'' --local", diagnostic: 'Unknown flag: "--local".' },
+  { args: '--local " "', diagnostic: 'Unknown flag: "--local".' },
+  { args: "--scope user --local", diagnostic: 'Unknown flag: "--local".' },
 ]) {
   test(`rejects ${args} before refreshing or cascading`, async (t) => {
     // arrange
@@ -464,9 +436,7 @@ for (const { args, diagnostic } of [
 
 for (const { args, tally } of [
   { args: "alpha --scope project", tally: "" },
-  { args: "--local alpha --scope project", tally: "" },
   { args: "--scope project", tally: "\n\nMarketplace update: 2 successes" },
-  { args: "--scope project --local", tally: "\n\nMarketplace update: 2 successes" },
 ]) {
   test(`update ${args} runs the real merged-config cascade without rewriting configuration`, async (t) => {
     // arrange
