@@ -25,6 +25,13 @@ const EXTENSION_ROOT = path.join(REPO_ROOT, EXTENSION_ROOT_REL);
  *   - `require("child_process")`
  *   - `require("node:child_process")`
  *
+ * Why this test is NOT replaceable by a fallow rule pack (measured):
+ *   A `banned-import` rule with these two specifiers and the three exempt
+ *   files as `exclude` rejects the static `import` and `export ... from`
+ *   forms, but it passes `await import("node:child_process")` and a
+ *   `createRequire` `require("child_process")` untouched, both of which the
+ *   regexes below reject. Keep this test.
+ *
  * AUTH-06 / AUTH-08 / AUTH-09 narrowing:
  * child_process is permitted ONLY for the `git credential`
  * subprocess in extensions/pi-claude-marketplace/platform/git-credential.ts,

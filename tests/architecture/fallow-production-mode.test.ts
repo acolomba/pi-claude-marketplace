@@ -18,6 +18,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   closeSync,
+  copyFileSync,
   mkdtempSync,
   mkdirSync,
   openSync,
@@ -189,7 +190,8 @@ const controls: readonly AnalyzerControl[] = [
 
 /**
  * Write one fixture tree under `root`: the control's sources, a minimal
- * manifest, and the shipping `.fallowrc.json` with the fixture entry.
+ * manifest, the shipping `.fallowrc.json` with the fixture entry, and every
+ * rule pack that config names, copied verbatim.
  *
  * D-05 / D-08: the fixture entry is the ONLY field overridden. Production
  * mode, the boundary matrix, the rule pack and every threshold arrive from
@@ -207,6 +209,17 @@ function materializeFixture(root: string, files: Readonly<Record<string, string>
     const target = path.join(root, relative);
     mkdirSync(path.dirname(target), { recursive: true });
     writeFileSync(target, source);
+  }
+
+  // A pack path resolves against the analyzed root, so the shipping packs
+  // must travel with the config or the analyzer refuses the fixture outright.
+  const rulePacks = (parsedConfig as Record<string, unknown>).rulePacks;
+  assert.ok(Array.isArray(rulePacks) && rulePacks.length > 0, "The config names no rule pack");
+  for (const pack of rulePacks) {
+    assert.ok(typeof pack === "string" && pack.length > 0);
+    const target = path.join(root, pack);
+    mkdirSync(path.dirname(target), { recursive: true });
+    copyFileSync(path.join(REPO_ROOT, pack), target);
   }
 
   writeFileSync(
@@ -409,6 +422,73 @@ test("D-05: the whole-tree cycle run reports a cycle the production-scoped run c
   );
 });
 
+/** Every policy-violation finding of `document`, reduced to its stable identity. */
+function policyViolationIdentities(
+  document: Record<string, unknown>,
+): { path: string; rule: string; matched: string }[] {
+  const rows = document.policy_violations;
+  assert.ok(Array.isArray(rows), "The report carries no `policy_violations` category");
+  return rows.map((row: unknown) => {
+    assert.ok(typeof row === "object" && row !== null && !Array.isArray(row));
+    const finding = row as Record<string, unknown>;
+    const { path: file, pack, rule_id: ruleId, matched } = finding;
+    assert.ok(typeof file === "string" && file.length > 0);
+    assert.ok(typeof pack === "string" && typeof ruleId === "string");
+    assert.ok(typeof matched === "string" && matched.length > 0);
+    return { path: file, rule: `${pack}/${ruleId}`, matched };
+  });
+}
+
+/**
+ * IL-2: a direct stdio write is rejected by the rule pack, and by nothing else.
+ *
+ * The ban used to be thirteen identical `boundaries.calls.forbidden` rows, one
+ * per zone. The rule pack states it once for the whole extension tree, so the
+ * control pins two facts together: the pack rejects the write, and the boundary
+ * matrix no longer reports it. The benign controls above run the same pack over
+ * clean sources and require its count to be zero.
+ */
+test("IL-2: the rule pack rejects a direct stdout write once, from the pack alone", (t) => {
+  // arrange
+  const root = mkdtempSync(path.join(tmpdir(), "fallow-stdio-control-"));
+  t.after(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+  materializeFixture(root, {
+    [entry]: "import { main } from './shared/errors.ts';\nmain();\n",
+    [helper]: "export function main() { process.stdout.write('x'); return 1; }\n",
+  });
+
+  // act
+  const { document, exitStatus } = readDeadCodeDocument(root, [
+    "dead-code",
+    "--no-cache",
+    "--format",
+    "json",
+    "--fail-on-issues",
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      violations: policyViolationIdentities(document),
+      policyViolations: summaryCount(document, "policy_violations"),
+      boundaryCallViolations: summaryCount(document, "boundary_call_violations"),
+      totalIssues: summaryCount(document, "total_issues"),
+      exitStatus,
+    },
+    {
+      violations: [
+        { path: helper, rule: "architecture/no-direct-stdio", matched: "process.stdout.write" },
+      ],
+      policyViolations: 1,
+      boundaryCallViolations: 0,
+      totalIssues: 1,
+      exitStatus: 1,
+    },
+  );
+});
+
 for (const control of [
   { name: "empty report", script: "", error: SyntaxError },
   { name: "malformed report", script: 'process.stdout.write("not JSON");', error: SyntaxError },
@@ -522,7 +602,7 @@ test("D-05: health analysis keeps its test-inclusive scope", () => {
 
 test("D-05: duplication analysis keeps its test-inclusive scope", () => {
   // arrange
-  const document = readScopeReport("dupes", "dupes", 9);
+  const document = readScopeReport("dupes", "dupes", 10);
 
   // act
   const cloned = reportedPaths(document, "clone_groups", (group) => {
