@@ -5796,9 +5796,17 @@ test("D-04-07: --partial is the consent that promotes a partially installed depe
 
 /**
  * D-04-07: disable the seeded dependency through the real disable verb, so its
- * record carries `enabled: false` with its inventory kept (ENBL-18), its
- * artifacts are off disk, and the config entry says `{ enabled: false }` --
- * the state a promotion of a disabled record starts from.
+ * record carries `enabled: false` with its inventory kept (ENBL-18) and its
+ * artifacts are off disk -- the state a promotion of a disabled record starts
+ * from. EDEP-02: "hello" (the requesting plugin this fixture installed
+ * alongside it) is still enabled and still declares "some-other-plugin", so a
+ * STANDALONE disable of it is now correctly refused -- that refusal is not
+ * what this fixture means to exercise. Orchestrated mode is the same
+ * call-site EDEP-01's own enable cascade uses to bypass its guard
+ * (`runEnableCascadeStep` skips identically): it skips EDEP-02's guard AND
+ * skips the config write-back (RECON-03), so "some-other-plugin@mp" gets no
+ * transient config entry here -- the later install-by-name promotion writes
+ * its own entry unconditionally, so the final config bytes are unaffected.
  */
 async function disableSeededDependency(
   cwd: string,
@@ -5807,18 +5815,17 @@ async function disableSeededDependency(
 ): Promise<void> {
   const { createEnableOperation } =
     await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts");
-  const disable = makeCtx();
-  await createEnableOperation(hooksRouting)({
-    ctx: disable.ctx,
+  const outcome = await createEnableOperation(hooksRouting)({
+    ctx: seeded.ctx,
     pi: seeded.pi,
     cwd,
     scope: "project",
     marketplace: "mp",
     plugin: "some-other-plugin",
     enable: false,
+    notifications: { mode: "orchestrated" },
   });
-  assert.equal(disable.notifications.length, 1, "the disable verb reported once");
-  assert.equal(disable.notifications[0]?.severity, undefined, "and not as a failure");
+  assert.equal(outcome.status, "disabled", "the disable verb reported once, and not as a failure");
 }
 
 test("D-04-07: installing a disabled dependency by name promotes it, re-materializes it and enables it", async () => {

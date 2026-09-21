@@ -934,11 +934,18 @@ async function dispatchBranch(args: {
  * EDEP-02: the disable branch's dependents guard, extracted so
  * `setPluginEnabledWithTransaction` gains one statement rather than an
  * inline branch. Called unconditionally from the closure; it is a no-op for
- * `enable` and for a target that is already disabled -- that arm has
- * nothing to refuse, so the idempotent short-circuit below keeps winning
- * there -- and only reads and refuses when the target is about to actually
- * move from enabled to disabled, before `dispatchBranch`/`runDisableBranch`
- * is reached.
+ * `enable`, for a target that is already disabled -- that arm has nothing to
+ * refuse, so the idempotent short-circuit below keeps winning there -- and
+ * for an orchestrated (reconcile-driven) call, which is a different call
+ * site with its own dependency handling in
+ * `orchestrators/reconcile/dependency-verdict.ts` (the EDEP-01 enable
+ * cascade's own precedent: `runEnableCascadeStep` skips identically). A
+ * reconcile pass disables a dependency chain in dependents-before-
+ * dependencies order precisely BECAUSE the dependents still declare what it
+ * is unwinding; refusing that here would deadlock the propagation this
+ * guard must not interfere with. It only reads and refuses a STANDALONE
+ * call that is about to actually move the target from enabled to disabled,
+ * before `dispatchBranch`/`runDisableBranch` is reached.
  *
  * Mirrors `uninstall.ts::readDeclarers`'s composition:
  * `buildScopeDeclarationIndex({ state, locations, exclude: key })` then
@@ -958,11 +965,12 @@ async function readEnabledDependents(args: {
   readonly state: ExtensionState;
   readonly locations: ScopedLocations;
   readonly enable: boolean;
+  readonly orchestrated: boolean;
   readonly installed: InstalledPluginRecord;
   readonly key: string;
 }): Promise<void> {
-  const { state, locations, enable, installed, key } = args;
-  if (enable || isRecordedButDisabled(installed)) {
+  const { state, locations, enable, orchestrated, installed, key } = args;
+  if (enable || orchestrated || isRecordedButDisabled(installed)) {
     return;
   }
 
@@ -1517,6 +1525,7 @@ async function setPluginEnabledWithTransaction(
           state,
           locations,
           enable,
+          orchestrated,
           installed,
           key: `${plugin}@${marketplace}`,
         });

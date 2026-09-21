@@ -5199,6 +5199,35 @@ test("EDEP-02: two enabled dependents are named on the cause line, sorted", asyn
   });
 });
 
+test("EDEP-02: an orchestrated disable skips the dependents guard entirely", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- a reconcile-driven call is a different call site with its
+    // own dependency handling (orchestrators/reconcile/dependency-verdict.ts);
+    // the EDEP-01 enable cascade skips identically for orchestrated calls.
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "shared-lib", version: "1.0.0", enabled: true },
+      { name: "helper", version: "1.0.0", dependencies: [{ name: "shared-lib" }], enabled: true },
+    ]);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx: makeCtx(cwd).ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "shared-lib",
+      enable: false,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, { status: "disabled", name: "shared-lib", version: "1.0.0" });
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins["shared-lib"]!.enabled, false);
+  });
+});
+
 test("EDEP-02: an unreadable declarer refuses the disable with no absolute path leaked", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
