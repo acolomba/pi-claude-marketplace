@@ -2506,7 +2506,7 @@ Reconcile: 1 success
 
 The degenerate case: a backfill `(partially-installed)` row whose re-resolved dropped-kind set is empty. `narrowUnsupportedKinds([])` returns `[]`, so nothing follows the `components now supported` marker and the brace holds that one token. A backfilled row has no brace-less shape at all -- the projection places the marker ahead of any dropped kind (WCONV-03 / D-69-04), and that is what separates this row from a fresh install of the same plugin.
 
-<!-- catalog-state: backfill-partially-installed-no-reasons -->
+<!-- catalog-state: backfill-partially-installed-marker-only -->
 
 ```text
 ● local-mp [user]

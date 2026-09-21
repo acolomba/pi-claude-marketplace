@@ -216,7 +216,7 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
     // WCONV-03 / SEV-05 / D-69-04: a backfill partially-installed row whose
     // dropped-kind set is empty still braces the convergence marker alone. A
     // backfilled row has no brace-less shape.
-    "backfill-partially-installed-no-reasons": {
+    "backfill-partially-installed-marker-only": {
       pi: piWithBothLoaded(),
       message: {
         kind: "reconcile-applied-cascade",
