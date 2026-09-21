@@ -490,17 +490,13 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
       },
     },
 
-    // RESV-05: the same skip, against a record that is DISABLED. A disabled
-    // record keeps its inventory and its name reservations while its artifacts
-    // are off disk, so the requesting plugin installed against a dependency
-    // that materialized nothing. `{already installed}` alone is the benign
-    // idempotent skip and would report that as fine; the second token names it
-    // and lifts the row -- and the block -- to warning. The install still
-    // stands: enablement is never decided on a dependency's behalf, so the row
-    // is the whole remedy.
-    "dependency-cascade-disabled-skip": {
+    // EDEP-03: `linter` was already installed but its record was DISABLED.
+    // Instead of leaving it exactly as it was, this command re-materializes it
+    // through that record -- the config file gains no key for it (D-04-02),
+    // and its `provenance` stays `"dependency"` (A2). The row is `installed`,
+    // not `skipped`, and carries both facts this command is responsible for.
+    "install-cascade-dependency-enabled": {
       pi: piWithBothLoaded(),
-      expectedSeverity: "warning",
       message: {
         marketplaces: [
           {
@@ -516,11 +512,13 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 needsReload: true,
               },
               {
-                status: "skipped",
+                status: "installed",
                 name: "linter@tools",
                 version: "3.0.0",
-                reasons: ["already installed", "dependency disabled"],
-                severity: "warning",
+                dependencies: [],
+                reasons: ["already installed", "dependency enabled"],
+                severity: "info",
+                needsReload: true,
               },
             ],
           },

@@ -122,6 +122,15 @@ export interface CascadeInstalledRow {
    * it is a compile error rather than a silently unreported fact.
    */
   readonly fellBackToCurrentCopy: boolean;
+  /**
+   * EDEP-03 / D-08-02: whether this member was already installed and
+   * DISABLED, and this run turned it back on through its own record.
+   *
+   * REQUIRED on the same D-07 rationale as `fellBackToCurrentCopy`: a
+   * hand-built row that omits it is a compile error rather than a silently
+   * unreported fact.
+   */
+  readonly reEnabledFromRecord: boolean;
 }
 
 /**
@@ -217,6 +226,16 @@ export function composeCascadeMemberRows(args: {
       // computes, so a member with an unloaded companion still reports the
       // genuine SEV-01 degradation the fallback must not paper over.
       ...(member.fellBackToCurrentCopy && { reasons: ["dependency current copy"] as const }),
+      // D-08-02: a member re-materialized through its own disabled record
+      // reports both what was already true and what this command is
+      // responsible for, on the same split the promotion row's own
+      // `["already installed", "dependency promoted"]` pair already sets out
+      // -- never alongside the fallback token above, since a member is either
+      // freshly resolved (possibly falling back) or already-installed and
+      // disabled, never both.
+      ...(member.reEnabledFromRecord && {
+        reasons: ["already installed", "dependency enabled"] as const,
+      }),
       severity: companionSeverity(
         { declaresAgents: member.declaresAgents, declaresMcp: member.declaresMcp },
         args.probe,
@@ -226,16 +245,11 @@ export function composeCascadeMemberRows(args: {
   }
 
   for (const member of args.alreadyInstalled) {
-    // RESV-05: a disabled record keeps its inventory and its name reservations
-    // while its artifacts are off disk, so `already installed` alone is true
-    // and misleading together -- the requesting plugin installed against a
-    // dependency that materialized nothing. The second token names that, and
-    // `skipSeverity` reads the pair rather than the producer asserting a
-    // verdict beside them: `already installed` alone is the benign idempotent
-    // skip and stays `info`, and anything else is actionable.
-    const reasons: ContentReason[] = member.disabled
-      ? ["already installed", "dependency disabled"]
-      : ["already installed"];
+    // RESV-05: every member reaching this loop is left-alone and ENABLED --
+    // `partitionAlreadyInstalled` routes a disabled member to the `installed`
+    // loop above instead (EDEP-03) -- so the skip is uniformly the benign
+    // idempotent one.
+    const reasons: ContentReason[] = ["already installed"];
     rows.push({
       status: "skipped",
       name: member.key,

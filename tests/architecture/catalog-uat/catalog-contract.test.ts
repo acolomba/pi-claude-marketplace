@@ -102,8 +102,18 @@ const EXPECTED_SECTION_COUNT = 20;
 // plugin in the same scope still declares the target, so the disable is
 // refused with the new `{dependents remain}` token and a plain-English
 // cause line naming the dependents and the order (219 -> 220).
+//
+// EDEP-03 SWAPS one state for another rather than growing the count:
+// `dependency-cascade-disabled-skip` (the RESV-05 skip carrying
+// `{already installed, dependency disabled}`) leaves, and
+// `install-cascade-dependency-enabled` (an `installed` row carrying
+// `{already installed, dependency enabled}`) arrives in its place -- the
+// install cascade now turns a disabled already-installed dependency back on
+// through its own record instead of leaving it inert. One state out, one
+// state in, so the count holds at 220; the byte count moves because the
+// replacement state's fenced block differs from the one it replaced.
 const EXPECTED_STATE_COUNT = 220;
-const EXPECTED_UTF8_BYTES = 30_104;
+const EXPECTED_UTF8_BYTES = 30_068;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,

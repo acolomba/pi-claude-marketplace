@@ -99,14 +99,6 @@ export type Reason =
   // produced -- reads as an unexplained failure beside the dependency row that
   // carries the real cause.
   | "dependency failed"
-  // RESV-05: the dependency the cascade left alone is RECORDED but disabled, so
-  // it materialized nothing on disk. `already installed` alone is true and
-  // misleading together -- it reads as the benign idempotent skip, and the
-  // requesting plugin installs against a dependency whose artifacts are not
-  // there. This token is what raises that row off info and names the one thing
-  // the user can act on. Enablement is never decided on a dependency's behalf
-  // (see `docs/plugin-enablement.md`), so reporting it is the whole remedy.
-  | "dependency disabled"
   // D-04-07: the plugin the user just named was already recorded, as another
   // plugin's dependency, and this command promoted that record to a direct
   // install. `already installed` alone reports a REFUSAL -- the command did
@@ -128,12 +120,9 @@ export type Reason =
   // CONDITION and the remedy naming both parties rides the row's cause line --
   // the same split `dependency cycle` established, and the only one available:
   // a reason is one to three lowercase words and this set is a literal tuple,
-  // so no token can interpolate an identifier. `dependency disabled` cannot
-  // carry it: that token's subject is the DEPENDENCY row inside an install
-  // cascade, reporting a dependency the cascade declined to install, where this
-  // token's subject is the DEPENDENT the load-time check just disabled. Same
-  // words, different subject, different surface -- one token for both would
-  // make a grep for either fact return the other.
+  // so no token can interpolate an identifier. Its subject is the DEPENDENT
+  // the load-time check just disabled, never the dependency an install cascade
+  // row is about.
   | "dependency unsatisfied"
   // LOAD-01: the same load-time check, on the arm where the dependency IS
   // recorded and enabled but its recorded version falls outside the declared

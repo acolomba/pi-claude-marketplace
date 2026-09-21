@@ -60,7 +60,7 @@ This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ct
 
 ### Reasons rendering
 
-Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 61-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only block is the dependency-cascade vocabulary -- `{no matching version}`, `{version conflict}`, `{constraint too complex}`, `{invalid version constraint}`, `{dependency marketplace not added}`, `{dependency cycle}`, `{dependency failed}`, `{dependency disabled}`, `{dependency promoted}`, `{dependency pruned}`, `{dependency unsatisfied}`, `{dependency version unsatisfied}`, `{dependents unsatisfied}`, `{dependency current copy}`, `{dependency enabled}` and `{dependents remain}` -- which sits after uninstall's data-disposition marker `{data kept}`.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 60-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only block is the dependency-cascade vocabulary -- `{no matching version}`, `{version conflict}`, `{constraint too complex}`, `{invalid version constraint}`, `{dependency marketplace not added}`, `{dependency cycle}`, `{dependency failed}`, `{dependency promoted}`, `{dependency pruned}`, `{dependency unsatisfied}`, `{dependency version unsatisfied}`, `{dependents unsatisfied}`, `{dependency current copy}`, `{dependency enabled}` and `{dependents remain}` -- which sits after uninstall's data-disposition marker `{data kept}`. `{dependency disabled}` is RETIRED (EDEP-03): `{dependency enabled}` replaces the skip it used to name.
 
 Structural `unavailable` rows derive reasons from resolver notes through `narrowResolverNotes`. Partial rows derive typed unsupported kinds through `narrowUnsupportedKinds`. The typed `workflows` kind uses the second path.
 
@@ -803,21 +803,19 @@ A plugin that declares `dependencies` installs as a CASCADE: the requesting plug
 
 `helper` declares `formatter@tools` and `linter@tools`. `formatter` was materialized by this command and renders the ordinary `(installed)` row; `linter` was already present in the target scope, so RESV-05 CHECKED it against the effective constraint and left it exactly as it was -- reported as the benign `(skipped) {already installed}` and never reinstalled. That token pair is what makes "installed by this command" and "already here" readable apart. Severity `info`: the benign skip is in the idempotent closed set, so the cascade does not compute warning. The reload-hint fires on the `installed` rows.
 
-### Dependency cascade -- the skipped dependency is disabled (RESV-05)
+### Dependency cascade -- the already-installed dependency is disabled, and this command turns it on (EDEP-03)
 
-<!-- catalog-state: dependency-cascade-disabled-skip -->
+<!-- catalog-state: install-cascade-dependency-enabled -->
 
 ```text
-A plugin operation needs attention.
-
 ● official [user]
   ● helper v1.0.0 (installed)
-  ⊘ linter@tools v3.0.0 (skipped) {already installed, dependency disabled}
+  ● linter@tools v3.0.0 (installed) {already installed, dependency enabled}
 
 /reload to pick up changes
 ```
 
-The same skip, against a record that is DISABLED. A disabled record keeps its inventory and its name reservations while its artifacts are off disk (ENBL-18 / ENBL-19), so `helper` installed against a dependency that materialized nothing. `{already installed}` alone is in the idempotent closed set and would report that as fine; `{dependency disabled}` names it, and `skipSeverity` reads the pair and computes `warning`, which raises the block. The install still stands and the dependency is still untouched -- enablement is never decided on a dependency's behalf (see `docs/plugin-enablement.md`), so the row is the whole remedy and `/claude:plugin enable linter@tools` is the user's move.
+`linter` was already present in the target scope but its record was DISABLED. Instead of leaving it exactly as it was, this command re-materializes it through that same record -- the same `runInstallLedger` re-enable machinery `enable`'s own cascade member row already uses (`pinVersionOverride` + `allowExistingRecord: true`) -- so its artifacts return to disk. The desired-state configuration is not touched: no config file gains a key for `linter` (D-04-02), the write reaches the state record alone, and `linter`'s `provenance` stays `"dependency"` -- only a by-name install promotes a record (A2). The row is `installed`, not `skipped`, because state changed and something was materialized; the brace carries both facts this command is responsible for, `{already installed, dependency enabled}`, on the same split the promotion row's own `{already installed, dependency promoted}` pair already sets out. Severity `info`, and the reload-hint fires because artifacts were re-materialized. A cascade failure anywhere puts `linter` back to disabled rather than deleting its record (D-03-07): the record is what still owns those artifacts.
 
 ### Dependency cascade -- a path-source dependency falls back to the marketplace's current copy (TAGS-02 / D-07-03)
 

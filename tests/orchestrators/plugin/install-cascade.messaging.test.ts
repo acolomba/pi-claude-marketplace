@@ -99,6 +99,7 @@ function member(overrides: Partial<CascadeInstalledRow> = {}): CascadeInstalledR
     declaresAgents: false,
     declaresMcp: false,
     fellBackToCurrentCopy: false,
+    reEnabledFromRecord: false,
     ...overrides,
   };
 }
@@ -170,7 +171,7 @@ describe("composeCascadeMemberRows", () => {
       rootKey: ROOT_KEY,
       rootRow: ROOT_ROW,
       installed: [member()],
-      alreadyInstalled: [{ key: "linter@tools", version: "3.0.0", disabled: false }],
+      alreadyInstalled: [{ key: "linter@tools", version: "3.0.0" }],
       probe: PROBE_BOTH_LOADED,
     });
 
@@ -191,17 +192,18 @@ describe("composeCascadeMemberRows", () => {
     });
   });
 
-  test("RESV-05 a skipped member whose record is disabled names it and raises the block", () => {
-    // arrange: a disabled record keeps its inventory and its name reservations
-    // while its artifacts are off disk, so the requesting plugin installed
-    // against a dependency that materialized nothing. Reported as the bare
-    // idempotent skip, the block tells the user everything is fine.
+  test("EDEP-03 a re-enabled member renders an installed row naming the state change", () => {
+    // arrange: `linter` was already installed and disabled; this run
+    // re-materialized it through its own record (D-08-02). The row is
+    // `installed`, not `skipped` -- the record changed and something was
+    // materialized -- and it carries both facts this command is responsible
+    // for: the dependency was already here, and it is enabled now.
     const rows = composeCascadeMemberRows({
       scope: "user",
       rootKey: ROOT_KEY,
       rootRow: ROOT_ROW,
-      installed: [],
-      alreadyInstalled: [{ key: "linter@tools", version: "3.0.0", disabled: true }],
+      installed: [member({ key: "linter@tools", version: "3.0.0", reEnabledFromRecord: true })],
+      alreadyInstalled: [],
       probe: PROBE_BOTH_LOADED,
     });
 
@@ -210,13 +212,41 @@ describe("composeCascadeMemberRows", () => {
 
     // assert
     assert.deepStrictEqual(emitted, {
-      severity: "warning",
+      severity: "info",
       message: [
-        "A plugin operation needs attention.",
-        "",
         "● official [user]",
         "  ● helper v1.0.0 (installed)",
-        "  ⊘ linter@tools v3.0.0 (skipped) {already installed, dependency disabled}",
+        "  ● linter@tools v3.0.0 (installed) {already installed, dependency enabled}",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    });
+  });
+
+  test("EDEP-03 a left-alone member stays the bare idempotent skip", () => {
+    // arrange: `linter` is already installed and ENABLED -- the control for
+    // the re-enabled case above. `partitionAlreadyInstalled` never routes an
+    // enabled member here through the `installed` loop, so the skip stays the
+    // single benign token it always was.
+    const rows = composeCascadeMemberRows({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootRow: ROOT_ROW,
+      installed: [],
+      alreadyInstalled: [{ key: "linter@tools", version: "3.0.0" }],
+      probe: PROBE_BOTH_LOADED,
+    });
+
+    // act
+    const emitted = emit(rows, BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "info",
+      message: [
+        "● official [user]",
+        "  ● helper v1.0.0 (installed)",
+        "  ⊘ linter@tools v3.0.0 (skipped) {already installed}",
         "",
         "/reload to pick up changes",
       ].join("\n"),
@@ -240,6 +270,26 @@ describe("composeCascadeMemberRows", () => {
 
     // assert
     assert.deepStrictEqual(names, ["formatter@tools", "helper"]);
+  });
+
+  test("EDEP-03 a re-enabled member takes its alphabetical place beside the root, unchanged by the new arm", () => {
+    // arrange: `aardvark@tools` sorts before `helper` -- the row order comes
+    // from the canonical name-then-scope comparator, not from which loop
+    // composed the row.
+    const rows = composeCascadeMemberRows({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootRow: ROOT_ROW,
+      installed: [member({ key: "aardvark@tools", version: "1.0.0", reEnabledFromRecord: true })],
+      alreadyInstalled: [],
+      probe: PROBE_BOTH_LOADED,
+    });
+
+    // act
+    const names = rows.map((row) => row.name);
+
+    // assert
+    assert.deepStrictEqual(names, ["aardvark@tools", "helper"]);
   });
 
   test("SEV-01 a member's unloaded companion marks its own row and raises the block", () => {
@@ -278,7 +328,7 @@ describe("composeCascadeMemberRows", () => {
       rootKey: ROOT_KEY,
       rootRow: ROOT_ROW,
       installed: [],
-      alreadyInstalled: [{ key: "linter@tools", version: undefined, disabled: false }],
+      alreadyInstalled: [{ key: "linter@tools", version: undefined }],
       probe: PROBE_BOTH_LOADED,
     });
 

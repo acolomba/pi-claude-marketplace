@@ -279,10 +279,6 @@ const EXPECTED_REASONS = [
   "dependency cycle",
   // RESV-06: the requesting plugin's own row, when a dependency is what failed.
   "dependency failed",
-  // RESV-05: the dependency the cascade left alone is recorded but disabled,
-  // so it materialized nothing. It joins `already installed` in the same
-  // brace and lifts that row off the benign-skip default.
-  "dependency disabled",
   // D-04-07: a recorded dependency the user then installed by name. The
   // record's provenance changed and nothing was materialized, so it rides an
   // `installed` row beside `already installed`.

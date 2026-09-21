@@ -239,7 +239,7 @@ test("RESV-06 the failure table names each reason exactly once", async () => {
   );
 });
 
-test("RESV-06 the skip section names the reason a disabled dependency's row carries", async () => {
+test("RESV-06 the skip section names the reason a left-alone dependency's row carries", async () => {
   // arrange: the skip is not a failure, so it is absent from the failure table
   // by design -- which leaves its token undocumented unless the section that
   // describes the skip names it.
@@ -248,11 +248,11 @@ test("RESV-06 the skip section names the reason a disabled dependency's row carr
     rootKey: ROOT_KEY,
     rootRow: ROOT_ROW,
     installed: [],
-    alreadyInstalled: [{ key: DEPENDENCY_KEY, version: "1.0.0", disabled: true }],
+    alreadyInstalled: [{ key: DEPENDENCY_KEY, version: "1.0.0" }],
     probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
   });
   const skipped = rows.find((row) => row.status === "skipped");
-  assert.ok(skipped !== undefined, "the disabled skip still renders a skipped row");
+  assert.ok(skipped !== undefined, "a left-alone member still renders a skipped row");
 
   // act
   const section = await readDocSection("## What happens to a dependency you already installed");
@@ -280,6 +280,7 @@ test("DIVG-01 the resolution section names every reason the fallback row carries
         declaresAgents: false,
         declaresMcp: false,
         fellBackToCurrentCopy: true,
+        reEnabledFromRecord: false,
       },
     ],
     alreadyInstalled: [],

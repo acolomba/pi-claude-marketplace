@@ -88,7 +88,6 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "dependency marketplace not added": true,
   "dependency cycle": true,
   "dependency failed": true,
-  "dependency disabled": true,
   "dependency promoted": true,
   "dependency pruned": true,
   "dependency unsatisfied": true,
@@ -158,7 +157,7 @@ const MARKETPLACE_STATUS_ENROLLMENT: Record<MarketplaceStatus, true> = {
   skipped: true,
 };
 
-test("OUT-08: Reason is the closed 61-entry reason set", () => {
+test("OUT-08: Reason is the closed 60-entry reason set", () => {
   // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
   // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
   // MCPR-03 / D-02: +1 for the malformed mcp failure-class member (34 -> 35).
@@ -192,7 +191,7 @@ test("OUT-08: Reason is the closed 61-entry reason set", () => {
   // RESV-05: +1 for `dependency disabled` -- the marker that lifts a skipped
   // dependency off the benign-skip default when its record is disabled and it
   // therefore materialized nothing for the requesting plugin to install
-  // against (52 -> 53).
+  // against (52 -> 53). EDEP-03 later RETIRES this member (see below).
   // D-04-07: +1 for `dependency promoted` -- install's marker for a recorded
   // dependency the user then asked for by name. The record changes hands and
   // nothing is materialized; `already installed` alone is the refusal's brace
@@ -233,7 +232,15 @@ test("OUT-08: Reason is the closed 61-entry reason set", () => {
   // installed and ENABLED plugin in the same scope that still declares the
   // target. It rides a `failed` row, unlike its `dependents unsatisfied`
   // neighbour, whose subject is a removal that WENT THROUGH (60 -> 61).
-  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 61);
+  //
+  // EDEP-03 is the second RETIREMENT this narrative records: `dependency
+  // disabled` joined the set at 53 and leaves it here, because install and
+  // enable now turn a disabled already-installed dependency back on through
+  // its own record instead of leaving it inert -- `{already installed,
+  // dependency enabled}` replaces `{already installed, dependency disabled}`.
+  // The running arithmetic above is renumbered rather than annotated, so a
+  // reader adding the next member does not inherit a gap (61 -> 60).
+  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 60);
 });
 
 test("SNM-02: StatusToken is the closed 24-entry token set", () => {

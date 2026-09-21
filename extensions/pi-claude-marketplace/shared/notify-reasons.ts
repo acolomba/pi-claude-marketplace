@@ -5,13 +5,13 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). `notification-types.ts` declares `Reason` as the SINGLE
- * source of catalog truth (OUT-08: the 61-entry membership AND order must stay
+ * source of catalog truth (OUT-08: the 60-entry membership AND order must stay
  * byte-identical for catalog stability); this module reorganizes that closed set
  * into shared topic-grouped unions + a structural completeness proof WITHOUT
  * restating the vocabulary's order. The topic groups below are typed views over
  * the same closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 59-entry set.
+ * 60-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
@@ -70,8 +70,13 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * `failed` row rather than a success row, which is what keeps it out of
  * `dependents unsatisfied`'s group: that token's subject is a removal that
  * WENT THROUGH, and this one's subject is an operation that did not happen
- * (60 to 61). The arithmetic above is renumbered rather than annotated with
- * the gap, so the next member to join does not inherit one.
+ * (60 to 61). EDEP-03 RETIRED `dependency disabled` -- RESV-05's own marker,
+ * added earlier in this paragraph -- because install and enable now turn a
+ * disabled already-installed dependency back on through its own record
+ * instead of leaving it inert: `{already installed, dependency enabled}`
+ * replaces `{already installed, dependency disabled}` (61 to 60). The
+ * arithmetic above is renumbered rather than annotated with the gap, so the
+ * next member to join does not inherit one.
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -363,10 +368,6 @@ type CommandPrivateReason =
   // already-installed arm (EDEP-03). Retires the
   // `{already installed, dependency disabled}` skip.
   | "dependency enabled"
-  // RESV-05: the skipped dependency is recorded but disabled, so it
-  // materialized nothing. It joins `already installed` in the same brace and
-  // is what lifts that row off the benign-skip default.
-  | "dependency disabled"
   // D-04-07: install's marker for a recorded dependency the user then named.
   // The record changed hands and nothing was materialized, so it joins
   // `already installed` on an `installed` row rather than a skipped one -- a

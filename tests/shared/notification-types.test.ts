@@ -86,7 +86,6 @@ const EXPECTED_REASONS = [
   "dependency marketplace not added",
   "dependency cycle",
   "dependency failed",
-  "dependency disabled",
   "dependency promoted",
   "dependency pruned",
   "dependency unsatisfied",

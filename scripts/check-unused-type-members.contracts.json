@@ -708,12 +708,12 @@
       "filter": "extensions/pi-claude-marketplace/shared/notification-summary.ts:41:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-types.ts:556:48",
+      "id": "extensions/pi-claude-marketplace/shared/notification-types.ts:545:48",
       "owner": "isScopeBearingListRow",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-types.ts:556:11"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-types.ts:545:11"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:271:52",
@@ -951,36 +951,36 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:94:40"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:138:60",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:147:60",
       "owner": "CascadeFailureSubject.failure",
       "key": "ok",
       "category": "type-selection",
       "purpose": "Selects within DependencyClosureResult by ok, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:138:25"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:147:25"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:260:47",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:274:47",
       "owner": "closureFailureFacts.failure",
       "key": "ok",
       "category": "type-selection",
       "purpose": "Selects within DependencyClosureResult by ok, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:260:12"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:274:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:313:48",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:327:48",
       "owner": "rangeConflictFacts.failure",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within CascadeConstraintFailure by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:313:12"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:327:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:407:45",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:421:45",
       "owner": "memberCause.subject",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within CascadeFailureSubject by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:407:12"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:421:12"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:434:60",
