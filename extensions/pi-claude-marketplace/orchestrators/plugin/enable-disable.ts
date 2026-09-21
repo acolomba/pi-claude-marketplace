@@ -504,16 +504,15 @@ function isDeclarerAbsentFromManifest(cause: Error): boolean {
 }
 
 /**
- * WR-03: reads ONE record's declarations, lazily, as the walk visits it --
- * replacing the former whole-scope eager read `buildScopeDeclarationDetail`
- * did. D-05-07 fail-closed still applies, but now scoped to records the walk
- * actually reaches: an unreadable record OUTSIDE the closure never blocks an
- * unrelated enable. A record the scope never installed (or whose
- * marketplace the scope never added) answers "found, declares nothing" --
- * NOT `{ kind: "absent" }` -- for the same reason the former eager lookup
- * did: the question is "is there a record here to turn on", and "absent"
- * would reach the walk's `not-found` arm and refuse an enable over a MISSING
- * dependency that LOAD-01's load-time check already owns reporting.
+ * WR-03: reads ONE record's declarations as the walk visits it, so an
+ * unreadable record OUTSIDE the closure never blocks the enable. D-05-07
+ * fail-closed still applies, but scoped to records the walk actually
+ * reaches. A record the scope never installed (or whose marketplace the
+ * scope never added) answers "found, declares nothing" -- NOT `{ kind:
+ * "absent" }`: the question is "is there a record here to turn on", and
+ * "absent" would reach the walk's `not-found` arm and refuse an enable over
+ * a MISSING dependency that LOAD-01's load-time check already owns
+ * reporting.
  *
  * `knownMarketplaces` is a MUTABLE set this function GROWS as each record's
  * declarations are read -- see `resolveEnableCascade`'s own seed comment.
@@ -521,10 +520,10 @@ function isDeclarerAbsentFromManifest(cause: Error): boolean {
  * Throws `EnableRefusedError("unreadable", ...)` on a genuinely unreadable
  * declarer, fail-closed (D-05-07) -- EXCEPT for the root itself when its
  * manifest is readable and its own entry is simply absent (ATTR-08 "not in
- * manifest"): the root's own enable is going to refuse through the ledger's
- * ordinary PI-3 lookup regardless, restoring the pre-EDEP-01 ENBL-07 bytes
- * rather than misreporting `{unreadable}` over a fact this cascade cannot
- * itself act on either way.
+ * manifest"): the ENBL-07 "not in manifest" refusal is rendered by the
+ * ledger's own PI-3 lookup, so this cascade treats a manifest-readable,
+ * entry-absent ROOT as declaring nothing rather than misreporting
+ * `{unreadable}` over a fact this cascade cannot itself act on either way.
  */
 function enableCascadeLookup(
   state: ExtensionState,
@@ -1204,8 +1203,7 @@ type EnableCascadeResolutionStep =
  * CR-03: materialization is decided by the CALLER, once it knows whether the
  * root itself is idempotent (`runEnableCascadeMembers`, members alone) or
  * fresh (`runEnableCascadeWithRoot`, members and the root in one ledger) --
- * that decision was not available yet at THIS point when materialization
- * used to happen here, before the idempotency check ran.
+ * a decision this function's own resolution step cannot make on its own.
  */
 async function resolveEnableCascadeStep(args: {
   readonly state: ExtensionState;

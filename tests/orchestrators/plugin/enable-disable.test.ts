@@ -4640,9 +4640,8 @@ test("WR-03: an unrelated plugin's unreadable manifest entry never blocks this e
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange: "x" declares nothing and is unrelated to "y". "y"'s own
     // manifest entry is broken, mirroring the "unreadable declarer"
-    // fixture's own technique -- before WR-03, the whole-scope eager read
-    // reached "y" before "x"'s own enable could even start, refusing an
-    // enable that has nothing to do with "y" at all.
+    // fixture's own technique. Enabling "x" reads only "x"'s own reachable
+    // closure, so "y"'s broken entry never blocks it.
     const { statePath } = await seedEdepGraph(home, [
       { name: "x", version: "1.0.0", enabled: false },
       { name: "y", version: "1.0.0", enabled: false },
@@ -5460,12 +5459,8 @@ test("CR-03: a root ledger failure AFTER a member materialized unwinds the membe
     // arrange: "a" declares "b"; both disabled. "b" materializes cleanly
     // (it is the cascade's own phase, ahead of the root's in post order),
     // and THEN "a"'s own ledger call -- the merged ledger's last phase --
-    // rejects. Before CR-03, "b"'s materialization ran in its own separate
-    // ledger, already committed by the time the root's runEnableBranch call
-    // failed; the caller returned without saving, leaving "b"'s artifacts
-    // on disk with state.json still disabled. Merging the root into the
-    // same runPhases ledger as the members is what makes this failure
-    // unwind "b" too.
+    // rejects. The root and the members share one `runPhases` ledger, so
+    // this failure unwinds "b" too.
     const { statePath, scopeRoot } = await seedEdepGraph(home, [
       { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
       { name: "b", version: "1.0.0", enabled: false },
