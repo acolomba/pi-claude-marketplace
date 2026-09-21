@@ -4893,7 +4893,6 @@ test("EDEP-01: a member's undo tolerates the record vanishing from the snapshot 
           // Simulate the record vanishing from the shared snapshot between
           // "b"'s materialization and its own undo -- the guard `undo` must
           // tolerate rather than assume.
-          // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- state.marketplaces is a Record<string,...> the test mutates directly.
           delete state.marketplaces.official?.plugins.b;
           return rejectUnknown(failure);
         }
