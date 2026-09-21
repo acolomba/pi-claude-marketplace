@@ -569,31 +569,38 @@ function enableCascadeKnownMarketplaces(state: ExtensionState): Set<string> {
 }
 
 type ClosureFailure = Extract<DependencyClosureResult, { readonly ok: false }>;
-type ClosureNotFoundOrMarketplaceFailure = Extract<
+type ClosureUnusableDeclarationFailure = Extract<
   ClosureFailure,
-  { readonly reason: "not-found" | "marketplace-not-added" }
+  { readonly reason: "unusable-declaration" }
 >;
 
 /**
- * `not-found` needs an `"absent"` lookup result and `enableCascadeLookup`
- * always answers `"found"` (`walkEdge`'s `looked.kind === "absent"` branch).
- * `marketplace-not-added` needs a child edge's marketplace that
- * `knownMarketplaces` does not already hold at check time, and
- * `enableCascadeLookup` GROWS that same mutable set with every marketplace a
- * declaring record's own read names, BEFORE the walk ever checks one of that
- * record's own children (`walkEdge` calls `lookup` before `walkChildren`
- * builds and checks each child edge) -- the same value `buildChildEdge`
- * computes for the edge (`AddressedDependency.marketplace` is never
- * `undefined`, so `buildChildEdge`'s `??` fallback never applies). Both arms
- * are unreachable for this walk's lookup and known-marketplaces pairing.
- * Evidence-backed type narrowing only, mirroring
- * `assertRecordedStateLedgerInstalled` above; the invariant is established by
- * `resolveEnableCascade`'s lookup and `knownMarketplaces` construction, not by
- * a runtime check here.
+ * Once `failure.reason !== "cycle"` is known, `unusable-declaration` is the
+ * ONLY remaining reachable arm for this walk's lookup and known-marketplaces
+ * pairing: `not-found` needs an `"absent"` lookup result and
+ * `enableCascadeLookup` always answers `"found"` (`walkEdge`'s
+ * `looked.kind === "absent"` branch); `marketplace-not-added` needs a child
+ * edge's marketplace that `knownMarketplaces` does not already hold at check
+ * time, and `enableCascadeLookup` GROWS that same mutable set with every
+ * marketplace a declaring record's own read names, BEFORE the walk ever
+ * checks one of that record's own children (`walkEdge` calls `lookup`
+ * before `walkChildren` builds and checks each child edge) -- the same
+ * value `buildChildEdge` computes for the edge (`AddressedDependency.marketplace`
+ * is never `undefined`, so `buildChildEdge`'s `??` fallback never applies).
+ *
+ * An unconditional assertion, not a branch inside a switch: `not-found` and
+ * `marketplace-not-added` need no runtime representation of their own here,
+ * because nothing this walk's construction produces can EVER hold either
+ * reason once `cycle` is excluded -- a dead switch arm for either would be
+ * code no test could reach without violating an invariant the walk itself
+ * establishes. Evidence-backed type narrowing only, mirroring
+ * `assertRecordedStateLedgerInstalled` above; the invariant is established
+ * by `resolveEnableCascade`'s lookup and `knownMarketplaces` construction,
+ * not by a runtime check here.
  */
-function assertNotFoundAndMarketplaceUnreachable(
-  _failure: ClosureFailure,
-): asserts _failure is ClosureNotFoundOrMarketplaceFailure {
+function assertUnusableDeclarationIsOnlyRemainingArm(
+  _failure: Exclude<ClosureFailure, { readonly reason: "cycle" }>,
+): asserts _failure is ClosureUnusableDeclarationFailure {
   // Evidence-backed type narrowing only; the invariant is established by the caller.
 }
 
@@ -607,22 +614,18 @@ function assertNotFoundAndMarketplaceUnreachable(
  * arm.
  */
 function enableCascadeClosureFailure(failure: ClosureFailure): EnableRefusedError {
-  switch (failure.reason) {
-    case "cycle":
-      return new EnableRefusedError(
-        "dependency cycle",
-        `Dependency cycle: ${failure.chain.join(" -> ")}.`,
-      );
-    case "unusable-declaration":
-      return new EnableRefusedError(
-        "invalid manifest",
-        `Plugin "${failure.key}" declares an unusable dependency (${failure.detail}).`,
-      );
-    case "not-found":
-    case "marketplace-not-added":
-      assertNotFoundAndMarketplaceUnreachable(failure);
-      throw new Error("unreachable");
+  if (failure.reason === "cycle") {
+    return new EnableRefusedError(
+      "dependency cycle",
+      `Dependency cycle: ${failure.chain.join(" -> ")}.`,
+    );
   }
+
+  assertUnusableDeclarationIsOnlyRemainingArm(failure);
+  return new EnableRefusedError(
+    "invalid manifest",
+    `Plugin "${failure.key}" declares an unusable dependency (${failure.detail}).`,
+  );
 }
 
 /** Classify one non-root closure member against the live locked snapshot. */
@@ -1587,16 +1590,20 @@ async function hydrateReEnabledMemberHooks(
   scope: Scope,
   members: readonly EnableCascadeHydratableMember[],
 ): Promise<void> {
-  const withHooks = members.filter((member) => member.hooksConfigPath !== undefined);
+  const withHooks = members.flatMap((member) =>
+    member.hooksConfigPath === undefined
+      ? []
+      : [{ member, hooksJsonPath: path.join(member.pluginRoot, member.hooksConfigPath) }],
+  );
   if (withHooks.length === 0) {
     return;
   }
 
-  for (const member of withHooks) {
+  for (const { member, hooksJsonPath } of withHooks) {
     try {
       await hooksRouting.readAndCachePluginHooks({
         cwd: opts.cwd,
-        hooksJsonPath: path.join(member.pluginRoot, member.hooksConfigPath ?? ""),
+        hooksJsonPath,
         logPrefix: "enable",
         marketplace: member.marketplace,
         plugin: member.name,

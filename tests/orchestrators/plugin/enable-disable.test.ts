@@ -5600,6 +5600,79 @@ test("CR-05: a member's undo folds a partial unstage failure and rethrows it as 
   });
 });
 
+test("CR-05: a member's undo whose unstage failure carries no cause still rethrows with a synthesized message", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange: mirrors the fold test above, except the mocked
+    // cascadeUnstagePlugin failure carries no `cause` -- exercising
+    // unstageBackToDisabled's `outcome.cause ?? new Error(...)` fallback.
+    const { statePath, scopeRoot } = await seedEdepGraph(home, [
+      {
+        name: "a",
+        version: "1.0.0",
+        dependencies: [{ name: "b" }, { name: "c" }],
+        enabled: false,
+      },
+      { name: "b", version: "1.0.0", enabled: false },
+      { name: "c", version: "1.0.0", enabled: false },
+    ]);
+    const ledgerFailure = new Error("c's ledger failed");
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async runInstallLedger(state, locations, options, capture) {
+        if (options.plugin === "c") {
+          return rejectUnknown(ledgerFailure);
+        }
+
+        return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture);
+      },
+      async cascadeUnstagePlugin(plugin, marketplace, locations, installedPlugin) {
+        if (plugin === "b") {
+          return {
+            ok: false,
+            dropped: { skills: ["s1"], commands: [], agents: [], hooks: [], mcpServers: [] },
+          };
+        }
+
+        return cascadeUnstagePlugin(plugin, marketplace, locations, installedPlugin);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    await stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b:s1"));
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ a v1.0.0 (failed) {rollback partial}",
+        "    cause: c's ledger failed",
+        "    [b@official] (rollback failed)",
+        '      cause: Rollback of "b@official" did not complete.',
+      ].join("\n"),
+    );
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins.b!.enabled, false);
+  });
+});
+
 test("EDEP-02: a disable is refused while an installed and enabled plugin still declares it", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange

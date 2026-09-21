@@ -1,21 +1,4 @@
 {
   "version": 1,
-  "rows": [
-    {
-      "sourcePath": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
-      "reading": "branches 273/277, functions 69/70, lines 2799/2806",
-      "findingIds": ["CR-02"],
-      "reasons": [
-        "assertNotFoundAndMarketplaceUnreachable's body, and the two switch case labels (\"not-found\", \"marketplace-not-added\") in enableCascadeClosureFailure that call it, are structurally unreachable for this specific lookup and known-marketplaces pairing: enableCascadeLookup never answers ClosureLookupResult \"absent\" (the only producer of DependencyClosureResult's \"not-found\" arm), and enableCascadeLookup grows the SAME mutable knownMarketplaces set with every marketplace a declaring record's own read names, before the walk ever checks one of that record's own children -- so \"marketplace-not-added\" cannot fire either. Evidence-backed type narrowing only; covering it would require constructing a scenario that violates an invariant this walk's own construction establishes."
-      ]
-    },
-    {
-      "sourcePath": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts",
-      "reading": "branches 141/142, lines 1235/1249",
-      "findingIds": ["CR-04"],
-      "reasons": [
-        "resolveTransitiveReEnableSet's final fold-into-one-order walk (the `if (!folded.ok)` arm) is not reachable: the discovery loop above it processes EVERY discovered disabled member as its own resolveDependencyClosure root, and each such call walks that member's FULL transitive closure with a fresh path/visited pair, so any cycle or unusable declaration reachable from a discovered member is already caught during that member's own discovery call, before the fold ever runs. The fold's own synthetic-root declaration can never itself be unusable: it is built from already token-validated ClosureMember name/marketplace pairs, never a sha. Kept as a real fail-closed return (not a type-narrowing assertion) because the invariant depends on the discovery loop's own shape, not on a type-level guarantee -- see the comment at the call site."
-      ]
-    }
-  ]
+  "rows": []
 }

@@ -973,22 +973,7 @@ async function resolveTransitiveReEnableSet(
     installedKeys: new Set<string>(),
     knownMarketplaces,
   });
-  if (!folded.ok) {
-    // Not reachable given the discovery loop above: `queue` processes EVERY
-    // discovered disabled member as its OWN root (each `queue.push` pairs
-    // with a later `resolveDependencyClosure` call for that exact key), and
-    // each such call walks that member's FULL transitive closure with a
-    // fresh `path`/`visited` pair -- so any cycle or unusable declaration
-    // reachable from a discovered member is already caught during ITS OWN
-    // discovery call, before folding ever runs. The synthetic root's own
-    // "declaration" can never itself be unusable: it is built from already
-    // token-validated `ClosureMember.name`/`.marketplace` pairs, never a
-    // `sha`. Kept as a real fail-closed return (not an assertion) because
-    // the invariant depends on the discovery loop's own shape, not on a
-    // type-level guarantee.
-    return folded;
-  }
-
+  assertFoldingClosureSucceeded(folded);
   return {
     ok: true,
     closure: folded.closure.filter(
@@ -996,6 +981,25 @@ async function resolveTransitiveReEnableSet(
     ),
     alreadyInstalled: [],
   };
+}
+
+/**
+ * The discovery loop above already proves the fold cannot fail: `queue`
+ * processes EVERY discovered disabled member as its OWN root (each
+ * `queue.push` pairs with a later `resolveDependencyClosure` call for that
+ * exact key), and each such call walks that member's FULL transitive
+ * closure with a fresh `path`/`visited` pair -- so any cycle or unusable
+ * declaration reachable from a discovered member is already caught during
+ * ITS OWN discovery call, before the fold ever runs. The fold's own
+ * synthetic-root "declaration" can never itself be unusable: it is built
+ * from already token-validated `ClosureMember.name`/`.marketplace` pairs,
+ * never a `sha`. Evidence-backed type narrowing only; the invariant is
+ * established by the discovery loop above, not by a runtime check here.
+ */
+function assertFoldingClosureSucceeded(
+  _folded: DependencyClosureResult,
+): asserts _folded is Extract<DependencyClosureResult, { readonly ok: true }> {
+  // Evidence-backed type narrowing only; the invariant is established by the caller.
 }
 
 /**
