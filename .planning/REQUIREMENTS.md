@@ -165,8 +165,9 @@ already-installed dependency disabled (RESV-05; BACKLOG ENBL-DEP-01).
 - [x] **EDEP-01**: `enable <plugin>` also enables the plugin's declared
   dependencies, transitively, in the same scope, and lists them.
 - [x] **EDEP-02**: `disable <plugin>` is refused while an enabled installed
-  plugin in the scope declares it; the refusal names the dependents and gives
-  the one command that disables them together.
+  plugin in the scope declares it; the refusal names the dependents, in the
+  order to disable them, as a plain-English instruction (D-08-01: `disable`
+  takes one target, so there is no chained form to give).
 - [x] **EDEP-03**: Installing or enabling a plugin enables an already-installed,
   disabled dependency through its record -- the desired-state config never
   names a dependency (D-04-02) -- and reports it on the row; the

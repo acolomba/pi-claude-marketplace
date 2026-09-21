@@ -38,7 +38,7 @@ constraint silently unchecked for a phase.
 
 - [x] **Phase 6: Load-time dependency check and allowed uninstall** — reconcile checks every installed plugin's declarations against the scope's records; a dependent whose dependency is missing, disabled or out of range is disabled with the upstream remedy, the disable is a recorded consequence reconcile respects until the dependency is satisfied, and `uninstall` stops refusing a still-needed plugin: it proceeds, names the dependents, and leaves them to the check. Retires PRUNE-05 / D-05-14..16 and the reload-path refusal. (LOAD-01, LOAD-02, LOAD-03) (completed 2026-09-19)
 - [x] **Phase 7: Marketplace-repository tag resolution for path-source dependencies** — a constrained dependency whose marketplace entry is a relative path resolves against the marketplace repository's `{name}--v{version}` tags, read from the local clone offline; no satisfying tag installs the current copy and defers to Phase 6's check. Also records the kept `sha` divergence. (TAGS-01, TAGS-02, TAGS-03, DIVG-01) (completed 2026-09-19)
-- [ ] **Phase 8: Enablement parity for dependencies** — `enable` cascades to declared dependencies and lists them, `disable` is refused while an enabled dependent needs the plugin and gives the chained command, and a cascade enables a disabled already-installed dependency through its record instead of skipping it. Closes BACKLOG ENBL-DEP-01. (EDEP-01, EDEP-02, EDEP-03)
+- [ ] **Phase 8: Enablement parity for dependencies** — `enable` cascades to declared dependencies and lists them, `disable` is refused while an enabled dependent needs the plugin and names the dependents to disable first (D-08-01), and a cascade enables a disabled already-installed dependency through its record instead of skipping it. Closes BACKLOG ENBL-DEP-01. (EDEP-01, EDEP-02, EDEP-03)
 - [ ] **Phase 9: Reload installs missing declared dependencies** — a reload installs any declared dependency an installed plugin lacks, through the cascade with provenance `dependency`; a dependency that cannot be installed is reported on its own row and the dependent falls to Phase 6's check. (MISS-01, MISS-02)
 - [ ] **Phase 10: Constraint-aware update** — `update` and `autoupdate` move a constrained plugin only to the highest version every installed dependent's range accepts, and skip-and-report when none does, naming the constraining plugin. (UPDT-01, UPDT-02)
 - [ ] **Phase 11: Cross-marketplace dependency allowlist** — a dependency in another marketplace is refused unless the root marketplace's `marketplace.json` lists it in `allowCrossMarketplaceDependenciesOn`; an already-installed dependency still satisfies. (XMKT-01, XMKT-02)
@@ -372,7 +372,7 @@ Plans:
 
 ### Phase 8: Enablement parity for dependencies
 
-**Goal**: `enable` and `disable` understand dependencies the way `install` and `uninstall` now do: enabling a plugin enables what it declares, disabling a plugin that an enabled dependent still needs is refused with the one command that does it properly, and a cascade turns a disabled dependency back on rather than leaving the dependent broken.
+**Goal**: `enable` and `disable` understand dependencies the way `install` and `uninstall` now do: enabling a plugin enables what it declares, disabling a plugin that an enabled dependent still needs is refused with a plain-English instruction naming the dependents in order (D-08-01: `disable` takes one target, so no chained form exists), and a cascade turns a disabled dependency back on rather than leaving the dependent broken.
 
 **Depends on**: Phase 6 (the "disabled as a consequence" record: an enable cascade must lift it, and EDEP-02's refusal reads the same declaration index) and Phase 4 (D-04-07: promotion re-enables through the enable path; this phase generalises that write).
 
@@ -381,7 +381,7 @@ Plans:
 **Success Criteria** (what must be TRUE):
 
 1. `enable <plugin>` enables the plugin's declared dependencies, transitively, in the same scope, and lists each one on its own row. (EDEP-01)
-2. `disable <plugin>` is refused while an enabled installed plugin in the scope declares it; the refusal names the dependents and gives one chained `disable` command that takes them down together. (EDEP-02)
+2. `disable <plugin>` is refused while an enabled installed plugin in the scope declares it; the refusal names the dependents, in the order to disable them, as a plain-English instruction — not a chained command, since `disable` takes exactly one target (D-08-01). (EDEP-02)
 3. Installing or enabling a plugin whose already-installed dependency is disabled enables that dependency through its record — the config never names it (D-04-02) — and reports it on the row with a new closed-set token; RESV-05's `{already installed, dependency disabled}` warning skip is removed from the catalog (fixture, both contract constants, length lock, both enumeration pins), and `docs/plugin-enablement.md` §"Dependencies" is rewritten, not appended, since it argues the divergence this phase reverses. (EDEP-03)
 4. BACKLOG `ENBL-DEP-01` is closed by this phase; `DEPS-STATUS-01` (partial dependency degrades the dependent) stays open — it is not upstream parity and is not pulled in here.
 
