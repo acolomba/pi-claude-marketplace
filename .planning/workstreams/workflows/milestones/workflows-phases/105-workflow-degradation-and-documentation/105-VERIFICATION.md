@@ -53,8 +53,11 @@ human_verification:
       `tests/live-uat/workflow-storage-canary.mjs`, was present on the branch
       where this phase ran and was never re-landed by the replay, so they cannot
       be driven on the current branch either. That open obligation is carried by
-      `.planning/WINDOWS.md` entry id 45 (`unrun-verify`, prefixed
-      `[workflows-replay]`).
+      `.planning/WINDOWS.md` entry id 72 (`unrun-verify`, prefixed
+      `[workflows-replay]`; cited as id 45 until 2026-09-21 -- the merge of
+      main PR #202 renumbered this branch's ledger ids 32-55 to 59-82).
+      Id 72 was waived on 2026-09-21 at the milestone close and the obligation
+      is carried by `.planning/BACKLOG.md` WSTOR-01.
 
 ---
 
@@ -130,7 +133,9 @@ The phase submitted with a prior review (`105-REVIEW.md`, 1 critical + 5 warning
 > milestone never re-landed it, so it does not exist on the current branch and the
 > W1/W2/W3 assertions cannot be driven here. Both halves are stated because
 > collapsing two trees into one row is what made the row wrong. The open
-> obligation is carried by `.planning/WINDOWS.md` entry id 45.
+> obligation is carried by `.planning/WINDOWS.md` entry id 72 (id 45 until the
+> #202 merge renumbered the ledger on 2026-09-21; waived the same day, carried by
+> `BACKLOG.md` WSTOR-01).
 
 ### Requirements Coverage
 
@@ -180,7 +185,7 @@ confirmed the stamp-coverage gate catches the regression it was built to catch, 
 exact property the review's WR-01 finding said was missing. The two items the fixer explicitly
 declined to address are both sound engineering judgments, not corner-cutting. The sole open item
 is the live-engine canary run, which needs a real out-of-tree engine install and is tracked as
-an open `unrun-verify` entry in `.planning/WINDOWS.md` (id 45) rather than silently assumed —
+an `unrun-verify` entry in `.planning/WINDOWS.md` (id 72) rather than silently assumed —
 this phase is honest about what it has and has not proven.
 
 > **WDOCS-02 correction, 2026-09-09.** The citation above previously named
@@ -196,6 +201,19 @@ this phase is honest about what it has and has not proven.
 > re-landed on the current branch, so the storage half of this route has no live
 > coverage there at all. Re-landing it is a recorded deferred idea (D-117-01), not
 > work this milestone took on.
+>
+> **WDOCS-02 correction, 2026-09-21.** The id above rotted a second time, by a
+> mechanism the first correction did not anticipate: the merge of main PR #202
+> (`9e48255a`) renumbered this branch's ledger ids 32-55 to 59-82, so "id 45"
+> came to name an unrelated phase-07 `deviation` about
+> `tests/scripts/coverage-source-map-fixtures.ts`. The entry this phase created
+> (same description, `recorded_at: 2026-09-09T19:27:52.900Z`) is id 72. Its
+> status also moved: it was waived at the milestone close on 2026-09-21, with the
+> obligation carried by `.planning/BACKLOG.md` WSTOR-01, so "open" above now means
+> "open in the backlog", not "open in the ledger". The lesson of the first
+> correction stands and is now twice-measured: a bare ledger id is a position,
+> not a name. The `[workflows-replay]` prefix and the `recorded_at` stamp are what
+> made the successor findable.
 
 ---
 

@@ -213,3 +213,29 @@ table marks all 9 Complete.
 This decides what `complete-milestone` archives and whether `workflow-hardening`
 survives as an open milestone. It needs an operator decision before the archive
 runs, not a silent choice by the tooling.
+
+## Close-out note, 2026-09-21
+
+The debt this audit graded `tech_debt` on was cleared or carried before the
+archive, and two facts about the record above changed after it was written:
+
+- **Ledger ids in this file are pre-renumbering.** The merge of main PR #202
+  (`9e48255a`, 2026-09-21) renumbered this branch's Broken Windows ids 32-55 to
+  59-82 (+27). Every id in the "Broken Windows: 10 open" table above, and every
+  bare ledger id cited in this milestone's SUMMARY, REVIEW-FIX and
+  `deferred-items.md` records written before that merge, reads 27 low against
+  today's ledger: 34 is 61, 39 is 66, 45 is 72, 46 is 73, 47 is 74. Those
+  records stay unedited as dated documents; the archived `105-VERIFICATION.md`,
+  whose ledger citation is a graded must-have of Phase 117, carries a dated
+  correction instead. Find an entry by its `[workflows-replay]` prefix and its
+  `recorded_at` stamp, never by its number.
+- **Dispositions.** All twelve `[workflows-replay]` entries are closed: #82,
+  #75, #67 and #78 fixed; #81 waived as an accepted residual; #61, #64, #66,
+  #72, #74, #79 and #80 waived with a named `BACKLOG.md` carrier each
+  (WPIN-01, PCERR-01, VSTALE-01, WSTOR-01, RLHINT-01, WLREC-01, VSTALE-01).
+  `OPEN-QUESTIONS.md` records the reasoning per question. The one deferred
+  item, the five missing SECURITY.md files, the five `draft` VALIDATION.md files
+  and the four review findings were closed between 2026-09-09 and 2026-09-10 as
+  `STATE.md` records. The operator decision the note above asks for was taken
+  on 2026-09-10 (STATE.md, "Milestone close"): all nine phases archive as one
+  milestone, `workflows-replay`.
