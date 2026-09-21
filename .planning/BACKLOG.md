@@ -3127,6 +3127,13 @@ fixture, and a UAT case. The review itself hedged ("if a bound is wanted").
 plugin that large is already pathological. It is filed so the uncapped read is
 a recorded decision rather than an oversight.
 
+Closed 2026-09-21 on the workflows branch: the ceiling is Claude Code's own.
+Its plugin-workflow loader (2.1.267 binary) skips a script above 524,288 bytes
+with a warning, so discovery now `lstat`s each candidate and skips one above
+that size before reading it, on `install` and `info` alike, with both tense
+phrases and a per-file line. `WORKFLOW_SCRIPT_MAX_BYTES` in
+`domain/workflow-script.ts` is the one declaration.
+
 ## RCSEAM-01: `applyReconcile`'s three uncaught per-entry loops cannot be tested
 
 Residue of the WINDOWS id 9 waiver (decided 2026-09-02). The exposure itself was
@@ -3251,6 +3258,12 @@ the `agent()` failure half was measured at 3.10.1 and refuted the source read.
 canary was run -- a disposable `npm install --prefix` scratch engine plus
 `PI_WORKFLOW_ENGINE_ROOT`, with the negative control.
 
+Closed 2026-09-21 on the workflows branch: `tests/live-uat/workflow-storage-canary.mjs`
+landed and was driven against engine 3.13.0 in both scopes (W0-W5 all PASS),
+with `--invert`, a missing engine and an out-of-sandbox agent directory each
+exiting 1. The transcript is in `tests/live-uat/README.md`; the compatibility
+doc's storage claims carry the `runtime-measured at 3.13.0` grade.
+
 ## WPIN-01: machine-check the engine internals the compatibility doc cites
 
 Carried from the workflows-replay REQUIREMENTS.md at archive (it was a deferred
@@ -3261,6 +3274,11 @@ Future Requirement there) and folds in WINDOWS #61 (OPEN-QUESTIONS Q8).
 instructs a human to re-read the vendored `DETERMINISM_BLOCKLIST` and the
 envelope/storage internals on every engine bump. No gate can detect that an
 upgrade moved them.
+
+Re-read by hand once, 2026-09-21, against 3.13.0: the admission checks, the
+blocklist, the name validator, `workflow-paths.ts` and the registration path
+are byte-identical, and the doc now says so per claim. The machine-check is
+still open; the storage canary (WSTOR-01) covers the layout half at run time.
 
 **What a scoped item decides.** How to make the re-read machine-checkable
 without declaring the engine as a dependency, which is out of scope (a 0.x

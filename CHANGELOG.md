@@ -3,8 +3,9 @@
 ## [Unreleased]
 
 - A plugin that ships workflow scripts now installs them as workflows the Pi workflow engine can load. (#TBD)
-  - The extension reports and skips a workflow script it cannot read, or one with no usable metadata. It installs the rest of the plugin.
-  - A workflow script with no readable name still installs. It reports that it will not run until it declares a name and a description.
+  - The extension reports and skips a workflow script it cannot read, one with no usable metadata, one with no literal `meta.name`, or one over 512 KiB. It installs the rest of the plugin. Claude Code skips the same scripts.
+  - Only `.js` files are workflow scripts, as in Claude Code. The `workflows` manifest field can name a single `.js` file as well as a directory.
+  - A skill that names a sibling workflow as `plugin:workflow` gets the installed name in its staged copy, the same way it already does for a sibling skill.
   - The extension now depends on `acorn` to read the metadata that a workflow script declares.
 - Every `/claude:plugin` verb now rejects an unknown flag or an extra argument before it does any work. (#202)
   - `--local` is accepted only by the verbs that write configuration. Marketplace `info`, `list`, and `update` read both configuration files and write neither, so they now reject it.
