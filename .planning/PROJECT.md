@@ -15,6 +15,33 @@ A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/r
 No active milestone. test-backlog shipped 2026-09-18; the branch awaits its pull
 request. Start the next one with `/gsd-new-milestone`.
 
+## Previous Milestone: workflows-replay -- Workflow Bridge Replay onto main (workstream: workflows, branch: features/workflow, completed 2026-09-21, not merged, no npm release)
+
+**Goal:** Re-land the `workflows` component-kind bridge -- shipped on the never-merged
+`features/workflows-spike` as milestone `workflows` -- onto a main that had since admitted
+`workflows` as an *unsupported* kind (PR #154) and deleted the test architecture the spike was
+written against (PR #167), then close the three gaps the original bridge shipped with.
+**Outcome:** completed 2026-09-21 -- 46/46 requirements, 9 phases (109-117), 39 plans, 83 tasks;
+audit `tech_debt` with no blockers, and the debt cleared or carried before the archive rather than
+accepted at the gate. Every phase reads `passed`, `SECURED` at `threats_open: 0`, and
+`nyquist_compliant: true`. `npm run check` green at 7178 unit / 36 integration at the close.
+
+**Target features:**
+
+- Invert `workflows` from `UNSUPPORTED_COMPONENT_KINDS` into both supported tuples and turn every closed set, classifier arm, doc and locking test with it.
+- Re-land the domain/platform modules and the `bridges/workflows/` bridge against the owner-test convention with no test-only seams: acorn-based script admission, engine-parity naming, `$HOME`-derived roots, prepare/commit/abort staging.
+- Wire every lifecycle verb -- install, uninstall, disable, `marketplace remove --cascade`, reinstall, update, enable -- and the `info` / `list` read surfaces; one `stale workflow command` reason token.
+- Make the host engine the third soft dependency (`requires pi-dynamic-workflows`) and write down the contract of the one bridge that installs executable code.
+- Harden: install-time admission-gate warnings that name the refusing engine check and never block; load-time convergence for plugins installed before the kind was admitted; the degrade-or-die claim measured against a real engine 3.10.1 instead of read from source.
+
+**Key context:** The measurement refuted the source read -- a recoverable `agent()` failure
+resolves to `null` and only the non-recoverable class rejects -- and every document was restated at
+the grade that holds. The close carried six decisions to `BACKLOG.md` (VSTALE-01, WLREC-01,
+RLHINT-01, PCERR-01, WSTOR-01, WPIN-01) and fixed three things on the way out: a held state lock
+reported as `unreadable` instead of `lock held` (#82), a saved-directory symlink check the staging
+root had and its sibling did not (#75), and a ledger citation the #202 merge had renumbered out from
+under phase 117. The bridge is on `features/workflow`, unmerged; nothing is released from it.
+
 ## Previous Milestone: test-backlog -- Test Backlog (branch: features/test-backlog, shipped 2026-09-18, no npm release)
 
 **Goal:** Resolve the authorized test and quality backlog with measured controls,
@@ -270,17 +297,17 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
-**In progress:** workstream `workflows`, milestone `workflows-replay` (Workflow Bridge Replay
-onto main, branch `features/workflow`). Phases 109-114 re-land the bridge that shipped on the
-never-merged `features/workflows-spike`; 115-117 harden it. Phase 109 of 9 is complete and
-verified 12/12: `workflows` has moved out of the unsupported kinds into both supported tuples,
-and the `{workflows}` reason is retired. Nothing is released from this branch. Phase 111 landed
-the bridge and moved `EXTENSION_VERSION` to 0.19.0 (A-03), which opens the load-time backfill
-gate: a reload now re-resolves a stale record and clears its `{workflows}` reason token. That
-re-materialization runs through `reinstallPlugin`, which gains no workflows phase until Phase 112,
-so a workflow-bearing plugin still installs clean and materializes nothing through the install
-path, and envelopes for records written by the last released version do not appear yet. v1.19 closed
-2026-09-04.
+**Completed, unmerged (workstream):** milestone `workflows-replay` (2026-09-21, Phases
+109-117, 39 plans, 83 tasks; archived to
+`.planning/workstreams/workflows/milestones/workflows-replay-*`). The `workflows` bridge that
+shipped on the never-merged `features/workflows-spike` was replayed phase by phase onto main
+on `features/workflow`: `workflows` is a supported kind, the `{workflows}` reason is retired,
+every lifecycle verb owns its workflow envelopes, the host engine is the third soft dependency,
+and the three original gaps (install-time gate warnings, load-time convergence, measured
+`agent()` failure evidence) are closed. Audit `tech_debt` with no blockers; the debt was cleared
+or carried before the archive. `EXTENSION_VERSION` moved to 0.19.0 on that branch (A-03), which
+opens the load-time backfill gate on first load after merge. Nothing is released from this
+branch; the next step is its PR.
 
 **Just shipped:** refine-unit-tests (2026-09-13, Phases 1-9, 213 plans, 412 tasks;
 archived to `.planning/milestones/refine-unit-tests-*`). v1.19 gave every production
@@ -346,6 +373,7 @@ All prior validated requirements below remain historical completed work.
 
 <!-- Shipped and confirmed valuable via this GSD project. -->
 
+- ✓ workflows-replay Phases 109-117 Workflow Bridge Replay onto main (WINV-01..05, WNAM-01..06, WPTH-01..05, WBRG-01..04, WLIF-01..06, WFLW-04, WDEP-01..04, WDOC-01..03, WGATE-01..05, WCONV-01..03, WEVID-01..02, WDOCS-01..02, completed 2026-09-21 on `features/workflow`, unmerged): `workflows` admitted as a supported kind; acorn-based script admission with engine-parity naming; prepare/commit/abort staging into the host engine's saved directory; envelopes owned by every lifecycle verb; the host engine as the third soft dependency; install-time gate warnings, load-time convergence, and the degrade-or-die claim measured against a real engine. Verified 9/9 phases, 46/46 requirements.
 - ✓ test-backlog Phases 1-2 Reliable Negative Controls and Sonar Rules for Tests (NEG-01/02, HIST-01, SONAR-01/02, completed 2026-09-14): the direct-coverage negative controls observe launch, signal, status and diagnostic independently on Node 26; four stale records were reconciled from live evidence; three Sonar assertion rules run as errors over `tests/` with nine type-only owners and five strict-mock controls explained, and 1,083 other flags dispositioned by cluster.
 - ✓ test-backlog Phases 3-4 Agent Collision Contract and Strict Command Arguments (AGENT-01/02, ARGS-01/02/03, completed 2026-09-14): exact source names survive discovery and staging, update and reinstall migrate generated names, all nineteen verbs reject unknown flags and surplus positionals before dispatch, `--local` is documented on the three marketplace verbs, and the flag catalog and drift gate cover both command families. Verified 18/18 and 7/7.
 - ✓ test-backlog Phase 5 Production Export Ownership (EXPORT-01/02, completed 2026-09-15): fallow production dead-code mode with the 111-finding census drained to zero across 28 plans and zero identities added, two adjacent exceptions, conceptual owners (`orchestrators/plugin/operations.ts`, `platform/git-auth-callbacks.ts`, `shared/path-containment.ts`), and a second `--no-production` cycle run for `tests/` and `scripts/`. Verified 10/10.
@@ -524,7 +552,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 - **Claude `local` scope** -- no Pi equivalent
 - **`npm` plugin sources** -- registry+tarball fetch, not git; zero occurrences in the official directories. (`github` / `url` / `git-subdir` plugin sources SHIPPED in milestone url-source 2026-07-13; `npm` remains the only unsupported plugin-source kind.)
 - **Marketplace source kinds beyond GitHub + HTTPS git URLs + local** -- SSH URLs, remote `marketplace.json` URLs, sparse checkout, browser-paste tree URLs (`/tree/<ref>`). Arbitrary HTTPS git URL marketplace sources SHIPPED in milestone url-source; marketplace-level `git-subdir` (ex-MURL-02) was DROPPED in Phase 76 discussion — upstream Claude Code has no subdirectory-marketplace concept (`git-subdir` remains a plugin-source concept only).
-- **Components beyond skills/commands/agents/mcpServers/hooks** -- workflows, lspServers, monitors, themes, output styles, channels, userConfig, bin, settings. Workflows are detected and surfaced as partially available but are not executed. Other unsupported components retain their existing classification. Hooks join the supported set in v1.13.
+- **Components beyond skills/commands/agents/mcpServers/hooks/workflows** -- lspServers, monitors, themes, output styles, channels, userConfig, bin, settings. (Workflows became a supported kind in milestone workflows-replay, completed 2026-09-21 on `features/workflow`, unmerged; before that they were detected and surfaced as partially available but not executed.) Other unsupported components retain their existing classification. Hooks join the supported set in v1.13.
 - **9 Claude hook events out of scope for v1.13 (upstream-fixable)** -- `Notification`, `PermissionRequest`, `PermissionDenied`, `MessageDisplay` (need `pi-coding-agent` runtime exposures); `TeammateIdle` (no agent-team primitive in Pi or `pi-subagents`); `Elicitation`, `ElicitationResult` (need two specific PRs to `pi-mcp-adapter`); `WorktreeCreate`, `WorktreeRemove` (need one PR to `pi-worktrees` to publish events on `pi.events`). See `docs/research/claude-hooks-vs-pi-events.md` § "Upstream-fixable blockers" and § "Soft-dep extension event surfaces".
 - **5 Claude hook events permanently inapplicable to Pi** -- `ConfigChange` (Claude config paths irrelevant under Pi), `Setup` (no Pi `--init-only` equivalent), `InstructionsLoaded` (Pi reads a different context-file model), `TaskCreated` / `TaskCompleted` (no canonical Pi task primitive; rpiv-todo and pi-crew are competing takes with semantics that don't map to Claude's TaskCreate). Silently dropped at hook-config parse time; debug-logged only. See `docs/research/claude-hooks-vs-pi-events.md` § "H -- Semantically inapplicable to Pi".
 - **Hook-payload extensions** -- `asyncRewake` / `rewakeMessage` / `rewakeSummary` and any future Claude Code hook-entry payload fields are tolerated (ignored + debug-logged at parse, surfaced once at install) but not implemented. The supported event still fires synchronously in-band.
@@ -785,3 +813,5 @@ _Last updated: 2026-09-13 after the refine-unit-tests milestone_
 _Last updated: 2026-09-18 after the test-backlog milestone closed. Eight phases, 65 plans, 18/18 requirements; two new mandatory gates (unused type members, CRAP 30 from a validated Istanbul map), fallow in production dead-code mode, the agent-collision and argument-validation contracts settled, and every gate measured green at the final HEAD with aggregate unit production coverage at exactly 100%. Audit `tech_debt`, no blockers. Prior updates follow._
 
 _Last updated: 2026-09-14 after starting test-backlog._
+
+_Last updated: 2026-09-21 after the workflows-replay milestone closed in workstream `workflows`. Nine phases, 39 plans, 46/46 requirements; the `workflows` bridge replayed onto main on `features/workflow` and hardened; audit `tech_debt` cleared or carried before the archive; unmerged._

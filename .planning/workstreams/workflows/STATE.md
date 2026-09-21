@@ -2,21 +2,21 @@
 gsd_state_version: "1.0"
 milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
-current_phase: 117
-current_phase_name: Measured `agent()` failure evidence
-current_plan: 3 of 3 executed
-status: paused for discussion; archive ready when the open questions are settled
-stopped_at: context exhaustion at 75% (2026-09-14)
-last_updated: "2026-09-14T19:41:39.178Z"
-state_head: aca97bad32fe1cf75ad2234025e8f39f31baebe7
+current_plan: none
+status: Awaiting next milestone
+stopped_at: milestone workflows-replay archived (2026-09-21)
+last_updated: "2026-09-21T15:45:27.440Z"
+last_activity: 2026-09-21
+last_activity_desc: Milestone workflows-replay completed and archived
+state_head: dbcc1a20bc363c4a38c618f11276ec4384ecb8a1
 progress:
   total_phases: 9
-  completed_phases: 5
+  completed_phases: 9
   total_plans: 39
   completed_plans: 39
-  percent: 56
-last_activity: 2026-09-09
-last_activity_desc: Debt items 3-5 cleared and the remaining twelve ledger entries written up as open questions
+  percent: 100
+current_phase: 117
+current_phase_name: Measured `agent()` failure evidence
 ---
 
 # Project State
@@ -28,158 +28,33 @@ and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
 
-**Current focus:** Phase 116 — Load-time workflow convergence. The replay
-is done: phases 109-114 re-landed the `workflows` bridge on a main that had
-moved under it. What remains is the three-phase hardening milestone that closes
-the gaps the bridge originally shipped with.
+**Current focus:** none — `workflows-replay` is archived. Phases 109-114
+re-landed the `workflows` bridge on a main that had moved under it, and 115-117
+closed the three gaps the bridge originally shipped with. The code sits on
+`features/workflow`, unmerged; the next step is the PR, not another phase.
 
 ## Current Position
 
-Phase: 117 — Measured `agent()` failure evidence
-Plan: 3 of 3 executed (3 plans, 3 waves, 9 tasks)
-Status: Audit done (`tech_debt`); the archive is paused until the debt is cleared
+Phase: Milestone workflows-replay complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-09-21 — Milestone workflows-replay completed and archived
 
-The replay (109-114) and all three hardening phases (115-117) are done, and the
-audit is written and committed at `efd29659`:
-`workflows-replay-MILESTONE-AUDIT.md`. It found no blockers — 46/46 requirements
-satisfied, 9/9 phases verified, cross-phase integration clean, all four E2E flows
-complete — and graded the milestone `tech_debt` on accumulated deferred work.
+Archived 2026-09-21 as one milestone of nine phases (109-117), per the decision
+recorded under Decisions. The archive ran only after the debt the audit graded
+`tech_debt` on was cleared or carried, in the order the audit listed it: the one
+deferred item (quick task `260909-ox9`), the twelve `[workflows-replay]` Broken
+Windows entries (four fixed, eight waived with named `BACKLOG.md` carriers —
+see `OPEN-QUESTIONS.md` § Dispositions), SECURITY.md for 109-113, VALIDATION.md
+reconciled for 109-113, and the four review findings. Phases 114-117 were
+re-verified the same day after three merges of main had made their reports
+`stale`; 117's re-verification found and closed one real regression (the #202
+merge renumbered the ledger ids 32-55 to 59-82 out from under the archived
+`105-VERIFICATION.md` citation — `dbcc1a20`).
 
-**The operator chose to clear that debt before archiving.** `complete-milestone`
-and `cleanup` have NOT run. What is owed, in the order the audit lists it:
-
-1. ~~The one open deferred item~~ — **DONE** (`5f3cd340`, `5073e497`), quick
-   task `260909-ox9`. The union listing was deleted rather than corrected, and
-   what replaced it is bound to source by
-   `tests/architecture/messaging-guide-doc-pins.test.ts` (MSGDOC-01, 5 cases).
-   Four further false claims in the surviving block were found and corrected on
-   the way; one more — a stale statement of the reload-hint MECHANISM, not an
-   enumeration defect — became ledger entry 74, so item 2 below grew by one.
-2. **Twelve open Broken Windows entries**, all tagged `[workflows-replay]`:
-   #61, #64, #66, #67, #72, #74, #75, #78, #79, #80, #81, #82. **These are now
-   written up as decisions rather than a work queue** in
-   [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) — eleven questions in five groups,
-   each with its options, what it costs, and a recommendation. Read that file
-   rather than the ledger to discuss them; the ledger has no field for the
-   framing.
-
-   Five were closed on 2026-09-10 by the fixes below. Two of the closures
-   uncovered live defects worth more than the entries themselves: the live-UAT
-   sandbox guard was a substring test that accepted a path resolving to the
-   operator's real `~/.pi/agent` — which exists, so its own `existsSync`
-   follow-up waved it through — and building the ENBL-08 lock twin exposed that a
-   held state lock reaches the user as `unreadable` rather than `lock held`
-   (filed as #82).
-
-3. ~~Phases 109-113 carry no SECURITY.md~~ — **DONE** (`2b7ffdc4`). One
-   auditor per phase verified all 127 registered threats against the
-   implementation; every phase returns SECURED at `threats_open: 0`, and every
-   register parse matched an independently measured row count. All nine phases
-   of the milestone now read `status: verified`.
-4. ~~Phases 109-113 sit at VALIDATION.md `status: draft`~~ — **DONE**
-   (`364dc753`, `358577b5`). All five reconciled to `validated` /
-   `nyquist_compliant: true`. Four had zero test gaps; only 113 found any, and
-   two of its three were closed with new architecture gates, each planted and
-   observed red before being trusted. The third — the abort-path call-site
-   enumeration — is an accepted, named residual. `wave_0_complete` on the bridge
-   phase was corrected from `false` to `true` against its nine satisfied items.
-5. ~~Four unresolved code-review findings~~ — **DONE** (`7304e02e`). All four
-   were checked against the tree rather than read off their dispositions. Two
-   closed, one stays open as intended future work with its backlog carrier
-   intact, one stays skipped against an operator-locked decision. One had been
-   filed against the wrong phase: WR-09 was deferred to the bridge phase but
-   actually discharged by the admission-gate work two phases later.
-
-Items 3 and 4 track when each capability became active in this workstream rather
-than a phase that skipped its gate.
-
-**Paused here for discussion.** The twelve remaining entries are written up in
-[`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md). Nothing blocks the archive — all nine
-phases are complete, verified, threat-verified and validated — so
-`/gsd-complete-milestone workflows-replay` is available whenever the questions
-are settled or explicitly carried.
-
-Phase 117 closed at 3/3 plans, `npm run check` exit 0 at 5654 unit and 35
-integration, goal verification 5/5, security SECURED at 19/19 with
-`threats_open: 0`, and the nyquist gate validated with zero gaps. Its deep code
-review found 2 criticals and 12 warnings; all 14 were fixed.
-
-**It refuted the claim it set out to measure.** The published contract said the
-host engine throws on a failed `agent()`, at source-read grade. Driven against a
-real 3.10.1 with no provider credentials, a recoverable failure resolves to
-`null` — the ordinary case — and only the non-recoverable class rejects. So a
-copied `pipeline(...)` + `.filter(Boolean)` script degrades and finishes rather
-than aborting, and the two engines agree on the ordinary failure. The doc now
-says that at `runtime-measured at 3.10.1`, and the non-recoverable codes are
-published as an OPEN list graded per entry, because the engine's error type
-defaults to non-recoverable when the option is omitted and the code does not
-determine the class.
-
-**The two stale re-verifications are done** (`d2582864`). Phase 114 was stale
-because Phase 117 edited `docs/workflows-compatibility.md`, which its
-verification grades; Phase 115 was stale because Phase 116 appended to
-`.planning/BACKLOG.md`, which criterion 5 grades directly. Both were legitimate
-coverage rather than the digest defect recorded as Broken Windows #66, and both
-were deliberately deferred to this boundary so that 116 and 117 had stopped
-moving the files they grade. Both re-verified `passed` at their previous scores
-with no gaps closed, none remaining, and no regressions.
-
-Phase 116 closed at 4/4 plans, `npm run check` exit 0 at 5654 unit and 35
-integration, goal verification 4/4, security SECURED at 15/15 with
-`threats_open: 0`, and the nyquist gate validated with zero gaps. Its deep code
-review found 2 criticals and 9 warnings; 10 of 11 were fixed and the one skipped
-is filed. Both criticals collided with a success criterion rather than with mere
-code quality — an unreadable manifest emitting a permanent per-load failure row,
-and a clean record flippable to degraded without consent — and both fixes were
-re-derived from source at verification rather than accepted from the report.
-
-Phase 115 closed at 6/6 plans, a deep code review of 1 critical and 6 warnings
-with all 7 fixed, goal verification 6/6, security SECURED at 30/30 threats closed
-with `threats_open: 0`, and the nyquist gate validated with zero gaps. Its two
-deferred items were re-measured and closed rather than carried.
-
-Phase 114 closed the replay. It made the host workflow engine the third soft
-dependency and published `docs/workflows-compatibility.md`, the contract of the
-one bridge that installs executable code rather than data. Verified 7/7,
-security SECURED (22/22 threats closed), nyquist validated, `npm run check`
-green at 5564 unit + 34 integration tests.
-
-Two things it settled that later phases should not re-litigate:
-
-- **Criterion 6 is CONFIRMED; no behavior rests on an unsourced premise any
-  more.** Upstream's plugin manifest does declare `workflows` as
-  `string | array` — Claude Code 2.1.251's own schema calls it "Path to a
-  workflows directory or .js file, relative to the plugin root", in a body
-  shaped like `themes` and `outputStyles`. `SUPPORTED_COMPONENT_PATH_KINDS`
-  keeps `workflows` and `tests/domain/resolver.test.ts` now carries the
-  citation. Two divergences went into the doc rather than the code: upstream
-  *replaces* the convention directory where this project *unions* (D-07), and
-  upstream admits a `.js` file path that this bridge silently drops.
-- **Every engine figure inherited from the archived phase was stale.** At 3.10.1
-  `parseWorkflowScript` refuses at NINE checks, not seven, and this bridge
-  replicates TWO, not one. Spike 027's own "twelve messages" contradicted its
-  source and was corrected. The engine is past 1.0 (57 versions, 1.0.0 through
-  3.10.1), not the "0.x" the archived context claimed.
-
-**The pattern that has now cost this milestone five times: an enumeration is
-smaller than the set it names.** Seven engine gates were nine. Five
-`composeReasons` translation sites were six. Two `piWithBothLoaded` definitions
-were four. Seven closed-set amendment sites were eight. Each was found by
-removing something and watching what went red — never by listing. Phases
-115-117 should assume their own enumerations are short until measured.
-
-**And its companion: a guard can be green because it checks nothing.** Phase
-114's code review found the new marker-coverage gate had a hand-maintained
-seven-entry literal with nothing binding it to the real site set — planting an
-eighth site printed `pass 1 / fail 0`. After the fix it prints `pass 1 / fail 1`.
-Every gate this milestone adds gets a negative control run before it is
-believed, and the transcript goes in the SUMMARY.
-
-Carried debt, tracked not hidden: Broken Windows #61 (the compatibility doc's
-engine line-number citations are ungated and will rot; `WPIN-01` is the named
-future subject), and WDEP-03's live hop — installing the engine and reloading —
-has no automated home on this tree, resting on Spike 027 and the structural
-probe-purity gate instead.
+Nothing is pending in this workstream. What the milestone carried out of scope
+lives in `.planning/BACKLOG.md` as VSTALE-01, WLREC-01, RLHINT-01, PCERR-01,
+WSTOR-01 and WPIN-01.
 
 ## Progress
 
@@ -646,22 +521,19 @@ _Recorded per phase as the milestone proceeds._
 
 ## Operator Next Steps
 
-All nine phases are complete and verified, and the audit is committed. The
-milestone is NOT archived — that step is deliberately paused. What is left is
-debt work, then the archive:
+The milestone is archived and nothing is pending here. What remains is getting
+the code onto main:
 
-- ~~Re-derive the `PluginNotificationMessage` listing~~ — done as quick task
-  `260909-ox9`; the listing is gone and its replacement is gated by
-  `tests/architecture/messaging-guide-doc-pins.test.ts`
-- Work or waive the ten open `[workflows-replay]` Broken Windows entries; #71 is
-  a plain TODO, #68 and #69 are one inert test case seen twice, and #73 is a
-  substring guard in two live-UAT canaries
-- ~~Run `/gsd-secure-phase N` for 109-113~~ — done; all nine phases now carry a
-  verified SECURITY.md at `threats_open: 0`
-- ~~Run `/gsd-validate-phase N` for the same five~~ — done; all five now read
-  `validated` / `nyquist_compliant: true`, with two new architecture gates and
-  one named residual
-- Turn Phase 112's WR-03 ledger status (Phase 113 already closed it) and waive
-  Phase 116's WR-03 (its fix reverses an operator-locked decision)
-- Then `/gsd-complete-milestone workflows-replay`, which takes all nine phases as
-  one milestone per the decision recorded above, followed by `/gsd-cleanup`
+- `/gsd-ship` (or `/babysit-pr`) from `features/workflow`: the branch carries
+  the whole bridge plus today's close-out fixes (`d2ca9df5`, `b596ff01`,
+  `9d9325ec`, `f52f04bb`). `npm run check` is green at 7178 unit / 36
+  integration. The ship gate reads the Broken Windows ledger; the 21 entries
+  still `open` there belong to the `test-backlog` milestone's phases 06/07
+  (coverage-producer and CRAP-gate work), not to this workstream; the CRAP
+  pipeline was removed on 2026-09-20, so most are probably stale, but they
+  need their own triage before a ship from any branch converges.
+- Version bump + CHANGELOG per the house checklist before the PR
+  (package.json, lock, EXTENSION_VERSION, sonar projectVersion).
+- After merge: `/gsd-cleanup` here, then `/gsd-new-milestone` if the workstream
+  continues; the natural first candidate is VSTALE-01 (the `covered_files` rule),
+  which touches every phase report and was deliberately kept out of the archive.
