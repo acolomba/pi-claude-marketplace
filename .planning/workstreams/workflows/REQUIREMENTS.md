@@ -119,7 +119,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WINV-04 | Phase 109 | Complete |
 | WINV-05 | Phase 109 | Complete |
 | WNAM-01, WNAM-02, WNAM-04, WNAM-05, WNAM-06 | Phase 110 | Complete (verified 20/20, 2026-09-05) |
-| WNAM-03 | Phase 110 -> Phase 111 | Partial - classification half done in 110-03; the warning and not-installed halves are Phase 111's |
+| WNAM-03 | Phase 110 -> Phase 111 | Complete - classification half done in 110-03; the warning and not-installed halves closed in 111-02 (`111-VERIFICATION.md` split-closure check, verified 9/9, 2026-09-05). Row turned 2026-09-21 at the milestone close; it had read `Partial` since the split was booked. |
 | WPTH-02 | Phase 110 -> Phase 111 | Complete - home-derivation half proved in 110-01; the never-written guarantee closed in Phase 111 |
 | WBRG-01..04, WPTH-01, WPTH-03..05 | Phase 111 | Complete (verified 9/9, 2026-09-05) |
 | WLIF-01, WLIF-03 | Phase 112 | Complete (verified 7/7, 2026-09-05) |
