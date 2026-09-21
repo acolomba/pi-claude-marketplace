@@ -1,30 +1,4 @@
 {
   "version": 1,
-  "rows": [
-    {
-      "sourcePath": "extensions/pi-claude-marketplace/bridges/agents/convert.ts",
-      "reading": "branches 125/126, lines 751/755",
-      "findingIds": ["AG-11"],
-      "reasons": [
-        "668-671 (branch 668): the `first === undefined` throw in toolsFields' explicit arm. assertMappedToolsNonEmpty already rejected an empty explicit tools list with the user-facing AG-11 message before toolsFields runs, so the arm is unreachable through convertAgent; it exists because destructuring is the only cast-free way to build the non-empty tuple GeneratedToolsFields requires, and the compiler cannot see the earlier assert."
-      ]
-    },
-    {
-      "sourcePath": "extensions/pi-claude-marketplace/bridges/commands/discover.ts",
-      "reading": "branches 55/56, lines 412/414",
-      "findingIds": ["BC-019"],
-      "reasons": [
-        "288-290 (branch 288): the `if (!(err instanceof CommandNameError)) { throw err; }` narrowing arm around `nameCommandInDir`. BC-019 records the measured disposition: the arm is unreachable -- only a `Symbol.hasInstance` patch reaches its throw -- but the check still narrows the `unknown` catch binding for `badNameWarning(err)`, so deleting it without a restructure breaks typing."
-      ]
-    },
-    {
-      "sourcePath": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
-      "reading": "branches 109/111, lines 1043/1049",
-      "findingIds": ["D-08-A14"],
-      "reasons": [
-        "422-426 (branch 422): re-validation of a manifest entry that the identical compiled schema already accepted in the same pass. MARKETPLACE_SCHEMA.plugins is Type.Array(PLUGIN_ENTRY_SCHEMA) and PLUGIN_ENTRY_VALIDATOR is Compile(PLUGIN_ENTRY_SCHEMA), so an entry reaching the re-check was already validated by that exact schema, in this process, from this parse. ARCHITECTURE.md records the re-check as deliberate defense-in-depth.",
-        "827-829 (branch 827): the hooks re-parse guard, over bytes on which the resolver already ran both of parseHooksConfig's {ok:false} arms at install-entry under D-57-04. The only difference between the two calls is skipIfMap, and D-61-02 records that every compileIfPredicate failure collapses to MATCH_ALL_IF, so no if-field issue can produce a refusal. The guard fires only on a mutation between the resolve and the phase."
-      ]
-    }
-  ]
+  "rows": []
 }

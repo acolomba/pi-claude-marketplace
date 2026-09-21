@@ -11,9 +11,7 @@ import {
   ICON_AVAILABLE,
   ICON_DISABLED,
   ICON_INSTALLED,
-  ICON_PARTIALLY_AVAILABLE,
   ICON_PARTIALLY_INSTALLED,
-  ICON_REMOTE,
   ICON_UNINSTALLABLE,
   installedLikeRow,
   joinTokens,
@@ -35,7 +33,37 @@ import {
   renderVersion,
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
-import type { Reason } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import type {
+  PluginNotificationMessage,
+  Reason,
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+
+/**
+ * PL-4: `composePluginLinesWith` selects the description-bearing rows by their
+ * status discriminant. These two spellings of that set -- by the presence of the
+ * optional member, and by the status literals -- must stay the same set, so the
+ * control below pins them against each other in BOTH directions and fails if a
+ * new variant ever joins one and not the other.
+ */
+type DescriptionBearingByMember = Extract<PluginNotificationMessage, { description?: string }>;
+type DescriptionBearingByStatus = Extract<
+  PluginNotificationMessage,
+  {
+    status:
+      | "installed"
+      | "upgradable"
+      | "available"
+      | "remote"
+      | "unavailable"
+      | "partially-available"
+      | "disabled"
+      | "partially-installed"
+      | "partially-upgradable";
+  }
+>;
+type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+
+void (true satisfies MutuallyAssignable<DescriptionBearingByMember, DescriptionBearingByStatus>);
 
 test("exports notification grammar from its named owner", () => {
   // arrange
@@ -550,7 +578,7 @@ test("reconcile applied body preserves empty and caller-ordered blocks", () => {
   assert.equal(many, "● official [user]\n\n● second [project]");
 });
 
-test("empty descriptions and invalid closed-set members take their exact boundary paths", () => {
+test("a whitespace-only description renders no description line", () => {
   // arrange
   const infoBase = {
     marketplaceName: "official",
@@ -574,44 +602,6 @@ test("empty descriptions and invalid closed-set members take their exact boundar
 
   // assert
   assert.equal(whitespace.includes("\n     "), false);
-  assert.throws(() =>
-    renderMpHeader({ ...MARKETPLACE_BASE, status: "future" } as never, bothLoadedProbe()),
-  );
-  assert.throws(() =>
-    composeMarketplaceBlock(
-      { ...MARKETPLACE_BASE, plugins: [{ status: "future", name: "alpha" }] } as never,
-      bothLoadedProbe(),
-    ),
-  );
-  assert.throws(() =>
-    renderMarketplaceInfo(
-      {
-        name: "official",
-        scope: "user",
-        details: { autoupdate: false },
-        source: { sourceKind: "future" },
-      } as never,
-      bothLoadedProbe(),
-    ),
-  );
-  assert.throws(() =>
-    renderPluginInfo(
-      {
-        ...infoBase,
-        plugin: { status: "future", name: "alpha", componentsResolved: false },
-      } as never,
-      bothLoadedProbe(),
-    ),
-  );
-  assert.throws(() =>
-    renderPluginInfo(
-      {
-        ...infoBase,
-        plugin: { status: "available", name: "alpha", componentsResolved: "future" },
-      } as never,
-      bothLoadedProbe(),
-    ),
-  );
 });
 
 test("covers the unavailable install hint and long single-word wrap boundaries", () => {
@@ -680,7 +670,7 @@ function neitherLoadedProbe(): Probe {
 
 test("notification glyph constants preserve exact public values", () => {
   // arrange
-  const expectedGlyphs = ["●", "○", "⊘", "◍", "◌", "◉", "⊖"];
+  const expectedGlyphs = ["●", "○", "⊘", "◍", "◉"];
 
   // act
   const glyphs = [
@@ -688,9 +678,34 @@ test("notification glyph constants preserve exact public values", () => {
     ICON_AVAILABLE,
     ICON_UNINSTALLABLE,
     ICON_DISABLED,
-    ICON_REMOTE,
     ICON_PARTIALLY_INSTALLED,
-    ICON_PARTIALLY_AVAILABLE,
+  ];
+
+  // assert
+  assert.deepStrictEqual(glyphs, expectedGlyphs);
+});
+
+test("the remote and partially-available glyphs preserve exact values on their rows", () => {
+  // arrange
+  // `◌` and `⊖` are module-private, and each is carried by exactly one row
+  // renderer, so the glyph the row leads with is the value under test. The row
+  // cases further down pin the whole line; this case pins the glyph alone, which
+  // is what the constant comparison above states for the other five.
+  const expectedGlyphs = ["◌", "⊖"];
+
+  // act
+  const glyphs = [
+    renderRemoteRow(
+      { status: "remote", name: "alpha" },
+      bothLoadedProbe(),
+      "user",
+      undefined,
+    ).slice(0, 1),
+    renderPartiallyAvailableRow(
+      { status: "partially-available", name: "alpha", reasons: [] },
+      bothLoadedProbe(),
+      "user",
+    ).slice(0, 1),
   ];
 
   // assert

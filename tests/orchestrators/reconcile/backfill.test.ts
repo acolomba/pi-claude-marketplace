@@ -28,7 +28,6 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   applyBackfillForScopeIsolated,
   runScopeIsolated,
-  scanForceInstalledBackfills,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -44,6 +43,7 @@ import { retryTree } from "../plugin/scope-tree-inventory.ts";
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
+import type * as BackfillOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts";
 import type {
   ApplyReconcileOptions,
   ScopeReadResult,
@@ -59,6 +59,13 @@ import type { TestContext } from "node:test";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 type PluginRecord = MarketplaceRecord["plugins"][string];
+
+// backfill.ts publishes the two isolated wrappers; the partially-installed scan is
+// the body of one of them and has no caller of its own. Restoring the export
+// makes the `satisfies` resolve and turns the directive below into an unused
+// one (TS2578).
+// @ts-expect-error backfill.ts does not expose the partially-installed scan
+void ({} satisfies { readonly retired?: typeof BackfillOrchestrator.scanForceInstalledBackfills });
 
 /** The stamp every seeded scope carries: older than the running version, so the gate opens. */
 const STALE_STAMP = "0.0.0";
@@ -297,7 +304,7 @@ function backfillOptionsWithRouting(
 }
 
 function readResultFor(state: ExtensionState, stateExisted: boolean): ScopeReadResult {
-  return { scope: "project", plan: undefined, invalidOutcomes: [], state, stateExisted };
+  return { plan: undefined, invalidOutcomes: [], state, stateExisted };
 }
 
 /** A seeded scope that has been read but not re-materialized. */
@@ -329,7 +336,6 @@ describe("applyBackfillForScopeIsolated", () => {
     const { ctx, pi, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const readResult: ScopeReadResult = {
-      scope: "project",
       plan: undefined,
       invalidOutcomes: [],
       stateExisted: false,
@@ -745,7 +751,11 @@ describe("runScopeIsolated", () => {
   });
 });
 
-describe("scanForceInstalledBackfills", () => {
+// The partially-installed scan reached through the wrapper that owns it. Its
+// SF-02 answer is not returned to a caller: the wrapper consumes it as the
+// version-gate decision, so a scan that reported no failure closes the gate to
+// the running version and a scan that reported one leaves it open.
+describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
   test("BFILL-01: promotes a plugin whose supported set grew into a fully installed record", async (t) => {
     // arrange
     const { cwd, locations } = await createHermeticProjectScope(t, "full-promotion");
@@ -774,15 +784,14 @@ describe("scanForceInstalledBackfills", () => {
     const outcomes: PerEntryOutcome[] = [];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      seeded,
+      readResultFor(seeded, true),
       outcomes,
     );
 
     // assert
-    assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, [
       {
         kind: "plugin-backfilled",
@@ -797,7 +806,7 @@ describe("scanForceInstalledBackfills", () => {
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
       schemaVersion: 2,
-      lastReconciledExtensionVersion: STALE_STAMP,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
           hello: {
@@ -856,15 +865,14 @@ describe("scanForceInstalledBackfills", () => {
     const outcomes: PerEntryOutcome[] = [];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      seeded,
+      readResultFor(seeded, true),
       outcomes,
     );
 
     // assert
-    assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, [
       {
         kind: "plugin-backfilled",
@@ -879,7 +887,7 @@ describe("scanForceInstalledBackfills", () => {
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
       schemaVersion: 2,
-      lastReconciledExtensionVersion: STALE_STAMP,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
           hello: {
@@ -967,14 +975,13 @@ describe("scanForceInstalledBackfills", () => {
     const outcomes: PerEntryOutcome[] = [];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptionsWithRouting(ctx, pi, cwd, gitOps, hooksRouting, ownerCache),
       "project",
-      seeded,
+      readResultFor(seeded, true),
       outcomes,
     );
     // assert
-    assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, [
       {
         kind: "plugin-backfilled",
@@ -990,7 +997,7 @@ describe("scanForceInstalledBackfills", () => {
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
       schemaVersion: 2,
-      lastReconciledExtensionVersion: STALE_STAMP,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
           hello: {
@@ -1090,15 +1097,14 @@ describe("scanForceInstalledBackfills", () => {
     const outcomes: PerEntryOutcome[] = [];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      seeded,
+      readResultFor(seeded, true),
       outcomes,
     );
 
     // assert
-    assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, [
       {
         kind: "plugin-backfilled",
@@ -1114,7 +1120,7 @@ describe("scanForceInstalledBackfills", () => {
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
       schemaVersion: 2,
-      lastReconciledExtensionVersion: STALE_STAMP,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
           hello: {
@@ -1171,17 +1177,19 @@ describe("scanForceInstalledBackfills", () => {
     const outcomes: PerEntryOutcome[] = [];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      seeded,
+      readResultFor(seeded, true),
       outcomes,
     );
 
     // assert
-    assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, []);
-    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...seeded,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
@@ -1217,17 +1225,19 @@ describe("scanForceInstalledBackfills", () => {
     const outcomes: PerEntryOutcome[] = [];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      seeded,
+      readResultFor(seeded, true),
       outcomes,
     );
 
     // assert
-    assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, []);
-    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...seeded,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
@@ -1268,15 +1278,14 @@ describe("scanForceInstalledBackfills", () => {
     ];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      seeded,
+      readResultFor(seeded, true),
       outcomes,
     );
 
     // assert
-    assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, [
       {
         kind: "plugin-installed",
@@ -1296,6 +1305,10 @@ describe("scanForceInstalledBackfills", () => {
         unsupported: [],
       },
     ]);
+    assert.strictEqual(
+      (await loadState(locations.extensionRoot)).lastReconciledExtensionVersion,
+      EXTENSION_VERSION,
+    );
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), fullyPromotedScopeTree());
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
@@ -1331,19 +1344,21 @@ describe("scanForceInstalledBackfills", () => {
     ];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      seeded,
+      readResultFor(seeded, true),
       outcomes,
     );
 
     // assert
-    assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, [
       { kind: "plugin-enabled", scope: "project", marketplace: "mp", plugin: "hello" },
     ]);
-    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...seeded,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
@@ -1376,17 +1391,19 @@ describe("scanForceInstalledBackfills", () => {
     const outcomes: PerEntryOutcome[] = [];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      seeded,
+      readResultFor(seeded, true),
       outcomes,
     );
 
     // assert
-    assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, []);
-    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...seeded,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
@@ -1437,17 +1454,19 @@ describe("scanForceInstalledBackfills", () => {
     const outcomes: PerEntryOutcome[] = [];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      snapshot,
+      readResultFor(snapshot, true),
       outcomes,
     );
 
     // assert
-    assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, []);
-    assert.deepStrictEqual(await loadState(locations.extensionRoot), stored);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...stored,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
@@ -1481,15 +1500,14 @@ describe("scanForceInstalledBackfills", () => {
     const outcomes: PerEntryOutcome[] = [];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      seeded,
+      readResultFor(seeded, true),
       outcomes,
     );
 
     // assert
-    assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, [
       {
         kind: "plugin-backfilled",
@@ -1504,7 +1522,7 @@ describe("scanForceInstalledBackfills", () => {
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
       schemaVersion: 2,
-      lastReconciledExtensionVersion: STALE_STAMP,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
           hello: {
@@ -1566,15 +1584,14 @@ describe("scanForceInstalledBackfills", () => {
     const outcomes: PerEntryOutcome[] = [];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      seeded,
+      readResultFor(seeded, true),
       outcomes,
     );
 
     // assert
-    assert.strictEqual(anyFailure, true);
     assert.deepStrictEqual(outcomes, [
       {
         kind: "plugin-install-failed",
@@ -1625,15 +1642,14 @@ describe("scanForceInstalledBackfills", () => {
     const outcomes: PerEntryOutcome[] = [];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      seeded,
+      readResultFor(seeded, true),
       outcomes,
     );
 
     // assert
-    assert.strictEqual(anyFailure, true);
     assert.deepStrictEqual(outcomes, [
       {
         kind: "plugin-install-failed",
@@ -1683,17 +1699,19 @@ describe("scanForceInstalledBackfills", () => {
     const outcomes: PerEntryOutcome[] = [];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      snapshot,
+      readResultFor(snapshot, true),
       outcomes,
     );
 
     // assert
-    assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, []);
-    assert.deepStrictEqual(await loadState(locations.extensionRoot), afterConcurrentUninstall);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...afterConcurrentUninstall,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
@@ -1723,17 +1741,19 @@ describe("scanForceInstalledBackfills", () => {
     const outcomes: PerEntryOutcome[] = [];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      seeded,
+      readResultFor(seeded, true),
       outcomes,
     );
 
     // assert
-    assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, []);
-    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...seeded,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
@@ -1766,15 +1786,14 @@ describe("scanForceInstalledBackfills", () => {
     const outcomes: PerEntryOutcome[] = [];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      seeded,
+      readResultFor(seeded, true),
       outcomes,
     );
 
     // assert
-    assert.strictEqual(anyFailure, true);
     assert.deepStrictEqual(outcomes, [
       {
         kind: "plugin-install-failed",
@@ -1831,15 +1850,14 @@ describe("scanForceInstalledBackfills", () => {
     const outcomes: PerEntryOutcome[] = [];
 
     // act
-    const anyFailure = await scanForceInstalledBackfills(
+    await applyBackfillForScopeIsolated(
       backfillOptions(ctx, pi, cwd, gitOps),
       "project",
-      seeded,
+      readResultFor(seeded, true),
       outcomes,
     );
 
     // assert
-    assert.strictEqual(anyFailure, true);
     assert.deepStrictEqual(outcomes, [
       {
         kind: "plugin-install-failed",

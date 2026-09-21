@@ -1,11 +1,4 @@
-import assert from "node:assert/strict";
-import test from "node:test";
-
-import { Compile } from "typebox/compile";
-
 import type {
-  DroppedHookArmKeysCheck,
-  DroppedHookDriftCheck,
   GitPluginRootResult,
   MaterializablePlugin,
   ResolveContext,
@@ -16,70 +9,6 @@ import type {
   StatKind,
   StatKindReader,
 } from "../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
-
-test("exports the exact three-arm resolver schema", async () => {
-  // arrange
-  let checkedStates: readonly boolean[] = [];
-
-  // act & assert
-  await assert.doesNotReject(async () => {
-    const { ResolvedPluginSchema } =
-      await import("../../extensions/pi-claude-marketplace/domain/resolver-types.ts");
-    const validator = Compile(ResolvedPluginSchema);
-    checkedStates = [
-      validator.Check({
-        state: "installable",
-        installable: true,
-        name: "alpha",
-        pluginRoot: "/plugins/alpha",
-        supported: [],
-        unsupported: [],
-        notes: [],
-        componentPaths: { skills: [], commands: [], agents: [] },
-        mcpServers: {},
-        defaultEnabled: true,
-      }),
-      validator.Check({
-        state: "partially-available",
-        installable: true,
-        name: "alpha",
-        pluginRoot: "/plugins/alpha",
-        supported: [],
-        unsupported: ["themes"],
-        notes: ["contains themes"],
-        componentPaths: { skills: [], commands: [], agents: [] },
-        mcpServers: {},
-        defaultEnabled: false,
-      }),
-      validator.Check({
-        state: "unavailable",
-        installable: false,
-        name: "alpha",
-        notes: ["source missing"],
-      }),
-      validator.Check({
-        state: "unavailable",
-        installable: false,
-        name: "alpha",
-        pluginRoot: "/must-not-leak",
-        notes: ["source missing"],
-      }),
-      validator.Check({
-        state: "unknown",
-        installable: false,
-        name: "alpha",
-        notes: ["source missing"],
-      }),
-      validator.Check({
-        state: "installable",
-        installable: false,
-        name: "alpha",
-        notes: ["source missing"],
-      }),
-    ];
-  });
-  assert.deepStrictEqual(checkedStates, [true, true, true, true, false, false]);
-});
 
 declare const resolvedPluginContract: ResolvedPlugin;
 declare const installablePluginContract: ResolvedPluginInstallable;
@@ -96,10 +25,60 @@ function proveExactDiscriminants(): void {
   void (unavailablePluginContract.state satisfies "unavailable");
 }
 
-function proveDroppedHookSchemaParity(): void {
-  void (true satisfies DroppedHookDriftCheck);
-  void (true satisfies DroppedHookArmKeysCheck);
-}
+type ResolvedDroppedHook = NonNullable<ResolvedPluginInstallable["droppedHooks"]>[number];
+type AssertTrue<T extends true> = T;
+type ExpectedDroppedHook =
+  | { kind: "event"; event: string }
+  | {
+      kind: "group";
+      event: string;
+      matcher: string;
+      cond: "regex" | "unmapped-tool" | "no-matcher-support" | "closed-set";
+    }
+  | { kind: "handler"; event: string; matcher: string; handlerType: string };
+void (true satisfies AssertTrue<
+  [ResolvedDroppedHook] extends [ExpectedDroppedHook] ? true : false
+>);
+void (true satisfies AssertTrue<
+  [ExpectedDroppedHook] extends [ResolvedDroppedHook] ? true : false
+>);
+
+const installableExample = {
+  state: "installable",
+  installable: true,
+  name: "alpha",
+  pluginRoot: "/plugins/alpha",
+  supported: [],
+  unsupported: [],
+  notes: [],
+  componentPaths: { skills: [], commands: [], agents: [] },
+  mcpServers: {},
+  defaultEnabled: true,
+} satisfies ResolvedPlugin;
+const partialExample = {
+  ...installableExample,
+  state: "partially-available",
+  unsupported: ["themes"],
+  notes: ["contains themes"],
+  defaultEnabled: false,
+} satisfies ResolvedPlugin;
+const unavailableExample = {
+  state: "unavailable",
+  installable: false,
+  name: "alpha",
+  notes: ["source missing"],
+} satisfies ResolvedPlugin;
+// Runtime schema accepted extra fields; structural assignment of an existing object remains legal.
+const unavailableWithExtraField = {
+  ...unavailableExample,
+  pluginRoot: "/must-not-leak",
+};
+void (unavailableWithExtraField satisfies ResolvedPlugin);
+// @ts-expect-error the resolver's state set is closed.
+void ({ ...unavailableExample, state: "unknown" } satisfies ResolvedPlugin);
+// @ts-expect-error installable and state discriminants must agree.
+void ({ ...unavailableExample, state: "installable" } satisfies ResolvedPlugin);
+void partialExample;
 
 function consumeInstallable(): string {
   return installablePluginContract.pluginRoot;
@@ -166,7 +145,6 @@ const resolveContextContract = {
 } satisfies ResolveContext;
 
 void proveExactDiscriminants;
-void proveDroppedHookSchemaParity;
 void consumeInstallable;
 void consumePartiallyAvailable;
 void narrowOnMaterializability;

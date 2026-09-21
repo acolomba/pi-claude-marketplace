@@ -347,6 +347,7 @@ interface InjectedChildOptions {
   readonly stdin?: PassThrough | null;
   readonly initiallyKilled?: boolean;
   readonly pid?: number;
+  readonly killReturnsFalse?: boolean;
 }
 
 function makeInjectedChild(
@@ -396,6 +397,10 @@ function makeInjectedChild(
       enumerable: true,
       value: (signal: NodeJS.Signals = "SIGTERM"): boolean => {
         killSignals.push(signal);
+        if (options.killReturnsFalse === true) {
+          return false;
+        }
+
         Object.defineProperty(child, "killed", {
           configurable: true,
           enumerable: true,
@@ -1637,6 +1642,82 @@ test("contains an EPIPE from stdin after registering its error listener", async 
   );
 });
 
+test("contains an EPIPE from stdout after registering its error listener", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const caseRoot = await makeCaseRoot(t, "dispatch-stdout-epipe-");
+  const errorSpy = observeDebug(t);
+  const processChild = makeInjectedChild(t);
+  const processBoundary = observeSpawn(t, processChild);
+  const entry = makeEntry(caseRoot);
+  const pipeError = Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
+
+  // act
+  const pendingOutcome = dispatchHookExec(
+    entry,
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    runtime,
+    { spawnImpl: processBoundary.spawnImpl },
+  );
+  await processBoundary.spawned;
+  processChild.stdout?.emit("error", pipeError);
+  await processChild.close(0);
+  const hookOutcome = await pendingOutcome;
+  const lines = debugLines(errorSpy);
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.strictEqual(
+    lines.some(
+      (line) =>
+        line.includes("stdout error") &&
+        line.includes("dispatch-plugin/PreToolUse") &&
+        line.includes("read ECONNRESET"),
+    ),
+    true,
+  );
+});
+
+test("contains an EPIPE from stderr after registering its error listener", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const caseRoot = await makeCaseRoot(t, "dispatch-stderr-epipe-");
+  const errorSpy = observeDebug(t);
+  const processChild = makeInjectedChild(t);
+  const processBoundary = observeSpawn(t, processChild);
+  const entry = makeEntry(caseRoot);
+  const pipeError = Object.assign(new Error("read ECONNRESET"), { code: "ECONNRESET" });
+
+  // act
+  const pendingOutcome = dispatchHookExec(
+    entry,
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    runtime,
+    { spawnImpl: processBoundary.spawnImpl },
+  );
+  await processBoundary.spawned;
+  processChild.stderr?.emit("error", pipeError);
+  await processChild.close(0);
+  const hookOutcome = await pendingOutcome;
+  const lines = debugLines(errorSpy);
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.strictEqual(
+    lines.some(
+      (line) =>
+        line.includes("stderr error") &&
+        line.includes("dispatch-plugin/PreToolUse") &&
+        line.includes("read ECONNRESET"),
+    ),
+    true,
+  );
+});
+
 test("contains a synchronous stdin end failure and cancels on child error", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
@@ -1766,6 +1847,46 @@ test("removes listeners and immediately escalates one-byte stdout overflow", asy
   assert.deepStrictEqual(killDeadlineSignals, ["SIGTERM", "SIGTERM", "SIGKILL"]);
   assert.deepStrictEqual(processChild.killSignals, ["SIGTERM", "SIGTERM", "SIGKILL"]);
   assert.strictEqual(stdout.byteLength, 1024 * 1024 + 1);
+});
+
+test("logs a failed SIGTERM kill() during stdout overflow cleanup", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const caseRoot = await makeCaseRoot(t, "dispatch-stdout-overflow-kill-false-");
+  const errorSpy = observeDebug(t);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const processChild = makeInjectedChild(t, { killReturnsFalse: true });
+  const processBoundary = observeSpawn(t, processChild);
+  const entry = makeEntry(caseRoot, { timeout: 60 });
+  const stdout = Buffer.alloc(1024 * 1024 + 1, 0x78);
+
+  // act
+  const pendingOutcome = dispatchHookExec(
+    entry,
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    runtime,
+    { spawnImpl: processBoundary.spawnImpl },
+  );
+  await processBoundary.spawned;
+  processChild.stdout?.write(stdout);
+  await processChild.close(null, "SIGKILL");
+  const hookOutcome = await pendingOutcome;
+  t.mock.timers.tick(60_000);
+  const lines = debugLines(errorSpy);
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(processChild.killSignals, ["SIGTERM"]);
+  assert.strictEqual(
+    lines.some(
+      (line) =>
+        line.includes("exec: SIGTERM kill() returned false") &&
+        line.includes("dispatch-plugin/PreToolUse"),
+    ),
+    true,
+  );
 });
 
 test("contains one-byte stderr overflow when the child is already marked killed", async (t) => {

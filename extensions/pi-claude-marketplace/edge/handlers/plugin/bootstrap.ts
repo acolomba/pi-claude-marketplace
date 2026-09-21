@@ -6,11 +6,8 @@
 // Idempotent end-to-end -- both composed orchestrators are idempotent.
 //
 // The bootstrap subcommand takes NO positional arguments and rejects
-// `--scope` explicitly: bootstrap always targets user scope. The token
-// schema in `args-schema.ts` validates positionals against a declared
-// list but does not currently reject extra positionals when the schema
-// is empty, so we parse `args` directly with `parseArgs` and assert
-// `positional.length === 0` ourselves.
+// `--scope` explicitly: bootstrap always targets user scope. Its direct
+// parser retains the command-specific diagnostics for forbidden arguments.
 //
 // IL-2: all user-visible output flows through `shared/notification-dispatch.ts`. The
 // success path is emitted by the composed orchestrators. `addMarketplace`
@@ -68,11 +65,15 @@ export function makeBootstrapHandler(
         gitOps: deps.gitOps,
       });
     } catch {
-      // `addMarketplace` throws on failure (e.g. a first-run GitHub clone
-      // failure) rather than notifying, so route the thrown error through
-      // the notify path as a failed marketplace row (IL-2). The row stamps
-      // caller `severity: "error"` (SEV-02). The marketplace-level row carries
-      // no cause chain -- SNM-10 confines `cause` to plugin-level variants.
+      // `addMarketplace`'s default contract (used by the public `marketplace
+      // add` command) routes precondition failures through `notify` instead
+      // of throwing (ATTR-07). `bootstrapClaudePlugin` passes
+      // `rethrowPreconditionErrors: true` to restore a throw-based contract,
+      // so a failure here (e.g. a first-run GitHub clone failure) still
+      // needs routing through the notify path as a failed marketplace row
+      // (IL-2). The row stamps caller `severity: "error"` (SEV-02). The
+      // marketplace-level row carries no cause chain -- SNM-10 confines
+      // `cause` to plugin-level variants.
       notify(ctx, pi, {
         marketplaces: [
           {

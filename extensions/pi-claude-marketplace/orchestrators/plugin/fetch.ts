@@ -54,8 +54,8 @@ import {
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { FETCH_CONTEXT, type FetchMsg } from "./fetch.messaging.ts";
-import { makePresenceProbe, probeManifestEntry } from "./git-source-probe.ts";
 
+import type { makePresenceProbe, probeManifestEntry } from "./git-source-probe.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -205,11 +205,6 @@ export function createFetchPlugins(
     notifyWithContext(ctx, pi, FETCH_CONTEXT, marketplaces, "cascade", cardinality);
   };
 }
-
-const NODE_FETCH_STATUS: FetchStatus = { makePresenceProbe, probeManifestEntry };
-
-/** Fetches plugins through the Node-backed status capability. */
-export const fetchPlugins = createFetchPlugins(NODE_FETCH_STATUS);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Manifest-driven enumeration (fetchable set)

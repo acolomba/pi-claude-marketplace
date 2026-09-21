@@ -1,5 +1,3 @@
-import { assertNever } from "./errors.ts";
-
 import type {
   CascadeNotificationMessage,
   MarketplaceNotificationMessage,
@@ -15,7 +13,7 @@ import type {
  * `marketplace-info-cascade`, `plugin-info-cascade`) PLUS the
  * `marketplace-not-added` failure variant. Enumerated in EXACTLY ONE place so
  * that adding a future standalone kind is a single-site edit here that
- * surfaces as a compile error in every consumer's `assertNever` tail.
+ * surfaces as a type and lint error at every consumer's switch.
  *
  * The guard name is kept as `isInfoKind` per the TYPE-03 wording even though
  * the set now includes a failure kind; "standalone-dispatched" is the precise
@@ -36,7 +34,7 @@ export type StandaloneKind =
  * (TYPE-03 / D-46-04). All four consumers (`computeSeverity`,
  * `buildSummaryLine`, `shouldEmitReloadHint`, the `notify()` early-dispatch)
  * route through this one guard; each then narrows the residual to
- * `CascadeNotificationMessage` and closes with `assertNever`.
+ * `CascadeNotificationMessage` and switches over every kind with no default.
  */
 export function isInfoKind(
   m: NotificationMessage,
@@ -205,9 +203,6 @@ function computeSeverity(message: NotificationMessage): ComputedSeverity {
       case "plugin-info-cascade":
       case "reconcile-pending-empty":
         // DIFF-01 SC #2: the empty-steady-state advisory is read-only / info.
-        return undefined;
-      default:
-        assertNever(message);
         return undefined;
     }
   }
@@ -401,9 +396,6 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
       case "reconcile-pending-empty":
         // DIFF-01 SC #2: info-severity / read-only -- no summary semantics.
         return "";
-      default:
-        assertNever(message);
-        return "";
     }
   }
 
@@ -560,6 +552,15 @@ export function shouldEmitReloadHint(message: NotificationMessage): boolean {
   // fan-out of N info blocks is N read-only queries composed; it remains
   // structurally read-only.
   if (isInfoKind(message)) {
+    // DIFF-01 SC #2: `reconcile-pending-empty` rows are pre-transition; the
+    // trailer would be grammatically false (`/reload` cannot pick up zero
+    // changes).
+    // RECON-04: `reconcile-applied-cascade` already ran ON /reload (the
+    // resources_discover handler IS the trailer's nominal trigger), so
+    // emitting `Run /reload to pick up changes` after applying changes
+    // would be a lie. Structurally false closes the trailer-leak gap --
+    // this kind-level exclusion stands EVEN THOUGH its rows stamp
+    // needsReload:true (they are realized transitions).
     switch (message.kind) {
       case "marketplace-info":
       case "plugin-info":
@@ -567,19 +568,7 @@ export function shouldEmitReloadHint(message: NotificationMessage): boolean {
       case "plugin-info-cascade":
       case "marketplace-not-added":
       case "reconcile-pending-empty":
-        // DIFF-01 SC #2: pending-list rows are pre-transition; the trailer would
-        // be grammatically false (`/reload` cannot pick up zero changes).
-        return false;
       case "reconcile-applied-cascade":
-        // RECON-04: the reconcile already ran ON /reload (the
-        // resources_discover handler IS the trailer's nominal trigger), so
-        // emitting `Run /reload to pick up changes` after applying changes
-        // would be a lie. Structurally false closes the trailer-leak gap --
-        // this kind-level exclusion stands EVEN THOUGH its rows stamp
-        // needsReload:true (they are realized transitions).
-        return false;
-      default:
-        assertNever(message);
         return false;
     }
   }

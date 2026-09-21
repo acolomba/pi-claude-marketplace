@@ -215,19 +215,22 @@ test("propagates a containment inspection error", async (testContext) => {
   );
 });
 
-test("collects only entry paths in loose mode", async () => {
+test("collects declared entry paths without convention matches", async () => {
   // arrange
-  const { collectLooseComponentPaths } =
+  const { collectStrictComponentPaths } =
     await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
   const resolution = emptyResolution();
 
   // act
-  const dirty = await collectLooseComponentPaths({
-    entry: { name: "alpha", source: "./alpha", agents: ["one", "one", "two"] },
-    manifest: null,
-    pluginRoot: "/plugins/alpha",
-    resolution,
-  });
+  const dirty = await collectStrictComponentPaths(
+    {
+      entry: { name: "alpha", source: "./alpha", agents: ["one", "one", "two"] },
+      manifest: null,
+      pluginRoot: "/plugins/alpha",
+      resolution,
+    },
+    () => Promise.resolve(null),
+  );
 
   // assert
   assert.strictEqual(dirty, false);
@@ -238,49 +241,32 @@ test("collects only entry paths in loose mode", async () => {
   });
 });
 
-test("reports manifest-only loose declarations as conflicts", async () => {
+test("treats absent and null strict declarations as empty", async () => {
   // arrange
-  const { collectLooseComponentPaths } =
-    await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
-  const resolution = emptyResolution();
-
-  // act
-  const dirty = await collectLooseComponentPaths({
-    entry: { name: "alpha", source: "./alpha" },
-    manifest: { commands: "commands" },
-    pluginRoot: "/plugins/alpha",
-    resolution,
-  });
-
-  // assert
-  assert.strictEqual(dirty, true);
-  assert.deepStrictEqual(resolution, {
-    supported: [],
-    notes: ['component declarations conflict: manifest declares "commands" but entry does not'],
-    componentPaths: { skills: [], commands: [], agents: [] },
-  });
-});
-
-test("treats absent and null loose declarations as empty", async () => {
-  // arrange
-  const { collectLooseComponentPaths } =
+  const { collectStrictComponentPaths } =
     await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
   const absentResolution = emptyResolution();
   const nullResolution = emptyResolution();
 
   // act
-  const absentDirty = await collectLooseComponentPaths({
-    entry: { name: "alpha", source: "./alpha" },
-    manifest: null,
-    pluginRoot: "/plugins/alpha",
-    resolution: absentResolution,
-  });
-  const nullDirty = await collectLooseComponentPaths({
-    entry: { name: "alpha", source: "./alpha", skills: null },
-    manifest: null,
-    pluginRoot: "/plugins/alpha",
-    resolution: nullResolution,
-  });
+  const absentDirty = await collectStrictComponentPaths(
+    {
+      entry: { name: "alpha", source: "./alpha" },
+      manifest: null,
+      pluginRoot: "/plugins/alpha",
+      resolution: absentResolution,
+    },
+    () => Promise.resolve(null),
+  );
+  const nullDirty = await collectStrictComponentPaths(
+    {
+      entry: { name: "alpha", source: "./alpha", skills: null },
+      manifest: null,
+      pluginRoot: "/plugins/alpha",
+      resolution: nullResolution,
+    },
+    () => Promise.resolve(null),
+  );
 
   // assert
   assert.deepStrictEqual(

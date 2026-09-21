@@ -4,13 +4,6 @@ import type { PluginEntry } from "./components/plugin.ts";
 import type { StatKindReader } from "./resolver-types.ts";
 
 /**
- * HOOK-01: the public closed set of supported component kinds. `hooks` is
- * admitted here even though component-path validation uses a narrower private
- * set: hook discovery owns the convention file `hooks/hooks.json` instead.
- */
-export const SUPPORTED_COMPONENT_KINDS = ["skills", "commands", "agents", "hooks"] as const;
-
-/**
  * PR-3: a declaration or matching convention for these kinds selects the
  * `partially-available` arm and adds the note `contains <kind>`. A normal
  * install rejects that arm. With `--partial`, the install admits its supported
@@ -24,7 +17,7 @@ export const SUPPORTED_COMPONENT_KINDS = ["skills", "commands", "agents", "hooks
  * runtime-honored through the PENV-01 PATH ledger, so a bin-shipping plugin
  * installs by default at Claude Code parity.
  */
-export const UNSUPPORTED_COMPONENT_KINDS = [
+const UNSUPPORTED_COMPONENT_KINDS = [
   "lspServers",
   "monitors",
   "themes",

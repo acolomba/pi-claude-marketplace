@@ -5,11 +5,11 @@
 //
 // Flow (D-04 outer guard wraps the ENTIRE flow including network IO):
 //
-//   parsePluginSource(rawSource) -> path | github | unknown
+//   parsePluginSource(rawSource) -> path | github | url | unknown
 //   if unknown: throw new Error(parsed.reason)  // MA-10
 //
 //   withStateGuard(locations, async (state) => {
-//     if (github):
+//     if (github) or (url):  // MURL-01: url mirrors the github clone path
 //       MA-6  stale-clone check on final sources/<derivedName>/  (BEFORE clone)
 //       MA-8  duplicate-name check on state.marketplaces[<derivedName>]
 //       gitOps.clone(stagingDir)                            // network -- gated by NFR-5
@@ -55,7 +55,7 @@ import { ensureGitSuffix, parsePluginSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { DEFAULT_CREDENTIAL_OPS } from "../../platform/git-credential.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
@@ -79,7 +79,7 @@ import {
   type Single,
 } from "../../shared/notify-context.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
-import { buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
 import { seedSameRepoPluginMirrors } from "../plugin/clone-cache.ts";
 
 import { ADD_CONTEXT } from "./add.messaging.ts";
@@ -606,11 +606,12 @@ export async function addMarketplace(
       opts.scope,
       recordedName,
     );
-  } catch {
+  } catch (err) {
     // Cache-refresh failures are swallowed: there is no clean notification
     // shape for "cache failure after a successful state mutation" and
     // emitting a second notify() would double severity routing. The state
     // mutation already succeeded; only the completion-cache is stale.
+    hookDebugLog(`completion-cache invalidation after add failed: ${errorMessage(err)}`);
   }
 
   // D-SEED-01 / SEED-01..06: best-effort post-commit seeding of same-repo git
@@ -621,8 +622,9 @@ export async function addMarketplace(
   // seeding touches no network, so it is load-time safe (NFR-5).
   try {
     await seedSameRepoPluginMirrors({ locations, marketplaceName: recordedName, gitOps });
-  } catch {
+  } catch (err) {
     // Seeding is best-effort; the add already committed.
+    hookDebugLog(`plugin-mirror seeding after add failed: ${errorMessage(err)}`);
   }
 
   if (orchestrated) {
@@ -692,7 +694,7 @@ async function addGitClonedInGuard(args: {
     const manifestPath = path.join(stagingDir, ".claude-plugin", "marketplace.json");
     const parsed = await loadMarketplaceManifest(manifestPath);
 
-    const derivedName = (parsed as { name: string }).name;
+    const derivedName = parsed.name;
 
     // 3. MA-8: duplicate name in this scope.
     if (derivedName in state.marketplaces) {
@@ -878,7 +880,7 @@ async function addPathInGuard(args: {
   // Read + validate manifest.
   const parsed = await loadMarketplaceManifest(manifestPath);
 
-  const derivedName = (parsed as { name: string }).name;
+  const derivedName = parsed.name;
 
   // MA-8: duplicate name in scope.
   if (derivedName in state.marketplaces) {

@@ -47,6 +47,18 @@ export default tseslint.config(
       ],
       "@typescript-eslint/no-empty-function": ["error", { allow: ["arrowFunctions"] }],
       "@typescript-eslint/explicit-module-boundary-types": "error",
+      // A switch over a union either lists every member and has no `default`,
+      // or lists some and has one. The `default` never counts as covering the
+      // union, so a member added later is a lint error at every switch that
+      // omits it; a `default: assertNever(...)` arm on a complete switch is
+      // unreachable and is an error too.
+      "@typescript-eslint/switch-exhaustiveness-check": [
+        "error",
+        {
+          allowDefaultCaseForExhaustiveSwitch: false,
+          considerDefaultExhaustiveForUnions: false,
+        },
+      ],
       // Pure-style rules I do not want to enforce: `Array<T>` vs `T[]` is
       // either-or, and template-literal expressions on numbers are normal.
       "@typescript-eslint/array-type": "off",
@@ -304,10 +316,9 @@ export default tseslint.config(
     //
     // Scoped to mirror `sonar.sources` in sonar-project.properties.
     // `sonar.test.exclusions` drops tests/**, so SonarCloud never reads the
-    // test tree; enforcing there would gate code Sonar does not grade. It
-    // would also fail on a deliberate house idiom -- the
-    // `void (x satisfies T)` compile-time assertion trips sonarjs/void-use
-    // 797 times under tests/.
+    // test tree. Tests opt into the three assertion rules below. The full
+    // preset conflicts with compiler proofs, strict mocks, and fixture data;
+    // SWTEST-01 records the measured per-cluster policy.
     //
     // The rules are SPREAD rather than the config being extended, for two
     // reasons. `recommended` re-declares the `sonarjs` plugin this file
@@ -363,12 +374,36 @@ export default tseslint.config(
       "@typescript-eslint/no-meaningless-void-operator": "off",
       "no-restricted-syntax": "off",
       "no-console": "off",
+      // Assertion checks also apply to test support that registers node:test cases.
+      "sonarjs/assertions-in-tests": "error",
+      "sonarjs/no-empty-test-file": "error",
+      "sonarjs/no-trivial-assertions": "error",
       "sonarjs/cognitive-complexity": "off",
       "sonarjs/no-identical-functions": "off",
       "sonarjs/no-inverted-boolean-check": "off",
       "sonarjs/no-nested-conditional": "off",
       "sonarjs/no-nested-template-literals": "off",
     },
+  },
+  {
+    // These nine owners prove erased types with satisfies and @ts-expect-error.
+    // Runtime assertions would not test their contract; neighboring runtime owners
+    // retain no-empty-test-file. Keep this list exact rather than exempting types.*.
+    // `exec-result.test.ts` qualifies on the same ground as the rest: its whole
+    // contract is compile-time, and the shared `assertNever` owner carries the
+    // runtime cases for that concern.
+    files: [
+      "tests/bridges/agents/types.test.ts",
+      "tests/bridges/commands/types.test.ts",
+      "tests/bridges/hooks/exec-result.test.ts",
+      "tests/bridges/mcp/types.test.ts",
+      "tests/bridges/skills/types.test.ts",
+      "tests/domain/resolver-types.test.ts",
+      "tests/edge/types.test.ts",
+      "tests/orchestrators/import/types.test.ts",
+      "tests/orchestrators/types.test.ts",
+    ],
+    rules: { "sonarjs/no-empty-test-file": "off" },
   },
   {
     // The eslint config file itself does not need type-aware linting.

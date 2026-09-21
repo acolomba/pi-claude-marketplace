@@ -1,38 +1,20 @@
 // bridges/mcp/types.ts
 //
 // Type-only module: shapes shared across the MCP bridge surface
-// (parse / collision-slots / stage / unstage). Kept in a single file so
+// (collision-slots / stage / unstage). Kept in a single file so
 // the discriminated `PreparedMcpStaging` union and `StageMcpInput` /
 // `UnstageMcpInput` records cannot drift apart across modules.
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /**
- * Top-level shape of any `mcp.json` document we read from disk -- either
- * a scoped (`<scopeRoot>/mcp.json`) doc or one of the four pi-mcp-adapter
- * collision slots. Both wrapped (`{mcpServers: {...}}`) and unwrapped
- * (`{server-name: {...}}`) forms appear at this layer; per-slot shape
- * normalization happens in the consumers.
+ * Top-level shape of the scoped `mcp.json` document read from and
+ * written to `<scopeRoot>/mcp.json`. Other top-level fields are
+ * preserved verbatim; only `mcpServers` is read or mutated.
  */
 export interface RawMcpDoc {
   readonly mcpServers?: unknown;
   readonly [extra: string]: unknown;
-}
-
-/** MC-1 source-of-truth tag returned by `resolvePluginMcpServers`. */
-export type McpServersSource = "marketplace-entry" | "plugin-manifest" | "standalone" | "none";
-
-/** Outcome of MC-1 precedence resolution. `servers` is empty when source === "none". */
-export interface ResolvedMcpServers {
-  readonly source: McpServersSource;
-  readonly servers: Record<string, unknown>;
-}
-
-/** MC-1 input bundle. `pluginRoot` is consulted only when entry+manifest are both absent. */
-export interface ResolvePluginMcpServersInput {
-  readonly entry: { readonly mcpServers?: unknown };
-  readonly manifest: { readonly mcpServers?: unknown };
-  readonly pluginRoot: string;
 }
 
 /** Input record for `prepareStageMcpServers`. */
@@ -42,7 +24,7 @@ export interface StageMcpInput {
   readonly cwd: string;
   readonly marketplaceName: string;
   readonly pluginName: string;
-  /** Already-resolved per-plugin servers (output of `resolvePluginMcpServers().servers`). */
+  /** Already-resolved per-plugin servers from the domain plugin resolver. */
   readonly servers: Record<string, unknown>;
   /** Absolute install path substituted for `${CLAUDE_PLUGIN_ROOT}` and injected into stdio env (MENV-01/02). */
   readonly pluginRoot: string;
@@ -92,8 +74,9 @@ export interface PreparedMcpNoop {
 /**
  * Staged branch. `_nextDoc` is the in-memory merged doc that
  * `commitPreparedMcp` will write atomically. The leading underscore
- * marks it as bridge-internal -- the barrel does NOT re-export this
- * field's shape; consumers use `result` instead.
+ * marks it as bridge-internal by convention only -- it is still
+ * reachable through the exported `PreparedMcpStaging` union; consumers
+ * should use `result` instead.
  */
 export interface PreparedMcpStaged {
   readonly kind: "staged";

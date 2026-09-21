@@ -30,7 +30,8 @@
 //     re-translates) sees the post-mutation state. finalResult stays at
 //     the prior noop / mutate.
 //   - noop: continue to the next entry without changing finalResult.
-//   - assertNever default arm pins exhaustiveness (NFR-7).
+//   - the switch lists every HookExecResult kind and has no default arm, so
+//     a kind added later is a lint and type error here (NFR-7).
 //
 // All handlers short-circuit when capturedEpoch != currentEpoch() so a
 // stale closure from a prior load cannot fire against the live routing
@@ -49,9 +50,9 @@ import {
   adaptToolResultResult,
   applyMutationInPlace,
 } from "./event-adapters.ts";
-import { assertNever, type HookExecResult } from "./exec-result.ts";
 import { ifFires } from "./if-field/index.ts";
 
+import type { HookExecResult } from "./exec-result.ts";
 import type { RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent, DispatchableEvent } from "../../domain/components/hook-events.ts";
@@ -168,7 +169,7 @@ interface ReducedBucket {
 
 async function reduceBucket(
   runtime: HooksRuntime,
-  bucket: ReadonlyArray<RoutingEntry>,
+  bucket: readonly RoutingEntry[],
   event: unknown,
   ctx: ExtensionContext,
   pi: ExtensionAPI | undefined,
@@ -219,8 +220,6 @@ async function reduceBucket(
         continue;
       case "noop":
         continue;
-      default:
-        return assertNever(r);
     }
   }
 
@@ -258,7 +257,7 @@ export interface BucketOutcome {
  */
 export async function collectBucketOutcomes(
   runtime: HooksRuntime,
-  bucket: ReadonlyArray<RoutingEntry>,
+  bucket: readonly RoutingEntry[],
   event: unknown,
   ctx: ExtensionContext,
   pi: ExtensionAPI | undefined,

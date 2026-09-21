@@ -117,7 +117,7 @@ export async function loadAgentsIndex(loc: ScopedLocations): Promise<LoadedAgent
   }
 
   // File-level: agents-array check.
-  const obj = parsed as { schemaVersion: 1; agents?: unknown };
+  const obj = parsed as { agents?: unknown };
   if (!Array.isArray(obj.agents)) {
     throw new TypeError(`Invalid agents-index at ${indexPath}: 'agents' field must be an array.`);
   }

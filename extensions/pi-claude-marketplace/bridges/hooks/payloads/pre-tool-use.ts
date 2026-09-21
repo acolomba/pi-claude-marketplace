@@ -25,7 +25,10 @@ export interface PreToolUseStdin {
   readonly tool_input: unknown;
 }
 
-export function translate(event: ToolCallEvent, ctx: TranslationContext): PreToolUseStdin {
+export function translatePreToolUse(
+  event: ToolCallEvent,
+  ctx: TranslationContext,
+): PreToolUseStdin {
   return {
     session_id: ctx.sessionId,
     transcript_path: ctx.transcriptPath,

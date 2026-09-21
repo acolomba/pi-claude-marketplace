@@ -71,13 +71,13 @@ export type ManifestEntryClassification =
  *   single `persistence/state-io.ts::isRecordedButDisabled`): a record with
  *   `enabled: false` was explicitly disabled and is version-frozen, so the
  *   classifier short-circuits it to `installed` (WR-01) -- it must never split
- *   into `upgradable`/`partially-upgradable`. `compatibility.installable` is
- *   read only for the caller's own purposes, never to decide disabled-ness.
+ *   into `upgradable`/`partially-upgradable`. A record's `installable` flag is
+ *   a caller-side concern and never decides disabled-ness, so this view does
+ *   not declare it.
  */
 export interface InstalledRecordLike {
   readonly enabled: boolean;
   readonly compatibility: {
-    readonly installable: boolean;
     readonly unsupported: readonly string[];
   };
 }

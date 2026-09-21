@@ -25,13 +25,15 @@
 //                  -> source-mismatch (report-only)
 //
 //     Each driven orchestrator call passes `notifications: { mode:
-//     "orchestrated" }`. The removal and uninstall loops wrap their call in a
+//     "orchestrated" }`. Every one of the five loops wraps its call in a
 //     try/catch so an unexpected throw becomes a typed `failed` outcome
-//     (RECON-03 soft-fail): both entrypoints resolve their target BEFORE
-//     entering their own failure handling, so a state file another process is
-//     mid-write reaches this boundary. The add, install and toggle loops carry
-//     no catch, because those three entrypoints handle every throw internally
-//     and always answer with a typed outcome -- see the note above each loop.
+//     (RECON-03 soft-fail) instead of aborting the whole cascade: the removal
+//     and uninstall loops need it because both entrypoints resolve their
+//     target BEFORE entering their own failure handling, so a state file
+//     another process is mid-write reaches this boundary; the add, install
+//     and toggle loops need it as defense-in-depth even though their three
+//     entrypoints are documented to handle every throw internally and always
+//     answer with a typed outcome -- see the note above each loop.
 //   - SINGLE notify() emission per applyReconcile invocation (IL-2 /
 //     RECON-04). Empty-and-clean reconciles are SILENT (NFR-2 / A4) -- the
 //     orchestrator skips the notify() call when no outcomes accumulated AND
@@ -51,7 +53,7 @@ import path from "node:path";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
-import { loadState } from "../../persistence/state-io.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 import { notifyDiagnostic } from "../../shared/notification-dispatch.ts";
@@ -61,9 +63,11 @@ import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { removeMarketplace } from "../marketplace/remove.ts";
-import { createNodeSetPluginEnabled } from "../plugin/enable-disable.ts";
-import { createNodeInstallPlugin } from "../plugin/install-flow.ts";
-import { createNodeUninstallPlugin } from "../plugin/uninstall.ts";
+import {
+  createEnableOperation,
+  createInstallOperation,
+  createUninstallOperation,
+} from "../plugin/operations.ts";
 
 import {
   classifyOrchestratorThrow,
@@ -78,6 +82,7 @@ import { RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ApplyReconcileOptions, ReconcilePlan, ScopeReadResult } from "./types.ts";
+import type { loadState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   EnableDegradationSignals,
@@ -122,7 +127,7 @@ async function readPassForScope(
   if (!stateExists && !configExists) {
     // Pristine scope: nothing recorded, nothing declared -- no-op without
     // touching the disk.
-    return { scope, plan: undefined, invalidOutcomes: [], stateExisted: false };
+    return { plan: undefined, invalidOutcomes: [], stateExisted: false };
   }
 
   return withLockedStateTransaction(
@@ -184,7 +189,7 @@ async function readPassForScope(
       }
 
       if (invalidOutcomes.length > 0) {
-        return { scope, plan: undefined, invalidOutcomes, stateExisted: stateExists };
+        return { plan: undefined, invalidOutcomes, stateExisted: stateExists };
       }
 
       // (4) Plan against the merged config + current state. Pure -- no I/O.
@@ -192,7 +197,7 @@ async function readPassForScope(
       // BFILL-02: carry the loaded state snapshot out so applyBackfillForScope can
       // read its stamp + scan its partially-installed plugins. planReconcile is pure,
       // so the snapshot is the unmutated read-pass state.
-      return { scope, plan, invalidOutcomes: [], state, stateExisted: stateExists };
+      return { plan, invalidOutcomes: [], state, stateExisted: stateExists };
     },
     { loadState: reader.loadState },
   );
@@ -224,6 +229,13 @@ async function applyMarketplaceRemoves(
       });
       foldRemoveOutcome(result, op.scope, op.marketplace, outcomes);
     } catch (err) {
+      // The row carries only the closed-set `reason` (T-55-02-02); trace the
+      // original error so an unrecognized throw isn't discarded with zero
+      // record anywhere.
+      hookDebugLog(
+        `applyMarketplaceRemoves: unexpected throw for ${op.marketplace}: ${errorMessage(err)}`,
+        "reconcile",
+      );
       outcomes.push({
         kind: "mp-remove-failed",
         scope: op.scope,
@@ -296,14 +308,13 @@ function foldRemoveOutcome(
 }
 
 /**
- * RECON-03 note: unlike the removal and uninstall loops, this one carries NO
- * per-entry try/catch. `addMarketplace` resolves its locations and parses its
+ * RECON-03 note: `addMarketplace` resolves its locations and parses its
  * source with two total functions and then enters one try whose catch routes
  * every classified AND unclassified error through `handleAddFailure`, which in
  * orchestrated mode always returns a typed outcome; the post-guard cache and
- * mirror-seeding steps swallow their own failures. No statement on the path
- * can therefore throw past the entrypoint, and a catch here would be a branch
- * no input reaches.
+ * mirror-seeding steps swallow their own failures. The orchestrated overload
+ * carries that contract in its return type, so this loop reads the outcome
+ * without a guard of its own.
  */
 async function applyMarketplaceAdds(
   opts: ApplyReconcileOptions,
@@ -325,7 +336,7 @@ async function applyMarketplaceAdds(
       // CR-01: render the row on the name the record was actually created
       // under (`result.name` is the MANIFEST-derived name, which the
       // declared config key does not have to match). The planner's
-      // source-based matching (plan.ts::findRecordedBySource) makes the
+      // source-based matching (plan.ts::buildMarketplaceClaims) makes the
       // next reconcile converge on that recorded name.
       outcomes.push({ kind: "mp-added", scope: op.scope, marketplace: result.name });
     } else {
@@ -344,7 +355,7 @@ async function applyPluginUninstalls(
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
-  const uninstallPlugin = createNodeUninstallPlugin(opts.hooksRouting, opts.completionCache);
+  const uninstallPlugin = createUninstallOperation(opts.hooksRouting, opts.completionCache);
   for (const op of plan.pluginsToUninstall) {
     try {
       const result = await uninstallPlugin({
@@ -381,6 +392,13 @@ async function applyPluginUninstalls(
         });
       }
     } catch (err) {
+      // The row carries only the closed-set `reason` (T-55-02-02); trace the
+      // original error so an unrecognized throw isn't discarded with zero
+      // record anywhere.
+      hookDebugLog(
+        `applyPluginUninstalls: unexpected throw for ${op.plugin}@${op.marketplace}: ${errorMessage(err)}`,
+        "reconcile",
+      );
       outcomes.push({
         kind: "plugin-uninstall-failed",
         scope: op.scope,
@@ -393,20 +411,19 @@ async function applyPluginUninstalls(
 }
 
 /**
- * RECON-03 note: unlike the removal and uninstall loops, this one carries NO
- * per-entry try/catch. `installPlugin` documents that it never re-throws: its
+ * RECON-03 note: `installPlugin` documents that it never re-throws: its
  * whole body sits inside one try whose catch returns a typed failed outcome in
  * orchestrated mode, and the only awaited statement after that catch collects
- * post-commit warnings behind its own swallowing guards. No statement on the
- * path can therefore throw past the entrypoint, and a catch here would be a
- * branch no input reaches.
+ * post-commit warnings behind its own swallowing guards. The orchestrated
+ * overload carries that contract in its return type, so this loop reads the
+ * outcome without a guard of its own.
  */
 async function applyPluginInstalls(
   opts: ApplyReconcileOptions,
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
-  const installPlugin = createNodeInstallPlugin(opts.hooksRouting, opts.completionCache);
+  const installPlugin = createInstallOperation(opts.hooksRouting, opts.completionCache);
   for (const op of plan.pluginsToInstall) {
     const result = await installPlugin({
       ctx: opts.ctx,
@@ -559,12 +576,11 @@ function degradationFromEnable(
 }
 
 /**
- * RECON-03 note: unlike the removal and uninstall loops, this one carries NO
- * per-entry try/catch. `setPluginEnabled` documents that it never re-throws:
- * its cross-scope resolution and its transaction each sit inside a try whose
+ * RECON-03 note: `setPluginEnabled` documents that it never re-throws: its
+ * cross-scope resolution and its transaction each sit inside a try whose
  * catch returns a typed failed outcome in orchestrated mode, and what follows
- * is a pure mapping. No statement on the path can therefore throw past the
- * entrypoint, and a catch here would be a branch no input reaches.
+ * is a pure mapping. The orchestrated overload carries that contract in its
+ * return type, so this loop reads the outcome without a guard of its own.
  */
 async function applyPluginToggles(
   opts: ApplyReconcileOptions,
@@ -572,7 +588,7 @@ async function applyPluginToggles(
   outcomes: PerEntryOutcome[],
   axes: PluginToggleAxes,
 ): Promise<void> {
-  const setPluginEnabled = createNodeSetPluginEnabled(opts.hooksRouting);
+  const setPluginEnabled = createEnableOperation(opts.hooksRouting);
   // Y6: successStatus is derivable from `enable` -- enable=true => "enabled",
   // enable=false => "disabled". Deriving it here closes a redundant-axis
   // footgun where a caller could pass an inconsistent (enable, successStatus)
@@ -741,9 +757,10 @@ async function applyPlan(
 /**
  * RECON-01..05: the load-time apply orchestrator. Fans out across both
  * scopes project-first (or just the explicit scope when `opts.scope` is
- * set), per-scope read pass under withStateGuard (migrate -> load -> plan),
- * per-scope apply pass with NO outer lock, single notify() emission per
- * invocation (IL-2) -- empty-and-clean reconciles are SILENT (NFR-2 / A4).
+ * set), per-scope read pass under withLockedStateTransaction (migrate ->
+ * load -> plan), per-scope apply pass with NO outer lock, single notify()
+ * emission per invocation (IL-2) -- empty-and-clean reconciles are SILENT
+ * (NFR-2 / A4).
  *
  * Returns `void`; the side effects are the orchestrator-driven state
  * mutations + the single notify() call (when non-empty).
@@ -809,7 +826,7 @@ async function applyReconcileWithReader(
     // BFILL-01 / BFILL-02 / D-68-03: load-time backfill sibling step. Runs in
     // the no-outer-lock apply region (CR-01) after applyPlan so re-materialized
     // promotions ride the same single cascade (RECON-04). Gated on the version
-    // stamp; stamps the running version whenever the gate opened. WR-02: a
+    // stamp; stamps the running version whenever the gate opened. WR-01: a
     // transient lock-held / EACCES throw is coerced to a structured row so it
     // never aborts the cascade.
     await applyBackfillForScopeIsolated(opts, scope, readResult, outcomes);
@@ -857,7 +874,12 @@ async function applyReconcileWithReader(
   surfacePostCommitWarnings(opts, outcomes);
 }
 
-/** Creates a reconcile apply operation with one required selected-state reader. */
+/**
+ * Creates a reconcile apply operation with one required selected-state reader.
+ * The single production composition of it lives in the extension entry point,
+ * which binds `loadState` once per extension load and hands the operation to
+ * its `resources_discover` handler.
+ */
 export function createApplyReconcile(
   reader: ReconcileStateReader,
 ): (opts: ApplyReconcileOptions) => Promise<void> {
@@ -865,11 +887,6 @@ export function createApplyReconcile(
     await applyReconcileWithReader(reader, opts);
   };
 }
-
-const NODE_RECONCILE_STATE_READER: ReconcileStateReader = { loadState };
-
-/** Applies reconcile through the production state reader and real child orchestrators. */
-export const applyReconcile = createApplyReconcile(NODE_RECONCILE_STATE_READER);
 
 /**
  * DISP-02: rebuild the per-scope routing tables under a brief read-only

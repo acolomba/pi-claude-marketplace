@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  buildClaudeImportPlan,
-  planMarketplaceSourcesForRefs,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts";
+import { buildClaudeImportPlan } from "../../../extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts";
 
 test("buildClaudeImportPlan builds a complete mixed user plan with ordered diagnostics", () => {
   // arrange
@@ -25,10 +22,10 @@ test("buildClaudeImportPlan builds a complete mixed user plan with ordered diagn
   ];
 
   // act
-  const result = buildClaudeImportPlan(inputs);
+  const plan = buildClaudeImportPlan(inputs);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(plan, {
     scopes: [
       {
         scope: "user",
@@ -135,10 +132,10 @@ test("buildClaudeImportPlan keeps every plugin while ensuring a shared marketpla
   ];
 
   // act
-  const result = buildClaudeImportPlan(inputs);
+  const plan = buildClaudeImportPlan(inputs);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(plan, {
     scopes: [
       {
         scope: "project",
@@ -195,10 +192,10 @@ test("buildClaudeImportPlan preserves user and project scope input order", () =>
   ];
 
   // act
-  const result = buildClaudeImportPlan(inputs);
+  const plan = buildClaudeImportPlan(inputs);
 
   // assert
-  assert.deepStrictEqual(result, {
+  assert.deepStrictEqual(plan, {
     scopes: [
       {
         scope: "user",
@@ -254,21 +251,14 @@ test("buildClaudeImportPlan returns a complete empty plan for no selected scopes
   const inputs: [] = [];
 
   // act
-  const result = buildClaudeImportPlan(inputs);
+  const plan = buildClaudeImportPlan(inputs);
 
   // assert
-  assert.deepStrictEqual(result, { scopes: [], diagnostics: [] });
+  assert.deepStrictEqual(plan, { scopes: [], diagnostics: [] });
 });
 
-test("planMarketplaceSourcesForRefs diagnoses malformed nested marketplace payloads", () => {
+test("buildClaudeImportPlan diagnoses malformed nested marketplace payloads", () => {
   // arrange
-  const refs = [
-    { marketplace: "bad-url", plugin: "alpha", raw: "alpha@bad-url" },
-    { marketplace: "bad-github", plugin: "beta", raw: "beta@bad-github" },
-    { marketplace: "bad-directory", plugin: "gamma", raw: "gamma@bad-directory" },
-    { marketplace: "file", plugin: "delta", raw: "delta@file" },
-    { marketplace: "unknown", plugin: "epsilon", raw: "epsilon@unknown" },
-  ];
   const extraKnownMarketplaces = {
     "bad-url": { source: { source: "url", url: 123 } },
     "bad-github": { source: { source: "github", repo: null } },
@@ -278,11 +268,100 @@ test("planMarketplaceSourcesForRefs diagnoses malformed nested marketplace paylo
   };
 
   // act
-  const result = planMarketplaceSourcesForRefs("user", refs, extraKnownMarketplaces);
+  const plan = buildClaudeImportPlan([
+    {
+      scope: "user",
+      settings: {
+        enabledPlugins: {
+          "alpha@bad-url": true,
+          "beta@bad-github": true,
+          "gamma@bad-directory": true,
+          "delta@file": true,
+          "epsilon@unknown": true,
+        },
+        extraKnownMarketplaces: extraKnownMarketplaces,
+      },
+    },
+  ]);
 
   // assert
-  assert.deepStrictEqual(result, {
-    marketplacesToEnsure: [],
+  assert.deepStrictEqual(plan, {
+    scopes: [
+      {
+        scope: "user",
+        marketplacesToEnsure: [],
+        diagnostics: [
+          {
+            code: "unmappable-marketplace-source",
+            marketplace: "bad-url",
+            message:
+              'Skipping Claude marketplace "bad-url" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable).',
+            scope: "user",
+            severity: "warning",
+          },
+          {
+            code: "unmappable-marketplace-source",
+            marketplace: "bad-github",
+            message:
+              'Skipping Claude marketplace "bad-github" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable).',
+            scope: "user",
+            severity: "warning",
+          },
+          {
+            code: "unmappable-marketplace-source",
+            marketplace: "bad-directory",
+            message:
+              'Skipping Claude marketplace "bad-directory" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable).',
+            scope: "user",
+            severity: "warning",
+          },
+          {
+            code: "unmappable-marketplace-source",
+            marketplace: "file",
+            message:
+              'Skipping Claude marketplace "file" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable).',
+            scope: "user",
+            severity: "warning",
+          },
+          {
+            code: "unmappable-marketplace-source",
+            marketplace: "unknown",
+            message:
+              'Skipping Claude marketplace "unknown" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable).',
+            scope: "user",
+            severity: "warning",
+          },
+        ],
+        pluginsToInstall: [],
+        skippedPlugins: [
+          {
+            scope: "user",
+            ref: { marketplace: "bad-url", plugin: "alpha", raw: "alpha@bad-url" },
+            reason: "unmappable-marketplace-source",
+          },
+          {
+            scope: "user",
+            ref: { marketplace: "bad-github", plugin: "beta", raw: "beta@bad-github" },
+            reason: "unmappable-marketplace-source",
+          },
+          {
+            scope: "user",
+            ref: { marketplace: "bad-directory", plugin: "gamma", raw: "gamma@bad-directory" },
+            reason: "unmappable-marketplace-source",
+          },
+          {
+            scope: "user",
+            ref: { marketplace: "file", plugin: "delta", raw: "delta@file" },
+            reason: "unmappable-marketplace-source",
+          },
+          {
+            scope: "user",
+            ref: { marketplace: "unknown", plugin: "epsilon", raw: "epsilon@unknown" },
+            reason: "unmappable-marketplace-source",
+          },
+        ],
+      },
+    ],
     diagnostics: [
       {
         code: "unmappable-marketplace-source",
@@ -325,21 +404,11 @@ test("planMarketplaceSourcesForRefs diagnoses malformed nested marketplace paylo
         severity: "warning",
       },
     ],
-    unmappableMarketplaces: ["bad-url", "bad-github", "bad-directory", "file", "unknown"],
   });
 });
 
-test("planMarketplaceSourcesForRefs diagnoses nonobject and unsupported flat entries", () => {
+test("buildClaudeImportPlan diagnoses nonobject and unsupported flat entries", () => {
   // arrange
-  const refs = [
-    { marketplace: "array", plugin: "alpha", raw: "alpha@array" },
-    { marketplace: "null", plugin: "beta", raw: "beta@null" },
-    { marketplace: "string", plugin: "gamma", raw: "gamma@string" },
-    { marketplace: "flat-url", plugin: "delta", raw: "delta@flat-url" },
-    { marketplace: "bad-github", plugin: "epsilon", raw: "epsilon@bad-github" },
-    { marketplace: "bad-source", plugin: "zeta", raw: "zeta@bad-source" },
-    { marketplace: "missing", plugin: "eta", raw: "eta@missing" },
-  ];
   const extraKnownMarketplaces = {
     array: [],
     null: null,
@@ -350,11 +419,128 @@ test("planMarketplaceSourcesForRefs diagnoses nonobject and unsupported flat ent
   };
 
   // act
-  const result = planMarketplaceSourcesForRefs("project", refs, extraKnownMarketplaces);
+  const plan = buildClaudeImportPlan([
+    {
+      scope: "project",
+      settings: {
+        enabledPlugins: {
+          "alpha@array": true,
+          "beta@null": true,
+          "gamma@string": true,
+          "delta@flat-url": true,
+          "epsilon@bad-github": true,
+          "zeta@bad-source": true,
+          "eta@missing": true,
+        },
+        extraKnownMarketplaces: extraKnownMarketplaces,
+      },
+    },
+  ]);
 
   // assert
-  assert.deepStrictEqual(result, {
-    marketplacesToEnsure: [],
+  assert.deepStrictEqual(plan, {
+    scopes: [
+      {
+        scope: "project",
+        marketplacesToEnsure: [],
+        diagnostics: [
+          {
+            code: "unmappable-marketplace-source",
+            marketplace: "array",
+            message:
+              'Skipping Claude marketplace "array" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable).',
+            scope: "project",
+            severity: "warning",
+          },
+          {
+            code: "unmappable-marketplace-source",
+            marketplace: "null",
+            message:
+              'Skipping Claude marketplace "null" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable).',
+            scope: "project",
+            severity: "warning",
+          },
+          {
+            code: "unmappable-marketplace-source",
+            marketplace: "string",
+            message:
+              'Skipping Claude marketplace "string" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable).',
+            scope: "project",
+            severity: "warning",
+          },
+          {
+            code: "unmappable-marketplace-source",
+            marketplace: "flat-url",
+            message:
+              'Skipping Claude marketplace "flat-url" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable).',
+            scope: "project",
+            severity: "warning",
+          },
+          {
+            code: "unmappable-marketplace-source",
+            marketplace: "bad-github",
+            message:
+              'Skipping Claude marketplace "bad-github" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable).',
+            scope: "project",
+            severity: "warning",
+          },
+          {
+            code: "unmappable-marketplace-source",
+            marketplace: "bad-source",
+            message:
+              'Skipping Claude marketplace "bad-source" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable).',
+            scope: "project",
+            severity: "warning",
+          },
+          {
+            code: "unmappable-marketplace-source",
+            marketplace: "missing",
+            message:
+              'Skipping Claude marketplace "missing" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable).',
+            scope: "project",
+            severity: "warning",
+          },
+        ],
+        pluginsToInstall: [],
+        skippedPlugins: [
+          {
+            scope: "project",
+            ref: { marketplace: "array", plugin: "alpha", raw: "alpha@array" },
+            reason: "unmappable-marketplace-source",
+          },
+          {
+            scope: "project",
+            ref: { marketplace: "null", plugin: "beta", raw: "beta@null" },
+            reason: "unmappable-marketplace-source",
+          },
+          {
+            scope: "project",
+            ref: { marketplace: "string", plugin: "gamma", raw: "gamma@string" },
+            reason: "unmappable-marketplace-source",
+          },
+          {
+            scope: "project",
+            ref: { marketplace: "flat-url", plugin: "delta", raw: "delta@flat-url" },
+            reason: "unmappable-marketplace-source",
+          },
+          {
+            scope: "project",
+            ref: { marketplace: "bad-github", plugin: "epsilon", raw: "epsilon@bad-github" },
+            reason: "unmappable-marketplace-source",
+          },
+          {
+            scope: "project",
+            ref: { marketplace: "bad-source", plugin: "zeta", raw: "zeta@bad-source" },
+            reason: "unmappable-marketplace-source",
+          },
+          {
+            scope: "project",
+            ref: { marketplace: "missing", plugin: "eta", raw: "eta@missing" },
+            reason: "unmappable-marketplace-source",
+          },
+        ],
+      },
+    ],
     diagnostics: [
       {
         code: "unmappable-marketplace-source",
@@ -413,24 +599,11 @@ test("planMarketplaceSourcesForRefs diagnoses nonobject and unsupported flat ent
         severity: "warning",
       },
     ],
-    unmappableMarketplaces: [
-      "array",
-      "null",
-      "string",
-      "flat-url",
-      "bad-github",
-      "bad-source",
-      "missing",
-    ],
   });
 });
 
-test("planMarketplaceSourcesForRefs maps flat directory and GitHub entries in ref order", () => {
+test("buildClaudeImportPlan maps flat directory and GitHub entries in ref order", () => {
   // arrange
-  const refs = [
-    { marketplace: "private", plugin: "alpha", raw: "alpha@private" },
-    { marketplace: "team", plugin: "beta", raw: "beta@team" },
-  ];
   const extraKnownMarketplaces = {
     private: {
       directory: "../fixtures/private-marketplace",
@@ -440,32 +613,46 @@ test("planMarketplaceSourcesForRefs maps flat directory and GitHub entries in re
   };
 
   // act
-  const result = planMarketplaceSourcesForRefs("project", refs, extraKnownMarketplaces);
+  const plan = buildClaudeImportPlan([
+    {
+      scope: "project",
+      settings: {
+        enabledPlugins: { "alpha@private": true, "beta@team": true },
+        extraKnownMarketplaces: extraKnownMarketplaces,
+      },
+    },
+  ]);
 
   // assert
-  assert.deepStrictEqual(result, {
-    marketplacesToEnsure: [
+  assert.deepStrictEqual(plan, {
+    scopes: [
       {
         scope: "project",
-        marketplace: "private",
-        source: "../fixtures/private-marketplace",
+        marketplacesToEnsure: [
+          {
+            scope: "project",
+            marketplace: "private",
+            source: "../fixtures/private-marketplace",
+          },
+          { scope: "project", marketplace: "team", source: "owner/repo" },
+        ],
+        diagnostics: [],
+        pluginsToInstall: [
+          {
+            scope: "project",
+            ref: { marketplace: "private", plugin: "alpha", raw: "alpha@private" },
+          },
+          { scope: "project", ref: { marketplace: "team", plugin: "beta", raw: "beta@team" } },
+        ],
+        skippedPlugins: [],
       },
-      { scope: "project", marketplace: "team", source: "owner/repo" },
     ],
     diagnostics: [],
-    unmappableMarketplaces: [],
   });
 });
 
-test("planMarketplaceSourcesForRefs maps every nested source shape and optional ref", () => {
+test("buildClaudeImportPlan maps every nested source shape and optional ref", () => {
   // arrange
-  const refs = [
-    { marketplace: "url", plugin: "alpha", raw: "alpha@url" },
-    { marketplace: "url-ref", plugin: "beta", raw: "beta@url-ref" },
-    { marketplace: "github", plugin: "gamma", raw: "gamma@github" },
-    { marketplace: "github-ref", plugin: "delta", raw: "delta@github-ref" },
-    { marketplace: "directory", plugin: "epsilon", raw: "epsilon@directory" },
-  ];
   const extraKnownMarketplaces = {
     url: { source: { source: "url", url: "https://gitlab.com/acme/marketplace.git" } },
     "url-ref": {
@@ -483,66 +670,128 @@ test("planMarketplaceSourcesForRefs maps every nested source shape and optional 
   };
 
   // act
-  const result = planMarketplaceSourcesForRefs("user", refs, extraKnownMarketplaces);
+  const plan = buildClaudeImportPlan([
+    {
+      scope: "user",
+      settings: {
+        enabledPlugins: {
+          "alpha@url": true,
+          "beta@url-ref": true,
+          "gamma@github": true,
+          "delta@github-ref": true,
+          "epsilon@directory": true,
+        },
+        extraKnownMarketplaces: extraKnownMarketplaces,
+      },
+    },
+  ]);
 
   // assert
-  assert.deepStrictEqual(result, {
-    marketplacesToEnsure: [
+  assert.deepStrictEqual(plan, {
+    scopes: [
       {
         scope: "user",
-        marketplace: "url",
-        source: "https://gitlab.com/acme/marketplace.git",
-      },
-      {
-        scope: "user",
-        marketplace: "url-ref",
-        source: "https://gitlab.com/acme/marketplace.git#main",
-      },
-      { scope: "user", marketplace: "github", source: "acme/marketplace" },
-      {
-        scope: "user",
-        marketplace: "github-ref",
-        source: "acme/marketplace@v2.0",
-      },
-      {
-        scope: "user",
-        marketplace: "directory",
-        source: "/opt/acme/marketplace",
+        marketplacesToEnsure: [
+          {
+            scope: "user",
+            marketplace: "url",
+            source: "https://gitlab.com/acme/marketplace.git",
+          },
+          {
+            scope: "user",
+            marketplace: "url-ref",
+            source: "https://gitlab.com/acme/marketplace.git#main",
+          },
+          { scope: "user", marketplace: "github", source: "acme/marketplace" },
+          {
+            scope: "user",
+            marketplace: "github-ref",
+            source: "acme/marketplace@v2.0",
+          },
+          {
+            scope: "user",
+            marketplace: "directory",
+            source: "/opt/acme/marketplace",
+          },
+        ],
+        diagnostics: [],
+        pluginsToInstall: [
+          { scope: "user", ref: { marketplace: "url", plugin: "alpha", raw: "alpha@url" } },
+          {
+            scope: "user",
+            ref: { marketplace: "url-ref", plugin: "beta", raw: "beta@url-ref" },
+          },
+          {
+            scope: "user",
+            ref: { marketplace: "github", plugin: "gamma", raw: "gamma@github" },
+          },
+          {
+            scope: "user",
+            ref: { marketplace: "github-ref", plugin: "delta", raw: "delta@github-ref" },
+          },
+          {
+            scope: "user",
+            ref: { marketplace: "directory", plugin: "epsilon", raw: "epsilon@directory" },
+          },
+        ],
+        skippedPlugins: [],
       },
     ],
     diagnostics: [],
-    unmappableMarketplaces: [],
   });
 });
 
-test("planMarketplaceSourcesForRefs maps the official source and skips its duplicate", () => {
+test("buildClaudeImportPlan maps the official source and skips its duplicate", () => {
   // arrange
-  const refs = [
-    {
-      marketplace: "claude-plugins-official",
-      plugin: "alpha",
-      raw: "alpha@claude-plugins-official",
-    },
-    {
-      marketplace: "claude-plugins-official",
-      plugin: "omega",
-      raw: "omega@claude-plugins-official",
-    },
-  ];
 
   // act
-  const result = planMarketplaceSourcesForRefs("user", refs, {});
+  const plan = buildClaudeImportPlan([
+    {
+      scope: "user",
+      settings: {
+        enabledPlugins: {
+          "alpha@claude-plugins-official": true,
+          "omega@claude-plugins-official": true,
+        },
+        extraKnownMarketplaces: {},
+      },
+    },
+  ]);
 
   // assert
-  assert.deepStrictEqual(result, {
-    marketplacesToEnsure: [
+  assert.deepStrictEqual(plan, {
+    scopes: [
       {
         scope: "user",
-        marketplace: "claude-plugins-official",
-        source: "anthropics/claude-plugins-official",
+        marketplacesToEnsure: [
+          {
+            scope: "user",
+            marketplace: "claude-plugins-official",
+            source: "anthropics/claude-plugins-official",
+          },
+        ],
+        diagnostics: [],
+        pluginsToInstall: [
+          {
+            scope: "user",
+            ref: {
+              marketplace: "claude-plugins-official",
+              plugin: "alpha",
+              raw: "alpha@claude-plugins-official",
+            },
+          },
+          {
+            scope: "user",
+            ref: {
+              marketplace: "claude-plugins-official",
+              plugin: "omega",
+              raw: "omega@claude-plugins-official",
+            },
+          },
+        ],
+        skippedPlugins: [],
       },
     ],
     diagnostics: [],
-    unmappableMarketplaces: [],
   });
 });

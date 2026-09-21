@@ -4,13 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  REAL_REINSTALL_TRANSACTION,
-  finalizeReinstalledPlugin,
-  replaceReinstalledPlugin,
-  rollbackReinstalledPlugin,
-  runPostSuccessMaintenance,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts";
+import { REAL_REINSTALL_TRANSACTION } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 import type {
@@ -20,9 +14,23 @@ import type {
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
-test("exports the atomic reinstall replacement owner", () => {
-  // act & assert
-  assert.strictEqual(REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin, replaceReinstalledPlugin);
+test("publishes every reinstall schedule step on the production transaction", () => {
+  // act
+  const transactionShape = Object.fromEntries(
+    Object.entries(REAL_REINSTALL_TRANSACTION).map(([member, value]) => [member, typeof value]),
+  );
+
+  // assert -- the schedule steps are module-private, so this object is the
+  // only surface a caller can reach them through; a dropped or renamed member
+  // is a missing key here rather than a silent behaviour change.
+  assert.deepStrictEqual(transactionShape, {
+    finalizeReinstalledPlugin: "function",
+    replaceOperations: "object",
+    replaceReinstalledPlugin: "function",
+    rollbackReinstalledPlugin: "function",
+    runPostSuccessMaintenance: "function",
+    withLockedStateTransaction: "function",
+  });
 });
 
 test("runs committed reinstall maintenance with the exact removal contract", async () => {
@@ -37,7 +45,7 @@ test("runs committed reinstall maintenance with the exact removal contract", asy
   } as unknown as CompletionCache;
 
   // act
-  const warnings = await runPostSuccessMaintenance(
+  const warnings = await REAL_REINSTALL_TRANSACTION.runPostSuccessMaintenance(
     {
       scope: "project",
       marketplace: "market",
@@ -69,7 +77,7 @@ test("reports both non-fatal committed maintenance failures", async () => {
   const dataDir = await locations.pluginDataDir("market", "plugin");
 
   // act
-  const warnings = await runPostSuccessMaintenance(
+  const warnings = await REAL_REINSTALL_TRANSACTION.runPostSuccessMaintenance(
     {
       scope: "user",
       marketplace: "market",
@@ -100,7 +108,7 @@ test("uses the real recursive data removal when no seam is supplied", async () =
 
   try {
     // act
-    const warnings = await runPostSuccessMaintenance(
+    const warnings = await REAL_REINSTALL_TRANSACTION.runPostSuccessMaintenance(
       { scope: "project", marketplace: "market", plugin: "plugin" },
       locations,
       completionCache,
@@ -191,9 +199,12 @@ test("replaces, rolls back, and finalizes every bridge in atomic order", async (
   const operations = fakeOperations(calls);
 
   // act
-  const replacement = await replaceReinstalledPlugin(replacementInput(), operations);
-  const rollbackLeaks = await rollbackReinstalledPlugin(replacement);
-  const finalizeLeaks = await finalizeReinstalledPlugin(replacement);
+  const replacement = await REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin(
+    replacementInput(),
+    operations,
+  );
+  const rollbackLeaks = await REAL_REINSTALL_TRANSACTION.rollbackReinstalledPlugin(replacement);
+  const finalizeLeaks = await REAL_REINSTALL_TRANSACTION.finalizeReinstalledPlugin(replacement);
 
   // assert
   assert.deepStrictEqual(calls, [
@@ -240,7 +251,7 @@ test("aborts prepared bridges and reports leaks when replacement fails", async (
 
   // act & assert
   await assert.rejects(
-    replaceReinstalledPlugin(replacementInput(), operations),
+    REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin(replacementInput(), operations),
     (error: Error) =>
       error instanceof Error &&
       error.message === "replace denied" &&
@@ -263,7 +274,7 @@ test("aborts partial preparation in reverse order", async () => {
 
   // act & assert
   await assert.rejects(
-    replaceReinstalledPlugin(replacementInput(), operations),
+    REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin(replacementInput(), operations),
     /mcp prepare denied/u,
   );
   assert.deepStrictEqual(calls.slice(-3), ["abort agents", "abort commands", "abort skills"]);
@@ -288,7 +299,10 @@ test("writes parsed hooks between agents and MCP replacement", async () => {
 
   try {
     // act
-    const replacement = await replaceReinstalledPlugin({ ...input, installable }, operations);
+    const replacement = await REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin(
+      { ...input, installable },
+      operations,
+    );
 
     // assert
     assert.deepStrictEqual(replacement.hookEntries, [{ event: "SessionStart" }]);
@@ -312,7 +326,7 @@ test("rejects malformed hooks and compensates completed replacements", async () 
   try {
     // act & assert
     await assert.rejects(
-      replaceReinstalledPlugin({ ...input, installable }, operations),
+      REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin({ ...input, installable }, operations),
       /hooks\.json re-parse failed/u,
     );
     assert.deepStrictEqual(calls.slice(-7), [
@@ -335,6 +349,9 @@ test("normalizes a real bridge preparation failure", async () => {
 
   // act & assert
   await assert.rejects(
-    replaceReinstalledPlugin(input, REAL_REINSTALL_TRANSACTION.replaceOperations),
+    REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin(
+      input,
+      REAL_REINSTALL_TRANSACTION.replaceOperations,
+    ),
   );
 });

@@ -1,13 +1,13 @@
 // edge/handlers/plugin/info.ts
 //
 // Thin-shim handler factory for
-// `/claude:plugin info <plugin>@<marketplace> [--scope user|project]`.
+// `/claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]`.
 // Argument-parsing failures route through `notifyUsageError`; the
 // orchestrator handles per-scope projection, fan-out, the `{marketplace not added}`
 // carve-out, and the `{not in manifest}` carve-out. This shim validates
 // the positional/scope shape and delegates.
 
-import { getPluginInfo } from "../../../orchestrators/plugin/info.ts";
+import { getPluginInfo } from "../../../orchestrators/plugin/operations.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
 import { parseFlagNames } from "../../flag-catalog.ts";

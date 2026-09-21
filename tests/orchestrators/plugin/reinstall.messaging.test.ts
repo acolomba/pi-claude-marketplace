@@ -6,10 +6,8 @@ import { Type } from "typebox";
 
 import {
   narrowReasons,
-  outcomeToPluginMessage,
   renderReinstallPartitionAndNotify,
   reinstalledRowFromOutcome,
-  type ReinstallMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
 import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
@@ -24,20 +22,22 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ToolInfo } from "@earendil-works/pi-coding-agent";
 
+// reinstall's row union is module-private; the public carrier of its
+// `reinstalled` arm is the row composer's own return type.
 void ({
   status: "reinstalled",
   name: "alpha",
   dependencies: [],
   severity: "info",
   needsReload: true,
-} satisfies ReinstallMsg);
+} satisfies ReturnType<typeof reinstalledRowFromOutcome>);
 void ({
   status: "reinstalled",
   name: "alpha",
   severity: "info",
   needsReload: true,
   // @ts-expect-error reinstalled messages require a dependency inventory
-} satisfies ReinstallMsg);
+} satisfies ReturnType<typeof reinstalledRowFromOutcome>);
 void ({
   partition: "skipped",
   name: "alpha",
@@ -218,224 +218,257 @@ test("reinstalledRowFromOutcome preserves agents before MCP when both dependenci
   });
 });
 
-test("outcomeToPluginMessage projects a clean reinstalled outcome without row scope", () => {
+/**
+ * Outcome-to-row projection is command-private: the public operation that
+ * carries it is `renderReinstallPartitionAndNotify`, so each projection case
+ * below states the exact notification bytes and severity that projection
+ * produces. The row scope is not a case axis here -- the operation groups
+ * outcomes by `(scope, marketplace)`, so a row's scope always matches its
+ * marketplace block and the bracket is always suppressed.
+ */
+test("renderReinstallPartitionAndNotify projects a clean reinstalled row with a reload trailer", () => {
   // arrange
-  const outcome: ReinstallPluginOutcome = {
-    partition: "reinstalled",
-    name: "alpha",
-    marketplace: "official",
-    scope: "project",
-    version: "1.0.0",
-    resourcesChanged: true,
-    stagedAgentNames: [],
-    stagedMcpServerNames: [],
-    declaresAgents: false,
-    declaresMcp: false,
-  };
+  const harness = createNotifyHarness({
+    message: [
+      "● official [project]",
+      "  ● alpha v1.0.0 (reinstalled)",
+      "",
+      "/reload to pick up changes",
+    ].join("\n"),
+  });
+  const outcomes: readonly ReinstallPluginOutcome[] = [
+    {
+      partition: "reinstalled",
+      name: "alpha",
+      marketplace: "official",
+      scope: "project",
+      version: "1.0.0",
+      resourcesChanged: true,
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+  ];
 
   // act
-  const row = outcomeToPluginMessage(outcome, "project");
+  renderReinstallPartitionAndNotify(harness.ctx, harness.pi, outcomes, "single");
 
   // assert
-  assert.deepStrictEqual(row, {
-    status: "reinstalled",
-    name: "alpha",
-    dependencies: [],
-    version: "1.0.0",
-    severity: "info",
-    needsReload: true,
-  });
+  verify(harness.ctx);
+  verify(harness.pi);
+  verify(harness.ui);
 });
 
-test("outcomeToPluginMessage gives a missing installed target error severity", () => {
+test("renderReinstallPartitionAndNotify preserves ordered idempotent skip reasons", () => {
   // arrange
-  const outcome: ReinstallPluginOutcome = {
-    partition: "skipped",
-    name: "alpha",
-    marketplace: "official",
-    scope: "project",
-    notes: ["not installed"],
-  };
+  const harness = createNotifyHarness({
+    message: [
+      "● official [project]",
+      "  ⊘ alpha (skipped) {up-to-date, already installed, already disabled}",
+    ].join("\n"),
+  });
+  const outcomes: readonly ReinstallPluginOutcome[] = [
+    {
+      partition: "skipped",
+      name: "alpha",
+      marketplace: "official",
+      scope: "project",
+      notes: ["up-to-date", "already installed", "already disabled"],
+    },
+  ];
 
   // act
-  const row = outcomeToPluginMessage(outcome, "project");
+  renderReinstallPartitionAndNotify(harness.ctx, harness.pi, outcomes, "single");
 
   // assert
-  assert.deepStrictEqual(row, {
-    status: "skipped",
-    name: "alpha",
-    reasons: ["not installed"],
-    severity: "error",
-    needsReload: false,
-  });
+  verify(harness.ctx);
+  verify(harness.pi);
+  verify(harness.ui);
 });
 
-test("outcomeToPluginMessage preserves ordered idempotent skip reasons and orphan scope", () => {
+test("renderReinstallPartitionAndNotify gives an opaque skipped note warning severity", () => {
   // arrange
-  const outcome: ReinstallPluginOutcome = {
-    partition: "skipped",
-    name: "alpha",
-    marketplace: "official",
-    scope: "project",
-    notes: ["up-to-date", "already installed", "already disabled"],
-  };
-
-  // act
-  const row = outcomeToPluginMessage(outcome, "user");
-
-  // assert
-  assert.deepStrictEqual(row, {
-    status: "skipped",
-    name: "alpha",
-    reasons: ["up-to-date", "already installed", "already disabled"],
-    scope: "project",
-    severity: "info",
-    needsReload: false,
-  });
-});
-
-test("outcomeToPluginMessage gives an opaque skipped note warning severity", () => {
-  // arrange
-  const outcome: ReinstallPluginOutcome = {
-    partition: "skipped",
-    name: "alpha",
-    marketplace: "official",
-    scope: "project",
-    notes: ["opaque"],
-  };
-
-  // act
-  const row = outcomeToPluginMessage(outcome, "project");
-
-  // assert
-  assert.deepStrictEqual(row, {
-    status: "skipped",
-    name: "alpha",
-    reasons: ["unreadable"],
+  const harness = createNotifyHarness({
+    message: [
+      "A plugin operation needs attention.",
+      "",
+      "● official [project]",
+      "  ⊘ alpha (skipped) {unreadable}",
+    ].join("\n"),
     severity: "warning",
-    needsReload: false,
   });
-});
-
-test("outcomeToPluginMessage gives an empty skipped reason set warning severity", () => {
-  // arrange
-  const outcome: ReinstallPluginOutcome = {
-    partition: "skipped",
-    name: "alpha",
-    marketplace: "official",
-    scope: "project",
-    notes: [],
-  };
+  const outcomes: readonly ReinstallPluginOutcome[] = [
+    {
+      partition: "skipped",
+      name: "alpha",
+      marketplace: "official",
+      scope: "project",
+      notes: ["opaque"],
+    },
+  ];
 
   // act
-  const row = outcomeToPluginMessage(outcome, "project");
+  renderReinstallPartitionAndNotify(harness.ctx, harness.pi, outcomes, "single");
 
   // assert
-  assert.deepStrictEqual(row, {
-    status: "skipped",
-    name: "alpha",
-    reasons: [],
+  verify(harness.ctx);
+  verify(harness.pi);
+  verify(harness.ui);
+});
+
+test("renderReinstallPartitionAndNotify gives an empty skipped reason set warning severity", () => {
+  // arrange
+  const harness = createNotifyHarness({
+    message: [
+      "A plugin operation needs attention.",
+      "",
+      "● official [project]",
+      "  ⊘ alpha (skipped)",
+    ].join("\n"),
     severity: "warning",
-    needsReload: false,
   });
-});
-
-test("outcomeToPluginMessage gives manual recovery precedence over typed reasons", () => {
-  // arrange
-  const outcome: ReinstallFailedOutcome = {
-    partition: "failed",
-    name: "alpha",
-    marketplace: "official",
-    scope: "user",
-    notes: ["EACCES: permission denied"],
-    failureClass: "manual-recovery",
-    reasons: ["permission denied"],
-  };
+  const outcomes: readonly ReinstallPluginOutcome[] = [
+    {
+      partition: "skipped",
+      name: "alpha",
+      marketplace: "official",
+      scope: "project",
+      notes: [],
+    },
+  ];
 
   // act
-  const row = outcomeToPluginMessage(outcome, "project");
+  renderReinstallPartitionAndNotify(harness.ctx, harness.pi, outcomes, "single");
 
   // assert
-  assert.deepStrictEqual(row, {
-    status: "manual recovery",
-    name: "alpha",
-    reasons: ["rollback partial"],
-    scope: "user",
+  verify(harness.ctx);
+  verify(harness.pi);
+  verify(harness.ui);
+});
+
+test("renderReinstallPartitionAndNotify gives manual recovery precedence over typed reasons", () => {
+  // arrange
+  const harness = createNotifyHarness({
+    message: [
+      "A plugin operation needs attention.",
+      "",
+      "● official [user]",
+      "  ⊘ alpha (manual recovery) {rollback partial}",
+    ].join("\n"),
     severity: "warning",
-    needsReload: false,
   });
-});
-
-test("outcomeToPluginMessage preserves typed failed reasons over note fallback", () => {
-  // arrange
-  const outcome: ReinstallFailedOutcome = {
-    partition: "failed",
-    name: "alpha",
-    marketplace: "official",
-    scope: "project",
-    notes: ["opaque"],
-    reasons: ["permission denied", "source missing"],
-  };
+  const outcomes: readonly ReinstallFailedOutcome[] = [
+    {
+      partition: "failed",
+      name: "alpha",
+      marketplace: "official",
+      scope: "user",
+      notes: ["EACCES: permission denied"],
+      failureClass: "manual-recovery",
+      reasons: ["permission denied"],
+    },
+  ];
 
   // act
-  const row = outcomeToPluginMessage(outcome, "user");
+  renderReinstallPartitionAndNotify(harness.ctx, harness.pi, outcomes, "single");
 
   // assert
-  assert.deepStrictEqual(row, {
-    status: "failed",
-    name: "alpha",
-    reasons: ["permission denied", "source missing"],
-    scope: "project",
-    severity: "error",
-    needsReload: false,
-  });
+  verify(harness.ctx);
+  verify(harness.pi);
+  verify(harness.ui);
 });
 
-test("outcomeToPluginMessage replaces an empty typed failed reason set with unreadable", () => {
+test("renderReinstallPartitionAndNotify preserves typed failed reasons over the note fallback", () => {
   // arrange
-  const outcome: ReinstallFailedOutcome = {
-    partition: "failed",
-    name: "alpha",
-    marketplace: "official",
-    scope: "project",
-    notes: ["rollback failed"],
-    reasons: [],
-  };
+  const harness = createNotifyHarness({
+    message: [
+      "A plugin operation has failed.",
+      "",
+      "● official [project]",
+      "  ⊘ alpha (failed) {permission denied, source missing}",
+    ].join("\n"),
+    severity: "error",
+  });
+  const outcomes: readonly ReinstallFailedOutcome[] = [
+    {
+      partition: "failed",
+      name: "alpha",
+      marketplace: "official",
+      scope: "project",
+      notes: ["opaque"],
+      reasons: ["permission denied", "source missing"],
+    },
+  ];
 
   // act
-  const row = outcomeToPluginMessage(outcome, "project");
+  renderReinstallPartitionAndNotify(harness.ctx, harness.pi, outcomes, "single");
 
   // assert
-  assert.deepStrictEqual(row, {
-    status: "failed",
-    name: "alpha",
-    reasons: ["unreadable"],
-    severity: "error",
-    needsReload: false,
-  });
+  verify(harness.ctx);
+  verify(harness.pi);
+  verify(harness.ui);
 });
 
-test("outcomeToPluginMessage narrows a rollback note for an ordinary failure", () => {
+test("renderReinstallPartitionAndNotify replaces an empty typed failed reason set with unreadable", () => {
   // arrange
-  const outcome: ReinstallFailedOutcome = {
-    partition: "failed",
-    name: "alpha",
-    marketplace: "official",
-    scope: "project",
-    notes: ["rollback failed at commands"],
-  };
+  const harness = createNotifyHarness({
+    message: [
+      "A plugin operation has failed.",
+      "",
+      "● official [project]",
+      "  ⊘ alpha (failed) {unreadable}",
+    ].join("\n"),
+    severity: "error",
+  });
+  const outcomes: readonly ReinstallFailedOutcome[] = [
+    {
+      partition: "failed",
+      name: "alpha",
+      marketplace: "official",
+      scope: "project",
+      notes: ["rollback failed"],
+      reasons: [],
+    },
+  ];
 
   // act
-  const row = outcomeToPluginMessage(outcome, "project");
+  renderReinstallPartitionAndNotify(harness.ctx, harness.pi, outcomes, "single");
 
   // assert
-  assert.deepStrictEqual(row, {
-    status: "failed",
-    name: "alpha",
-    reasons: ["rollback partial"],
+  verify(harness.ctx);
+  verify(harness.pi);
+  verify(harness.ui);
+});
+
+test("renderReinstallPartitionAndNotify narrows a rollback note for an ordinary failure", () => {
+  // arrange
+  const harness = createNotifyHarness({
+    message: [
+      "A plugin operation has failed.",
+      "",
+      "● official [project]",
+      "  ⊘ alpha (failed) {rollback partial}",
+    ].join("\n"),
     severity: "error",
-    needsReload: false,
   });
+  const outcomes: readonly ReinstallFailedOutcome[] = [
+    {
+      partition: "failed",
+      name: "alpha",
+      marketplace: "official",
+      scope: "project",
+      notes: ["rollback failed at commands"],
+    },
+  ];
+
+  // act
+  renderReinstallPartitionAndNotify(harness.ctx, harness.pi, outcomes, "single");
+
+  // assert
+  verify(harness.ctx);
+  verify(harness.pi);
+  verify(harness.ui);
 });
 
 test("narrowReasons returns independent empty results for absent and empty notes", () => {

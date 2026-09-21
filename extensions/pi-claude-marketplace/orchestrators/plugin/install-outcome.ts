@@ -93,7 +93,6 @@ import {
   unstagePluginSkills,
 } from "../../bridges/skills/index.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
-import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import {
   requirePartialInstallable,
@@ -134,6 +133,7 @@ import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
+import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -184,6 +184,24 @@ export interface InstallFailureCapture {
   version: string | undefined;
 }
 
+// SKILL-01 / CMD-01 / WARN-01: one frontmatter-parse degrade record. Shared by
+// `InstallLedgerSummary` and `InstallLedgerContext` (one declaration, not two
+// structurally-identical ones) so a read against either side's array resolves
+// to the same member.
+export interface FrontmatterDegradationRow {
+  kind: DegradeKind;
+  generatedName: string;
+  parseError: string;
+}
+
+// AS-7 / W-08 / B-08: one agents-bridge foreign-content row preserved on disk
+// during prepare. Shared with `InstallLedgerContext` for the same reason as
+// `FrontmatterDegradationRow`.
+export interface AgentForeignFailureRow {
+  generatedName: string;
+  reason: string;
+}
+
 /** Readonly facts exposed after a completed ledger run. */
 export interface InstallLedgerSummary {
   readonly locations: ScopedLocations;
@@ -193,21 +211,14 @@ export interface InstallLedgerSummary {
   readonly resolved: MaterializablePlugin;
   readonly version: string;
   readonly pluginDataDir: string;
-  readonly frontmatterDegradations: readonly {
-    readonly kind: DegradeKind;
-    readonly generatedName: string;
-    readonly parseError: string;
-  }[];
+  readonly frontmatterDegradations: readonly FrontmatterDegradationRow[];
   readonly stagedSkillNames: readonly string[];
   readonly stagedCommandNames: readonly string[];
   readonly stagedAgentNames: readonly string[];
   readonly stagedMcpServerNames: readonly string[];
   readonly bridgeWarnings: readonly string[];
   readonly discoveryWarnings: readonly string[];
-  readonly agentForeignFailures: readonly {
-    readonly generatedName: string;
-    readonly reason: string;
-  }[];
+  readonly agentForeignFailures: readonly AgentForeignFailureRow[];
 }
 
 /** Caller-facing result of the guard-free install ledger. */
@@ -274,17 +285,13 @@ interface InstallLedgerContext {
   // warnings beside them stay suppressed.
   discoveryWarnings: string[];
   // Bridge-side per-record AG-5 foreign-content rows -- routed to notifyWarning post-success.
-  agentForeignFailures: { generatedName: string; reason: string }[];
+  agentForeignFailures: AgentForeignFailureRow[];
   // SKILL-01 / CMD-01 / WARN-01: per-component frontmatter-parse degrade records
   // collected from the skills + commands bridges. Feed the one-per-plugin
   // `{malformed skill}` / `{malformed command}` reason token (standalone row),
   // the per-component parse-error detail (orchestrated postCommitWarnings), and
   // the `degradedKinds` outcome seam the reconcile composer consumes.
-  frontmatterDegradations: {
-    kind: DegradeKind;
-    generatedName: string;
-    parseError: string;
-  }[];
+  frontmatterDegradations: FrontmatterDegradationRow[];
   // Mutable handle to the state snapshot loaded by the caller's locked transaction.
   readonly stateSnapshot: ExtensionState;
 }
@@ -297,9 +304,7 @@ interface InstallLedgerContext {
  * the path-source marketplace's manifest. Either way the bytes are on disk
  * before install runs.
  */
-async function loadCachedMarketplaceManifest(
-  manifestPath: string,
-): Promise<{ name: string; plugins: readonly PluginEntry[] }> {
+async function loadCachedMarketplaceManifest(manifestPath: string): Promise<MarketplaceManifest> {
   return loadMarketplaceManifest(manifestPath);
 }
 
@@ -411,21 +416,12 @@ async function preflightInstallResolve(
   // exist in the manifest plugins[] array.
   const sourceMp = source.sourceRecord;
   const manifest = await loadCachedMarketplaceManifest(sourceMp.manifestPath);
-  const entryRaw = manifest.plugins.find((p) => p.name === plugin);
-  if (entryRaw === undefined) {
+  // The loader validated every entry against PLUGIN_ENTRY_SCHEMA as part of
+  // MARKETPLACE_SCHEMA, so the chosen entry needs no second check.
+  const entry = manifest.plugins.find((p) => p.name === plugin);
+  if (entry === undefined) {
     throw new PluginShapeError({ kind: "not-in-manifest", plugin, marketplace });
   }
-
-  // Defense-in-depth: re-run the per-entry validator on the chosen entry so
-  // a corrupted manifest cannot smuggle a malformed entry past the top-level
-  // marketplace check.
-  if (!PLUGIN_ENTRY_VALIDATOR.Check(entryRaw)) {
-    throw new Error(
-      `Plugin entry for "${plugin}" in marketplace "${marketplace}" failed schema validation.`,
-    );
-  }
-
-  const entry: PluginEntry = entryRaw;
 
   // PURL-01..04 / PURL-09 / D-77-01..06: the clone-materializing
   // resolveGitPluginRoot callback plus its captured resolved sha. The
@@ -660,7 +656,6 @@ async function runInstallLedgerBody(
     do: async (c) => {
       const prep = await prepareStageSkills(opts.removalOps, {
         locations: c.locations,
-        marketplaceName: c.marketplace,
         pluginName: c.plugin,
         pluginRoot: c.resolved.pluginRoot,
         pluginDataDir: c.pluginDataDir,
@@ -705,7 +700,6 @@ async function runInstallLedgerBody(
     do: async (c) => {
       const prep = await prepareStageCommands(opts.removalOps, {
         locations: c.locations,
-        marketplaceName: c.marketplace,
         pluginName: c.plugin,
         pluginRoot: c.resolved.pluginRoot,
         pluginDataDir: c.pluginDataDir,
@@ -750,7 +744,6 @@ async function runInstallLedgerBody(
         pluginName: c.plugin,
         pluginRoot: c.resolved.pluginRoot,
         pluginDataDir: c.pluginDataDir,
-        resolved: c.resolved,
         agentsDirs: c.agentsDirs,
         knownSkills: c.stagedSkillNames,
         // AG-7 opt-in: `--map-model` on /claude:plugin install threads

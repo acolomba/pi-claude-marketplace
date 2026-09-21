@@ -42,6 +42,8 @@
 
 import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type MarketplaceNotificationMessage,
@@ -87,7 +89,6 @@ import type { Scope } from "../../shared/types.ts";
 type ReconcileBlockStatus = Extract<MarketplaceStatus, "added" | "removed" | "failed">;
 
 interface MarketplaceBlock<Msg extends PluginNotificationMessage = PluginNotificationMessage> {
-  readonly key: string;
   readonly name: string;
   readonly scope: Scope;
   status?: ReconcileBlockStatus;
@@ -107,7 +108,6 @@ function ensureMarketplaceBlock<Msg extends PluginNotificationMessage>(
   }
 
   const block: MarketplaceBlock<Msg> = {
-    key,
     name: marketplaceName,
     scope,
     plugins: [],
@@ -306,11 +306,18 @@ export async function resolvePendingForceInstalls(
         if (resolved.state === "partially-available") {
           keys.add(forceInstallKey(install.scope, install.marketplace, install.plugin));
         }
-      } catch {
+      } catch (err) {
         // A manifest-load / probe failure leaves the row a plain
         // `(will install)`: the offline preview cannot assert a degrade it
         // could not resolve, and a throw must never escape the read-only
-        // pending surface (IL-2 single-notify discipline).
+        // pending surface (IL-2 single-notify discipline). Still worth a
+        // debug trace -- a systemic break here (e.g. `resolveStrict` failing
+        // for every candidate) would otherwise degrade silently with zero
+        // record anywhere.
+        hookDebugLog(
+          `resolvePendingForceInstalls: probe failed for ${install.plugin}@${install.marketplace}: ${errorMessage(err)}`,
+          "reconcile",
+        );
       }
     }
   }

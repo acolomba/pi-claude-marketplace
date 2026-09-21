@@ -20,6 +20,7 @@
 // itself.
 
 import { notifyUsageError } from "../../shared/notification-dispatch.ts";
+import { tokenizeArgs } from "../args.ts";
 import { SCOPE_TARGET_FLAG } from "../flag-catalog.ts";
 
 import type { ExtensionCommandContext } from "../../platform/pi-api.ts";
@@ -34,7 +35,7 @@ import type { ExtensionCommandContext } from "../../platform/pi-api.ts";
  * the downstream domain parser, e.g. install/update's `--map-model`).
  *
  * Returns `{ local, residualArgs }` where `residualArgs` has every `--local`
- * token REMOVED (other passthrough flags are preserved verbatim for the
+ * flag token REMOVED (scope values and other flags remain verbatim for the
  * downstream parser). Returns `undefined` when an unknown long flag was
  * found (the usage error has already been notified; caller should early-
  * return).
@@ -46,9 +47,11 @@ export function extractLocalFlag(
   passThroughLongFlags: readonly string[] = [],
 ): { local: boolean; residualArgs: string } | undefined {
   let local = false;
-  const tokens = args.split(/\s+/).filter((t) => t.length > 0);
+  const tokens = tokenizeArgs(args);
+  const consumed = new Set<number>();
   let skipValue = false;
-  for (const tok of tokens) {
+  for (const [index, token] of tokens.entries()) {
+    const tok = token.value;
     if (skipValue) {
       // The `--scope` value, handled by the downstream domain parser. ER-F19:
       // skipping it here is what keeps it out of the flag tests below.
@@ -63,6 +66,7 @@ export function extractLocalFlag(
 
     if (tok === SCOPE_TARGET_FLAG) {
       local = true;
+      consumed.add(index);
       continue;
     }
 
@@ -78,5 +82,11 @@ export function extractLocalFlag(
     }
   }
 
-  return { local, residualArgs: tokens.filter((t) => t !== SCOPE_TARGET_FLAG).join(" ") };
+  return {
+    local,
+    residualArgs: tokens
+      .filter((_, index) => !consumed.has(index))
+      .map((token) => args.slice(token.start, token.end))
+      .join(" "),
+  };
 }

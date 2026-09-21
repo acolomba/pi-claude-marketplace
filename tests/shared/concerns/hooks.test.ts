@@ -5,7 +5,7 @@ import {
   appendHooksBlock,
   type ClaudeHookEvent,
   type HookSummaryEntry,
-  type ToolEvent,
+  type HookSummaryToolEvent,
 } from "../../../extensions/pi-claude-marketplace/shared/concerns/hooks.ts";
 
 void ([
@@ -20,7 +20,11 @@ void ([
   "Stop",
   "StopFailure",
 ] as const satisfies readonly ClaudeHookEvent[]);
-void (["PreToolUse", "PostToolUse", "PostToolUseFailure"] as const satisfies readonly ToolEvent[]);
+void ([
+  "PreToolUse",
+  "PostToolUse",
+  "PostToolUseFailure",
+] as const satisfies readonly HookSummaryToolEvent[]);
 void ([
   { event: "PreToolUse", matcher: "Bash" },
   { event: "SessionStart" },
@@ -31,7 +35,7 @@ void ([
 void ("Notification" satisfies ClaudeHookEvent);
 
 // @ts-expect-error SessionStart is not a tool event
-void ("SessionStart" satisfies ToolEvent);
+void ("SessionStart" satisfies HookSummaryToolEvent);
 
 // @ts-expect-error PreToolUse requires a matcher
 void ({ event: "PreToolUse" } satisfies HookSummaryEntry);

@@ -179,6 +179,37 @@ describe("adaptToolCallResult", () => {
     });
   });
 
+  test("drops a __proto__ key from the patch without polluting the input's prototype", () => {
+    // arrange
+    const input = { command: "inspect", keep: "original" };
+    const event = {
+      type: "tool_call",
+      toolCallId: "call-mutate-proto",
+      toolName: "owner-tool",
+      input,
+    } satisfies ToolCallEvent;
+    const updatedInput = JSON.parse(
+      '{"__proto__":{"polluted":true},"command":"replacement"}',
+    ) as Record<string, unknown>;
+    const hookOutcome = { kind: "mutate", updatedInput } satisfies HookExecResult;
+
+    // act
+    const adaptation = adaptToolCallResult(hookOutcome, event);
+
+    // assert
+    assert.strictEqual(adaptation, undefined);
+    assert.deepStrictEqual(event, {
+      type: "tool_call",
+      toolCallId: "call-mutate-proto",
+      toolName: "owner-tool",
+      input: { command: "replacement", keep: "original" },
+    });
+    assert.strictEqual(event.input, input);
+    assert.strictEqual(Object.getPrototypeOf(event.input), Object.prototype);
+    assert.strictEqual(Object.hasOwn(event.input, "__proto__"), false);
+    assert.strictEqual((Object.prototype as Record<string, unknown>).polluted, undefined);
+  });
+
   test("leaves input unchanged when updated input is absent", () => {
     // arrange
     const input = { command: "inspect", keep: "original" };
@@ -285,25 +316,6 @@ describe("adaptToolCallResult", () => {
       });
     });
   }
-
-  test("rejects a result outside the exhaustive tool-call vocabulary", () => {
-    // arrange
-    const event = {
-      type: "tool_call",
-      toolCallId: "call-future",
-      toolName: "owner-tool",
-      input: { command: "inspect" },
-    } satisfies ToolCallEvent;
-    const adaptFutureOutcome = (): void => {
-      Reflect.apply(adaptToolCallResult, undefined, [{ kind: "future" }, event]);
-    };
-
-    // act & assert
-    assert.throws(
-      adaptFutureOutcome,
-      new Error('unreachable HookExecResult arm: {"kind":"future"}'),
-    );
-  });
 });
 
 describe("adaptToolResultResult", () => {
@@ -693,28 +705,6 @@ describe("adaptToolResultResult", () => {
       assert.strictEqual(event.isError, false);
     });
   }
-
-  test("rejects a result outside the exhaustive tool-result vocabulary", () => {
-    // arrange
-    const event = {
-      type: "tool_result",
-      toolCallId: "result-future",
-      toolName: "owner-tool",
-      input: { command: "inspect" },
-      content: [{ type: "text" as const, text: "original output" }],
-      isError: false,
-      details: { exitCode: 0 },
-    } satisfies ToolResultEvent;
-    const adaptFutureOutcome = (): void => {
-      Reflect.apply(adaptToolResultResult, undefined, [{ kind: "future" }, event]);
-    };
-
-    // act & assert
-    assert.throws(
-      adaptFutureOutcome,
-      new Error('unreachable HookExecResult arm: {"kind":"future"}'),
-    );
-  });
 });
 
 describe("adaptInputResult", () => {
@@ -875,24 +865,6 @@ describe("adaptInputResult", () => {
       });
     });
   }
-
-  test("rejects a result outside the exhaustive input vocabulary", () => {
-    // arrange
-    const event = {
-      type: "input",
-      text: "original prompt",
-      source: "interactive",
-    } satisfies InputEvent;
-    const adaptFutureOutcome = (): void => {
-      Reflect.apply(adaptInputResult, undefined, [{ kind: "future" }, event]);
-    };
-
-    // act & assert
-    assert.throws(
-      adaptFutureOutcome,
-      new Error('unreachable HookExecResult arm: {"kind":"future"}'),
-    );
-  });
 });
 
 describe("adaptObservationResultForEvent", () => {
@@ -1088,28 +1060,4 @@ describe("adaptObservationResultForEvent", () => {
       );
     });
   }
-
-  test("rejects a result outside the exhaustive observation vocabulary", () => {
-    // arrange
-    const runtime = createHooksRuntime();
-    const provenance = {
-      scope: "user",
-      marketplace: "future-marketplace",
-      pluginId: "future-plugin",
-    } as const;
-    const adaptFutureOutcome = (): void => {
-      Reflect.apply(adaptObservationResultForEvent, undefined, [
-        runtime,
-        { kind: "future" },
-        "SessionStart",
-        provenance,
-      ]);
-    };
-
-    // act & assert
-    assert.throws(
-      adaptFutureOutcome,
-      new Error('unreachable HookExecResult arm: {"kind":"future"}'),
-    );
-  });
 });

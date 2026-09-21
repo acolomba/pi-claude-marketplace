@@ -137,7 +137,9 @@ export function buildConfigFromState(state: ExtensionState): ScopeConfig & {
     // in-memory on the first load by the gate-closed migrate.ts scrub.
     const legacyAutoupdate = (mp as unknown as Record<string, unknown>).autoupdate;
 
-    const entry: { source: string; autoupdate?: boolean } = { source: sourceRaw };
+    // The projection entry is annotated with the consumer's own declared type,
+    // so one declaration carries both this build site and every read of it.
+    const entry: MarketplaceConfigEntry = { source: sourceRaw };
     // D-04 omit-when-undefined + defense-in-depth: only exact booleans pass.
     if (legacyAutoupdate === true) {
       entry.autoupdate = true;

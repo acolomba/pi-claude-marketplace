@@ -2,7 +2,7 @@
 //
 // The `marketplace remove` command's co-located notification vocabulary: its
 // `CommandContext` (carrying `Messaging.label` and a render map over the
-// plugin-child-row statuses it emits) and its command-private reason.
+// plugin-child-row statuses it emits) for its marketplace notifications.
 //
 // D-01 / MOD-01: `marketplace remove` emits a marketplace block whose header is
 // `(removed)` (clean) or `(failed)` (partial), with child plugin rows: one
@@ -19,23 +19,10 @@ import {
   ICON_UNINSTALLABLE,
 } from "../../shared/notification-grammar.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
-import { type PluginUninstalledMessage, type Reason } from "../../shared/notification-types.ts";
+import { type PluginUninstalledMessage } from "../../shared/notification-types.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 
-/**
- * D-09 / MOD-01: the command-private reason owned by `marketplace remove`.
- * `plugins remain` is meaningful only to the remove flow (a marketplace that
- * cannot be removed because plugins are still recorded under it). It is a member
- * of the closed `Reason` set; the pin below rejects a typo at compile time.
- */
-// `_ReasonInSet<R extends Reason> = R` pins the private reason to the closed
-// `Reason` set as it derives `RemovePrivateReason`: an out-of-set literal
-// violates the `extends Reason` constraint -- a TS2344 compile error here, with
-// no runtime footprint.
-type _ReasonInSet<R extends Reason> = R;
-// fallow-ignore-next-line private-type-leak -- `_ReasonInSet` is the compile-time membership guard; exporting that helper would widen the command's public reason vocabulary.
-export type RemovePrivateReason = _ReasonInSet<"plugins remain">;
 /**
  * The plugin-child-row statuses `marketplace remove` emits inside its cascade:
  * `uninstalled` (one per unstaged plugin) and `failed` (one per cascade

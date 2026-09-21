@@ -18,11 +18,12 @@
  *
  * Gate discipline: this module lives in the orchestrator tier but MUST NOT
  * name `gitOps` / `DEFAULT_GIT_OPS` or import `platform/git.ts` as a VALUE --
- * only `import type` from platform/git.ts is permitted -- so consumers
- * (install-outcome.ts) that import it stay clean under the no-orchestrator-network
- * gate. It imports the provider registry (domain), the Device Flow engine
- * (domain), the raw notify seam (shared), and credential/auth types, and
- * re-exports the `DEFAULT_CREDENTIAL_OPS` value (platform/git-credential.ts).
+ * only `import type` from platform/git.ts and its auth-callback sibling is
+ * permitted -- so consumers (install-outcome.ts) that import it stay clean
+ * under the no-orchestrator-network gate. It imports the provider registry
+ * (domain), the Device Flow engine (domain), the raw notify seam (shared), the
+ * auth-callback seam types (platform/git-auth-callbacks.ts), and the credential
+ * surface (platform/git-credential.ts).
  *
  * AUTH-09: no credential field is ever interpolated into an Error/notify here;
  * enforced by tests/architecture/no-credential-leak.test.ts (PROV-05).
@@ -30,22 +31,40 @@
 
 import { findProviderForHost } from "../domain/auth-registry.ts";
 import { initiateDeviceFlow } from "../domain/github-auth.ts";
+import { NODE_CREDENTIAL_SPAWN, createCredentialOps } from "../platform/git-credential.ts";
 import { makeRawNotifyFn } from "../shared/notification-dispatch.ts";
 
 import type { DeviceFlowHttp } from "../domain/github-auth.ts";
+import type { AuthAttemptResult, OnAuthRequiredFn } from "../platform/git-auth-callbacks.ts";
 import type { CredentialOps } from "../platform/git-credential.ts";
-import type { AuthAttemptResult, OnAuthRequiredFn } from "../platform/git.ts";
 import type { NotificationContext } from "../platform/pi-api.ts";
 import type { GitAuthBundle } from "./marketplace/shared.ts";
 
-// Re-export the credential/auth surface the network-gated plugin orchestrators
+// Re-export the auth/credential types the network-gated plugin orchestrators
 // (install-outcome.ts / reinstall.ts) need. Those files MUST NOT import from
 // `platform/git.ts` or `platform/git-credential.ts` directly -- the
 // no-orchestrator-network gate greps for any `platform/git` import, even
-// type-only -- so this gate-clean module is their single sanctioned re-export
-// point for the auth bundle inputs (T-79-10).
-export { DEFAULT_CREDENTIAL_OPS } from "../platform/git-credential.ts";
+// type-only -- so this gate-clean module is their single sanctioned source for
+// the auth bundle inputs (T-79-10).
 export type { AuthAttemptResult, CredentialOps, DeviceFlowHttp };
+
+/** How long a `git credential` subprocess may run before it is SIGTERMed. */
+const CREDENTIAL_TIMEOUT_MS = 5_000;
+
+/**
+ * The production credential surface every verb defaults to: the platform
+ * credential protocol bound to Node's process launcher and the timeout above.
+ *
+ * It is composed HERE rather than inside `platform/git-credential.ts` so that
+ * module publishes only the protocol and its injected collaborators, and the
+ * one concrete binding lives with the other host-keyed auth composition. The
+ * call builds three closures and launches nothing; the first subprocess starts
+ * when a verb actually calls fill/approve/reject.
+ */
+export const DEFAULT_CREDENTIAL_OPS: CredentialOps = createCredentialOps({
+  spawn: NODE_CREDENTIAL_SPAWN,
+  timeoutMs: CREDENTIAL_TIMEOUT_MS,
+});
 
 /**
  * Extract the bare host from a clone URL per source kind.
@@ -65,7 +84,7 @@ export function hostFromCloneUrl(cloneUrl: string, kind: "github" | "url" | "git
 }
 
 /** The single no-provider cause line (D-79-03). No supported-hosts list. */
-export const NO_PROVIDER_CAUSE = (host: string): string =>
+export const NO_PROVIDER_CAUSE: (host: string) => string = (host) =>
   `no auth provider is registered for ${host}`;
 
 /**

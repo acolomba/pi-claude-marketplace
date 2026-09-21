@@ -24,7 +24,7 @@ export interface ClaudeMarketplaceMarker {
  * entry; otherwise null. Robust against arrays, primitives, and partial
  * shapes -- never throws.
  */
-export function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
+function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return null;
   }

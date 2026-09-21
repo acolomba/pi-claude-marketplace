@@ -9,6 +9,7 @@
 // This keeps this module independent of `ExtensionContext` and lets
 // tests inject a spy.
 
+import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 
 import { parseArgs, type ParsedArgs } from "./args.ts";
@@ -27,10 +28,28 @@ function parseArgsOrNotify(
   try {
     return parseArgs(args);
   } catch (err) {
+    // parseArgs only throws the two controlled AP-2 diagnostics (bad/missing
+    // --scope value), which are already safe to surface verbatim; logging
+    // here just gives a debug trail if that ever stops being true.
+    hookDebugLog(`parseArgs failed: ${errorMessage(err)}`, "args");
     onError(errorMessage(err));
     return undefined;
   }
 }
+
+/** One positional argument in a `parseCommandArgs` schema. */
+export interface PositionalSpec<Name extends string = string> {
+  readonly name: Name;
+  /** Defaults to true; set to false for tail-optional args. */
+  readonly required?: boolean;
+}
+
+/** The typed object `parseCommandArgs` returns for a given positional schema. */
+export type ParsedCommandArgs<Spec extends readonly PositionalSpec[]> = {
+  readonly [Entry in Spec[number] as Entry["name"]]: Entry extends { required: false }
+    ? string | undefined
+    : string;
+} & { readonly scope?: Scope };
 
 /**
  * Parse + validate command args against an explicit positional schema.
@@ -50,18 +69,6 @@ function parseArgsOrNotify(
  *   parsed.plugin;      // string
  *   parsed.scope;       // Scope | undefined
  */
-export interface PositionalSpec<Name extends string = string> {
-  readonly name: Name;
-  /** Defaults to true; set to false for tail-optional args. */
-  readonly required?: boolean;
-}
-
-export type ParsedCommandArgs<Spec extends readonly PositionalSpec[]> = {
-  readonly [Entry in Spec[number] as Entry["name"]]: Entry extends { required: false }
-    ? string | undefined
-    : string;
-} & { readonly scope?: Scope };
-
 export function parseCommandArgs<const Spec extends readonly PositionalSpec[]>(
   args: string,
   schema: { positional: Spec; usage: string },
@@ -72,9 +79,20 @@ export function parseCommandArgs<const Spec extends readonly PositionalSpec[]>(
     return undefined;
   }
 
+  const unknownFlag = parsed.positional.find((token) => token.startsWith("--"));
+  if (unknownFlag !== undefined) {
+    onError(`Unknown flag: "${unknownFlag}".`);
+    return undefined;
+  }
+
+  if (parsed.positional.length > schema.positional.length) {
+    onError("Too many arguments.");
+    return undefined;
+  }
+
   const out: Record<string, string | undefined> = {};
-  for (const [i, entry] of schema.positional.entries()) {
-    const value = parsed.positional[i];
+  for (const [index, entry] of schema.positional.entries()) {
+    const value = parsed.positional[index];
     const required = entry.required !== false;
     if (required) {
       if (value === undefined || value.trim() === "") {
@@ -83,7 +101,12 @@ export function parseCommandArgs<const Spec extends readonly PositionalSpec[]>(
       }
 
       out[entry.name] = value;
-    } else if (value !== undefined && value.trim() !== "") {
+    } else if (value !== undefined) {
+      if (value.trim() === "") {
+        onError("Argument must not be empty.");
+        return undefined;
+      }
+
       out[entry.name] = value;
     }
   }
@@ -92,5 +115,7 @@ export function parseCommandArgs<const Spec extends readonly PositionalSpec[]>(
     out.scope = parsed.scope;
   }
 
+  // Built field-by-field from `schema` above; the mapped conditional return
+  // type cannot be verified structurally from a plain Record.
   return out as ParsedCommandArgs<Spec>;
 }

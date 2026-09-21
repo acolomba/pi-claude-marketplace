@@ -5,22 +5,20 @@
 // offline and re-materialized, so a plugin that was degraded at install time
 // becomes whole without the user running anything.
 //
-// It lived inside apply.ts and its two entry points were reached through
-// `__test_` re-exports, while its tests already had a file of their own
-// (tests/orchestrators/reconcile/backfill.test.ts). A concern with its own
-// test file and its own name is a module; extracting it is what turns those
-// seams into an interface (FLOW-09).
+// A concern with its own test file (tests/orchestrators/reconcile/backfill.test.ts)
+// and its own name is a module (FLOW-09).
 
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { EXTENSION_VERSION } from "../../shared/extension-version.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
-import { createNodeReinstallPlugin } from "../plugin/reinstall-flow.ts";
+import { createReinstallOperation } from "../plugin/operations.ts";
 
 import {
   classifyOrchestratorThrow,
@@ -96,7 +94,7 @@ async function applyBackfillForScope(
   // SF-02: a partially-installed plugin was scanned but its backfill FAILED -- a
   // genuine `failed` partition, OR a per-plugin manifest-I/O throw caught inside
   // the scan; not a benign no-growth / concurrent-uninstall. Leave the version
-  // gate OPEN so the next load retries -- symmetric with the WR-02 self-heal (a
+  // gate OPEN so the next load retries -- symmetric with the WR-01 self-heal (a
   // THROW from the stamp write also keeps the gate open). Skipping the stamp
   // leaves state.json untouched (RECON-05 mtime invariant preserved).
   if (anyFailure) {
@@ -114,15 +112,15 @@ async function applyBackfillForScope(
 }
 
 /**
- * WR-02: throw-isolated wrapper around `applyBackfillForScope`. The stamp
+ * WR-01: throw-isolated wrapper around `applyBackfillForScope`. The stamp
  * `withStateGuard` (and the per-plugin re-materialize) can throw a transient
  * `StateLockHeldError` (a concurrent process holds the scope lock) or an EACCES
  * on saveState. Mirrors `rebuildScopeRoutingTableIsolated`: coerce the throw
  * into a structured `invalid-block` row (subject `state.json`, closed-set
  * reason) so a transient failure NEVER aborts the single cascade for both
  * scopes. The gate stays open and the scan self-heals on the next load --
- * retry-safe (NFR-3); NFR-1 atomicity is unaffected (the failed write simply
- * did not commit).
+ * retry-safe (NFR-3); NFR-1 atomicity is unaffected (the failed write did not
+ * commit).
  */
 export async function applyBackfillForScopeIsolated(
   opts: ApplyReconcileOptions,
@@ -201,17 +199,17 @@ function hasForceInstalledPlugin(state: ExtensionState): boolean {
  * is surfaced as a plugin-scoped `(failed)` row and flips `anyFailure`, then the
  * loop CONTINUES so healthy SIBLING plugins -- including ones under a different,
  * readable marketplace -- are still scanned and promoted. Without this guard a
- * single corrupt manifest would unwind the whole loop into the outer WR-02
+ * single corrupt manifest would unwind the whole loop into the outer WR-01
  * wrapper's single generic `state.json (failed)` row and block every still-
  * unscanned sibling on every load.
  */
-export async function scanForceInstalledBackfills(
+async function scanForceInstalledBackfills(
   opts: ApplyReconcileOptions,
   scope: Scope,
   state: ExtensionState,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
-  const reinstallPlugin = createNodeReinstallPlugin(opts.hooksRouting, opts.completionCache);
+  const reinstallPlugin = createReinstallOperation(opts.hooksRouting, opts.completionCache);
   const alreadyTouched = new Set<string>();
   for (const o of outcomes) {
     if (o.scope === scope && "plugin" in o) {
@@ -244,13 +242,13 @@ export async function scanForceInstalledBackfills(
  *
  * SF-02 lets a genuine manifest I/O error (corrupt / permission-denied cached
  * manifest) propagate out of `maybeBackfillPlugin`. Without this guard that throw
- * unwinds the whole scan loop into the outer WR-02 wrapper, coercing the WHOLE
+ * unwinds the whole scan loop into the outer WR-01 wrapper, coercing the WHOLE
  * scope to a single generic `state.json (failed)` row and skipping promotion of
  * every still-unscanned SIBLING (including healthy ones under other marketplaces).
  * Instead surface a plugin-scoped `(failed)` row -- the same outcome shape + reason
  * classifier as the SF-01 `failed`-partition branch in `maybeBackfillPlugin` -- and
  * return `true` so the caller keeps the version gate OPEN (this plugin retries next
- * load) while still scanning its siblings. The WR-02 wrapper stays as the net for
+ * load) while still scanning its siblings. The WR-01 wrapper stays as the net for
  * throws OUTSIDE the loop (e.g. the stamp write).
  */
 async function backfillOnePluginIsolated(
@@ -289,6 +287,13 @@ async function backfillOnePluginIsolated(
   try {
     return await maybeBackfillPlugin(opts, target, reinstallPlugin, outcomes);
   } catch (err) {
+    // The row carries only the closed-set `reason` (T-55-02-02); trace the
+    // manifest-I/O detail this catch exists to catch (SF-02) so it isn't
+    // discarded with zero record anywhere.
+    hookDebugLog(
+      `backfillOnePluginIsolated: unexpected throw for ${plugin}@${marketplace}: ${errorMessage(err)}`,
+      "reconcile",
+    );
     outcomes.push({
       kind: "plugin-install-failed",
       scope,
@@ -379,13 +384,13 @@ async function maybeBackfillPlugin(
     // SF-01: render: "none" makes reinstallPlugin CATCH its own throw and RETURN
     // a `failed` outcome (reinstall.ts handleSinglePluginFailure), so a genuine
     // re-materialize failure (EACCES / EIO / bridge failure) never throws and the
-    // WR-02 wrapper -- which only catches THROWS -- never sees it. Surface a
+    // WR-01 wrapper -- which only catches THROWS -- never sees it. Surface a
     // plugin-scoped (failed) row on the same cascade instead of silently dropping
     // it, mirroring the applyPluginInstalls failure arm (T-55-02-02: carry ONLY
     // the closed-set reason, never the raw notes text). Prefer the pre-narrowed
     // `reasons[0]`; absent it, classify the composed notes. Return `true` so the
     // caller keeps the version gate OPEN and the scan retries this plugin next
-    // load (symmetric with the WR-02 self-heal).
+    // load (symmetric with the WR-01 self-heal).
     outcomes.push({
       kind: "plugin-install-failed",
       scope,

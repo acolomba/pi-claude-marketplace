@@ -12,68 +12,79 @@ function preserveDirectOwnerType(owner: OwnerShape): void {
 
 void preserveDirectOwnerType;
 
-test("exports the exact supported and unsupported closed sets", async () => {
-  // arrange
-  let supported: readonly string[] = [];
-  let unsupported: readonly string[] = [];
+const installDisabledPrecedenceCases = [
+  {
+    description: "entry disabled, no user declaration",
+    entryDefault: false,
+    declared: undefined,
+    expected: true,
+  },
+  {
+    description: "entry enabled, no user declaration",
+    entryDefault: true,
+    declared: undefined,
+    expected: false,
+  },
+  {
+    description: "entry silent, no user declaration",
+    entryDefault: undefined,
+    declared: undefined,
+    expected: false,
+  },
+  {
+    description: "entry disabled, user declares enabled",
+    entryDefault: false,
+    declared: true,
+    expected: false,
+  },
+  {
+    description: "entry disabled, user declares disabled",
+    entryDefault: false,
+    declared: false,
+    expected: false,
+  },
+  {
+    description: "entry silent, user declares enabled",
+    entryDefault: undefined,
+    declared: true,
+    expected: false,
+  },
+  {
+    description: "entry silent, user declares disabled",
+    entryDefault: undefined,
+    declared: false,
+    expected: false,
+  },
+] as const;
 
-  // act & assert
-  await assert.doesNotReject(async () => {
-    const owner =
+for (const { description, entryDefault, declared, expected } of installDisabledPrecedenceCases) {
+  test(`rowClaimsInstallDisabled with ${description} claims disabled: ${expected}`, async () => {
+    // arrange
+    const { rowClaimsInstallDisabled } =
       await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");
-    supported = owner.SUPPORTED_COMPONENT_KINDS;
-    unsupported = owner.UNSUPPORTED_COMPONENT_KINDS;
-  }, "unsupported-components.ts is absent");
-  assert.deepStrictEqual(supported, ["skills", "commands", "agents", "hooks"]);
-  assert.deepStrictEqual(unsupported, [
-    "lspServers",
-    "monitors",
-    "themes",
-    "outputStyles",
-    "channels",
-    "userConfig",
-    "settings",
-    "workflows",
-  ]);
-});
-test("rowClaimsInstallDisabled preserves user-declaration precedence", async () => {
-  // arrange
-  const { rowClaimsInstallDisabled } =
-    await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");
-  const cases = [
-    { entryDefault: false, declared: undefined, expected: true },
-    { entryDefault: true, declared: undefined, expected: false },
-    { entryDefault: undefined, declared: undefined, expected: false },
-    { entryDefault: false, declared: true, expected: false },
-    { entryDefault: false, declared: false, expected: false },
-    { entryDefault: undefined, declared: true, expected: false },
-    { entryDefault: undefined, declared: false, expected: false },
-  ] as const;
 
-  // act
-  const actual = cases.map(({ entryDefault, declared }) =>
-    rowClaimsInstallDisabled(
+    // act
+    const claimedDisabled = rowClaimsInstallDisabled(
       {
         name: "alpha",
         source: "./alpha",
         ...(entryDefault !== undefined && { defaultEnabled: entryDefault }),
       },
       declared,
-    ),
-  );
+    );
 
-  // assert
-  assert.deepStrictEqual(
-    actual,
-    cases.map(({ expected }) => expected),
-  );
-});
+    // assert
+    assert.strictEqual(claimedDisabled, expected);
+  });
+}
 
 test("rowClaimsInstallDisabled treats an invalid entry default as silent", async () => {
   // arrange
   const { rowClaimsInstallDisabled } =
     await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");
   const entry = { name: "alpha", source: "./alpha" };
+  // Object.defineProperty smuggles a non-boolean value past the field's
+  // `boolean | undefined` type, simulating malformed data a literal cannot express.
   Object.defineProperty(entry, "defaultEnabled", { value: "false" });
 
   // act
@@ -143,23 +154,24 @@ test("collectUnsupportedKinds detects every filesystem convention", async () => 
   ]);
 });
 
-test("collectUnsupportedKinds ignores absent, null-experimental, and mismatched conventions", async () => {
-  // arrange
-  const { collectUnsupportedKinds } =
-    await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");
-  const records = [{}, { experimental: null }, { experimental: "themes" }] as const;
+const ignoredExperimentalCases = [
+  { description: "an absent experimental field", entry: {} },
+  { description: "a null experimental field", entry: { experimental: null } },
+  { description: "a mismatched-type experimental field", entry: { experimental: "themes" } },
+] as const;
 
-  // act
-  const results = await Promise.all(
-    records.map((entry) =>
-      collectUnsupportedKinds(entry, null, "/plugins/alpha", () => Promise.resolve("file")),
-    ),
-  );
+for (const { description, entry } of ignoredExperimentalCases) {
+  test(`collectUnsupportedKinds ignores ${description}`, async () => {
+    // arrange
+    const { collectUnsupportedKinds } =
+      await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");
 
-  // assert
-  assert.deepStrictEqual(results, [
-    ["lspServers", "monitors", "settings"],
-    ["lspServers", "monitors", "settings"],
-    ["lspServers", "monitors", "settings"],
-  ]);
-});
+    // act
+    const kinds = await collectUnsupportedKinds(entry, null, "/plugins/alpha", () =>
+      Promise.resolve("file"),
+    );
+
+    // assert
+    assert.deepStrictEqual(kinds, ["lspServers", "monitors", "settings"]);
+  });
+}

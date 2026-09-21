@@ -73,12 +73,10 @@ const PERSISTED_HOOK_ENTRY_SCHEMA = Type.Object({
  * before validation runs, so v1.0..v1.13 state.json files load cleanly.
  * `enabled: false` is the sole disable marker; `true` means active.
  *
- * COMPAT-01: exported so the no-expansion gate reads the record's key set off
- * this single source of truth rather than a hand-maintained field list that
- * would drift. No production consumer imports it; the schema stays the sole
- * validation boundary for the persisted record.
+ * COMPAT-01: the public PluginInstallRecord type and saved records expose the
+ * compatibility contract; the schema remains this module's validation boundary.
  */
-export const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
+const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
   version: Type.String(),
   resolvedSource: Type.String(),
   // D-77-02 / PURL-09: the full 40-hex resolved commit sha for git-source
@@ -198,7 +196,6 @@ export function clonePluginRecord(record: PluginInstallRecord): PluginInstallRec
  * generic constrains only the producer, the behavioral proof that disable
  * preserves the inventory lives in the orchestrator suite.
  */
-export type EnabledPluginRecord = PluginInstallRecord & { enabled: true };
 export type DisabledPluginRecord<
   R extends PluginInstallRecord["resources"] = PluginInstallRecord["resources"],
 > = PluginInstallRecord & {
@@ -228,10 +225,11 @@ export function toDisabledRecord<R extends PluginInstallRecord["resources"]>(
  * {@link toDisabledRecord} writes. Every surface that asks "is this record
  * currently disabled" consumes this one definition; a module that re-derives
  * the rule locally is a drift twin the gate in
- * `tests/orchestrators/reconcile/plan.test.ts` rejects. That gate WALKS the
- * whole extension source tree rather than an allowlist of known sites, so the
- * claim holds for a copy landing anywhere -- this module is the single
- * exemption, because reading the boolean here IS the definition.
+ * `tests/architecture/disabled-state-classification.test.ts` rejects. That
+ * gate WALKS the whole extension source tree rather than an allowlist of
+ * known sites, so the claim holds for a copy landing anywhere -- this module
+ * is the single exemption, because reading the boolean here IS the
+ * definition.
  *
  * The availability axis (`compatibility.installable`) is deliberately NOT an
  * input. The disable orchestrator is the only writer of `enabled: false` and
@@ -284,7 +282,7 @@ const MARKETPLACE_RECORD_SCHEMA = Type.Object({
  * (`enabled: boolean` required). The union lets loadState accept both during
  * the migration cycle; `persistMigratedState` always writes schemaVersion 2.
  */
-export const STATE_SCHEMA = Type.Object({
+const STATE_SCHEMA = Type.Object({
   schemaVersion: Type.Union([Type.Literal(1), Type.Literal(2)]),
   // BFILL-02 / D-68-01: the last extension version that reconciled this state.
   // OPTIONAL and additive -- NO schemaVersion bump. An absent stamp means
@@ -299,7 +297,7 @@ export const STATE_SCHEMA = Type.Object({
 export type ExtensionState = Type.Static<typeof STATE_SCHEMA>;
 
 /** JIT-compiled validator (D-07). */
-export const STATE_VALIDATOR = Compile(STATE_SCHEMA);
+const STATE_VALIDATOR = Compile(STATE_SCHEMA);
 
 /** First-load default (ENOENT and empty treated identically). */
 export const DEFAULT_STATE: ExtensionState = Object.freeze({
@@ -313,13 +311,10 @@ function stateJsonPathFor(extensionRoot: string): string {
 }
 
 /** Format the first validator error into a single-line message. */
-function firstValidationErrorDetail(value: unknown): string {
-  const errors = STATE_VALIDATOR.Errors(value);
-  const first = errors[0];
-  if (!first) {
-    return "(no detail available)";
-  }
-
+function firstValidationErrorDetail(first: {
+  readonly instancePath: string;
+  readonly message: string;
+}): string {
   return `${first.instancePath || "<root>"}: ${first.message}`;
 }
 
@@ -461,19 +456,23 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
         }
       : { schemaVersion: 2, marketplaces };
 
-  if (!STATE_VALIDATOR.Check(normalized)) {
+  const [validationError] = STATE_VALIDATOR.Errors(normalized);
+  if (validationError !== undefined) {
     throw new Error(
-      `state.json at ${stateJsonPath} failed schema validation: ${firstValidationErrorDetail(normalized)}`,
+      `state.json at ${stateJsonPath} failed schema validation: ${firstValidationErrorDetail(validationError)}`,
     );
   }
+
+  // No schema issues proves the normalized JSON has the public state shape.
+  const state = normalized as ExtensionState;
 
   // ST-4 best-effort async save -- fire-and-forget; the IL-3 sanctioned warn
   // in persistMigratedState handles failure.
   if (mutated) {
-    void persistMigratedState(stateJsonPath, normalized);
+    void persistMigratedState(stateJsonPath, state);
   }
 
-  return normalized;
+  return state;
 }
 
 /**
@@ -484,9 +483,10 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
  * here instead of producing a corrupt state.json on disk.
  */
 export async function saveState(extensionRoot: string, state: ExtensionState): Promise<void> {
-  if (!STATE_VALIDATOR.Check(state)) {
+  const [validationError] = STATE_VALIDATOR.Errors(state);
+  if (validationError !== undefined) {
     throw new Error(
-      `saveState refused: in-memory state failed schema validation: ${firstValidationErrorDetail(state)}`,
+      `saveState refused: in-memory state failed schema validation: ${firstValidationErrorDetail(validationError)}`,
     );
   }
 

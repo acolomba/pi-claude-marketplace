@@ -49,9 +49,13 @@ export const NETWORK_FREE_TARGETS = [
   // The ledger reads the cached manifest with no
   // network sync of its own; the only network touch is the cache-miss clone
   // inside the seam. Keep both targets so splitting composition from the
-  // ledger cannot weaken the original gate.
+  // ledger cannot weaken the original gate. operations.ts is the third install
+  // owner: it binds the concrete runPhases and withLockedStateTransaction
+  // wrappers around the semantic factory, so it is exactly where a direct git
+  // import would land once composition moved out of the flow.
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts",
   // PL-3 + NFR-5: list is read-only against state + manifest; no network.
   // Every list owner is gated, not just the flow: candidate-row owns the
   // cold/warm `(remote)` vs `(available)` classification and installed-row
@@ -405,6 +409,12 @@ export const CREDENTIAL_LEAK_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/auth-host.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
+  // AUTH-09: buildAuthCallbacks and its three hookDebugLog calls moved out of
+  // platform/git.ts into this module. The scan aimed at git.ts kept passing
+  // over a file with nothing left to catch, so the credential-adjacent logging
+  // was covered by nothing. Appended last so no existing positional binding in
+  // no-credential-leak.test.ts is re-aimed.
+  "extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts",
 ] as const;
 
 /**
@@ -518,6 +528,55 @@ export const MISSING_TARGET_PROBES = [
 ] as const;
 
 /**
+ * The unused-type-member gate's own subjects.
+ *
+ * MEMBER-01: the gate's live sensitivity control plants an unread optional
+ * member on the REAL `EdgeDeps` declaration and clears it with a read from the
+ * REAL owner test. Both files are therefore targets in the sense this registry
+ * means: a rename leaves the control planting into nothing, and a plant into
+ * nothing is a control that inspects nothing.
+ *
+ * The runner and the suites beside it are targets for the same reason -- the
+ * claim-to-control ledger names a case inside each one, and a suite that moved
+ * would leave a stated capability with no discriminating control.
+ */
+export const UNUSED_TYPE_MEMBER_GATE_TARGETS = [
+  "extensions/pi-claude-marketplace/edge/types.ts",
+  "tests/edge/types.test.ts",
+  "scripts/check-unused-type-members.mjs",
+  "scripts/check-unused-type-members.negative.mjs",
+  "scripts/check-unused-type-members.exceptions.json",
+  "tests/scripts/check-unused-type-members.test.ts",
+  "tests/scripts/check-unused-type-members.model.test.ts",
+  "tests/scripts/check-unused-type-members.operations.test.ts",
+] as const;
+
+/** The declaration the live sensitivity control plants its offender into. */
+export const EDGE_DEPS_REL: (typeof UNUSED_TYPE_MEMBER_GATE_TARGETS)[number] =
+  "extensions/pi-claude-marketplace/edge/types.ts";
+
+/** The owner test whose `EdgeDeps` receiver supplies the benign read. */
+export const EDGE_DEPS_OWNER_TEST_REL: (typeof UNUSED_TYPE_MEMBER_GATE_TARGETS)[number] =
+  "tests/edge/types.test.ts";
+
+/** The gate's command-line entry point, which states the claims it supports. */
+export const TYPE_MEMBER_GATE_REL: (typeof UNUSED_TYPE_MEMBER_GATE_TARGETS)[number] =
+  "scripts/check-unused-type-members.mjs";
+
+/** The executable offender and benign controls around that entry point. */
+export const TYPE_MEMBER_NEGATIVE_REL: (typeof UNUSED_TYPE_MEMBER_GATE_TARGETS)[number] =
+  "scripts/check-unused-type-members.negative.mjs";
+
+/**
+ * The recorded decisions the gate's exit status accepts: one entry per member,
+ * each naming exact coordinates and the mechanism that was measured. This is a
+ * target in the sense this file means -- a gate that cannot open it accepts
+ * whatever it happens to contain.
+ */
+export const TYPE_MEMBER_EXCEPTIONS_REL: (typeof UNUSED_TYPE_MEMBER_GATE_TARGETS)[number] =
+  "scripts/check-unused-type-members.exceptions.json";
+
+/**
  * D-07-17: the records that carry a finding's disposition when the evidence for
  * it is a command run this cycle rather than a change to the tree.
  *
@@ -561,159 +620,38 @@ export const FINDING_DISPOSITIONS_REL: (typeof EVIDENCE_RECORD_TARGETS)[number] 
  * this module is a list of paths that must resolve on disk, and a census entry
  * carries an export name as well as a path. Keying by path keeps every path a
  * bare string literal, which is what the literal-match scan over this file needs.
+ *
+ * The record is EMPTY, and an empty measurement is not a disabled one. The gate
+ * still runs the analyzer, still validates the report envelope, and still
+ * compares for exact equality -- so the first export that production stops
+ * reading fails here rather than landing unremarked. Emptiness is the strongest
+ * state this pin can be in, not the weakest.
  */
-export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> = {
-  "extensions/pi-claude-marketplace/bridges/agents/convert.ts": [
-    "MODEL_MAP",
-    "THINKING_VALUES",
-    "TOOL_MAP",
-  ],
-  "extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts": [
-    "GENERATED_AGENT_MARKER",
-    "emitYamlScalar",
-    "sanitizeProvenanceValue",
-  ],
-  "extensions/pi-claude-marketplace/bridges/agents/index.ts": [
-    "GENERATED_AGENT_MARKER",
-    "GENERATED_AGENT_MARKER_LEGACY",
-  ],
-  "extensions/pi-claude-marketplace/bridges/agents/marker.ts": [
-    "GENERATED_AGENT_MARKER_LEGACY",
-    "GENERATED_AGENT_PREFIX",
-  ],
-  "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts": [
-    "ASYNC_REWAKE_PIDS_FILENAME",
-    "ASYNC_REWAKE_PID_TABLE_VERSION",
-  ],
-  "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts": ["MARKER_ENV"],
-  "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts": [
-    "createBeforeAgentStartHandler",
-  ],
-  "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts": [
-    "bashSubcommandFires",
-    "compileBashGlob",
-    "compilePathGlob",
-    "compilePowerShellGlob",
-    "compilePowerShellRule",
-    "parseBashSubcommands",
-    "parsePowerShellSubcommands",
-    "powerShellSubcommandFires",
-  ],
-  "extensions/pi-claude-marketplace/bridges/hooks/stage.ts": [
-    "createWriteHookConfig",
-    "hookConfigPathFor",
-  ],
-  "extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts": ["MCP_COLLISION_SLOTS"],
-  "extensions/pi-claude-marketplace/bridges/mcp/index.ts": ["resolvePluginMcpServers"],
-  "extensions/pi-claude-marketplace/bridges/mcp/marker.ts": ["readMarker"],
-  "extensions/pi-claude-marketplace/bridges/mcp/parse.ts": [
-    "parseMcpServers",
-    "resolvePluginMcpServers",
-  ],
-  "extensions/pi-claude-marketplace/bridges/mcp/stage.ts": ["MalformedMcpServersError"],
-  "extensions/pi-claude-marketplace/bridges/mcp/substitute.ts": ["deepSubstitute"],
-  "extensions/pi-claude-marketplace/bridges/skills/unstage.ts": ["createUnstagePluginSkills"],
-  "extensions/pi-claude-marketplace/domain/auth-registry.ts": ["GITLAB_PROVIDER"],
-  "extensions/pi-claude-marketplace/domain/components/hooks.ts": [
-    "HOOKS_CONFIG_SCHEMA",
-    "HOOKS_VALIDATOR",
-  ],
-  "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts": ["HOOKS_CONFIG_SCHEMA"],
-  "extensions/pi-claude-marketplace/domain/plugin-resolver.ts": ["resolveLoose"],
-  "extensions/pi-claude-marketplace/domain/resolver-types.ts": ["ResolvedPluginSchema"],
-  "extensions/pi-claude-marketplace/domain/unsupported-components.ts": [
-    "SUPPORTED_COMPONENT_KINDS",
-    "UNSUPPORTED_COMPONENT_KINDS",
-  ],
-  "extensions/pi-claude-marketplace/edge/browser/plugin-browser.ts": [
-    "availableActions",
-    "makeSelectListTheme",
-    "statusDescription",
-    "statusTag",
-  ],
-  "extensions/pi-claude-marketplace/edge/completions/data.ts": [
-    "buildItem",
-    "getPluginToMarketplacesMap",
-  ],
-  "extensions/pi-claude-marketplace/edge/flag-catalog.ts": ["CATALOG_VERBS"],
-  "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts": ["parseFetchTarget"],
-  "extensions/pi-claude-marketplace/edge/handlers/tools.ts": ["projectRowStatus"],
-  "extensions/pi-claude-marketplace/index.ts": ["default"],
-  "extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts": [
-    "planMarketplaceSourcesForRefs",
-  ],
-  "extensions/pi-claude-marketplace/orchestrators/import/refs.ts": ["parseEnabledPluginRef"],
-  "extensions/pi-claude-marketplace/orchestrators/import/settings.ts": [
-    "mergeClaudeSettings",
-    "resolveClaudeSettingsPaths",
-  ],
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts": ["resolveScopeFromState"],
-  "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts": ["collectBinDirs"],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts": [
-    "createSetPluginEnabled",
-  ],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts": ["createFetchPlugins"],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts": ["createGetPluginInfo"],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts": ["createInstallPlugin"],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts": [
-    "narrowResolverReasons",
-  ],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts": [
-    "createReinstallPlugin",
-  ],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts": [
-    "finalizeReinstalledPlugin",
-    "replaceReinstalledPlugin",
-    "rollbackReinstalledPlugin",
-    "runPostSuccessMaintenance",
-  ],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts": [
-    "outcomeToPluginMessage",
-  ],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts": ["createUninstallPlugin"],
-  "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts": ["createApplyReconcile"],
-  "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts": [
-    "scanForceInstalledBackfills",
-  ],
-  "extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts": [
-    "PENDING_STATUSES",
-  ],
-  "extensions/pi-claude-marketplace/persistence/config-io.ts": ["CONFIG_VALIDATOR"],
-  "extensions/pi-claude-marketplace/persistence/state-io.ts": [
-    "PLUGIN_INSTALL_RECORD_SCHEMA",
-    "STATE_SCHEMA",
-    "STATE_VALIDATOR",
-  ],
-  "extensions/pi-claude-marketplace/platform/git-credential.ts": ["createCredentialOps"],
-  "extensions/pi-claude-marketplace/platform/git.ts": [
-    "buildAuthCallbacks",
-    "listBranches",
-    "listRemotes",
-  ],
-  "extensions/pi-claude-marketplace/platform/pi-api.ts": [
-    "hasLoadedPiMcpAdapter",
-    "hasLoadedPiSubagents",
-  ],
-  "extensions/pi-claude-marketplace/shared/completion-cache.ts": [
-    "MARKETPLACE_NAMES_CACHE_SCHEMA",
-    "PLUGIN_INDEX_CACHE_SCHEMA",
-  ],
-  "extensions/pi-claude-marketplace/shared/errors-bridges.ts": ["AgentForeignContentError"],
-  "extensions/pi-claude-marketplace/shared/errors.ts": ["ConcurrentUninstallError"],
-  "extensions/pi-claude-marketplace/shared/markers.ts": ["STATE_LOCK_HELD_PREFIX"],
-  "extensions/pi-claude-marketplace/shared/notification-dispatch.ts": ["emitWithSummary"],
-  "extensions/pi-claude-marketplace/shared/notification-grammar.ts": [
-    "ICON_PARTIALLY_AVAILABLE",
-    "ICON_REMOTE",
-  ],
-  "extensions/pi-claude-marketplace/shared/notification-types.ts": [
-    "MARKETPLACE_STATUSES",
-    "PLUGIN_STATUSES",
-    "REASONS",
-    "STATUS_TOKENS",
-  ],
-  "extensions/pi-claude-marketplace/shared/path-safety.ts": [
-    "LexicalTraversalError",
-    "createPathSafetyGuard",
-  ],
-};
+export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> = {};
+
+/** Real fixture targets use existing repository paths so the registry still resolves. */
+export const FALLOW_CONTROL_TARGETS = [
+  "extensions/pi-claude-marketplace/index.ts",
+  "extensions/pi-claude-marketplace/shared/errors.ts",
+  "extensions/pi-claude-marketplace/shared/markers.ts",
+] as const;
+
+/**
+ * Complete production finding identities; additions, removals, and swaps require review.
+ *
+ * Every category is empty, which is the measured state of the tree and not a
+ * suppression of it. Two declarations production reachability cannot follow --
+ * the manifest-loaded entry default and the ring buffer's `read` -- carry an
+ * exact adjacent annotation naming their real loader and their real callers;
+ * both are calibrated by the offender and benign controls in
+ * `fallow-production-mode.test.ts`, which prove the same annotations do not
+ * cover a sibling export, an unrelated default, or the same member name on
+ * another class.
+ */
+export const PRODUCTION_FINDING_CENSUS = {
+  unused_exports: [],
+  unused_types: [],
+  unused_files: [],
+  unused_class_members: [],
+  duplicate_exports: [],
+} as const;

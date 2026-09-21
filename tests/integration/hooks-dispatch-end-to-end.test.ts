@@ -10,9 +10,11 @@
 //   3. Survive the sequential per-scope rebuild loop without wiping
 //   4. Invoke the executor on the captured handler when session_start fires
 //
-// Regression gate for the cross-scope wipe (commit 2dbbcbd) and for any
-// future change that would make the boot loop fail to populate the
-// routing table for a user-scope plugin when the project scope is empty.
+// Regression gate for the cross-scope wipe and for any future change that
+// would make the boot loop fail to populate the routing table for a
+// user-scope plugin when the project scope is empty. The boot loop lives in
+// rebuildRoutingTablesWith() / collectAllCachedPlugins() in
+// bridges/hooks/event-router.ts.
 //
 // Test shape: real on-disk state.json + hooks.json, real cache + rebuild,
 // composite-handler dispatch routed through the `executor` injected into
@@ -193,7 +195,6 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
     // carry the real project cwd so the hydrate resolves the right scope root.
     const placeholderCtx = { cwd: projectCwd } as unknown as ExtensionContext;
     await hooksHydration.registerHooksBridge(pi, {
-      ctx: placeholderCtx,
       cwd: projectCwd,
       executor: injectedExecutor,
     });
@@ -272,7 +273,6 @@ test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_
     const { pi, registrations } = makeMockPi();
     const placeholderCtx = { cwd: projectCwd } as unknown as ExtensionContext;
     await hooksHydration.registerHooksBridge(pi, {
-      ctx: placeholderCtx,
       cwd: agentDir,
       executor: injectedExecutor,
     });
@@ -330,7 +330,6 @@ test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pr
     const { pi, registrations } = makeMockPi();
     const placeholderCtx = { cwd: projectCwd } as unknown as ExtensionContext;
     await hooksHydration.registerHooksBridge(pi, {
-      ctx: placeholderCtx,
       cwd: bootCwd,
       executor: injectedExecutor,
     });
@@ -344,7 +343,7 @@ test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pr
     // SessionStart entry actually existing. With only a user-scope plugin
     // installed, an unsolicited mkdir here would create `<cwd>/.pi/...` in
     // the user's project on every session start -- the WR-05 violation.
-    assert.deepEqual(
+    assert.deepStrictEqual(
       await readdir(projectCwd),
       [],
       "pristine project cwd must stay empty across session_start (WR-05)",
@@ -373,7 +372,6 @@ test("HOOK-E2E-04: a throwing lazy project hydrate never blocks SessionStart dis
 
     const { pi, registrations } = makeMockPi();
     await hooksHydration.registerHooksBridge(pi, {
-      ctx: { cwd: projectCwd } as unknown as ExtensionContext,
       cwd: projectCwd,
       executor: injectedExecutor,
     });

@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "exceptions": [
+    {
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts:68:69",
+      "owner": "PLUGIN_INFO_RENDER",
+      "key": "status",
+      "decision": "Orchestrators repair: the type-selection draft was submitted to the real engine and withdrawn, not rewritten.",
+      "mechanism": "A type-selection contract was drafted for this filter, submitted to the real contract engine against this tree, and refused: \"filter ...:68:37 selects over a type that does not discriminate on status\". PluginInfoCascadeMsg is PluginSkippedMessage, a single variant, so the selected-over type is not a union and discriminates nothing. The draft was withdrawn rather than reshaped. The filter itself was NOT dropped: every sibling render map in the family carries the same Extract<Msg, { status: K }> shape with an accepted entry, and dropping it here hands each arm the whole union the moment info gains a second cascade status -- a widening the as const satisfies pin cannot catch."
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts:130:5",
+      "owner": "enableRowDependencies.signals",
+      "key": "partition",
+      "decision": "Orchestrators repair: WR-01 refusal marker kept, with no source touched.",
+      "mechanism": "A partition?: never refusal marker. LedgerDegradationSignals declares no partition and the Pick<...> left operand declares none either, so there is no slot to narrow and every restatement ADDS a key; the type-refinement prover refuses it by construction rather than by coordinate, so no contract entry can reach it. Its documented job (WR-01) is to refuse PluginUpdateUpdatedOutcome, which declares the same two optional facts and would otherwise match structurally and silently return an empty dependency list for every update. Weakening the refusal to clear this row reintroduces exactly that bug."
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/orchestrators/types.ts:155:3",
+      "owner": "UpdatePhaseFailure",
+      "key": "msg",
+      "decision": "Orchestrators repair: reclassified from the inherited disposition and recorded rather than deleted.",
+      "mechanism": "The reader survey agrees the slot has no reader today -- the only syntax naming this declaration is the write at update-swap.ts:929, and the f.msg reads at :921 and :929 land on Phase3Failure.msg through UpdatePhase3Failure, a different declaration. The removal is still refused: phaseFailures is populated by exactly one path, the phase-3 rollback aggregation, and its own header states the contract, to surface failures structurally so the cascade renderer can build the rollback-partial parent plus indented children. A slot a rollback path populates is behaviour even with no reader today, and deleting it forces a future consumer to re-parse the per-phase text back out of notes prose."
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:41:39",
+      "owner": "AuthAttemptResult",
+      "key": "authAttempted",
+      "decision": "D-32-05. Revoking a recorded decision is outside any repair plan in this phase.",
+      "mechanism": "D-32-05 put authAttempted: true on BOTH arms deliberately, as a reference-only future-proofing marker, and the declaration own comment states the implementation never branches on it: onAuthFailure(url, cred) is called with only the credential and never receives this value. The analyzer is not involved -- there is no read to find. Its structural twin DeviceFlowResult.authAttempted in domain/github-auth.ts is test-only-observed with 36 witnesses; this platform copy exists only because platform/README.md forbids a platform to domain import, so it carries no witness of its own and the orchestrators rely on structural typing to pass initiateDeviceFlow across. Clearing this row means revisiting D-32-05, not repairing source."
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts:42:34",
+      "owner": "AuthAttemptResult",
+      "key": "authAttempted",
+      "decision": "D-32-05. Revoking a recorded decision is outside any repair plan in this phase.",
+      "mechanism": "D-32-05 put authAttempted: true on BOTH arms deliberately, as a reference-only future-proofing marker, and the declaration own comment states the implementation never branches on it: onAuthFailure(url, cred) is called with only the credential and never receives this value. The analyzer is not involved -- there is no read to find. Its structural twin DeviceFlowResult.authAttempted in domain/github-auth.ts is test-only-observed with 36 witnesses; this platform copy exists only because platform/README.md forbids a platform to domain import, so it carries no witness of its own and the orchestrators rely on structural typing to pass initiateDeviceFlow across. Clearing this row means revisiting D-32-05, not repairing source."
+    }
+  ]
+}

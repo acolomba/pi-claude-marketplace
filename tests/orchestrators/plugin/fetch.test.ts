@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHook } from "node:async_hooks";
 import { chmod, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
@@ -15,17 +16,14 @@ import {
   materializePluginClone,
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
-import {
-  createFetchPlugins,
-  fetchPlugins,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
+import { createFetchPlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
 import {
   makePresenceProbe,
   probeManifestEntry,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
+import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
@@ -41,6 +39,7 @@ import type {
   FetchCloneCacheSeam,
   FetchStatus,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
+import type * as FetchOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -51,6 +50,23 @@ import type {
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type ManifestEntry = MarketplaceManifest["plugins"][number];
+
+// fetch.ts publishes the factory and its injected status contract; the single
+// production composition of them lives in orchestrators/plugin/operations.ts.
+// Re-adding a composed value here would give the command two production
+// bindings. Restoring the export makes the `satisfies` resolve and turns the
+// directive below into an unused one (TS2578).
+// @ts-expect-error fetch.ts does not expose a composed fetchPlugins value
+void ({} satisfies { readonly retired?: typeof FetchOrchestrator.fetchPlugins });
+
+/**
+ * The composition every case below drives: this module's own factory bound to
+ * the real fs-only status capability, stated at one site so each case reads as
+ * the command rather than as its assembly. It is the same pair of probes the
+ * production composition binds.
+ */
+const fetchPlugins = createFetchPlugins({ makePresenceProbe, probeManifestEntry });
+
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 type NotificationSeverity = Parameters<ExtensionContext["ui"]["notify"]>[1];
 type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
@@ -327,6 +343,28 @@ async function withWorkspace<T>(
 ): Promise<T> {
   return withHermeticEnvironment("plugin-fetch-", run);
 }
+
+test("constructs the fetch command without using its status capability or starting asynchronous work", (t) => {
+  // arrange
+  const status = mock<FetchStatus>({ exactParams: true, name: "fetch status" });
+  const startedResourceTypes: string[] = [];
+  const resources = createHook({
+    init: (_asyncId, type) => {
+      startedResourceTypes.push(type);
+    },
+  });
+  t.after(() => resources.disable());
+
+  // act
+  resources.enable();
+  const fetchWithStatus = createFetchPlugins(status);
+  resources.disable();
+
+  // assert
+  assert.strictEqual(typeof fetchWithStatus, "function");
+  assert.deepStrictEqual(startedResourceTypes, []);
+  verify(status);
+});
 
 test("exposes a required fetch status factory", async () => {
   // arrange

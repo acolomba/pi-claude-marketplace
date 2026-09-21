@@ -32,8 +32,8 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  *
  * D-10: `IMPORT_CONTEXT` is pinned via `as const satisfies
  * CommandContext<...>`, so omitting a render arm for any declared status is a
- * TS2741 compile error at the satisfies site -- the localized replacement for
- * the central `renderPluginRow` `assertNever` default.
+ * TS2741 compile error at the satisfies site -- the localized counterpart of
+ * the central `renderPluginRow` exhaustive switch.
  */
 
 /**

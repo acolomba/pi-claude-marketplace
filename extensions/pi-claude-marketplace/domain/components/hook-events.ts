@@ -38,7 +38,7 @@ import type { ClaudeHookEvent } from "../../shared/concerns/hooks.ts";
  * has a dispatch translator; each dispatch owner pins that invariant with an
  * exhaustive record keyed by `DispatchableEvent`.
  */
-export const BUCKET_A_EVENTS = [
+const ADMITTED_EVENT_NAMES = [
   "SessionStart",
   "UserPromptSubmit",
   "PreToolUse",
@@ -50,6 +50,24 @@ export const BUCKET_A_EVENTS = [
   "Stop",
   "StopFailure",
 ] as const satisfies readonly ClaudeHookEvent[];
+
+/**
+ * SCN-F025 / GGAT-04 completeness proof for the reverse direction described
+ * on `BucketAEvent` below. `Exclude<ClaudeHookEvent, BucketAEvent>` is `never` only
+ * when the tuple registers the whole union; an unregistered member leaves a
+ * non-`never` type, which violates `_AssertNever`'s constraint and is a
+ * TS2344 build failure. The public registration tuple consumes the private
+ * proof in its actual satisfies contract, with no runtime footprint.
+ */
+type _AssertNever<T extends never> = T;
+type _UnregisteredHookEvent = Exclude<ClaudeHookEvent, (typeof ADMITTED_EVENT_NAMES)[number]>;
+type _BucketAEventsCoverageProof = _AssertNever<_UnregisteredHookEvent>;
+
+/** Complete admitted event tuple, checked against the shared event vocabulary. */
+export const BUCKET_A_EVENTS = ADMITTED_EVENT_NAMES satisfies readonly Exclude<
+  ClaudeHookEvent,
+  _BucketAEventsCoverageProof
+>[];
 
 /**
  * Literal union of bucket-A event names. Derived from the tuple above so
@@ -64,7 +82,7 @@ export const BUCKET_A_EVENTS = [
  *   - The `as const satisfies readonly ClaudeHookEvent[]` assertion above
  *     proves every `BUCKET_A_EVENTS` member is a `ClaudeHookEvent`. A tuple
  *     entry outside the union fails at that assertion site.
- *   - `_BucketAEventsCoverageProof` below proves every `ClaudeHookEvent` is
+ *   - `_BucketAEventsCoverageProof` above proves every `ClaudeHookEvent` is
  *     a `BUCKET_A_EVENTS` member. A union member left unregistered fails
  *     there.
  *
@@ -74,21 +92,6 @@ export const BUCKET_A_EVENTS = [
  * resolver admits and no dispatch translator routes.
  */
 export type BucketAEvent = (typeof BUCKET_A_EVENTS)[number];
-
-/**
- * SCN-F025 / GGAT-04 completeness proof for the second direction described
- * above. `Exclude<ClaudeHookEvent, BucketAEvent>` resolves to `never` only
- * when the tuple registers the whole union; an unregistered member leaves a
- * non-`never` type, which violates `_AssertNever`'s constraint and is a
- * TS2344 build failure. Type-only, with no runtime footprint. The export is
- * what keeps `noUnusedLocals` quiet -- `_AssertNever` and
- * `_UnregisteredHookEvent` are the proof's own internals and mean nothing to
- * a caller.
- */
-type _AssertNever<T extends never> = T;
-type _UnregisteredHookEvent = Exclude<ClaudeHookEvent, BucketAEvent>;
-// fallow-ignore-next-line private-type-leak -- SCN-F025 completeness proof; a non-never result is a TS2344 build failure, and the export is what keeps `noUnusedLocals` quiet. `_AssertNever` / `_UnregisteredHookEvent` are the proof's own internals, meaningless to a caller.
-export type _BucketAEventsCoverageProof = _AssertNever<_UnregisteredHookEvent>;
 
 /**
  * The three bucket-A events whose matcher targets a Claude tool name

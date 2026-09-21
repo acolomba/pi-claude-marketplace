@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
-import { test } from "node:test";
+import test from "node:test";
 import { isDeepStrictEqual } from "node:util";
 
 import { SessionManager } from "@earendil-works/pi-coding-agent";
@@ -14,7 +14,6 @@ import {
   type PidTableEntry,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts";
 import {
-  MARKER_ENV,
   shutdownInMemoryChildren,
   spawnAndRegister,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
@@ -245,22 +244,22 @@ function destroyChildren(children: readonly ChildHarness[]): void {
 }
 
 function assertLaneParity(syncEnv: NodeJS.ProcessEnv, asyncEnv: NodeJS.ProcessEnv): void {
-  const syncKeys = Object.keys(syncEnv).sort();
-  const asyncKeysWithoutMarker = Object.keys(asyncEnv)
-    .filter((key) => key !== MARKER_ENV)
-    .sort();
-  assert.deepStrictEqual(asyncKeysWithoutMarker, syncKeys);
-  for (const key of syncKeys) {
-    assert.strictEqual(asyncEnv[key], syncEnv[key]);
-  }
+  const asyncWithoutMarker = Object.fromEntries(
+    Object.entries(asyncEnv).filter(([key]) => key !== "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH"),
+  );
+  assert.deepStrictEqual(asyncWithoutMarker, syncEnv);
 }
 
 async function waitForPidTable(
   loc: ReturnType<typeof locationsFor>,
   expected: readonly PidTableEntry[],
 ): Promise<void> {
+  // The registry persists the table after `close` through async file
+  // operations it does not await, so the test reads the file until it
+  // settles. Wall-clock time is the only bound: a count of attempts is not,
+  // because a fast runner exhausts it in a fraction of the deadline.
   const deadline = process.hrtime.bigint() + 2_000_000_000n;
-  for (let attempt = 0; attempt < 1_000 && process.hrtime.bigint() < deadline; attempt += 1) {
+  while (process.hrtime.bigint() < deadline) {
     const entries = await readPidTable(loc);
     if (isDeepStrictEqual(entries, expected)) {
       return;
@@ -321,7 +320,10 @@ test("keeps PreToolUse hook environments equal across sync and async lanes excep
       "D-07-03: expected one sync and one async spawn; lane parity over an unspawned lane proves nothing",
     );
     assertLaneParity(syncEnvironment, asyncEnvironment);
-    assert.strictEqual(asyncEnvironment[MARKER_ENV], "dispatch-pretool-parity");
+    assert.strictEqual(
+      asyncEnvironment["PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH"],
+      "dispatch-pretool-parity",
+    );
     assert.strictEqual(Object.hasOwn(syncEnvironment, "CLAUDE_ENV_FILE"), false);
     assert.strictEqual(Object.hasOwn(asyncEnvironment, "CLAUDE_ENV_FILE"), false);
   } finally {
@@ -372,7 +374,10 @@ test("keeps SessionStart env-file identity equal across sync and async lanes", a
       "D-07-03: expected one sync and one async spawn; lane parity over an unspawned lane proves nothing",
     );
     assertLaneParity(syncEnvironment, asyncEnvironment);
-    assert.strictEqual(asyncEnvironment[MARKER_ENV], "dispatch-session-parity");
+    assert.strictEqual(
+      asyncEnvironment["PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH"],
+      "dispatch-session-parity",
+    );
     assert.strictEqual(
       syncEnvironment.CLAUDE_ENV_FILE,
       path.join(
