@@ -723,14 +723,17 @@ function enableCascadeSkipRow(member: EnableCascadeMember): EnableCascadeMemberR
     };
   }
 
-  // "not-installed": LOAD-01's load-time check owns reporting a missing
-  // declared dependency, so this disposition never refuses the root's own
-  // enable -- it only reports.
+  // WR-04: "not-installed". LOAD-01's load-time check owns reporting a
+  // missing declared dependency, so this disposition never refuses the
+  // root's own enable -- it only reports. The enable WAS carried out, so
+  // `warning` ("carried out but short"), never `error` ("not carried out"):
+  // the next reload holds the root down as `dependencyDisabled` until the
+  // missing dependency is installed.
   return {
     status: "skipped",
     name: member.key,
     reasons: absentTargetReasons(),
-    severity: "error",
+    severity: "warning",
     needsReload: false,
   };
 }

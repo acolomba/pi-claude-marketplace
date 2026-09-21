@@ -4581,7 +4581,7 @@ test("EDEP-01: a not-installed declared dependency reports {not installed} and d
     assert.equal(
       notifications[0]!.message,
       [
-        "A plugin operation has failed.",
+        "A plugin operation needs attention.",
         "",
         "● official [user]",
         "  ● a v1.0.0 (installed)",
