@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- A plugin that ships workflow scripts now installs them as workflows the Pi workflow engine can load. (#TBD)
+- A plugin that ships workflow scripts now installs them as workflows the Pi workflow engine can load. (#205)
   - The extension reports and skips a workflow script it cannot read, one with no usable metadata, one with no literal `meta.name`, or one over 512 KiB. It installs the rest of the plugin. Claude Code skips the same scripts.
   - Only `.js` files are workflow scripts, as in Claude Code. The `workflows` manifest field can name a single `.js` file as well as a directory.
   - A skill that names a sibling workflow as `plugin:workflow` gets the installed name in its staged copy, the same way it already does for a sibling skill.
