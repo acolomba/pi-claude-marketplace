@@ -94,6 +94,7 @@ const EXPECTED_REASONS = [
   "dependents unsatisfied",
   "dependency current copy",
   "dependency enabled",
+  "dependents remain",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

@@ -4396,7 +4396,10 @@ test("EDEP-01 empty edge: a root declaring no dependencies enables byte-identica
  * One marketplace "official" holding several REAL on-disk plugins, some of
  * which declare others as dependencies -- for the depth-2, diamond, cycle
  * and consequence-marker cases, which all stay within one scope and one
- * marketplace.
+ * marketplace. `opts.scope` (default "user") and `opts.cwd` let a caller seed
+ * a SECOND graph in the OTHER scope from the same `home`, for the D-05-05
+ * cross-scope guard case -- the two graphs' marketplace clones live under
+ * distinct `mpRoot`s so seeding both from one `home` cannot collide.
  */
 async function seedEdepGraph(
   home: string,
@@ -4407,11 +4410,16 @@ async function seedEdepGraph(
     readonly enabled: boolean;
     readonly dependencyDisabled?: true;
   }[],
+  opts: { readonly scope?: "user" | "project"; readonly cwd?: string } = {},
 ): Promise<{ statePath: string; configPath: string; scopeRoot: string; mpRoot: string }> {
-  const scopeRoot = path.join(home, ".pi", "agent");
+  const scope = opts.scope ?? "user";
+  const scopeRoot =
+    scope === "user"
+      ? path.join(home, ".pi", "agent")
+      : locationsFor("project", opts.cwd ?? home).scopeRoot;
   const extRoot = path.join(scopeRoot, "pi-claude-marketplace");
   await mkdir(extRoot, { recursive: true });
-  const mpRoot = path.join(home, "official-src");
+  const mpRoot = path.join(home, `official-src-${scope}`);
   await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
 
   const pluginRecords: Record<
@@ -4449,7 +4457,7 @@ async function seedEdepGraph(
     marketplaces: {
       official: {
         name: "official",
-        scope: "user",
+        scope,
         source: { kind: "path" as const, raw: mpRoot, logical: mpRoot },
         addedFromCwd: home,
         marketplaceRoot: mpRoot,
@@ -4989,5 +4997,267 @@ test("EDEP-01: a member's undo folds a partial unstage failure into the record i
     assert.match(notifications[0]!.message, /\(failed\)/);
     const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
     assert.equal(state.marketplaces.official!.plugins.b!.enabled, false);
+  });
+});
+
+test("EDEP-02: a disable is refused while an installed and enabled plugin still declares it", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "shared-lib", version: "1.0.0", enabled: true },
+      { name: "helper", version: "1.0.0", dependencies: [{ name: "shared-lib" }], enabled: true },
+    ]);
+    let cascadeUnstageCalls = 0;
+    let saveCalls = 0;
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async cascadeUnstagePlugin(plugin, marketplace, locations, installedPlugin) {
+        cascadeUnstageCalls += 1;
+        return cascadeUnstagePlugin(plugin, marketplace, locations, installedPlugin);
+      },
+      async withLockedStateTransaction(locations, run) {
+        return withLockedStateTransaction(locations, async (tx) => {
+          return run({
+            state: tx.state,
+            save: async () => {
+              saveCalls += 1;
+              await tx.save();
+            },
+          });
+        });
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const mtimeBefore = (await stat(statePath)).mtimeMs;
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "shared-lib",
+      enable: false,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ shared-lib (failed) {dependents remain}",
+        "    cause: Disable helper@official first, then shared-lib@official.",
+      ].join("\n"),
+    );
+    assert.equal(cascadeUnstageCalls, 0);
+    assert.equal(saveCalls, 0);
+    assert.equal((await stat(statePath)).mtimeMs, mtimeBefore);
+  });
+});
+
+test("EDEP-02: a DISABLED declarer does not block the disable", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "shared-lib", version: "1.0.0", enabled: true },
+      { name: "helper", version: "1.0.0", dependencies: [{ name: "shared-lib" }], enabled: false },
+    ]);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "shared-lib",
+      enable: false,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● official [user]", "  ◍ shared-lib v1.0.0 (disabled)", "", "/reload to pick up changes"].join(
+        "\n",
+      ),
+    );
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins["shared-lib"]!.enabled, false);
+  });
+});
+
+test("EDEP-02: a declarer in the OTHER scope does not block the disable", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "shared-lib", version: "1.0.0", enabled: true },
+    ]);
+    await seedEdepGraph(
+      home,
+      [{ name: "helper", version: "1.0.0", dependencies: [{ name: "shared-lib" }], enabled: true }],
+      { scope: "project", cwd },
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "shared-lib",
+      enable: false,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(disabled\)/);
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins["shared-lib"]!.enabled, false);
+  });
+});
+
+test("EDEP-02: nothing declares the target, disable proceeds byte-identically to disable-fresh", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [{ name: "shared-lib", version: "1.0.0", enabled: true }]);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "shared-lib",
+      enable: false,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● official [user]", "  ◍ shared-lib v1.0.0 (disabled)", "", "/reload to pick up changes"].join(
+        "\n",
+      ),
+    );
+  });
+});
+
+test("EDEP-02: two enabled dependents are named on the cause line, sorted", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [
+      { name: "shared-lib", version: "1.0.0", enabled: true },
+      { name: "zeta", version: "1.0.0", dependencies: [{ name: "shared-lib" }], enabled: true },
+      { name: "alpha", version: "1.0.0", dependencies: [{ name: "shared-lib" }], enabled: true },
+    ]);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "shared-lib",
+      enable: false,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ shared-lib (failed) {dependents remain}",
+        "    cause: Disable alpha@official, zeta@official first, then shared-lib@official.",
+      ].join("\n"),
+    );
+    assert.ok(!notifications[0]!.message.includes("&&"));
+  });
+});
+
+test("EDEP-02: an unreadable declarer refuses the disable with no absolute path leaked", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "shared-lib", version: "1.0.0", enabled: true },
+      { name: "other", version: "1.0.0", enabled: true },
+    ]);
+    // Break "other"'s own manifest read AND remove it from the marketplace
+    // entry so D-01-07's fallback also misses, forcing the declarer read to
+    // fail closed (D-05-07).
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: { official: { manifestPath: string; marketplaceRoot: string } };
+    };
+    const manifest = JSON.parse(
+      await readFile(state.marketplaces.official.manifestPath, "utf8"),
+    ) as { plugins: { name: string }[] };
+    manifest.plugins = manifest.plugins.filter((entry) => entry.name !== "other");
+    await writeFile(state.marketplaces.official.manifestPath, JSON.stringify(manifest), "utf8");
+    let saveCalls = 0;
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async withLockedStateTransaction(locations, run) {
+        return withLockedStateTransaction(locations, async (tx) => {
+          return run({
+            state: tx.state,
+            save: async () => {
+              saveCalls += 1;
+              await tx.save();
+            },
+          });
+        });
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const mtimeBefore = (await stat(statePath)).mtimeMs;
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "shared-lib",
+      enable: false,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ shared-lib (failed) {unreadable}",
+        "    cause: cannot read the dependencies of other@official: not declared by its marketplace",
+      ].join("\n"),
+    );
+    assert.equal(saveCalls, 0);
+    assert.equal((await stat(statePath)).mtimeMs, mtimeBefore);
+    assert.ok(!notifications[0]!.message.includes(state.marketplaces.official.marketplaceRoot));
   });
 });

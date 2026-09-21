@@ -5,7 +5,7 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). `notification-types.ts` declares `Reason` as the SINGLE
- * source of catalog truth (OUT-08: the 59-entry membership AND order must stay
+ * source of catalog truth (OUT-08: the 61-entry membership AND order must stay
  * byte-identical for catalog stability); this module reorganizes that closed set
  * into shared topic-grouped unions + a structural completeness proof WITHOUT
  * restating the vocabulary's order. The topic groups below are typed views over
@@ -64,9 +64,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * already-installed, disabled dependency through its record -- the install
  * cascade's already-installed arm and the enable cascade's own member row
  * both stamp it on an `installed` row, because the record changed and
- * `already installed` alone reports a no-op (59 to 60). The arithmetic above
- * is renumbered rather than annotated with the gap, so the next member to
- * join does not inherit one.
+ * `already installed` alone reports a no-op (59 to 60). EDEP-02 added
+ * `dependents remain`, disable's refusal marker for an installed and ENABLED
+ * plugin in the same scope that still declares the target -- it rides a
+ * `failed` row rather than a success row, which is what keeps it out of
+ * `dependents unsatisfied`'s group: that token's subject is a removal that
+ * WENT THROUGH, and this one's subject is an operation that did not happen
+ * (60 to 61). The arithmetic above is renumbered rather than annotated with
+ * the gap, so the next member to join does not inherit one.
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -398,4 +403,12 @@ type CommandPrivateReason =
   | "marketplace not added"
   | "marketplace not added to user scope"
   | "marketplace not added to project scope"
-  | "orphan rewake";
+  | "orphan rewake"
+  // EDEP-02: disable's refusal marker, owned by
+  // `orchestrators/plugin/enable-disable.ts`. An installed and ENABLED
+  // plugin in the same scope still declares the target, so the disable is
+  // refused and nothing is written; the dependent keys ride the cause line.
+  // It is the one member of this group that rides a `failed` row -- the
+  // command was NOT carried out, unlike its `dependents unsatisfied`
+  // neighbour above.
+  | "dependents remain";

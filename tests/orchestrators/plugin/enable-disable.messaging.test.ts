@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  composeDisableRefusalCause,
   composeEnableCascadeRows,
   DISABLE_CONTEXT,
   ENABLE_CONTEXT,
@@ -650,5 +651,71 @@ describe("composeEnableCascadeRows", () => {
 
     // assert
     assert.deepStrictEqual(rows, [memberRow, rootRow]);
+  });
+});
+
+test("the disable context renders the dependents-remain refusal reason", () => {
+  // arrange
+  const cause = new Error("Disable helper@official first, then shared-lib@official.");
+  const row = {
+    status: "failed",
+    severity: "error",
+    needsReload: false,
+    name: "shared-lib",
+    reasons: ["dependents remain"],
+    cause,
+  } as const satisfies DisableMsg;
+  const probe: SoftDepStatus = {
+    piSubagentsLoaded: false,
+    piMcpAdapterLoaded: false,
+  };
+
+  // act
+  const actual = DISABLE_CONTEXT.render.failed(row, probe, "user");
+
+  // assert
+  assert.equal(actual, "⊘ shared-lib (failed) {dependents remain}");
+});
+
+describe("composeDisableRefusalCause", () => {
+  test("names one dependent and the target, in disable order", () => {
+    // act
+    const cause = composeDisableRefusalCause("shared-lib@official", ["helper@official"]);
+
+    // assert
+    assert.equal(cause, "Disable helper@official first, then shared-lib@official.");
+  });
+
+  test("names two sorted dependents joined by comma, before the target", () => {
+    // act
+    const cause = composeDisableRefusalCause("shared-lib@official", [
+      "alpha@official",
+      "zeta@official",
+    ]);
+
+    // assert
+    assert.equal(cause, "Disable alpha@official, zeta@official first, then shared-lib@official.");
+    assert.ok(!cause.includes("&&"));
+  });
+
+  test("T-08-06: counts the dependents when one key could close the sentence's quote", () => {
+    // act
+    const cause = composeDisableRefusalCause("shared-lib@official", [
+      'alpha" and disable "victim@official',
+      "zeta@official",
+    ]);
+
+    // assert
+    assert.equal(cause, "Disable 2 other plugins first, then shared-lib@official.");
+    assert.ok(!cause.includes('alpha" and disable "victim@official'));
+  });
+
+  test("T-08-06: counts a single unrenderable dependent in the singular", () => {
+    // act
+    const cause = composeDisableRefusalCause("shared-lib@official", ["alpha@official@extra"]);
+
+    // assert
+    assert.equal(cause, "Disable 1 other plugin first, then shared-lib@official.");
+    assert.ok(!cause.includes("alpha@official@extra"));
   });
 });

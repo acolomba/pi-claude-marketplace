@@ -96,6 +96,7 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "dependents unsatisfied": true,
   "dependency current copy": true,
   "dependency enabled": true,
+  "dependents remain": true,
 };
 
 const STATUS_TOKEN_ENROLLMENT: Record<StatusToken, true> = {
@@ -157,7 +158,7 @@ const MARKETPLACE_STATUS_ENROLLMENT: Record<MarketplaceStatus, true> = {
   skipped: true,
 };
 
-test("OUT-08: Reason is the closed 60-entry reason set", () => {
+test("OUT-08: Reason is the closed 61-entry reason set", () => {
   // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
   // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
   // MCPR-03 / D-02: +1 for the malformed mcp failure-class member (34 -> 35).
@@ -228,7 +229,11 @@ test("OUT-08: Reason is the closed 60-entry reason set", () => {
   // and enable's own cascade member row both stamp it when a disabled,
   // already-installed dependency is re-materialized through its record
   // (59 -> 60).
-  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 60);
+  // EDEP-02: +1 for `dependents remain` -- disable's refusal marker for an
+  // installed and ENABLED plugin in the same scope that still declares the
+  // target. It rides a `failed` row, unlike its `dependents unsatisfied`
+  // neighbour, whose subject is a removal that WENT THROUGH (60 -> 61).
+  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 61);
 });
 
 test("SNM-02: StatusToken is the closed 24-entry token set", () => {

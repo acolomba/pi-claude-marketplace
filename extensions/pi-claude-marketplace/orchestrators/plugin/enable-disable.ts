@@ -62,6 +62,7 @@
 import path from "node:path";
 
 import { resolveDependencyClosure } from "../../domain/dependency-closure.ts";
+import { findDependents } from "../../domain/dependency-orphans.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
@@ -76,8 +77,9 @@ import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
 
-import { buildScopeDeclarationDetail } from "./dependency-index.ts";
+import { buildScopeDeclarationDetail, buildScopeDeclarationIndex } from "./dependency-index.ts";
 import {
+  composeDisableRefusalCause,
   composeEnableCascadeRows,
   DISABLE_CONTEXT,
   ENABLE_CONTEXT,
@@ -391,14 +393,18 @@ async function runEnableBranch(
 }
 
 /**
- * EDEP-01 / D-05-07 precedent, applied to the enable cascade: the enable was
- * REFUSED inside the locked transaction before anything left disk, because
- * the closure could not be resolved -- either some other record's
- * declarations could not be established, or the declared graph closes on
- * itself. Mirrors `uninstall.ts::UninstallRefusedError` exactly: the reason
+ * EDEP-01 / EDEP-02 / D-05-07 precedent: an enable or a disable was REFUSED
+ * inside the locked transaction before anything left disk. On the enable
+ * cascade (EDEP-01), the closure could not be resolved -- either some other
+ * record's declarations could not be established, or the declared graph
+ * closes on itself. On the disable branch (EDEP-02, `readEnabledDependents`),
+ * an installed and ENABLED plugin in the same scope still declares the
+ * target. Mirrors `uninstall.ts::UninstallRefusedError` exactly: the reason
  * is a closed-set token and `message` IS the rendered cause line, so it
  * carries only `name@marketplace` keys, field paths or already-redacted
  * text -- never an absolute path -- with no `{ cause }` chained behind it.
+ * Widened for the disable guard rather than paired with a second class,
+ * since both refusals share the same carrier shape and the same catch site.
  *
  * Thrown from inside the locked transaction closure and left to propagate to
  * `setPluginEnabledWithTransaction`'s own outer catch -- the same catch that
@@ -925,6 +931,60 @@ async function dispatchBranch(args: {
 }
 
 /**
+ * EDEP-02: the disable branch's dependents guard, extracted so
+ * `setPluginEnabledWithTransaction` gains one statement rather than an
+ * inline branch. Called unconditionally from the closure; it is a no-op for
+ * `enable` and for a target that is already disabled -- that arm has
+ * nothing to refuse, so the idempotent short-circuit below keeps winning
+ * there -- and only reads and refuses when the target is about to actually
+ * move from enabled to disabled, before `dispatchBranch`/`runDisableBranch`
+ * is reached.
+ *
+ * Mirrors `uninstall.ts::readDeclarers`'s composition:
+ * `buildScopeDeclarationIndex({ state, locations, exclude: key })` then
+ * `findDependents(key, result.index)`. Fail-closed (D-05-07): the `ok: false`
+ * arm throws the refusal carrier with `"unreadable"` and `result.cause.message`
+ * before the disable can proceed, so a record with no usable answer is never
+ * read as "declares nothing".
+ *
+ * D-05-04: `buildScopeDeclarationIndex` indexes DISABLED declarers too,
+ * because holding a declaration does not depend on being active. EDEP-02
+ * asks about an ENABLED installed plugin, so this narrows the index's own
+ * `candidates` to the keys whose record is not `isRecordedButDisabled`
+ * before calling `findDependents` -- reusing the `record` handle each
+ * candidate already carries, no second walk and no key re-lookup.
+ */
+async function readEnabledDependents(args: {
+  readonly state: ExtensionState;
+  readonly locations: ScopedLocations;
+  readonly enable: boolean;
+  readonly installed: InstalledPluginRecord;
+  readonly key: string;
+}): Promise<void> {
+  const { state, locations, enable, installed, key } = args;
+  if (enable || isRecordedButDisabled(installed)) {
+    return;
+  }
+
+  const result = await buildScopeDeclarationIndex({ state, locations, exclude: key });
+  if (!result.ok) {
+    throw new EnableRefusedError("unreadable", result.cause.message);
+  }
+
+  const enabledDeclarers = new Set(
+    result.candidates
+      .filter((candidate) => !isRecordedButDisabled(candidate.record))
+      .map((candidate) => candidate.key),
+  );
+  const dependents = findDependents(key, result.index).filter((dependent) =>
+    enabledDeclarers.has(dependent),
+  );
+  if (dependents.length > 0) {
+    throw new EnableRefusedError("dependents remain", composeDisableRefusalCause(key, dependents));
+  }
+}
+
+/**
  * Run the disable branch: cascade-unstage every artifact via the existing
  * `cascadeUnstagePlugin` primitive, then flip the record to its disabled form
  * (ENBL-02 / ENBL-18: `enabled: false` plus a fresh `updatedAt`, everything
@@ -1448,6 +1508,18 @@ async function setPluginEnabledWithTransaction(
           enableCascadeRows = cascadeStep.rows;
           cascadeNeedsSave = cascadeStep.needsSave;
         }
+
+        // EDEP-02: refuse a disable while an installed and ENABLED plugin in
+        // the same scope still declares the target, before the idempotency
+        // short-circuit below is allowed to return and before
+        // `dispatchBranch`/`runDisableBranch` is reached.
+        await readEnabledDependents({
+          state,
+          locations,
+          enable,
+          installed,
+          key: `${plugin}@${marketplace}`,
+        });
 
         // ENBL-05 idempotency: the explicit `enabled: false` marker, read
         // through the single predicate. Availability is not consulted, so a

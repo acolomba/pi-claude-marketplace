@@ -173,7 +173,14 @@ export type Reason =
   // state changed and nothing was refused, so a plain `already installed`
   // (which reports a no-op) cannot carry it. Retires the
   // `{already installed, dependency disabled}` skip this token replaces.
-  | "dependency enabled";
+  | "dependency enabled"
+  // EDEP-02: disable refuses while an installed and ENABLED plugin in the
+  // same scope still declares the target, and the refusal rides a `failed`
+  // row. `dependents unsatisfied` cannot carry it: that token's subject is a
+  // removal that WENT THROUGH on a SUCCESS row, and this one's subject is an
+  // operation that was NOT carried out. The dependent keys ride the row's
+  // cause line, on the `dependency cycle` precedent, never the token.
+  | "dependents remain";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<

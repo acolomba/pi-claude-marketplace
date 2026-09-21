@@ -307,6 +307,11 @@ const EXPECTED_REASONS = [
   // its record. It rides an `installed` row -- the state changed and
   // nothing was refused, so `already installed` alone cannot carry it.
   "dependency enabled",
+  // EDEP-02: disable's refusal marker for an installed and ENABLED plugin
+  // in the same scope that still declares the target. It rides a `failed`
+  // row -- the command was NOT carried out, unlike its `dependents
+  // unsatisfied` neighbour, whose subject is a removal that went through.
+  "dependents remain",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [
