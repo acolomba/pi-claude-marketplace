@@ -5087,9 +5087,12 @@ test("EDEP-02: a DISABLED declarer does not block the disable", async () => {
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      ["● official [user]", "  ◍ shared-lib v1.0.0 (disabled)", "", "/reload to pick up changes"].join(
-        "\n",
-      ),
+      [
+        "● official [user]",
+        "  ◍ shared-lib v1.0.0 (disabled)",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
     );
     const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
     assert.equal(state.marketplaces.official!.plugins["shared-lib"]!.enabled, false);
@@ -5149,9 +5152,12 @@ test("EDEP-02: nothing declares the target, disable proceeds byte-identically to
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      ["● official [user]", "  ◍ shared-lib v1.0.0 (disabled)", "", "/reload to pick up changes"].join(
-        "\n",
-      ),
+      [
+        "● official [user]",
+        "  ◍ shared-lib v1.0.0 (disabled)",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
     );
   });
 });
