@@ -619,6 +619,13 @@ interface EnableCascadeRun {
   readonly rows: EnableCascadeMemberRow[];
   readonly materialized: Set<string>;
   readonly hydratable: EnableCascadeHydratableMember[];
+  /**
+   * WR-01: rollback partials from a member's OWN ledger `InstallFailureCapture`
+   * (populated by `runInstallLedger` before it rethrows), which `runPhases`'s
+   * own aggregated `RunPhasesResult.rollbackPartials` does not carry -- that
+   * one covers only OTHER members' `undo` calls the failure unwound.
+   */
+  readonly rollbackPartials: RollbackPartial[];
 }
 
 /**
@@ -663,22 +670,32 @@ function buildEnableCascadeMemberPhase(
     name: member.key,
     do: async (run) => {
       const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
-      const result = await transaction.runInstallLedger(
-        state,
-        locations,
-        {
-          ctx: opts.ctx,
-          scope,
-          cwd: opts.cwd,
-          marketplace: member.marketplace,
-          plugin: member.name,
-          pinVersionOverride: record.version,
-          allowExistingRecord: true,
-          partial,
-          removalOps: createRemovalOps(),
-        },
-        capture,
-      );
+      let result: InstallLedgerResult;
+      try {
+        result = await transaction.runInstallLedger(
+          state,
+          locations,
+          {
+            ctx: opts.ctx,
+            scope,
+            cwd: opts.cwd,
+            marketplace: member.marketplace,
+            plugin: member.name,
+            pinVersionOverride: record.version,
+            allowExistingRecord: true,
+            partial,
+            removalOps: createRemovalOps(),
+          },
+          capture,
+        );
+      } catch (err) {
+        // WR-01: the ledger populates `capture.rollbackPartials` BEFORE it
+        // rethrows (mirrors `runEnableBranch`'s own I4 comment) -- carry it
+        // into the run so the caller can thread it into the failed outcome.
+        run.rollbackPartials.push(...capture.rollbackPartials);
+        throw err;
+      }
+
       assertRecordedStateLedgerInstalled(result);
       run.materialized.add(member.key);
       const summary = result.summary;
@@ -720,7 +737,14 @@ function buildEnableCascadeMemberPhase(
         installedNow,
       );
       if (!outcome.ok) {
+        // WR-01: fold what DID drop (NFR-3 -- state must never claim
+        // artifacts still on disk) and RETHROW the unfinished unstage,
+        // mirroring `install-cascade.ts::buildReEnableMemberPhase`'s own
+        // undo (D-03-07). A swallowed failure here reported a clean unwind
+        // while artifacts survived on disk; the row's `{rollback partial}`
+        // child is the only surface that names it.
         applyPartialCascadeFold(installedNow, outcome.dropped);
+        throw outcome.cause ?? new Error(`Rollback of "${member.key}" did not complete.`);
       }
 
       marketplaceRecord.plugins[member.name] = toDisabledRecord(
@@ -788,9 +812,18 @@ async function runEnableCascadeMembers(
       readonly wrote: boolean;
       readonly hydratable: readonly EnableCascadeHydratableMember[];
     }
-  | { readonly ok: false; readonly error: Error }
+  | {
+      readonly ok: false;
+      readonly error: Error;
+      readonly rollbackPartials: readonly RollbackPartial[];
+    }
 > {
-  const run: EnableCascadeRun = { rows: [], materialized: new Set(), hydratable: [] };
+  const run: EnableCascadeRun = {
+    rows: [],
+    materialized: new Set(),
+    hydratable: [],
+    rollbackPartials: [],
+  };
   const phases: Phase<EnableCascadeRun>[] = [];
   for (const member of members) {
     if (member.disposition !== "re-enabled") {
@@ -816,7 +849,15 @@ async function runEnableCascadeMembers(
   const result = await runPhases(phases, run);
   if (!result.ok) {
     assertFailedPhasesHasError(result);
-    return { ok: false, error: result.error };
+    // WR-01: the failing member's OWN ledger capture (`run.rollbackPartials`)
+    // and `runPhases`'s own aggregate over every OTHER member's `undo`
+    // (`result.rollbackPartials`) are two different sources -- neither
+    // subsumes the other.
+    return {
+      ok: false,
+      error: result.error,
+      rollbackPartials: [...run.rollbackPartials, ...result.rollbackPartials],
+    };
   }
 
   return { ok: true, rows: run.rows, wrote: phases.length > 0, hydratable: run.hydratable };
@@ -940,6 +981,9 @@ async function runEnableCascadeStep(args: {
         kind: "enable-failed",
         cause: materialized.error,
         recordedVersion: installed.version,
+        ...(materialized.rollbackPartials.length > 0 && {
+          rollbackPartials: materialized.rollbackPartials,
+        }),
       },
     };
   }

@@ -4949,10 +4949,10 @@ test("EDEP-01 / LOAD-02: enabling a consequence-disabled member clears its depen
   });
 });
 
-test("EDEP-01: a member ledger failure unwinds every member this command already turned on", async () => {
+test("CR-05: a member ledger failure unwinds every member this command already turned on", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { statePath } = await seedEdepGraph(home, [
+    const { statePath, scopeRoot } = await seedEdepGraph(home, [
       {
         name: "a",
         version: "1.0.0",
@@ -4991,9 +4991,27 @@ test("EDEP-01: a member ledger failure unwinds every member this command already
     });
 
     // assert: the whole operation fails, and "b" -- materialized before "c"
-    // threw -- is unwound back to disabled rather than left enabled.
+    // threw -- is unwound back to disabled rather than left enabled. This
+    // path never saves (see the file's own "Save discipline" comment), so
+    // state.json is byte-for-byte the seed regardless of whether the unwind
+    // ran -- the on-disk footprint and the exact row bytes are the only
+    // observables that prove it did (CR-05).
+    await assert.rejects(
+      stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b:s1")),
+      { code: "ENOENT" },
+      "b's staged skill is off disk again",
+    );
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /\(failed\)/);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ a v1.0.0 (failed)",
+        "    cause: c's ledger failed",
+      ].join("\n"),
+    );
     const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
     assert.equal(state.marketplaces.official!.plugins.a!.enabled, false);
     assert.equal(state.marketplaces.official!.plugins.b!.enabled, false);
@@ -5038,10 +5056,10 @@ test("EDEP-01: orchestrated mode skips the cascade entirely -- a cyclic declarat
   });
 });
 
-test("EDEP-01: a member's undo tolerates the record vanishing from the snapshot before it runs", async () => {
+test("CR-05: a member's undo tolerates the record vanishing from the snapshot before it runs", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { statePath } = await seedEdepGraph(home, [
+    const { statePath, scopeRoot } = await seedEdepGraph(home, [
       {
         name: "a",
         version: "1.0.0",
@@ -5083,11 +5101,24 @@ test("EDEP-01: a member's undo tolerates the record vanishing from the snapshot 
       scope: "user",
     });
 
-    // assert: the operation still fails cleanly (no throw escapes), and
-    // whatever state.json HAD before this call stands -- the in-memory
-    // snapshot mutation above is discarded because the closure never saves.
+    // assert: the operation still fails cleanly (no throw escapes the
+    // guard), and the exact row bytes and the real footprint are the
+    // observables that prove it (CR-05) -- this path never saves, so
+    // state.json is byte-for-byte the seed either way. With no record left
+    // to read, the guard CANNOT unstage "b" -- its skill stays on disk,
+    // which is the guard tolerating rather than crashing, not cleaning up.
+    await stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b:s1"));
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /\(failed\)/);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ a v1.0.0 (failed)",
+        "    cause: c's ledger failed",
+      ].join("\n"),
+    );
     const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
     assert.equal(state.marketplaces.official!.plugins.a!.enabled, false);
     assert.equal(state.marketplaces.official!.plugins.b!.enabled, false);
@@ -5137,10 +5168,10 @@ test("WR-02: a re-enabled member's hooks are hydrated into the routing cache wit
   });
 });
 
-test("EDEP-01: a member's undo folds a partial unstage failure into the record it puts back to disabled", async () => {
+test("CR-05: a member's undo folds a partial unstage failure and rethrows it as a rollback partial", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { statePath } = await seedEdepGraph(home, [
+    const { statePath, scopeRoot } = await seedEdepGraph(home, [
       {
         name: "a",
         version: "1.0.0",
@@ -5191,10 +5222,24 @@ test("EDEP-01: a member's undo folds a partial unstage failure into the record i
     });
 
     // assert: the operation still fails cleanly, and "b" -- whose rollback
-    // unstage only partially completed -- is folded to disabled rather than
-    // left claiming artifacts that are still on disk (NFR-3).
+    // unstage only partially completed -- is folded and its own throw is
+    // reported as a rollback partial (WR-01) rather than swallowed. The
+    // mocked `cascadeUnstagePlugin` never touches disk, so "b"'s staged
+    // skill is the real, observable remainder the fold claims (CR-05).
+    await stat(path.join(scopeRoot, "pi-claude-marketplace", "resources", "skills", "b:s1"));
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /\(failed\)/);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ a v1.0.0 (failed) {rollback partial}",
+        "    cause: c's ledger failed",
+        "    [b@official] (rollback failed)",
+        "      cause: b's rollback unstage failed",
+      ].join("\n"),
+    );
     const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
     assert.equal(state.marketplaces.official!.plugins.b!.enabled, false);
   });
