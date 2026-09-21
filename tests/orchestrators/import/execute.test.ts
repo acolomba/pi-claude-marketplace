@@ -27,7 +27,7 @@
 // every other case promises exactly one.
 
 import assert from "node:assert/strict";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
@@ -40,15 +40,16 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { importClaudeSettings as importClaudeSettingsWithCache } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
-import {
-  createEnableOperation,
-  createInstallOperation,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
+import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { planReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
 import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  loadState,
+  saveState,
+  toDisabledRecord,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   ConcurrentInstallError,
@@ -2948,20 +2949,41 @@ test("D-04-07: promotes a partially installed dependency the imported settings n
   verifyBoundary();
 });
 
+/**
+ * D-04-07 / EDEP-02: these two promotion fixtures need `dep` disabled while
+ * `sample` -- the plugin that declares it -- stays enabled, but the disable
+ * verb now refuses exactly that (EDEP-02: an installed and ENABLED plugin in
+ * the same scope still declares the target). That refusal is not what these
+ * tests exercise, so the precondition is seeded directly: the state record
+ * the disable verb would have produced (`toDisabledRecord`) and its skill
+ * taken off disk, the same two effects the disable cascade's unstage leaves
+ * behind. Neither test needs a companion probe or a `notify()` emission for
+ * this step, so the boundary below sizes the two imports alone.
+ */
+async function seedDisabledDependencyRecord(
+  project: ScopedLocations,
+  opts: { readonly plugin: string; readonly marketplace: string; readonly skillDir: string },
+): Promise<void> {
+  const state = await loadState(project.extensionRoot);
+  const marketplace = state.marketplaces[opts.marketplace];
+  const record = marketplace?.plugins[opts.plugin];
+  assert.ok(marketplace !== undefined && record !== undefined);
+  marketplace.plugins[opts.plugin] = toDisabledRecord(record, new Date().toISOString());
+  await saveState(project.extensionRoot, state);
+  await rm(opts.skillDir, { recursive: true, force: true });
+}
+
 test("D-04-07: promotes a disabled dependency the imported settings name and declares it enabled", async (t) => {
   // arrange
-  // The first import's cascade records `dep`, and the disable verb
+  // The first import's cascade records `dep`, and `seedDisabledDependencyRecord`
   // then takes it off disk and declares `{ enabled: false }` for it. The second
   // import names `dep`, which is the user asking for it by name: the promotion
   // re-materializes the record, and the post-pass writes the enable path's own
-  // `{ enabled: true }` over the disable verb's entry. A bare key merged over
+  // `{ enabled: true }` over the seeded entry. A bare key merged over
   // that entry would leave `enabled: false` in the file and hand the reload the
   // row asks for a disable to plan.
   const { cwd, project } = await createHermeticScopes(t, "promotes-disabled-dependency");
-  // Two imports and one disable: the disable verb takes one companion probe
-  // for its block before `notify()` takes its own, so that emission reads
-  // `getAllTools()` four times where an import's reads twice.
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 8);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 4);
   const marketplaceRoot = path.join(cwd, "fixture-mp");
   const dependency = { name: "dep", version: "*" };
   await writeUnder(
@@ -3022,19 +3044,15 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
   const skillDir = path.join(project.skillsTargetDir, "dep:tool");
   await writeUnder(settingsPath, settingsNaming(marketplaceRoot, { "sample@fixture-mp": true }));
   await importClaudeSettings(importOptions);
-  await createEnableOperation(hooksRouting)({
-    ctx,
-    pi,
-    cwd,
-    scope: "project",
-    marketplace: "fixture-mp",
+  await seedDisabledDependencyRecord(project, {
     plugin: "dep",
-    enable: false,
+    marketplace: "fixture-mp",
+    skillDir,
   });
   const dependencyBefore = (await loadState(project.extensionRoot)).marketplaces["fixture-mp"]
     ?.plugins["dep"];
   assert.strictEqual(dependencyBefore?.provenance, "dependency");
-  assert.strictEqual(dependencyBefore.enabled, false, "the disable verb disabled the dependency");
+  assert.strictEqual(dependencyBefore.enabled, false, "the seeded record is disabled");
   await assert.rejects(stat(skillDir), { code: "ENOENT" }, "and took its skill off disk");
 
   // act
@@ -3066,7 +3084,7 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
     planReconcile((await loadMergedScopeConfig(project)).merged, stateAfter, "project"),
     emptyReconcilePlan("project"),
   );
-  assert.deepStrictEqual(notifications[2], {
+  assert.deepStrictEqual(notifications[1], {
     message:
       "● fixture-mp [project] (updated)\n" +
       "  ● dep (installed) {already installed, dependency promoted}\n" +
@@ -3079,19 +3097,17 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
 
 test("D-04-07: declares a promoted dependency enabled in the local file when the disable verb declared it there", async (t) => {
   // arrange
-  // The first import's cascade records `dep`, and `disable --local`
-  // declares `{ enabled: false }` for it in the local file, whose entry shadows
-  // the base entry wholesale (CFG-02). The second import names `dep`: the
-  // promotion re-materializes the record, and the post-pass writes the enable
-  // path's `{ enabled: true }` to the file that declares the key (D-103-16),
-  // leaving the base file the bare key. A stamp in the base file alone would
-  // leave the merged view disabled and hand the reload the row asks for a
-  // disable to plan.
+  // The first import's cascade records `dep`. `seedDisabledDependencyRecord`
+  // then takes it off disk, and the local config file is seeded directly with
+  // `{ enabled: false }` for it -- the state a `disable --local` declares in the
+  // local file, whose entry shadows the base entry wholesale (CFG-02). The
+  // second import names `dep`: the promotion re-materializes the record, and
+  // the post-pass writes the enable path's `{ enabled: true }` to the file
+  // that declares the key (D-103-16), leaving the base file the bare key. A
+  // stamp in the base file alone would leave the merged view disabled and
+  // hand the reload the row asks for a disable to plan.
   const { cwd, project } = await createHermeticScopes(t, "promotes-disabled-dependency-local");
-  // Two imports and one disable: the disable verb takes one companion probe
-  // for its block before `notify()` takes its own, so that emission reads
-  // `getAllTools()` four times where an import's reads twice.
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 8);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 4);
   const marketplaceRoot = path.join(cwd, "fixture-mp");
   const dependency = { name: "dep", version: "*" };
   await writeUnder(
@@ -3156,20 +3172,19 @@ test("D-04-07: declares a promoted dependency enabled in the local file when the
   const skillDir = path.join(project.skillsTargetDir, "dep:tool");
   await writeUnder(settingsPath, settingsNaming(marketplaceRoot, { "sample@fixture-mp": true }));
   await importClaudeSettings(importOptions);
-  await createEnableOperation(hooksRouting)({
-    ctx,
-    pi,
-    cwd,
-    scope: "project",
-    marketplace: "fixture-mp",
+  await seedDisabledDependencyRecord(project, {
     plugin: "dep",
-    enable: false,
-    local: true,
+    marketplace: "fixture-mp",
+    skillDir,
   });
+  await writeUnder(
+    project.configLocalJsonPath,
+    configBytes({ marketplaces: {}, plugins: { "dep@fixture-mp": { enabled: false } } }),
+  );
   const dependencyBefore = (await loadState(project.extensionRoot)).marketplaces["fixture-mp"]
     ?.plugins["dep"];
   assert.strictEqual(dependencyBefore?.provenance, "dependency");
-  assert.strictEqual(dependencyBefore.enabled, false, "the disable verb disabled the dependency");
+  assert.strictEqual(dependencyBefore.enabled, false, "the seeded record is disabled");
   assert.strictEqual(
     await readFile(project.configLocalJsonPath, "utf8"),
     configBytes({ marketplaces: {}, plugins: { "dep@fixture-mp": { enabled: false } } }),
@@ -3211,7 +3226,7 @@ test("D-04-07: declares a promoted dependency enabled in the local file when the
     planReconcile(merged, stateAfter, "project"),
     emptyReconcilePlan("project"),
   );
-  assert.deepStrictEqual(notifications[2], {
+  assert.deepStrictEqual(notifications[1], {
     message:
       "● fixture-mp [project] (updated)\n" +
       "  ● dep (installed) {already installed, dependency promoted}\n" +
