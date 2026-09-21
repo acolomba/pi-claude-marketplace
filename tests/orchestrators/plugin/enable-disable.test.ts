@@ -224,7 +224,13 @@ async function writeUserState(
     // `disabled: true` is the disabled PARTIAL shape.
     unsupported?: readonly string[];
   },
-): Promise<{ statePath: string; configPath: string; configLocalPath: string; scopeRoot: string }> {
+): Promise<{
+  statePath: string;
+  configPath: string;
+  configLocalPath: string;
+  scopeRoot: string;
+  mpRoot: string;
+}> {
   const scope = opts.scope ?? "user";
   const scopeRoot =
     scope === "user"
@@ -251,6 +257,32 @@ async function writeUserState(
   }
 
   const unsupported = opts.unsupported ?? [];
+  // EDEP-01: the enable cascade reads every record's declared dependencies
+  // off its scope's marketplace manifest BEFORE anything else runs
+  // (`buildScopeDeclarationDetail`, D-05-07 fail-closed), so a manifest must
+  // exist and list the plugin for that read to succeed -- otherwise every
+  // enable in this fixture would fail cascade-side with `{unreadable}`
+  // regardless of what the test itself is exercising. The plugin's own
+  // directory is deliberately NOT created here: a case that needs a
+  // genuinely missing clone/source still observes that failure at the
+  // install ledger, several steps later than the declaration read.
+  const mpRoot = path.join(home, "mp-src", `${scope}-${opts.marketplaceName}`);
+  await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
+  const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: opts.marketplaceName,
+      plugins: [
+        {
+          name: opts.pluginName,
+          source: `./plugins/${opts.pluginName}`,
+          version: opts.version ?? "1.2.3",
+        },
+      ],
+    }),
+    "utf8",
+  );
   const state = {
     schemaVersion: 2,
     marketplaces: {
@@ -259,16 +291,16 @@ async function writeUserState(
         scope,
         source: {
           kind: "path" as const,
-          raw: "/tmp/dummy-mp",
-          logical: "/tmp/dummy-mp",
+          raw: mpRoot,
+          logical: mpRoot,
         },
         addedFromCwd: "/tmp",
-        marketplaceRoot: "/tmp/dummy-mp",
-        manifestPath: "/tmp/dummy-mp/.claude-plugin/marketplace.json",
+        marketplaceRoot: mpRoot,
+        manifestPath,
         plugins: {
           [opts.pluginName]: {
             version: opts.version ?? "1.2.3",
-            resolvedSource: "/tmp/dummy-mp/plugins/foo",
+            resolvedSource: path.join(mpRoot, "plugins", opts.pluginName),
             compatibility: {
               installable: unsupported.length === 0,
               notes: [],
@@ -286,7 +318,7 @@ async function writeUserState(
     },
   };
   await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
-  return { statePath, configPath, configLocalPath, scopeRoot };
+  return { statePath, configPath, configLocalPath, scopeRoot, mpRoot };
 }
 
 async function readConfig(configPath: string): Promise<unknown> {
@@ -1598,10 +1630,12 @@ test("ENBL-07 / D-97-01: enable on a manifest-absent disabled PARTIAL fails clea
       scope: "user",
     });
 
-    // The existing resolve-failure semantics, unchanged by the widened gate:
-    // the PI-3 manifest lookup throws BEFORE any ledger phase, so
-    // `narrowEnableFailure` yields no closed-set reason and the renderer
-    // suppresses the brace, surfacing the cause via the 4-space trailer.
+    // EDEP-01: the enable cascade's declaration-detail read (D-05-07
+    // fail-closed) now reaches this exact absence BEFORE the PI-3 manifest
+    // lookup ever runs -- both read the SAME manifest for the SAME plugin,
+    // and the cascade read runs first. `EnableRefusedError("unreadable", ...)`
+    // is the classified reason, and nothing runs after it: no ledger phase,
+    // no artifact staged, no state write.
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -1610,8 +1644,8 @@ test("ENBL-07 / D-97-01: enable on a manifest-absent disabled PARTIAL fails clea
         "A plugin operation has failed.",
         "",
         "● mp [user]",
-        "  ⊘ foo-plugin v1.2.3 (failed)",
-        '    cause: Plugin "foo-plugin" not found in marketplace "mp".',
+        "  ⊘ foo-plugin (failed) {unreadable}",
+        "    cause: cannot read the dependencies of foo-plugin@mp: not declared by its marketplace",
       ].join("\n"),
     );
     assert.equal(notifications[0]!.severity, "error");
@@ -3147,7 +3181,7 @@ test("a held project lock returns lock-held in orchestrated mode and succeeds af
 test("a config-write failure leaves the state bytes unchanged and a standalone retry succeeds", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
-    const { configPath, statePath } = await writeUserState(home, {
+    const { configPath, statePath, mpRoot } = await writeUserState(home, {
       disabled: false,
       marketplaceName: "mp",
       pluginName: "foo",
@@ -3254,7 +3288,7 @@ test("a config-write failure leaves the state bytes unchanged and a standalone r
       },
     ]);
     assert.deepStrictEqual(await readConfig(configPath), {
-      marketplaces: { mp: { source: "/tmp/dummy-mp" } },
+      marketplaces: { mp: { source: mpRoot } },
       plugins: { "foo@mp": { enabled: false } },
       schemaVersion: 1,
     });
@@ -4067,5 +4101,877 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
     assert.equal(enableContext.notifications.length, 1);
     assert.equal(updateContext.notifications.length, 1);
     assert.equal(reinstallContext.notifications.length, 1);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// EDEP-01 / EDEP-03: the enable cascade
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * A single seeded plugin record, disabled or enabled, pointing at a real
+ * on-disk plugin root.
+ */
+function edepCascadeRecord(opts: {
+  readonly resolvedSource: string;
+  readonly version: string;
+  readonly enabled: boolean;
+}): {
+  version: string;
+  resolvedSource: string;
+  compatibility: { installable: boolean; notes: string[]; supported: string[]; unsupported: string[] };
+  resources: { skills: string[]; prompts: string[]; agents: string[]; mcpServers: string[]; hooks: string[] };
+  enabled: boolean;
+  provenance: "explicit";
+  installedAt: string;
+  updatedAt: string;
+} {
+  return {
+    version: opts.version,
+    resolvedSource: opts.resolvedSource,
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    enabled: opts.enabled,
+    provenance: "explicit",
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+}
+
+/** Write one plugin's real on-disk root: a `plugin.json` plus one skill. */
+async function writeEdepPluginRoot(
+  pluginRoot: string,
+  opts: { readonly name: string; readonly version: string; readonly dependencies?: unknown },
+): Promise<void> {
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({
+      name: opts.name,
+      version: opts.version,
+      ...(opts.dependencies !== undefined && { dependencies: opts.dependencies }),
+    }),
+  );
+  const skillDir = path.join(pluginRoot, "skills", "s1");
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: s1\n---\n\nBody.\n");
+}
+
+/**
+ * Two REAL on-disk marketplaces in the user scope: "official" holding the
+ * disabled root `helper`, and "tools" holding its dependency `formatter` --
+ * declared or not, disabled or not, per the case. Mirrors
+ * `seedRealDisabledMarketplace`'s single-plugin shape, extended to a second
+ * marketplace so EDEP-01's cross-marketplace member key
+ * (`formatter@tools`) is a REAL closure member, not a synthetic one.
+ */
+async function seedEnableCascadeFixture(
+  home: string,
+  opts: { readonly declareDependency: boolean; readonly dependencyEnabled?: boolean },
+): Promise<{ statePath: string; configPath: string; configLocalPath: string; scopeRoot: string }> {
+  const scopeRoot = path.join(home, ".pi", "agent");
+  const extRoot = path.join(scopeRoot, "pi-claude-marketplace");
+  await mkdir(extRoot, { recursive: true });
+
+  const officialRoot = path.join(home, "official-src");
+  const helperRoot = path.join(officialRoot, "plugins", "helper");
+  await writeEdepPluginRoot(helperRoot, {
+    name: "helper",
+    version: "1.0.0",
+    ...(opts.declareDependency && {
+      dependencies: [{ name: "formatter", marketplace: "tools" }],
+    }),
+  });
+  const officialManifestPath = path.join(officialRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(officialManifestPath), { recursive: true });
+  await writeFile(
+    officialManifestPath,
+    JSON.stringify({
+      name: "official",
+      plugins: [{ name: "helper", source: "./plugins/helper", version: "1.0.0" }],
+    }),
+  );
+
+  const toolsRoot = path.join(home, "tools-src");
+  const formatterRoot = path.join(toolsRoot, "plugins", "formatter");
+  await writeEdepPluginRoot(formatterRoot, { name: "formatter", version: "2.1.0" });
+  const toolsManifestPath = path.join(toolsRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(toolsManifestPath), { recursive: true });
+  await writeFile(
+    toolsManifestPath,
+    JSON.stringify({
+      name: "tools",
+      plugins: [{ name: "formatter", source: "./plugins/formatter", version: "2.1.0" }],
+    }),
+  );
+
+  const statePath = path.join(extRoot, "state.json");
+  const state = {
+    schemaVersion: 2,
+    marketplaces: {
+      official: {
+        name: "official",
+        scope: "user",
+        source: { kind: "path" as const, raw: officialRoot, logical: officialRoot },
+        addedFromCwd: home,
+        marketplaceRoot: officialRoot,
+        manifestPath: officialManifestPath,
+        plugins: {
+          helper: edepCascadeRecord({ resolvedSource: helperRoot, version: "1.0.0", enabled: false }),
+        },
+      },
+      tools: {
+        name: "tools",
+        scope: "user",
+        source: { kind: "path" as const, raw: toolsRoot, logical: toolsRoot },
+        addedFromCwd: home,
+        marketplaceRoot: toolsRoot,
+        manifestPath: toolsManifestPath,
+        plugins: {
+          formatter: edepCascadeRecord({
+            resolvedSource: formatterRoot,
+            version: "2.1.0",
+            enabled: opts.dependencyEnabled ?? false,
+          }),
+        },
+      },
+    },
+  };
+  await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
+  return {
+    statePath,
+    configPath: path.join(scopeRoot, "claude-plugins.json"),
+    configLocalPath: path.join(scopeRoot, "claude-plugins.local.json"),
+    scopeRoot,
+  };
+}
+
+interface EdepStateShape {
+  marketplaces: Record<string, { plugins: Record<string, { enabled: boolean }> }>;
+}
+
+test("EDEP-01 / EDEP-03: enabling a plugin turns on its one disabled dependency and reports both rows", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath, configPath, configLocalPath } = await seedEnableCascadeFixture(home, {
+      declareDependency: true,
+      dependencyEnabled: false,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "helper",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert: one notification, two rows, the member sorted before the root.
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● official [user]",
+        "  ● formatter@tools v2.1.0 (installed) {dependency enabled}",
+        "  ● helper v1.0.0 (installed)",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    );
+
+    // Both records end enabled.
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins.helper!.enabled, true);
+    assert.equal(state.marketplaces.tools!.plugins.formatter!.enabled, true);
+
+    // D-04-02: only the plugin the user named reaches the config write --
+    // neither config file gains a key for the cascade member.
+    assert.equal(await fileExists(configLocalPath), false);
+    const cfg = (await readConfig(configPath)) as { plugins?: Record<string, unknown> };
+    assert.deepEqual(Object.keys(cfg.plugins ?? {}), ["helper@official"]);
+  });
+});
+
+test("EDEP-03: an already-enabled dependency renders (skipped) {already enabled} and its record is untouched", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEnableCascadeFixture(home, {
+      declareDependency: true,
+      dependencyEnabled: true,
+    });
+    const before = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: { tools: { plugins: { formatter: { updatedAt: string } } } };
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "helper",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● official [user]",
+        "  ⊘ formatter@tools v2.1.0 (skipped) {already enabled}",
+        "  ● helper v1.0.0 (installed)",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    );
+
+    const after = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: { tools: { plugins: { formatter: { updatedAt: string } } } };
+    };
+    assert.equal(
+      after.marketplaces.tools.plugins.formatter.updatedAt,
+      before.marketplaces.tools.plugins.formatter.updatedAt,
+    );
+  });
+});
+
+test("EDEP-01 empty edge: a root declaring no dependencies enables byte-identically to the plain enable-fresh row", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEnableCascadeFixture(home, {
+      declareDependency: false,
+      dependencyEnabled: false,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "helper",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert: one row, byte-identical to the catalog `enable-fresh` state.
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● official [user]", "  ● helper v1.0.0 (installed)", "", "/reload to pick up changes"].join(
+        "\n",
+      ),
+    );
+
+    // The undeclared dependency's own record is never touched.
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.tools!.plugins.formatter!.enabled, false);
+  });
+});
+
+/**
+ * One marketplace "official" holding several REAL on-disk plugins, some of
+ * which declare others as dependencies -- for the depth-2, diamond, cycle
+ * and consequence-marker cases, which all stay within one scope and one
+ * marketplace.
+ */
+async function seedEdepGraph(
+  home: string,
+  plugins: readonly {
+    readonly name: string;
+    readonly version: string;
+    readonly dependencies?: readonly { readonly name: string; readonly marketplace?: string }[];
+    readonly enabled: boolean;
+    readonly dependencyDisabled?: true;
+  }[],
+): Promise<{ statePath: string; configPath: string; scopeRoot: string; mpRoot: string }> {
+  const scopeRoot = path.join(home, ".pi", "agent");
+  const extRoot = path.join(scopeRoot, "pi-claude-marketplace");
+  await mkdir(extRoot, { recursive: true });
+  const mpRoot = path.join(home, "official-src");
+  await mkdir(path.join(mpRoot, ".claude-plugin"), { recursive: true });
+
+  const pluginRecords: Record<string, ReturnType<typeof edepCascadeRecord> & { dependencyDisabled?: true }> =
+    {};
+  const manifestPlugins: unknown[] = [];
+  for (const plugin of plugins) {
+    const pluginRoot = path.join(mpRoot, "plugins", plugin.name);
+    await writeEdepPluginRoot(pluginRoot, {
+      name: plugin.name,
+      version: plugin.version,
+      ...(plugin.dependencies !== undefined && { dependencies: plugin.dependencies }),
+    });
+    manifestPlugins.push({
+      name: plugin.name,
+      source: `./plugins/${plugin.name}`,
+      version: plugin.version,
+    });
+    const record = edepCascadeRecord({
+      resolvedSource: pluginRoot,
+      version: plugin.version,
+      enabled: plugin.enabled,
+    });
+    pluginRecords[plugin.name] =
+      plugin.dependencyDisabled === true ? { ...record, dependencyDisabled: true } : record;
+  }
+
+  const manifestPath = path.join(mpRoot, ".claude-plugin", "marketplace.json");
+  await writeFile(manifestPath, JSON.stringify({ name: "official", plugins: manifestPlugins }));
+
+  const statePath = path.join(extRoot, "state.json");
+  const state = {
+    schemaVersion: 2,
+    marketplaces: {
+      official: {
+        name: "official",
+        scope: "user",
+        source: { kind: "path" as const, raw: mpRoot, logical: mpRoot },
+        addedFromCwd: home,
+        marketplaceRoot: mpRoot,
+        manifestPath,
+        plugins: pluginRecords,
+      },
+    },
+  };
+  await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
+  return { statePath, configPath: path.join(scopeRoot, "claude-plugins.json"), scopeRoot, mpRoot };
+}
+
+test("EDEP-01: depth-2 transitivity enables the whole chain in dependency-first order", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", dependencies: [{ name: "c" }], enabled: false },
+      { name: "c", version: "1.0.0", enabled: false },
+    ]);
+    const callOrder: string[] = [];
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async runInstallLedger(state, locations, options, capture) {
+        callOrder.push(options.plugin);
+        return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepEqual(callOrder, ["c", "b", "a"]);
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins.a!.enabled, true);
+    assert.equal(state.marketplaces.official!.plugins.b!.enabled, true);
+    assert.equal(state.marketplaces.official!.plugins.c!.enabled, true);
+  });
+});
+
+test("EDEP-01: a diamond shares its member once", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [
+      {
+        name: "a",
+        version: "1.0.0",
+        dependencies: [{ name: "b" }, { name: "c" }],
+        enabled: false,
+      },
+      { name: "b", version: "1.0.0", dependencies: [{ name: "d" }], enabled: false },
+      { name: "c", version: "1.0.0", dependencies: [{ name: "d" }], enabled: false },
+      { name: "d", version: "1.0.0", enabled: false },
+    ]);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    const rows = notifications[0]!.message.split("\n").filter((line) => line.startsWith("  "));
+    assert.equal(rows.length, 4);
+    const dRows = rows.filter((line) => line.includes("d@official"));
+    assert.equal(dRows.length, 1);
+  });
+});
+
+test("EDEP-01: a not-installed declared dependency reports {not installed} and does not refuse the root", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      {
+        name: "a",
+        version: "1.0.0",
+        dependencies: [{ name: "formatter", marketplace: "tools" }],
+        enabled: false,
+      },
+    ]);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ● a v1.0.0 (installed)",
+        "  ⊘ formatter@tools (skipped) {not installed}",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    );
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins.a!.enabled, true);
+  });
+});
+
+test("EDEP-01: a cycle refuses the enable and writes nothing", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", dependencies: [{ name: "a" }], enabled: false },
+    ]);
+    const mtimeBefore = (await stat(statePath)).mtimeMs;
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ a (failed) {dependency cycle}",
+        "    cause: Dependency cycle: a@official -> b@official -> a@official.",
+      ].join("\n"),
+    );
+    assert.equal((await stat(statePath)).mtimeMs, mtimeBefore);
+  });
+});
+
+test("EDEP-01: an unreadable declarer refuses the enable with no absolute path leaked", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    // Break "b"'s own manifest read AND remove it from the marketplace
+    // entry so D-01-07's fallback also misses, forcing the declarer read to
+    // fail closed (D-05-07).
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: { official: { manifestPath: string; marketplaceRoot: string } };
+    };
+    const manifest = JSON.parse(
+      await readFile(state.marketplaces.official.manifestPath, "utf8"),
+    ) as { plugins: { name: string }[] };
+    manifest.plugins = manifest.plugins.filter((entry) => entry.name !== "b");
+    await writeFile(state.marketplaces.official.manifestPath, JSON.stringify(manifest), "utf8");
+    const mtimeBefore = (await stat(statePath)).mtimeMs;
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ a (failed) {unreadable}",
+        "    cause: cannot read the dependencies of b@official: not declared by its marketplace",
+      ].join("\n"),
+    );
+    assert.equal((await stat(statePath)).mtimeMs, mtimeBefore);
+    assert.ok(!notifications[0]!.message.includes(state.marketplaces.official.marketplaceRoot));
+  });
+});
+
+test("EDEP-01: row order follows the canonical comparator even when the root is not first", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [
+      { name: "zeta", version: "1.0.0", dependencies: [{ name: "alpha" }], enabled: false },
+      { name: "alpha", version: "1.0.0", enabled: false },
+    ]);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "zeta",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert: `alpha@official` sorts before the root `zeta` -- the root does
+    // NOT always lead.
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● official [user]",
+        "  ● alpha@official v1.0.0 (installed) {dependency enabled}",
+        "  ● zeta v1.0.0 (installed)",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    );
+  });
+});
+
+test("EDEP-01: an idempotent root still enables a disabled dependency and reports both rows", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath, configPath } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: true },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    // The config ALREADY declares `a` enabled, so the idempotent arm returns
+    // `{ kind: "idempotent" }` rather than `{ kind: "fresh" }` -- the branch
+    // this test exists to prove still forces a save for the cascade.
+    await mkdir(path.dirname(configPath), { recursive: true });
+    await writeFile(
+      configPath,
+      JSON.stringify({ schemaVersion: 1, plugins: { "a@official": { enabled: true } } }),
+      "utf8",
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert: the root's own row reads `already enabled`, and the disabled
+    // dependency still turns on.
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● official [user]",
+        "  ⊘ a (skipped) {already enabled}",
+        "  ● b@official v1.0.0 (installed) {dependency enabled}",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    );
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins.b!.enabled, true);
+  });
+});
+
+test("EDEP-01 / LOAD-02: enabling a consequence-disabled member clears its dependencyDisabled marker", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false, dependencyDisabled: true },
+    ]);
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: {
+        official: { plugins: Record<string, { enabled: boolean; dependencyDisabled?: boolean }> };
+      };
+    };
+    assert.equal(state.marketplaces.official.plugins.b!.enabled, true);
+    assert.equal(state.marketplaces.official.plugins.b!.dependencyDisabled, undefined);
+  });
+});
+
+test("EDEP-01: a member ledger failure unwinds every member this command already turned on", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      {
+        name: "a",
+        version: "1.0.0",
+        dependencies: [{ name: "b" }, { name: "c" }],
+        enabled: false,
+      },
+      { name: "b", version: "1.0.0", enabled: false },
+      { name: "c", version: "1.0.0", enabled: false },
+    ]);
+    const failure = new Error("c's ledger failed");
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async runInstallLedger(state, locations, options, capture) {
+        if (options.plugin === "c") {
+          return rejectUnknown(failure);
+        }
+
+        return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert: the whole operation fails, and "b" -- materialized before "c"
+    // threw -- is unwound back to disabled rather than left enabled.
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(failed\)/);
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins.a!.enabled, false);
+    assert.equal(state.marketplaces.official!.plugins.b!.enabled, false);
+    assert.equal(state.marketplaces.official!.plugins.c!.enabled, false);
+  });
+});
+
+test("EDEP-01: orchestrated mode skips the cascade entirely -- a cyclic declaration does not refuse a reconcile-driven enable", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- a declares b, b declares a: a cycle that WOULD refuse a
+    // standalone enable (see the cycle test above), proving this is a real
+    // gate and not merely an untriggered one.
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", dependencies: [{ name: "a" }], enabled: false },
+    ]);
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      REAL_ENABLE_DISABLE_TRANSACTION,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act -- a reconcile-driven (orchestrated) call is a different call site
+    // with its own dependency handling; EDEP-01's cascade never runs for it.
+    const outcome = await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      notifications: { mode: "orchestrated" },
+      scope: "user",
+    });
+
+    // assert: the root alone enables; "b" is left exactly as it was.
+    assert.equal(notifications.length, 0);
+    assert.deepStrictEqual(outcome, { name: "a", status: "enabled", version: "1.0.0" });
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins.a!.enabled, true);
+    assert.equal(state.marketplaces.official!.plugins.b!.enabled, false);
+  });
+});
+
+test("EDEP-01: a member's undo tolerates the record vanishing from the snapshot before it runs", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      {
+        name: "a",
+        version: "1.0.0",
+        dependencies: [{ name: "b" }, { name: "c" }],
+        enabled: false,
+      },
+      { name: "b", version: "1.0.0", enabled: false },
+      { name: "c", version: "1.0.0", enabled: false },
+    ]);
+    const failure = new Error("c's ledger failed");
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async runInstallLedger(state, locations, options, capture) {
+        if (options.plugin === "c") {
+          // Simulate the record vanishing from the shared snapshot between
+          // "b"'s materialization and its own undo -- the guard `undo` must
+          // tolerate rather than assume.
+          // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- state.marketplaces is a Record<string,...> the test mutates directly.
+          delete state.marketplaces.official?.plugins.b;
+          return rejectUnknown(failure);
+        }
+
+        return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert: the operation still fails cleanly (no throw escapes), and
+    // whatever state.json HAD before this call stands -- the in-memory
+    // snapshot mutation above is discarded because the closure never saves.
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(failed\)/);
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins.a!.enabled, false);
+    assert.equal(state.marketplaces.official!.plugins.b!.enabled, false);
+    assert.equal(state.marketplaces.official!.plugins.c!.enabled, false);
+  });
+});
+
+test("EDEP-01: a member's undo folds a partial unstage failure into the record it puts back to disabled", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      {
+        name: "a",
+        version: "1.0.0",
+        dependencies: [{ name: "b" }, { name: "c" }],
+        enabled: false,
+      },
+      { name: "b", version: "1.0.0", enabled: false },
+      { name: "c", version: "1.0.0", enabled: false },
+    ]);
+    const ledgerFailure = new Error("c's ledger failed");
+    const unstageFailure = new Error("b's rollback unstage failed");
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async runInstallLedger(state, locations, options, capture) {
+        if (options.plugin === "c") {
+          return rejectUnknown(ledgerFailure);
+        }
+
+        return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture);
+      },
+      async cascadeUnstagePlugin(plugin, marketplace, locations, installedPlugin) {
+        if (plugin === "b") {
+          return {
+            ok: false,
+            dropped: { skills: ["s1"], commands: [], agents: [], hooks: [], mcpServers: [] },
+            cause: unstageFailure,
+          };
+        }
+
+        return cascadeUnstagePlugin(plugin, marketplace, locations, installedPlugin);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert: the operation still fails cleanly, and "b" -- whose rollback
+    // unstage only partially completed -- is folded to disabled rather than
+    // left claiming artifacts that are still on disk (NFR-3).
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(failed\)/);
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins.b!.enabled, false);
   });
 });

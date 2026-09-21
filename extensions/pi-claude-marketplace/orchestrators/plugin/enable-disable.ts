@@ -61,6 +61,7 @@
 
 import path from "node:path";
 
+import { resolveDependencyClosure } from "../../domain/dependency-closure.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
@@ -73,14 +74,18 @@ import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
+import { runPhases } from "../../transaction/phase-ledger.ts";
 
+import { buildScopeDeclarationDetail } from "./dependency-index.ts";
 import {
+  composeEnableCascadeRows,
   DISABLE_CONTEXT,
   ENABLE_CONTEXT,
   narrowDisableFailure,
   narrowEnableFailure,
   staleGateDropped,
   type DisableMsg,
+  type EnableCascadeMemberRow,
   type EnableMsg,
 } from "./enable-disable.messaging.ts";
 import {
@@ -97,17 +102,19 @@ import {
   type writeAdoptingConfigEntries,
 } from "./shared.ts";
 
+import type { AddressedDependency } from "./dependency-index.ts";
 import type {
   InstallFailureCapture,
   InstallLedgerResult,
   runInstallLedger,
 } from "./install-outcome.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
+import type { ClosureLookup, ClosureMember, DependencyClosureResult } from "../../domain/dependency-closure.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
+import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
 import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import type { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
@@ -377,6 +384,520 @@ async function runEnableBranch(
       ...(capture.rollbackPartials.length > 0 && { rollbackPartials: capture.rollbackPartials }),
     };
   }
+}
+
+/**
+ * EDEP-01 / D-05-07 precedent, applied to the enable cascade: the enable was
+ * REFUSED inside the locked transaction before anything left disk, because
+ * the closure could not be resolved -- either some other record's
+ * declarations could not be established, or the declared graph closes on
+ * itself. Mirrors `uninstall.ts::UninstallRefusedError` exactly: the reason
+ * is a closed-set token and `message` IS the rendered cause line, so it
+ * carries only `name@marketplace` keys, field paths or already-redacted
+ * text -- never an absolute path -- with no `{ cause }` chained behind it.
+ *
+ * Thrown from inside the locked transaction closure and left to propagate to
+ * `setPluginEnabledWithTransaction`'s own outer catch -- the same catch that
+ * already classifies a `StateLockHeldError` or any other transaction throw --
+ * so no dedicated catch site is needed for it.
+ */
+class EnableRefusedError extends Error {
+  readonly reason: ContentReason;
+  constructor(reason: ContentReason, message: string) {
+    super(message);
+    this.name = "EnableRefusedError";
+    this.reason = reason;
+  }
+}
+
+/**
+ * EDEP-01: the classification of one non-root closure member against the
+ * LIVE locked snapshot.
+ *
+ * - `"re-enabled"`: the member's record is present and disabled
+ *   (`isRecordedButDisabled`); it is re-materialized through its own record.
+ * - `"already-enabled"`: the member's record is present and already enabled;
+ *   D-08-03's full-closure report still gives it a row.
+ * - `"not-installed"`: the scope records nothing under the member's exact
+ *   key. LOAD-01's load-time check owns reporting a missing declared
+ *   dependency, so this disposition never refuses the root's own enable.
+ */
+type EnableCascadeDisposition = "re-enabled" | "already-enabled" | "not-installed";
+
+/**
+ * One non-root member of the enable cascade's transitive closure, classified
+ * against the live locked snapshot. `record` is present for `"re-enabled"`
+ * and `"already-enabled"` (a record was found) and absent for
+ * `"not-installed"`.
+ */
+interface EnableCascadeMember {
+  readonly key: string;
+  readonly name: string;
+  readonly marketplace: string;
+  readonly disposition: EnableCascadeDisposition;
+  readonly record?: InstalledPluginRecord;
+}
+
+/** The enable cascade's closure resolution: every non-root member, classified. */
+interface EnableCascadeResolution {
+  readonly members: readonly EnableCascadeMember[];
+}
+
+/**
+ * Reads a member's declared dependencies from the pre-built scope-wide map.
+ * A key the map does not hold answers "declares nothing" (`dependencies:
+ * []`), NOT `{ kind: "absent" }`: the enable cascade's question is "is there
+ * a record here to turn on", and answering absent would reach the walk's
+ * `not-found` arm and refuse an enable over a MISSING dependency that
+ * LOAD-01's load-time check already owns reporting.
+ */
+function enableCascadeLookup(
+  declarations: ReadonlyMap<string, readonly AddressedDependency[]>,
+): ClosureLookup {
+  return (subject) =>
+    Promise.resolve({
+      kind: "found",
+      dependencies: declarations.get(subject.key) ?? [],
+    });
+}
+
+/**
+ * Every marketplace name D-03-08's guard must not refuse for this cascade:
+ * the union of every marketplace already added to the scope and every
+ * marketplace named by a declaration in the scope's own map. This cascade
+ * installs nothing, so seeding the guard so it cannot fire is the truthful
+ * reading -- membership in the enabled closure is decided by the record
+ * classification instead.
+ */
+function enableCascadeKnownMarketplaces(
+  state: ExtensionState,
+  declarations: ReadonlyMap<string, readonly AddressedDependency[]>,
+): ReadonlySet<string> {
+  const names = new Set(Object.keys(state.marketplaces));
+  for (const declared of declarations.values()) {
+    for (const dependency of declared) {
+      names.add(dependency.marketplace);
+    }
+  }
+
+  return names;
+}
+
+type ClosureFailure = Extract<DependencyClosureResult, { readonly ok: false }>;
+type ClosureCycleFailure = Extract<ClosureFailure, { readonly reason: "cycle" }>;
+
+/**
+ * `installedKeys: new Set()` (EDEP-01's empty set, see `resolveEnableCascade`)
+ * and a lookup that always answers `"found"` make every OTHER
+ * `DependencyClosureResult` failure arm unreachable for this walk: `not-found`
+ * needs an `"absent"` lookup result, `marketplace-not-added` needs a
+ * marketplace this walk did not already seed via
+ * `enableCascadeKnownMarketplaces`, and `unusable-declaration` needs a lookup
+ * that reports `"unusable"` -- this one never does. Evidence-backed type
+ * narrowing only, mirroring `assertRecordedStateLedgerInstalled` above; the
+ * invariant is established by `resolveEnableCascade`'s lookup and
+ * `knownMarketplaces` construction, not by a runtime check here.
+ */
+function assertOnlyCycleReachable(_failure: ClosureFailure): asserts _failure is ClosureCycleFailure {
+  // Evidence-backed type narrowing only; the invariant is established by the caller.
+}
+
+/**
+ * The `EnableRefusedError` a closure failure resolves to. Mirrors
+ * `install-cascade.messaging.ts::closureFailureFacts`'s cycle arm.
+ */
+function enableCascadeClosureFailure(failure: ClosureFailure): EnableRefusedError {
+  assertOnlyCycleReachable(failure);
+  return new EnableRefusedError(
+    "dependency cycle",
+    `Dependency cycle: ${failure.chain.join(" -> ")}.`,
+  );
+}
+
+/** Classify one non-root closure member against the live locked snapshot. */
+function classifyEnableCascadeMember(
+  state: ExtensionState,
+  member: ClosureMember,
+): EnableCascadeMember {
+  const record = state.marketplaces[member.marketplace]?.plugins[member.name];
+  if (record === undefined) {
+    return {
+      key: member.key,
+      name: member.name,
+      marketplace: member.marketplace,
+      disposition: "not-installed",
+    };
+  }
+
+  return {
+    key: member.key,
+    name: member.name,
+    marketplace: member.marketplace,
+    disposition: isRecordedButDisabled(record) ? "re-enabled" : "already-enabled",
+    record,
+  };
+}
+
+/**
+ * EDEP-01: resolve `plugin`'s declared dependency closure transitively in the
+ * same scope, and classify every non-root member against the live locked
+ * snapshot. Called INSIDE the locked transaction, before the root's own
+ * idempotency is decided (D-08-03), so a dependency that is disabled still
+ * turns on even when the root itself is already enabled.
+ *
+ * Throws `EnableRefusedError` when the closure cannot be resolved -- an
+ * unreadable declarer, or a cycle. `buildScopeDeclarationDetail` is offline,
+ * fail-closed (D-05-07), and already covered by the network-free gate.
+ */
+async function resolveEnableCascade(
+  state: ExtensionState,
+  locations: ScopedLocations,
+  rootKey: string,
+): Promise<EnableCascadeResolution> {
+  const detail = await buildScopeDeclarationDetail({ state, locations });
+  if (!detail.ok) {
+    throw new EnableRefusedError("unreadable", detail.cause.message);
+  }
+
+  const closure = await resolveDependencyClosure({
+    rootKey,
+    lookup: enableCascadeLookup(detail.declarations),
+    // EDEP-01: EMPTY on purpose. `walkDependencyEdge` returns WITHOUT
+    // recursing on an `installedKeys` hit, so any non-empty set would
+    // truncate the walk at the first installed dependency and make EDEP-01's
+    // word "transitively" false. Being already installed is the
+    // PRECONDITION for being enabled here, not a reason to stop walking.
+    installedKeys: new Set<string>(),
+    knownMarketplaces: enableCascadeKnownMarketplaces(state, detail.declarations),
+  });
+  if (!closure.ok) {
+    throw enableCascadeClosureFailure(closure);
+  }
+
+  const members = closure.closure
+    .filter((member) => member.key !== rootKey)
+    .map((member) => classifyEnableCascadeMember(state, member));
+  return { members };
+}
+
+/** Mutable accumulator threaded through the cascade members' `runPhases` run. */
+interface EnableCascadeRun {
+  readonly rows: EnableCascadeMemberRow[];
+  readonly materialized: Set<string>;
+}
+
+/**
+ * One `"re-enabled"` member's phase. `do` calls `runInstallLedger` on the
+ * OUTER transaction's state snapshot with the exact argument set
+ * `runEnableBranch` already passes, now per member: `pinVersionOverride` set
+ * to the member's own recorded version, `allowExistingRecord: true`, and
+ * `partial` derived from the member record's own `compatibility.installable`.
+ * `undo` puts the member BACK to disabled via `cascadeUnstagePlugin` +
+ * `toDisabledRecord`, the pair `runDisableBranch` already composes; it must
+ * NOT delete the record, because the record is what owns those artifacts.
+ *
+ * The state phase inside `runInstallLedger` rebuilds the record from a fresh
+ * object literal that never names `dependencyDisabled` (LOAD-02 / D-06-02),
+ * so a member re-enabled through this phase has the Phase 6 consequence
+ * marker cleared in the same write with no code of its own needed here.
+ */
+function buildEnableCascadeMemberPhase(
+  transaction: EnableDisableTransaction,
+  opts: EnableDisablePluginOptions,
+  scope: Scope,
+  locations: ScopedLocations,
+  state: ExtensionState,
+  member: EnableCascadeMember,
+  record: InstalledPluginRecord,
+): Phase<EnableCascadeRun> {
+  const partial = !record.compatibility.installable;
+  return {
+    name: member.key,
+    do: async (run) => {
+      const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+      const result = await transaction.runInstallLedger(
+        state,
+        locations,
+        {
+          ctx: opts.ctx,
+          scope,
+          cwd: opts.cwd,
+          marketplace: member.marketplace,
+          plugin: member.name,
+          pinVersionOverride: record.version,
+          allowExistingRecord: true,
+          partial,
+          removalOps: createRemovalOps(),
+        },
+        capture,
+      );
+      assertRecordedStateLedgerInstalled(result);
+      run.materialized.add(member.key);
+      const summary = result.summary;
+      run.rows.push({
+        status: "installed",
+        name: member.key,
+        version: summary.version,
+        dependencies: enableRowDependencies({
+          stagedAgents: summary.stagedAgentNames.length > 0,
+          stagedMcpServers: summary.stagedMcpServerNames.length > 0,
+        }),
+        reasons: ["dependency enabled"],
+        severity: "info",
+        needsReload: true,
+      });
+    },
+    undo: async (run) => {
+      if (!run.materialized.has(member.key)) {
+        return;
+      }
+
+      const marketplaceRecord = state.marketplaces[member.marketplace];
+      const installedNow = marketplaceRecord?.plugins[member.name];
+      if (marketplaceRecord === undefined || installedNow === undefined) {
+        return;
+      }
+
+      const outcome = await transaction.cascadeUnstagePlugin(
+        member.name,
+        member.marketplace,
+        locations,
+        installedNow,
+      );
+      if (!outcome.ok) {
+        applyPartialCascadeFold(installedNow, outcome.dropped);
+      }
+
+      marketplaceRecord.plugins[member.name] = toDisabledRecord(
+        installedNow,
+        new Date().toISOString(),
+      );
+    },
+  };
+}
+
+/** A classified member's row when nothing is materialized for it. */
+function enableCascadeSkipRow(member: EnableCascadeMember): EnableCascadeMemberRow {
+  if (member.disposition === "already-enabled") {
+    return {
+      status: "skipped",
+      name: member.key,
+      ...(member.record !== undefined && { version: member.record.version }),
+      reasons: ["already enabled"],
+      severity: "info",
+      needsReload: false,
+    };
+  }
+
+  // "not-installed": LOAD-01's load-time check owns reporting a missing
+  // declared dependency, so this disposition never refuses the root's own
+  // enable -- it only reports.
+  return {
+    status: "skipped",
+    name: member.key,
+    reasons: absentTargetReasons(),
+    severity: "error",
+    needsReload: false,
+  };
+}
+
+/**
+ * Materialize every `"re-enabled"` member through its own record, all or
+ * nothing: driven through `runPhases` so a member failure unwinds every
+ * member this command already turned on -- the same all-or-nothing stance
+ * D-03-07 gives the install cascade, and the reason a half-enabled graph
+ * never reaches disk (NFR-3). The root itself is NOT one of these phases; it
+ * keeps going through the existing `runEnableBranch`, unchanged, called
+ * separately by the caller.
+ *
+ * Known gap: if the ROOT's own `runEnableBranch` call fails AFTER this
+ * function's phases already committed, the caller returns without saving and
+ * these members' state mutations are discarded even though their artifacts
+ * already reached disk. Not reachable by any case this plan tests; flagged
+ * here rather than silently accepted.
+ */
+async function runEnableCascadeMembers(
+  transaction: EnableDisableTransaction,
+  opts: EnableDisablePluginOptions,
+  scope: Scope,
+  locations: ScopedLocations,
+  state: ExtensionState,
+  members: readonly EnableCascadeMember[],
+): Promise<
+  | { readonly ok: true; readonly rows: readonly EnableCascadeMemberRow[]; readonly wrote: boolean }
+  | { readonly ok: false; readonly error: Error }
+> {
+  const run: EnableCascadeRun = { rows: [], materialized: new Set() };
+  const phases: Phase<EnableCascadeRun>[] = [];
+  for (const member of members) {
+    if (member.disposition !== "re-enabled") {
+      run.rows.push(enableCascadeSkipRow(member));
+      continue;
+    }
+
+    if (member.record !== undefined) {
+      phases.push(
+        buildEnableCascadeMemberPhase(
+          transaction,
+          opts,
+          scope,
+          locations,
+          state,
+          member,
+          member.record,
+        ),
+      );
+    }
+  }
+
+  const result = await runPhases(phases, run);
+  if (!result.ok) {
+    assertFailedPhasesHasError(result);
+    return { ok: false, error: result.error };
+  }
+
+  return { ok: true, rows: run.rows, wrote: phases.length > 0 };
+}
+
+/**
+ * `runPhases`'s sole `ok: false` producer always sets `error`
+ * (`transaction/phase-ledger.ts`'s catch normalizes any throw to an `Error`
+ * before returning it). Evidence-backed type narrowing only, mirroring
+ * `assertRecordedStateLedgerInstalled` above; the invariant is established
+ * by that producer, not by a runtime check here.
+ */
+function assertFailedPhasesHasError(
+  _result: RunPhasesResult,
+): asserts _result is RunPhasesResult & { readonly error: Error } {
+  // Evidence-backed type narrowing only; the invariant is established by the callee.
+}
+
+/** The EDEP-01 cascade step's outcome, for the transaction closure to act on. */
+type EnableCascadeStepResult =
+  | { readonly kind: "skipped" }
+  | { readonly kind: "failed"; readonly outcome: SetEnabledOutcome }
+  | {
+      readonly kind: "ran";
+      readonly rows: readonly EnableCascadeMemberRow[];
+      readonly needsSave: boolean;
+    };
+
+/**
+ * EDEP-01 / EDEP-03: resolve and materialize the enable cascade, extracted
+ * from the transaction closure to keep its cognitive complexity within the
+ * project's lint budget. Scoped to standalone `enable` calls only -- a
+ * reconcile-driven (orchestrated) call is a different call site with its own
+ * dependency handling in `orchestrators/reconcile/dependency-verdict.ts`, and
+ * `disable` keeps its own short-circuit exactly where it was.
+ */
+async function runEnableCascadeStep(args: {
+  readonly transaction: EnableDisableTransaction;
+  readonly opts: EnableDisablePluginOptions;
+  readonly scope: Scope;
+  readonly locations: ScopedLocations;
+  readonly state: ExtensionState;
+  readonly installed: InstalledPluginRecord;
+  readonly enable: boolean;
+  readonly orchestrated: boolean;
+}): Promise<EnableCascadeStepResult> {
+  const { transaction, opts, scope, locations, state, installed, enable, orchestrated } = args;
+  if (!enable || orchestrated) {
+    return { kind: "skipped" };
+  }
+
+  const cascade = await resolveEnableCascade(
+    state,
+    locations,
+    `${opts.plugin}@${opts.marketplace}`,
+  );
+  const materialized = await runEnableCascadeMembers(
+    transaction,
+    opts,
+    scope,
+    locations,
+    state,
+    cascade.members,
+  );
+  if (!materialized.ok) {
+    return {
+      kind: "failed",
+      outcome: {
+        kind: "enable-failed",
+        cause: materialized.error,
+        recordedVersion: installed.version,
+      },
+    };
+  }
+
+  return { kind: "ran", rows: materialized.rows, needsSave: materialized.wrote };
+}
+
+/** Either a terminal outcome to return immediately, or the branch's own outcome to continue post-processing. */
+type BranchDispatchResult =
+  | { readonly kind: "terminal"; readonly outcome: SetEnabledOutcome }
+  | {
+      readonly kind: "continue";
+      readonly branchOutcome: SetEnabledOutcome;
+      readonly removeRoutesAfterSave: boolean;
+    };
+
+/**
+ * Dispatch to the enable or disable branch and fold the disable branch's
+ * partial-cascade save-and-return arm, extracted from the transaction
+ * closure to keep its cognitive complexity within the project's lint budget.
+ */
+async function dispatchBranch(args: {
+  readonly transaction: EnableDisableTransaction;
+  readonly hooksRouting: EnableDisableHooksRouting;
+  readonly opts: EnableDisablePluginOptions;
+  readonly scope: Scope;
+  readonly locations: ScopedLocations;
+  readonly state: ExtensionState;
+  readonly mp: ExtensionState["marketplaces"][string];
+  readonly plugin: string;
+  readonly installed: InstalledPluginRecord;
+  readonly enable: boolean;
+  readonly tx: { readonly save: () => Promise<void> };
+}): Promise<BranchDispatchResult> {
+  const { transaction, hooksRouting, opts, scope, locations, state, mp, plugin, installed, enable, tx } =
+    args;
+  if (enable) {
+    const branchOutcome = await runEnableBranch(transaction, opts, scope, locations, state, installed);
+    return { kind: "continue", branchOutcome, removeRoutesAfterSave: false };
+  }
+
+  const disableResult = await runDisableBranch(transaction, opts, locations, installed);
+  // ENBL-02: on a clean disable, replace the map slot with the branded
+  // `DisabledPluginRecord` the branch built via `toDisabledRecord` (rather
+  // than mutating `installed` in place). The terminal `tx.save()` -- here on
+  // the partial-cascade arm, or the caller's own on the clean arm --
+  // persists `tx.state` with the replaced slot.
+  if (disableResult.disabled !== undefined) {
+    mp.plugins[plugin] = disableResult.disabled;
+  }
+
+  // I3: a partial disable cascade mutated `installed.resources.*` in place to
+  // drop the artifacts already removed before the throw. Persist the
+  // shrunken record so state.json never claims artifacts gone from disk
+  // (NFR-3 fail-clean), THEN surface the failed row as a terminal outcome.
+  if (disableResult.saveShrunken) {
+    await tx.save();
+    dropCachedHooksAfterSave(
+      hooksRouting,
+      opts,
+      scope,
+      disableResult.removeRoutesAfterSave,
+      "partial-cascade ",
+      false,
+    );
+    return { kind: "terminal", outcome: disableResult.outcome };
+  }
+
+  return {
+    kind: "continue",
+    branchOutcome: disableResult.outcome,
+    removeRoutesAfterSave: disableResult.removeRoutesAfterSave,
+  };
 }
 
 /**
@@ -720,6 +1241,7 @@ async function emitUnresolvedTarget(args: {
     // Only the `invalid-config` arm reads this, and `not-recorded` is not it.
     configBasename: "",
     outcome: { kind: "not-recorded", notInstalledAt },
+    cascadeRows: [],
   });
   return undefined;
 }
@@ -814,6 +1336,15 @@ async function setPluginEnabledWithTransaction(
   // at the base file -- the value the no-flag, no-declaration arm yields -- so
   // the pre-assignment value is never wrong and the type stays definite.
   let configBasename = path.basename(locations.configJsonPath);
+  // EDEP-01: the enable cascade's classified member rows, threaded out of the
+  // locked closure below for the standalone renderer. Stays empty for
+  // `disable`, for orchestrated mode (a reconcile-driven enable is a
+  // different call site with its own dependency handling in
+  // `orchestrators/reconcile/dependency-verdict.ts`), and for a root that
+  // declares no dependencies -- so `dispatchOutcome`'s row array degrades to
+  // exactly the pre-EDEP-01 single root row in every case this plan does not
+  // change (EDEP-01 empty edge).
+  let enableCascadeRows: readonly EnableCascadeMemberRow[] = [];
 
   let outcome: SetEnabledOutcome;
   const write: EnabledFlagWriteTarget = {
@@ -870,57 +1401,71 @@ async function setPluginEnabledWithTransaction(
           return { kind: "not-recorded" };
         }
 
+        // EDEP-01 / EDEP-03: resolve and materialize the enable cascade
+        // BEFORE the root's own idempotency is decided (D-08-03), so a
+        // dependency that is disabled still turns on even when the root
+        // itself is already enabled.
+        const cascadeStep = await runEnableCascadeStep({
+          transaction,
+          opts,
+          scope,
+          locations,
+          state,
+          installed,
+          enable,
+          orchestrated,
+        });
+        if (cascadeStep.kind === "failed") {
+          return cascadeStep.outcome;
+        }
+
+        let cascadeNeedsSave = false;
+        if (cascadeStep.kind === "ran") {
+          enableCascadeRows = cascadeStep.rows;
+          cascadeNeedsSave = cascadeStep.needsSave;
+        }
+
         // ENBL-05 idempotency: the explicit `enabled: false` marker, read
         // through the single predicate. Availability is not consulted, so a
         // disabled PARTIAL record is idempotent on `disable` and re-materializes
         // on `enable`, at parity with the canonical disabled record.
         if (isRecordedButDisabled(installed) === !enable) {
-          return resolveIdempotentOutcome(transaction, write, selection, state, installed);
-        }
-
-        let branchOutcome: SetEnabledOutcome;
-        let removeRoutesAfterSave = false;
-        if (enable) {
-          branchOutcome = await runEnableBranch(
+          const idempotentOutcome = await resolveIdempotentOutcome(
             transaction,
-            opts,
-            scope,
-            locations,
+            write,
+            selection,
             state,
             installed,
           );
-        } else {
-          const disableResult = await runDisableBranch(transaction, opts, locations, installed);
-          branchOutcome = disableResult.outcome;
-          removeRoutesAfterSave = disableResult.removeRoutesAfterSave;
-          // ENBL-02: on a clean disable, replace the map slot with the branded
-          // `DisabledPluginRecord` the branch built via `toDisabledRecord`
-          // (rather than mutating `installed` in place). The terminal
-          // `tx.save()` below persists tx.state with the replaced slot.
-          if (disableResult.disabled !== undefined) {
-            mp.plugins[plugin] = disableResult.disabled;
-          }
-
-          // I3: a partial disable cascade mutated `installed.resources.*` in
-          // place to drop the artifacts already removed before the throw.
-          // Persist the shrunken record so state.json never claims artifacts
-          // gone from disk (NFR-3 fail-clean), THEN fall through to the
-          // post-guard branch that surfaces the failed row.
-          if (disableResult.saveShrunken) {
+          if (cascadeNeedsSave) {
+            // EDEP-01: the root is a no-op, but the cascade materialized real
+            // state for at least one dependency -- persist it (NFR-3): a
+            // materialized member's artifacts must not survive on disk with
+            // no matching state.json entry.
             await tx.save();
-            dropCachedHooksAfterSave(
-              hooksRouting,
-              opts,
-              scope,
-              disableResult.removeRoutesAfterSave,
-              "partial-cascade ",
-              false,
-            );
-
-            return branchOutcome;
           }
+
+          return idempotentOutcome;
         }
 
+        const dispatch = await dispatchBranch({
+          transaction,
+          hooksRouting,
+          opts,
+          scope,
+          locations,
+          state,
+          mp,
+          plugin,
+          installed,
+          enable,
+          tx,
+        });
+        if (dispatch.kind === "terminal") {
+          return dispatch.outcome;
+        }
+
+        const { branchOutcome, removeRoutesAfterSave } = dispatch;
         if (branchOutcome.kind !== "fresh") {
           return branchOutcome;
         }
@@ -957,6 +1502,10 @@ async function setPluginEnabledWithTransaction(
 
     // D-04: the `failed` row's bytes are identical across both verbs; emit it
     // through the active verb's CommandContext for naming consistency.
+    // EDEP-01: an `EnableRefusedError` (cycle / unreadable declarer) is the
+    // one transaction throw this catch classifies for standalone mode -- its
+    // reason names the fact the cause line states. Every other transaction
+    // throw keeps the pre-existing brace-less `(failed)` row.
     emitEnableDisableFailedRow({
       ctx,
       pi,
@@ -966,7 +1515,7 @@ async function setPluginEnabledWithTransaction(
       row: {
         status: "failed",
         name: plugin,
-        reasons: [] as const,
+        reasons: cause instanceof EnableRefusedError ? [cause.reason] : ([] as const),
         cause,
         // D-03/D-06: a transaction-throw enable/disable failure -> error, no
         // reload.
@@ -981,7 +1530,17 @@ async function setPluginEnabledWithTransaction(
     return outcomeToTypedResult({ plugin, enable, outcome, configBasename });
   }
 
-  dispatchOutcome({ ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome });
+  dispatchOutcome({
+    ctx,
+    pi,
+    marketplace,
+    scope,
+    plugin,
+    enable,
+    configBasename,
+    outcome,
+    cascadeRows: enableCascadeRows,
+  });
   return undefined;
 }
 
@@ -1255,8 +1814,10 @@ function dispatchOutcome(args: {
   readonly enable: boolean;
   readonly configBasename: string;
   readonly outcome: SetEnabledOutcome;
+  /** EDEP-01: the enable cascade's classified member rows; empty for `disable`. */
+  readonly cascadeRows: readonly EnableCascadeMemberRow[];
 }): void {
-  const { ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome } = args;
+  const { ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome, cascadeRows } = args;
   // SEV-01: the single sanctioned companion probe, taken once here -- the same
   // one `notify()` uses to render the `{requires pi-...}` markers -- and passed
   // down to the pure row composer, which holds no Pi reference of its own.
@@ -1285,11 +1846,16 @@ function dispatchOutcome(args: {
     // or `partially-installed`, never `disabled`), so narrowing to the
     // ENABLE_CONTEXT row type is sound.
     const enableRow = row as EnableMsg;
+    // EDEP-01 / D-08-03: the full closure's rows ride the SAME single
+    // notification -- root plus every classified member, sorted. A root
+    // with zero cascade members composes to `[enableRow]` alone, which a
+    // one-element sort leaves byte-identical to the pre-EDEP-01 form.
+    const rows = composeEnableCascadeRows({ scope, rootRow: enableRow, members: cascadeRows });
     notifyWithContext(
       ctx,
       pi,
       ENABLE_CONTEXT,
-      [{ name: marketplace, scope, plugins: [enableRow] }],
+      [{ name: marketplace, scope, plugins: rows }],
       undefined,
       "single",
     );

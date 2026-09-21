@@ -60,7 +60,7 @@ This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ct
 
 ### Reasons rendering
 
-Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 58-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only block is the dependency-cascade vocabulary -- `{no matching version}`, `{version conflict}`, `{constraint too complex}`, `{invalid version constraint}`, `{dependency marketplace not added}`, `{dependency cycle}`, `{dependency failed}`, `{dependency disabled}`, `{dependency promoted}`, `{dependency pruned}`, `{dependency unsatisfied}`, `{dependency version unsatisfied}` and `{dependents unsatisfied}` -- which sits after uninstall's data-disposition marker `{data kept}`.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 60-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only block is the dependency-cascade vocabulary -- `{no matching version}`, `{version conflict}`, `{constraint too complex}`, `{invalid version constraint}`, `{dependency marketplace not added}`, `{dependency cycle}`, `{dependency failed}`, `{dependency disabled}`, `{dependency promoted}`, `{dependency pruned}`, `{dependency unsatisfied}`, `{dependency version unsatisfied}`, `{dependents unsatisfied}`, `{dependency current copy}` and `{dependency enabled}` -- which sits after uninstall's data-disposition marker `{data kept}`.
 
 Structural `unavailable` rows derive reasons from resolver notes through `narrowResolverNotes`. Partial rows derive typed unsupported kinds through `narrowUnsupportedKinds`. The typed `workflows` kind uses the second path.
 
@@ -3078,6 +3078,22 @@ D-54-01 / ENBL-01 / ENBL-03. Re-materializes a previously-disabled plugin from t
 ```
 
 Fresh enable -- a previously-disabled plugin is re-materialized. The marketplace header is the bare always-marketplace-header form (`mp.status === undefined`, no details -- byte-identical to the install command's header; the former `(added)` token leaked from reusing the install-cascade header shape and was dropped per UAT-04); plugin row = `PluginInstalledMessage` (status: `"installed"`, the existing state-change token). Severity `info`; reload-hint fires per SNM-33 (the plugin row is a state-change transition).
+
+### Enable cascade -- a declared dependency is re-enabled through its own record (EDEP-01 / EDEP-03)
+
+`enable <plugin>` resolves the plugin's declared dependency closure transitively in the same scope (D-08-03), reusing the install cascade's post-order walk and row conventions (RESV-01 / RESV-06): a member renders by its full `<plugin>@<marketplace>` key because it may resolve from a marketplace other than the header's, rows sort through the project's canonical name-then-scope comparator so the root takes its alphabetical place among the members, and one `notifyWithContext` call carries the whole block.
+
+<!-- catalog-state: enable-cascade -->
+
+```text
+● official [user]
+  ● formatter@tools v2.1.0 (installed) {dependency enabled}
+  ● helper v1.0.0 (installed)
+
+/reload to pick up changes
+```
+
+`helper` declares `formatter@tools`; both records are disabled. `formatter`'s record is re-materialized through the SAME `runInstallLedger` re-enable machinery `helper`'s own row already used (`pinVersionOverride` + `allowExistingRecord: true`), so its artifacts return to disk without the config file gaining a key for it (D-04-02: only the plugin the user named reaches the config write). The member row carries the new `{dependency enabled}` token (D-08-02) -- an `installed` row, not a skip, because the record changed and something was materialized. Severity `info` on both rows; the reload-hint fires per SNM-33. A closure member already enabled renders `(skipped) {already enabled}` instead (the existing idempotent-skip token, reused rather than duplicated per D-08-03's discretion); a member the scope records nothing for renders `(skipped) {not installed}` at `error` and does not refuse the root's own enable -- LOAD-01's load-time check owns reporting a missing declared dependency. A root that declares no dependencies renders exactly the `enable-fresh` state above, byte for byte.
 
 ### Partial enable -- component kinds dropped (ENBL-07)
 

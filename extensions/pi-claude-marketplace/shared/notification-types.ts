@@ -165,7 +165,15 @@ export type Reason =
   // failing. It rides an `installed` row -- the install succeeded -- and is
   // neither idempotent (a copy installed) nor a failure reason. The
   // constraint itself is left for the LOAD-01 load-time check to enforce.
-  | "dependency current copy";
+  | "dependency current copy"
+  // D-08-02: install or enable turned on an already-installed, disabled
+  // dependency through its record. It rides an `installed` row beside
+  // `already installed` on the install cascade's already-installed arm, and
+  // alone on the enable cascade's own re-materialized member row -- the
+  // state changed and nothing was refused, so a plain `already installed`
+  // (which reports a no-op) cannot carry it. Retires the
+  // `{already installed, dependency disabled}` skip this token replaces.
+  | "dependency enabled";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<

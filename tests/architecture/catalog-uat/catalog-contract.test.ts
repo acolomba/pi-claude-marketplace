@@ -95,8 +95,11 @@ const EXPECTED_SECTION_COUNT = 20;
 // TAGS-02 / D-07-03: +1 state for the path-source dependency-cascade fallback
 // -- an `installed` row carrying `{dependency current copy}` when no
 // marketplace tag satisfied the constraint (217 -> 218).
-const EXPECTED_STATE_COUNT = 218;
-const EXPECTED_UTF8_BYTES = 29_798;
+// EDEP-01 / EDEP-03: +1 state for the enable cascade's own multi-row block --
+// a declared dependency re-enabled through its own record, carrying the new
+// `{dependency enabled}` token on an `installed` row (218 -> 219).
+const EXPECTED_STATE_COUNT = 219;
+const EXPECTED_UTF8_BYTES = 29_939;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -385,7 +388,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 218 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 219 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

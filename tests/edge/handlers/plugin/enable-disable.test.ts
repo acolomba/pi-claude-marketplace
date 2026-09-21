@@ -650,6 +650,49 @@ for (const { args, enable, expectedMessage, failure, label, reported } of [
   });
 }
 
+test("EDEP-01: an enable cascade's member row reaches the rendered output through the real edge handler", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "cascade-member-row");
+  await seedBothScopes(workspace, true);
+  // `alpha` declares `beta` (same marketplace, no `marketplace` field) as a
+  // dependency; both are disabled by `seedBothScopes(workspace, true)` above.
+  await writeFile(
+    path.join(workspace.cwd, "mp-src", "alpha", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "alpha", version: "1.0.0", dependencies: [{ name: "beta" }] }),
+    "utf8",
+  );
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+    value: workspace.cwd,
+    reads: 1,
+  });
+  const enableDisableHandler = makeHandlerUnderTest(pi, true);
+
+  // act
+  await enableDisableHandler("alpha@mp --scope user", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message: [
+        "● mp [user]",
+        "  ● alpha v1.0.0 (installed)",
+        "  ● beta@mp v1.0.0 (installed) {dependency enabled}",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    },
+  ]);
+  assert.deepStrictEqual(await readFootprint(workspace), {
+    projectRecords: BOTH_DISABLED,
+    userRecords: BOTH_ENABLED,
+    projectBase: undefined,
+    projectLocal: undefined,
+    userBase: ALPHA_DECLARED_ENABLED,
+    userLocal: undefined,
+  });
+  verifyBoundary();
+});
+
 test("removes only the owning runtime route after a successful disable", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "runtime-owner-disable");

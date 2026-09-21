@@ -95,6 +95,7 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "dependency version unsatisfied": true,
   "dependents unsatisfied": true,
   "dependency current copy": true,
+  "dependency enabled": true,
 };
 
 const STATUS_TOKEN_ENROLLMENT: Record<StatusToken, true> = {
@@ -156,7 +157,7 @@ const MARKETPLACE_STATUS_ENROLLMENT: Record<MarketplaceStatus, true> = {
   skipped: true,
 };
 
-test("OUT-08: Reason is the closed 59-entry reason set", () => {
+test("OUT-08: Reason is the closed 60-entry reason set", () => {
   // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
   // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
   // MCPR-03 / D-02: +1 for the malformed mcp failure-class member (34 -> 35).
@@ -223,7 +224,11 @@ test("OUT-08: Reason is the closed 59-entry reason set", () => {
   // TAGS-02 / D-07-03: +1 for `dependency current copy` -- the marker for a
   // path-source dependency that installed the marketplace's current copy
   // because no tag satisfied its constraint (58 -> 59).
-  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 59);
+  // D-08-02: +1 for `dependency enabled` -- install's already-installed arm
+  // and enable's own cascade member row both stamp it when a disabled,
+  // already-installed dependency is re-materialized through its record
+  // (59 -> 60).
+  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 60);
 });
 
 test("SNM-02: StatusToken is the closed 24-entry token set", () => {

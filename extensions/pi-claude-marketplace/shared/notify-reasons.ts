@@ -59,9 +59,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * instead of failing (58 to 59). It joins the command-private reasons rather
  * than the idempotent group because it is not a no-op -- a copy installed --
  * and it is not a failure reason because the install succeeded; the
- * constraint itself is left for the LOAD-01 load-time check to enforce. The
- * arithmetic above is renumbered rather than annotated with the gap, so the
- * next member to join does not inherit one.
+ * constraint itself is left for the LOAD-01 load-time check to enforce.
+ * D-08-02 added `dependency enabled`, the marker for turning on an
+ * already-installed, disabled dependency through its record -- the install
+ * cascade's already-installed arm and the enable cascade's own member row
+ * both stamp it on an `installed` row, because the record changed and
+ * `already installed` alone reports a no-op (59 to 60). The arithmetic above
+ * is renumbered rather than annotated with the gap, so the next member to
+ * join does not inherit one.
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -345,6 +350,14 @@ type CommandPrivateReason =
   // real degradation is never masked. Do not raise this reason's severity to
   // match `warning` without recording a decision that supersedes D-07-03.
   | "dependency current copy"
+  // D-08-02: install's already-installed arm and enable's own cascade member
+  // row both stamp this when a disabled, already-installed dependency is
+  // re-materialized through its record. Owned by
+  // `orchestrators/plugin/enable-disable.messaging.ts` (EDEP-01's cascade
+  // member row) and shared by `install-cascade.messaging.ts`'s
+  // already-installed arm (EDEP-03). Retires the
+  // `{already installed, dependency disabled}` skip.
+  | "dependency enabled"
   // RESV-05: the skipped dependency is recorded but disabled, so it
   // materialized nothing. It joins `already installed` in the same brace and
   // is what lifts that row off the benign-skip default.

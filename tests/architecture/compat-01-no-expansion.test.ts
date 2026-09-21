@@ -302,6 +302,11 @@ const EXPECTED_REASONS = [
   // instead of failing. Rides an `installed` row -- the install succeeded --
   // and is neither idempotent nor a failure reason.
   "dependency current copy",
+  // D-08-02: install's already-installed arm and enable's own cascade
+  // member row turn on an already-installed, disabled dependency through
+  // its record. It rides an `installed` row -- the state changed and
+  // nothing was refused, so `already installed` alone cannot carry it.
+  "dependency enabled",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

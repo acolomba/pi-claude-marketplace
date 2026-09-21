@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { describe, test } from "node:test";
 
 import {
+  composeEnableCascadeRows,
   DISABLE_CONTEXT,
   ENABLE_CONTEXT,
   narrowDisableFailure,
   narrowEnableFailure,
   staleGateDropped,
   type DisableMsg,
+  type EnableCascadeMemberRow,
   type EnableMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts";
 import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -450,6 +452,40 @@ test("narrowEnableFailure keeps a plain Error brace-less", () => {
   assert.deepStrictEqual(actual, []);
 });
 
+test("narrowEnableFailure classifies a missing clone directory as source missing", () => {
+  // arrange
+  const cause = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "foo",
+    reasons: ["source dir does not exist: /tmp/mp/plugins/foo"],
+    partialable: false,
+    unsupportedKinds: [],
+  });
+
+  // act
+  const actual = narrowEnableFailure(cause);
+
+  // assert
+  assert.deepStrictEqual(actual, ["source missing"]);
+});
+
+test("narrowEnableFailure keeps an unrelated not-installable shape brace-less", () => {
+  // arrange
+  const cause = new PluginShapeError({
+    kind: "not-installable",
+    plugin: "foo",
+    reasons: ["contains lspServers"],
+    partialable: true,
+    unsupportedKinds: ["lspServers"],
+  });
+
+  // act
+  const actual = narrowEnableFailure(cause);
+
+  // assert
+  assert.deepStrictEqual(actual, []);
+});
+
 test("staleGateDropped ignores an empty unsupported-kind list", () => {
   // arrange
   const cause = new PluginShapeError({
@@ -543,4 +579,76 @@ test("staleGateDropped preserves first-seen unsupported-kind order and deduplica
 
   // assert
   assert.deepStrictEqual(actual, ["lsp", "unsupported hooks", "unsupported component"]);
+});
+
+describe("composeEnableCascadeRows", () => {
+  test("a root with no cascade members composes to exactly the root row", () => {
+    // arrange
+    const rootRow = {
+      status: "installed",
+      name: "helper",
+      dependencies: [],
+      version: "1.0.0",
+      severity: "info",
+      needsReload: true,
+    } satisfies EnableMsg;
+
+    // act
+    const rows = composeEnableCascadeRows({ scope: "user", rootRow, members: [] });
+
+    // assert
+    assert.deepStrictEqual(rows, [rootRow]);
+  });
+
+  test("sorts the root among its members by the canonical name-then-scope comparator", () => {
+    // arrange
+    const rootRow = {
+      status: "installed",
+      name: "helper",
+      dependencies: [],
+      version: "1.0.0",
+      severity: "info",
+      needsReload: true,
+    } satisfies EnableMsg;
+    const memberRow = {
+      status: "installed",
+      name: "formatter@tools",
+      version: "2.1.0",
+      dependencies: [],
+      reasons: ["dependency enabled"],
+      severity: "info",
+      needsReload: true,
+    } satisfies EnableCascadeMemberRow;
+
+    // act
+    const rows = composeEnableCascadeRows({ scope: "user", rootRow, members: [memberRow] });
+
+    // assert
+    assert.deepStrictEqual(rows, [memberRow, rootRow]);
+  });
+
+  test("carries a skipped already-enabled member row through unchanged", () => {
+    // arrange
+    const rootRow = {
+      status: "skipped",
+      name: "helper",
+      reasons: ["already enabled"],
+      severity: "info",
+      needsReload: false,
+    } satisfies EnableMsg;
+    const memberRow = {
+      status: "skipped",
+      name: "formatter@tools",
+      version: "2.1.0",
+      reasons: ["already enabled"],
+      severity: "info",
+      needsReload: false,
+    } satisfies EnableCascadeMemberRow;
+
+    // act
+    const rows = composeEnableCascadeRows({ scope: "user", rootRow, members: [memberRow] });
+
+    // assert
+    assert.deepStrictEqual(rows, [memberRow, rootRow]);
+  });
 });
