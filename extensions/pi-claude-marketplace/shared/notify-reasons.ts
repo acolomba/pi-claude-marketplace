@@ -365,8 +365,7 @@ type CommandPrivateReason =
   // re-materialized through its record. Owned by
   // `orchestrators/plugin/enable-disable.messaging.ts` (EDEP-01's cascade
   // member row) and shared by `install-cascade.messaging.ts`'s
-  // already-installed arm (EDEP-03). Retires the
-  // `{already installed, dependency disabled}` skip.
+  // already-installed arm (EDEP-03).
   | "dependency enabled"
   // D-04-07: install's marker for a recorded dependency the user then named.
   // The record changed hands and nothing was materialized, so it joins

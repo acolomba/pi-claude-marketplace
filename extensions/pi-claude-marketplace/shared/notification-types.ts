@@ -160,8 +160,7 @@ export type Reason =
   // `already installed` on the install cascade's already-installed arm, and
   // alone on the enable cascade's own re-materialized member row -- the
   // state changed and nothing was refused, so a plain `already installed`
-  // (which reports a no-op) cannot carry it. Retires the
-  // `{already installed, dependency disabled}` skip this token replaces.
+  // (which reports a no-op) cannot carry it.
   | "dependency enabled"
   // EDEP-02: disable refuses while an installed and ENABLED plugin in the
   // same scope still declares the target, and the refusal rides a `failed`

@@ -632,8 +632,9 @@ interface EnableCascadeRun {
  *
  * The state phase inside `runInstallLedger` rebuilds the record from a fresh
  * object literal that never names `dependencyDisabled` (LOAD-02 / D-06-02),
- * so a member re-enabled through this phase has the Phase 6 consequence
- * marker cleared in the same write with no code of its own needed here.
+ * so a member re-enabled through this phase has the LOAD-02 consequence
+ * marker (`dependencyDisabled`) cleared in the same write with no code of its
+ * own needed here.
  */
 function buildEnableCascadeMemberPhase(
   transaction: EnableDisableTransaction,
@@ -1458,9 +1459,8 @@ async function setPluginEnabledWithTransaction(
   // `disable`, for orchestrated mode (a reconcile-driven enable is a
   // different call site with its own dependency handling in
   // `orchestrators/reconcile/dependency-verdict.ts`), and for a root that
-  // declares no dependencies -- so `dispatchOutcome`'s row array degrades to
-  // exactly the pre-EDEP-01 single root row in every case this plan does not
-  // change (EDEP-01 empty edge).
+  // declares no dependencies -- so `dispatchOutcome`'s row array is exactly
+  // the single root row (EDEP-01 empty edge).
   let enableCascadeRows: readonly EnableCascadeMemberRow[] = [];
 
   let outcome: SetEnabledOutcome;
@@ -1978,9 +1978,9 @@ function dispatchOutcome(args: {
     // ENABLE_CONTEXT row type is sound.
     const enableRow = row as EnableMsg;
     // EDEP-01 / D-08-03: the full closure's rows ride the SAME single
-    // notification -- root plus every classified member, sorted. A root
-    // with zero cascade members composes to `[enableRow]` alone, which a
-    // one-element sort leaves byte-identical to the pre-EDEP-01 form.
+    // notification -- root plus every classified member, sorted. A
+    // one-element sort is a no-op, so a root with no members composes to
+    // `[enableRow]` alone (pinned by the `enable-fresh` catalog state).
     const rows = composeEnableCascadeRows({ scope, rootRow: enableRow, members: cascadeRows });
     notifyWithContext(
       ctx,

@@ -141,10 +141,9 @@ export type EnableCascadeMemberRow = PluginInstalledMessage | PluginSkippedMessa
  * comparator's scope half is inert here by construction, exactly as it is
  * for the install cascade's block.
  *
- * A root that declares no dependencies (or whose every member fails
- * classification, `members: []`) composes to exactly `[rootRow]` -- byte
- * identical to the pre-EDEP-01 single-row form, because a one-element sort
- * is a no-op.
+ * A one-element sort is a no-op, so a root that declares no dependencies (or
+ * whose every member fails classification, `members: []`) composes to
+ * exactly `[rootRow]`.
  */
 export function composeEnableCascadeRows(args: {
   readonly scope: Scope;
