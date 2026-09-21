@@ -385,7 +385,7 @@ Plans:
 3. Installing or enabling a plugin whose already-installed dependency is disabled enables that dependency through its record — the config never names it (D-04-02) — and reports it on the row with a new closed-set token; RESV-05's `{already installed, dependency disabled}` warning skip is removed from the catalog (fixture, both contract constants, length lock, both enumeration pins), and `docs/plugin-enablement.md` §"Dependencies" is rewritten, not appended, since it argues the divergence this phase reverses. (EDEP-03)
 4. BACKLOG `ENBL-DEP-01` is closed by this phase; `DEPS-STATUS-01` (partial dependency degrades the dependent) stays open — it is not upstream parity and is not pulled in here.
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans executed
 
 Plans:
 **Wave 1**
@@ -398,7 +398,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 08-03-PLAN.md — the install cascade enables a disabled already-installed dependency and the old skip leaves the catalog (EDEP-03 install arm)
+- [x] 08-03-PLAN.md — the install cascade enables a disabled already-installed dependency and the old skip leaves the catalog (EDEP-03 install arm)
 
 **Notes.** `orchestrators/plugin/enable-disable.ts`'s existing "dependencies" are the soft-dep companion extensions (pi-subagents, pi-mcp-adapter), not plugin dependencies — the naming collision is the first thing the planner should disambiguate. The enable branch already reuses `runInstallLedger` for materialization; the cascade order comes from `domain/dependency-closure.ts`'s post-order. The disable refusal text upstream: `X is still required by A, B. Disable those plugins first, or disable everything together: <chained command>`.
 
@@ -528,7 +528,7 @@ plugin names — so plan these phases with the UI gate skipped.
 | 5. Prune on uninstall | v1.20 | 3/3 | Complete    | 2026-09-16 |
 | 6. Load-time dependency check and allowed uninstall | v1.20 | 4/4 | Complete    | 2026-09-19 |
 | 7. Marketplace-repository tag resolution for path-source dependencies | v1.20 | 3/3 | Complete    | 2026-09-19 |
-| 8. Enablement parity for dependencies | v1.20 | 2/3 | In Progress|  |
+| 8. Enablement parity for dependencies | v1.20 | 3/3 | In Progress|  |
 | 9. Reload installs missing declared dependencies | v1.20 | 0/0 | Not started | — |
 | 10. Constraint-aware update | v1.20 | 0/0 | Not started | — |
 | 11. Cross-marketplace dependency allowlist | v1.20 | 0/0 | Not started | — |

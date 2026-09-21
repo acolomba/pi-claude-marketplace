@@ -5,16 +5,16 @@ milestone_name: transitive-dependencies
 current_phase: 08
 current_phase_name: Enablement parity for dependencies
 status: executing
-stopped_at: Phase 8 waves 1-2 complete; plan 08-03 executing
+stopped_at: Phase 8 all plans executed; post-execution gates running
 last_updated: "2026-09-21T12:10:00.000Z"
 last_activity: 2026-09-21
-last_activity_desc: 08-01 and 08-02 complete; 08-03 dispatched
+last_activity_desc: 08-03 complete; phase 8 gates running
 state_head: 235a812b293ae32189f37adbf6f478004504b429
 progress:
   total_phases: 12
   completed_phases: 7
   total_plans: 32
-  completed_plans: 31
+  completed_plans: 32
   percent: 58
 ---
 
@@ -37,8 +37,8 @@ under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 08 (Enablement parity for dependencies) — EXECUTING
-Plan: 3 of 3 (08-01 and 08-02 complete 2026-09-21; 08-03 next)
-Status: Executing Phase 08
+Plan: 3 of 3 (all three plans complete 2026-09-21)
+Status: Phase 08 executed; code review, regression and verification gates pending
 
 All four plans are executed. LOAD-01, LOAD-02 and LOAD-03 are closed in
 `REQUIREMENTS.md`. PRUNE-05 stays in the record with a pointer naming LOAD-03,
@@ -926,7 +926,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 8, waves 1-2 complete; plan 08-03 (wave 3) executing
+**Stopped at:** Phase 8 all plans executed; running the post-execution gates (code review -> regression -> verification)
 
 **Resume file:** .planning/phases/08-enablement-parity-for-dependencies/08-03-PLAN.md
 
@@ -964,8 +964,18 @@ otherwise deadlock on itself; two test fixtures that disabled a still-declared
 dependency through the standalone verb were re-seeded. Six commits
 `00b102a8`..`9dd32b86`.
 
-**Next:** when the 08-03 executor returns, commit STATE.md/ROADMAP.md, then the
-phase's code-review, regression and verification gates, then Phase 9.
+**Wave 3 (08-03) closed 2026-09-21:** the install cascade turns a disabled
+already-installed dependency back on through its own record and reports
+`(installed) {already installed, dependency enabled}` (EDEP-03 install arm);
+`{already installed, dependency disabled}` is RETIRED with a documented
+supersession (`REASONS` 61 -> 60, catalog held at 220 states);
+`docs/plugin-enablement.md` and `docs/dependency-resolution.md` rewritten;
+BACKLOG `ENBL-DEP-01` closed, `DEPS-STATUS-01` left open. Four commits
+`1b6752b0`..`e9fe19de`; the executor ran the full `npm run check` chain green.
+
+**Next:** code review gate (`/gsd-code-review 8`), regression gate (already
+covered by 08-03's full `npm run check`), phase-goal verification
+(`gsd-verifier` -> `08-VERIFICATION.md`), then `phase complete` and Phase 9.
 
 ### Historical v1.19 completion record
 
