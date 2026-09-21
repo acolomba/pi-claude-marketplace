@@ -39,7 +39,12 @@ codegraph install --target claude,codex --location local --no-permissions --init
 # removes the generated per-tool copy, which would shadow the root file
 rm -f .claude/CLAUDE.md
 
-# codegraph's install regenerates AGENTS.md's CodeGraph block with minor
-# drift (unicode dashes, blank lines); normalize it the same way
-# pre-commit would at commit time, so it doesn't sit dirty afterward.
+# fallow: AGENTS.md task map, skill pointers, MCP registration (no commit gate;
+# pre-commit already runs the full `npm run fallow`)
+npx fallow agent install --harness claude --harness codex --without hooks --approve
+
+# removes the generated `@AGENTS.md` import shim; AGENTS.md is the canonical file
+rm -f CLAUDE.md
+
+# normalize AGENTS.md
 SKIP=trufflehog pre-commit run --files AGENTS.md || true
