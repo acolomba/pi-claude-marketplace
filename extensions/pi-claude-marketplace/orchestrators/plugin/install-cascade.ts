@@ -686,6 +686,28 @@ function recordedDisabled(state: ExtensionState, member: ClosureMember): boolean
 }
 
 /**
+ * WR-11: every `<plugin>@<marketplace>` key the target scope records as
+ * installed AND ENABLED -- the live-dependency set `resolveTransitiveReEnableSet`
+ * seeds its own per-member walk with, so that walk stops at a live dependency
+ * exactly as the OUTER walk does (RESV-05), instead of recursing past it into
+ * declarations RESV-05 was deliberately built to leave unexplored. A DISABLED
+ * record is excluded on purpose: the whole point of the walk this seeds is to
+ * keep recursing through a disabled dependency to find what IT needs.
+ */
+function enabledInstalledKeys(state: ExtensionState): ReadonlySet<string> {
+  const keys = new Set<string>();
+  for (const [marketplaceName, record] of Object.entries(state.marketplaces)) {
+    for (const [pluginName, pluginRecord] of Object.entries(record.plugins)) {
+      if (!isRecordedButDisabled(pluginRecord)) {
+        keys.add(`${pluginName}@${marketplaceName}`);
+      }
+    }
+  }
+
+  return keys;
+}
+
+/**
  * RESV-05: an already-installed dependency is CHECKED against the effective
  * constraint before anything else touches it.
  *
@@ -888,6 +910,15 @@ function partitionAlreadyInstalled(
 const TRANSITIVE_REENABLE_SYNTHETIC_ROOT_KEY =
   "cr04-synthetic-reenable-root@cr04-synthetic-marketplace";
 
+/** `resolveTransitiveReEnableSet`'s outcome: the WR-11(b) never-installed subset travels alongside the re-enable set's own post-order, since both come from the same per-member walk. */
+type TransitiveReEnableResult =
+  | {
+      readonly ok: true;
+      readonly closure: readonly ClosureMember[];
+      readonly neverInstalled: readonly ClosureMember[];
+    }
+  | Extract<DependencyClosureResult, { readonly ok: false }>;
+
 /**
  * CR-04: `toReEnable`'s re-enable arm is not transitive on its own. The
  * closure walk stops at ANY already-installed hit (`collectInstalledKeys`
@@ -896,43 +927,97 @@ const TRANSITIVE_REENABLE_SYNTHETIC_ROOT_KEY =
  * are never visited by the closure that found it -- LOAD-01 then holds it
  * back down again on the very next pass.
  *
- * For each `toReEnable` member this resolves its OWN closure with an EMPTY
- * `installedKeys` set, mirroring `enable-disable.ts::resolveEnableCascade`'s
- * identical technique, to discover every transitively reachable member and
- * keep the ones that are themselves installed-and-disabled. The whole
- * discovered set is then folded into ONE globally post-ordered list through
- * a single further walk from a synthetic root that "declares" every
- * discovered member -- reusing the walk's own tested post-order and diamond
- * dedup rather than a hand-rolled merge of several independently-ordered
- * sub-closures. The synthetic root is exempt from the marketplace-known and
- * already-installed guards exactly as every real root is (`domain/
- * dependency-closure.ts`'s `isRoot` exemption), so it needs no entry in
- * `knownMarketplaces` and no state record.
+ * For each `toReEnable` member this resolves its OWN closure, mirroring
+ * `enable-disable.ts::resolveEnableCascade`'s identical technique, to
+ * discover every transitively reachable member and keep the ones that are
+ * themselves installed-and-disabled. WR-11(a): the walk is seeded with
+ * `enabledInstalledKeys`, not an empty set -- it stops at a LIVE dependency
+ * exactly as the OUTER walk does (RESV-05 precedes D-03-08 deliberately), so
+ * a declaration reachable only through an already-enabled, already-installed
+ * member is left unexplored here too, instead of failing this install over a
+ * plugin nothing asked about. The whole disabled subset discovered this way
+ * is then folded into ONE globally post-ordered list through a single further
+ * walk from a synthetic root that "declares" every discovered member --
+ * reusing the walk's own tested post-order and diamond dedup rather than a
+ * hand-rolled merge of several independently-ordered sub-closures. The
+ * synthetic root is exempt from the marketplace-known and already-installed
+ * guards exactly as every real root is (`domain/dependency-closure.ts`'s
+ * `isRoot` exemption), so it needs no entry in `knownMarketplaces` and no
+ * state record.
+ *
+ * WR-11(b): a candidate `sub.closure` hands back that is NOT disabled has no
+ * state record at all -- `enabledInstalledKeys` stops the walk at every
+ * enabled candidate before it can reach `sub.closure` -- so it is a
+ * never-installed member of the requested root's own transitive closure,
+ * reached only through a disabled dependency this install is about to turn
+ * back on. `outerClosureKeys` excludes one the OUTER walk already found
+ * another way (a diamond also reachable through a live path), so the caller
+ * can install it exactly once.
  *
  * A failure resolving any member's own closure propagates as the cascade's
  * own closure failure (fail-closed, D-05-07 precedent): a disabled
  * dependency reachable from the plugin being installed is not a fact this
  * install may silently leave unexplored.
+ *
+ * CR-07: the synthetic root's exemption does not extend to its CHILDREN --
+ * a discovered member absent from its own marketplace manifest is tolerated
+ * during discovery (walked there as its OWN root) but is a real `not-found`
+ * as a child of the synthetic root. The fold below remaps that one case back
+ * onto the real dependent that discovered the member.
  */
+/**
+ * Classifies one candidate a member's own sub-closure surfaced, mutating
+ * whichever accumulator it belongs to. Extracted from
+ * `resolveTransitiveReEnableSet`'s discovery loop to keep that function
+ * within the project's cognitive-complexity ceiling.
+ */
+function classifyReEnableCandidate(args: {
+  readonly state: ExtensionState;
+  readonly member: ClosureMember;
+  readonly candidate: ClosureMember;
+  readonly discovered: Map<string, ClosureMember>;
+  readonly neverInstalled: Map<string, ClosureMember>;
+  readonly outerClosureKeys: ReadonlySet<string>;
+  readonly queue: ClosureMember[];
+}): void {
+  const { state, member, candidate, discovered, neverInstalled, outerClosureKeys, queue } = args;
+  if (candidate.key === member.key || discovered.has(candidate.key)) {
+    return;
+  }
+
+  if (recordedDisabled(state, candidate)) {
+    discovered.set(candidate.key, candidate);
+    queue.push(candidate);
+    return;
+  }
+
+  if (!outerClosureKeys.has(candidate.key) && !neverInstalled.has(candidate.key)) {
+    neverInstalled.set(candidate.key, candidate);
+  }
+}
+
 async function resolveTransitiveReEnableSet(
   state: ExtensionState,
   lookup: ClosureLookup,
   knownMarketplaces: ReadonlySet<string>,
   toReEnable: readonly ClosureMember[],
-): Promise<DependencyClosureResult> {
+  outerClosureKeys: ReadonlySet<string>,
+): Promise<TransitiveReEnableResult> {
   if (toReEnable.length === 0) {
-    return { ok: true, closure: [], alreadyInstalled: [] };
+    return { ok: true, closure: [], neverInstalled: [] };
   }
 
   const discovered = new Map<string, ClosureMember>(
     toReEnable.map((member) => [member.key, member]),
   );
+  const neverInstalled = new Map<string, ClosureMember>();
+  const installedKeys = enabledInstalledKeys(state);
   const queue: ClosureMember[] = [...toReEnable];
   for (let member = queue.shift(); member !== undefined; member = queue.shift()) {
     const sub = await resolveDependencyClosure({
       rootKey: member.key,
       lookup,
-      installedKeys: new Set<string>(),
+      installedKeys,
       knownMarketplaces,
     });
     if (!sub.ok) {
@@ -940,14 +1025,15 @@ async function resolveTransitiveReEnableSet(
     }
 
     for (const candidate of sub.closure) {
-      if (candidate.key === member.key || discovered.has(candidate.key)) {
-        continue;
-      }
-
-      if (recordedDisabled(state, candidate)) {
-        discovered.set(candidate.key, candidate);
-        queue.push(candidate);
-      }
+      classifyReEnableCandidate({
+        state,
+        member,
+        candidate,
+        discovered,
+        neverInstalled,
+        outerClosureKeys,
+        queue,
+      });
     }
   }
 
@@ -955,7 +1041,7 @@ async function resolveTransitiveReEnableSet(
     // No member's own closure surfaced a transitively disabled dependency
     // beyond the direct set the caller already found in the walk's own
     // post order -- nothing to re-fold.
-    return { ok: true, closure: toReEnable, alreadyInstalled: [] };
+    return { ok: true, closure: toReEnable, neverInstalled: [...neverInstalled.values()] };
   }
 
   const folded = await resolveDependencyClosure({
@@ -970,35 +1056,68 @@ async function resolveTransitiveReEnableSet(
             })),
           })
         : lookup(subject),
-    installedKeys: new Set<string>(),
+    // Matches the discovery loop's own `installedKeys` above: the fold
+    // re-walks each discovered member's declared children through the SAME
+    // `lookup`, so an empty set here would let it recurse PAST a live
+    // dependency the discovery loop deliberately stopped at (WR-11(a)).
+    installedKeys,
     knownMarketplaces,
   });
-  assertFoldingClosureSucceeded(folded);
+  if (!folded.ok) {
+    // CR-07: a discovered member is `not-found` here only as a CHILD of the
+    // synthetic root, where the catalog-absent guard is not exempt; the
+    // discovery loop above already walked the same member as its OWN root,
+    // where the guard IS exempt, and returned `ok: true` for it. Every OTHER
+    // failure a fold could produce -- `cycle`, `marketplace-not-added`, or a
+    // `not-found` belonging to a deeper descendant -- is already caught
+    // during that same discovery call, which validates each discovered
+    // member's FULL closure with the IDENTICAL lookup and `installedKeys`
+    // before the fold ever runs. Report the failure against the real
+    // dependent that discovered the member instead of leaking the synthetic
+    // key into a user-visible row.
+    assertFoldedNotFoundFromSyntheticChild(folded);
+    const declarer = discovered.get(folded.key);
+    assertDeclaredBySyntheticRoot(declarer);
+    return { ...folded, requiredBy: declarer.requiredBy };
+  }
+
   return {
     ok: true,
     closure: folded.closure.filter(
       (member) => member.key !== TRANSITIVE_REENABLE_SYNTHETIC_ROOT_KEY,
     ),
-    alreadyInstalled: [],
+    neverInstalled: [...neverInstalled.values()],
   };
 }
 
 /**
- * The discovery loop above already proves the fold cannot fail: `queue`
- * processes EVERY discovered disabled member as its OWN root (each
- * `queue.push` pairs with a later `resolveDependencyClosure` call for that
- * exact key), and each such call walks that member's FULL transitive
- * closure with a fresh `path`/`visited` pair -- so any cycle or unusable
- * declaration reachable from a discovered member is already caught during
- * ITS OWN discovery call, before the fold ever runs. The fold's own
- * synthetic-root "declaration" can never itself be unusable: it is built
- * from already token-validated `ClosureMember.name`/`.marketplace` pairs,
- * never a `sha`. Evidence-backed type narrowing only; the invariant is
+ * `folded` fails only when a DIRECT child of the synthetic root -- one of
+ * `discovered.values()` -- is itself absent from its own marketplace
+ * manifest: every other failure reason is already excluded by the discovery
+ * loop's own validation (see the call site's comment). Evidence-backed type
+ * narrowing only; the invariant is established by the caller, not by a
+ * runtime check here.
+ */
+function assertFoldedNotFoundFromSyntheticChild(
+  _folded: Extract<DependencyClosureResult, { readonly ok: false }>,
+): asserts _folded is Extract<
+  DependencyClosureResult,
+  { readonly ok: false; readonly reason: "not-found" }
+> {
+  // Evidence-backed type narrowing only; the invariant is established by the caller.
+}
+
+/**
+ * `folded.key` is a direct child the synthetic root itself declared, and its
+ * only declared children are `discovered.values()`, so the key is always a
+ * member of `discovered` -- and every member `discovered` holds is a
+ * non-root edge somewhere in a real walk, so it always carries a real
+ * `requiredBy`. Evidence-backed type narrowing only; the invariant is
  * established by the discovery loop above, not by a runtime check here.
  */
-function assertFoldingClosureSucceeded(
-  _folded: DependencyClosureResult,
-): asserts _folded is Extract<DependencyClosureResult, { readonly ok: true }> {
+function assertDeclaredBySyntheticRoot(
+  _declarer: ClosureMember | undefined,
+): asserts _declarer is ClosureMember & { readonly requiredBy: string } {
   // Evidence-backed type narrowing only; the invariant is established by the caller.
 }
 
@@ -1181,13 +1300,42 @@ export async function runInstallCascade(
     return { kind: "closure-failed", failure: closure };
   }
 
+  // EDEP-03: the disabled subset of `alreadyInstalled` re-enables through its
+  // own record; the rest stays RESV-05's untouched skip.
+  const { toReEnable, leftAlone } = partitionAlreadyInstalled(
+    options.state,
+    closure.alreadyInstalled,
+  );
+  // CR-04: `toReEnable` alone is not transitive -- fold in every disabled
+  // member reachable FROM those members that the outer walk's
+  // already-installed wall hid. WR-11(b): the same walk also surfaces every
+  // NEVER-installed member reachable only through one of those disabled
+  // dependencies, excluding one the outer walk already found another way
+  // (`outerClosureKeys`).
+  const outerClosureKeys = new Set(
+    [...closure.closure, ...closure.alreadyInstalled].map((member) => member.key),
+  );
+  const transitiveReEnable = await resolveTransitiveReEnableSet(
+    options.state,
+    options.lookup,
+    options.knownMarketplaces,
+    toReEnable,
+    outerClosureKeys,
+  );
+  if (!transitiveReEnable.ok) {
+    return { kind: "closure-failed", failure: transitiveReEnable };
+  }
+
   // RESV-03 / RESV-05: decided here, between the walk and the phase array, so
   // every constraint verdict lands while nothing is materialized. ONE memo is
   // allocated per run and threaded through every member, so a graph whose
-  // dependencies share a repository lists that repository once.
+  // dependencies share a repository lists that repository once. WR-11(b): the
+  // never-installed members `resolveTransitiveReEnableSet` discovered join the
+  // outer closure here, so they resolve a pin and install exactly like any
+  // other cascade member.
   const constraints = await resolveMemberConstraints({
     state: options.state,
-    closure: closure.closure,
+    closure: [...closure.closure, ...transitiveReEnable.neverInstalled],
     alreadyInstalled: closure.alreadyInstalled,
     ledgerOptionsFor: options.ledgerOptionsFor,
     tagProbe: options.tagProbe ?? probeDependencyTags,
@@ -1213,32 +1361,24 @@ export async function runInstallCascade(
     members: [],
     materialized: new Set<string>(),
   };
-  // EDEP-03: the disabled subset of `alreadyInstalled` re-enables through its
-  // own record; the rest stays RESV-05's untouched skip. The re-enable phases
-  // go FIRST, ahead of the closure's own members, so a dependency is live
-  // before the plugin that needs it materializes.
-  const { toReEnable, leftAlone } = partitionAlreadyInstalled(
-    options.state,
-    closure.alreadyInstalled,
-  );
-  // CR-04: `toReEnable` alone is not transitive -- fold in every disabled
-  // member reachable FROM those members that the outer walk's
-  // already-installed wall hid.
-  const transitiveReEnable = await resolveTransitiveReEnableSet(
-    options.state,
-    options.lookup,
-    options.knownMarketplaces,
-    toReEnable,
-  );
-  if (!transitiveReEnable.ok) {
-    return { kind: "closure-failed", failure: transitiveReEnable };
-  }
-
+  // WR-11(b): a never-installed member discovered THROUGH a disabled
+  // dependency must be live before that dependency's own re-enable phase
+  // runs, so its member phase goes FIRST. The re-enable phases follow, ahead
+  // of the primary closure's own members, so a dependency is live before the
+  // plugin that needs it materializes.
+  const neverInstalledKeys = new Set(transitiveReEnable.neverInstalled.map((member) => member.key));
+  const discoveredMemberPhases = constraints.members
+    .filter((member) => neverInstalledKeys.has(member.key))
+    .map((member) => buildMemberPhase(options, seam, transaction, member));
+  const primaryMemberPhases = constraints.members
+    .filter((member) => !neverInstalledKeys.has(member.key))
+    .map((member) => buildMemberPhase(options, seam, transaction, member));
   const phases: readonly Phase<CascadeRun>[] = [
+    ...discoveredMemberPhases,
     ...transitiveReEnable.closure.map((member) =>
       buildReEnableMemberPhase(options, seam, transaction, member),
     ),
-    ...constraints.members.map((member) => buildMemberPhase(options, seam, transaction, member)),
+    ...primaryMemberPhases,
   ];
   // RESV-05 / RESV-06: projected from the walk's own left-alone list, not from
   // the ledger -- these members never reach a phase, so the run has nothing to

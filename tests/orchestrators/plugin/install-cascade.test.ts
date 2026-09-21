@@ -1910,6 +1910,177 @@ test("CR-04: a cycle among disabled dependencies fails the cascade closed", asyn
   assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.baz?.enabled, false);
 });
 
+test("CR-07: a toReEnable member absent from its own manifest fails closed with a real requiredBy, not a throw", async (t) => {
+  // arrange: "foo" directly declares both "bar" and "qux"; "bar" declares
+  // "baz". All three are pre-installed and disabled. "qux" has no catalog
+  // entry at all -- the marketplace-update case ATTR-08 names. Discovery
+  // walks "bar" and "qux" each as their OWN root, tolerating "qux"'s
+  // catalog-absent answer there (root-exempt) and finding "baz" through
+  // "bar"; the fold then walks all three as children of the synthetic root,
+  // where "qux"'s absence is a real `not-found` the fold cannot tolerate --
+  // this is exactly where the pre-fix code dereferenced `folded.closure` on
+  // a failure arm and threw a TypeError.
+  const environment = await createHermeticEnvironment(t, "install-cascade-cr07-not-found-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo"], {
+    preinstalled: ["bar", "baz", "qux"],
+  });
+  const marketplace = state.marketplaces[MARKETPLACE];
+  assert.ok(marketplace !== undefined, "the fixture pre-installs the marketplace record");
+  for (const name of ["bar", "baz", "qux"]) {
+    const record = marketplace.plugins[name];
+    assert.ok(record !== undefined, `the fixture pre-installs ${name}`);
+    record.enabled = false;
+    record.provenance = "dependency";
+  }
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar" }, { name: "qux" }],
+      [`bar@${MARKETPLACE}`]: [{ name: "baz" }],
+      [`baz@${MARKETPLACE}`]: [],
+      // "qux@marketplace" carries no entry at all: the catalog answers
+      // "absent" for it.
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`, `baz@${MARKETPLACE}`, `qux@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert: the cascade fails closed and reports the failure against "foo",
+  // the real dependent that declared "qux" -- not the internal synthetic
+  // root's key -- and nothing is re-enabled.
+  assert.strictEqual(cascade.kind, "closure-failed");
+  assert.ok(cascade.kind === "closure-failed");
+  assert.deepStrictEqual(cascade.failure, {
+    ok: false,
+    reason: "not-found",
+    key: `qux@${MARKETPLACE}`,
+    requiredBy: `foo@${MARKETPLACE}`,
+  });
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.enabled, false);
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.baz?.enabled, false);
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.qux?.enabled, false);
+});
+
+test("WR-11(a): the discovery walk stops at a live (enabled, installed) dependency, exactly like the outer walk", async (t) => {
+  // arrange: "foo" declares "bar" (disabled); "bar" declares "baz", which is
+  // already installed and ENABLED; "baz" declares "qux", which carries no
+  // catalog entry at all. Before the fix, the discovery walk's empty
+  // `installedKeys` recursed PAST "baz" and would fail this install over
+  // "qux" -- a plugin nothing asked about, and exactly the already-installed
+  // dependency RESV-05 was built to leave unexplored (RESV-05 precedes
+  // D-03-08 deliberately).
+  const environment = await createHermeticEnvironment(t, "install-cascade-wr11a-stop-at-live-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo"], {
+    preinstalled: ["bar", "baz"],
+  });
+  const marketplace = state.marketplaces[MARKETPLACE];
+  assert.ok(marketplace !== undefined, "the fixture pre-installs the marketplace record");
+  const bar = marketplace.plugins.bar;
+  assert.ok(bar !== undefined, "the fixture pre-installs bar");
+  bar.enabled = false;
+  bar.provenance = "dependency";
+  // "baz" stays enabled -- the live dependency the walk must stop at.
+  const locations = locationsFor("project", environment.cwd);
+  const queried: string[] = [];
+  const baseLookup = catalog({
+    [`foo@${MARKETPLACE}`]: [{ name: "bar" }],
+    [`bar@${MARKETPLACE}`]: [{ name: "baz" }],
+    [`baz@${MARKETPLACE}`]: [{ name: "qux" }],
+    // "qux@marketplace" carries no entry at all.
+  });
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: (subject) => {
+      queried.push(subject.key);
+      return baseLookup(subject);
+    },
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`, `baz@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert: the install succeeds; "bar" re-enables and "baz" is left
+  // exactly as it was -- neither materialized nor reported as re-enabled --
+  // and "qux" is never even queried.
+  assert.strictEqual(cascade.kind, "installed");
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.enabled, true);
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.baz?.enabled, true);
+  const barMember =
+    cascade.kind === "installed" &&
+    cascade.members.find((member) => member.key === `bar@${MARKETPLACE}`);
+  assert.ok(barMember, "bar appears in the materialized member list");
+  assert.strictEqual(barMember.reEnabledFromRecord, true);
+  const bazMember =
+    cascade.kind === "installed" &&
+    cascade.members.find((member) => member.key === `baz@${MARKETPLACE}`);
+  assert.strictEqual(bazMember, undefined, "baz is left alone, never re-enabled");
+  assert.ok(!queried.includes(`qux@${MARKETPLACE}`), "qux is never reached past the live baz");
+});
+
+test("WR-11(b): a never-installed dependency reached through a re-enabled member installs like any other cascade member", async (t) => {
+  // arrange: "foo" declares "bar" (disabled, pre-installed); "bar" declares
+  // "qux", which the snapshot has never installed at all. Before the fix,
+  // the discovery walk found "qux" in "bar"'s own sub-closure and silently
+  // dropped it -- neither re-enabled, nor installed, nor reported -- so
+  // "bar" came back up short a live dependency and LOAD-01 held both "bar"
+  // and "foo" down again on the very next pass.
+  const environment = await createHermeticEnvironment(t, "install-cascade-wr11b-never-installed-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo", "qux"], {
+    preinstalled: ["bar"],
+  });
+  const bar = state.marketplaces[MARKETPLACE]?.plugins.bar;
+  assert.ok(bar !== undefined, "the fixture pre-installs bar");
+  bar.enabled = false;
+  bar.provenance = "dependency";
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar" }],
+      [`bar@${MARKETPLACE}`]: [{ name: "qux" }],
+      [`qux@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert: both "bar" (re-enabled through its record) and "qux" (a fresh
+  // install) appear in the materialized member list with their normal rows,
+  // and "qux" installs BEFORE "bar" -- it must be live before the
+  // dependency that needs it re-enables.
+  assert.strictEqual(cascade.kind, "installed");
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.enabled, true);
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.qux?.enabled, true);
+  const keys = cascade.kind === "installed" ? cascade.members.map((member) => member.key) : [];
+  assert.deepStrictEqual(keys, [`qux@${MARKETPLACE}`, `bar@${MARKETPLACE}`, `foo@${MARKETPLACE}`]);
+  const quxMember =
+    cascade.kind === "installed" &&
+    cascade.members.find((member) => member.key === `qux@${MARKETPLACE}`);
+  assert.ok(quxMember, "qux appears in the materialized member list");
+  assert.strictEqual(quxMember.reEnabledFromRecord, false);
+  assert.strictEqual(quxMember.requiredBy, `bar@${MARKETPLACE}`);
+  const barMember =
+    cascade.kind === "installed" &&
+    cascade.members.find((member) => member.key === `bar@${MARKETPLACE}`);
+  assert.ok(barMember, "bar appears in the materialized member list");
+  assert.strictEqual(barMember.reEnabledFromRecord, true);
+});
+
 test("EDEP-03 a re-enabled dependency keeps its provenance at dependency", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-cascade-reenable-provenance-");
