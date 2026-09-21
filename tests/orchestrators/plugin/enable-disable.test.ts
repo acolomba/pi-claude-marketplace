@@ -1632,12 +1632,14 @@ test("ENBL-07 / D-97-01: enable on a manifest-absent disabled PARTIAL fails clea
       scope: "user",
     });
 
-    // EDEP-01: the enable cascade's declaration-detail read (D-05-07
-    // fail-closed) now reaches this exact absence BEFORE the PI-3 manifest
-    // lookup ever runs -- both read the SAME manifest for the SAME plugin,
-    // and the cascade read runs first. `EnableRefusedError("unreadable", ...)`
-    // is the classified reason, and nothing runs after it: no ledger phase,
-    // no artifact staged, no state write.
+    // WR-03 / ATTR-08: the enable cascade's own root-declaration read hits
+    // this exact absence, but a manifest-readable, entry-absent ROOT is not
+    // a reason to fail closed at the cascade level -- the root's own enable
+    // is going to refuse through the ledger's ordinary PI-3 lookup either
+    // way, so the cascade treats it as "declares nothing" and lets that
+    // refusal render, restoring the pre-EDEP-01 bytes rather than
+    // misreporting `{unreadable}` over a fact the cascade cannot itself act
+    // on. No ledger phase staged an artifact and no state was written.
     // assert
     assert.equal(notifications.length, 1);
     assert.equal(
@@ -1646,8 +1648,8 @@ test("ENBL-07 / D-97-01: enable on a manifest-absent disabled PARTIAL fails clea
         "A plugin operation has failed.",
         "",
         "● mp [user]",
-        "  ⊘ foo-plugin (failed) {unreadable}",
-        "    cause: cannot read the dependencies of foo-plugin@mp: not declared by its marketplace",
+        "  ⊘ foo-plugin v1.2.3 (failed)",
+        '    cause: Plugin "foo-plugin" not found in marketplace "mp".',
       ].join("\n"),
     );
     assert.equal(notifications[0]!.severity, "error");
@@ -4631,6 +4633,52 @@ test("EDEP-01: a cycle refuses the enable and writes nothing", async () => {
       ].join("\n"),
     );
     assert.equal((await stat(statePath)).mtimeMs, mtimeBefore);
+  });
+});
+
+test("WR-03: an unrelated plugin's unreadable manifest entry never blocks this enable", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange: "x" declares nothing and is unrelated to "y". "y"'s own
+    // manifest entry is broken, mirroring the "unreadable declarer"
+    // fixture's own technique -- before WR-03, the whole-scope eager read
+    // reached "y" before "x"'s own enable could even start, refusing an
+    // enable that has nothing to do with "y" at all.
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "x", version: "1.0.0", enabled: false },
+      { name: "y", version: "1.0.0", enabled: false },
+    ]);
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: { official: { manifestPath: string } };
+    };
+    const manifest = JSON.parse(
+      await readFile(state.marketplaces.official.manifestPath, "utf8"),
+    ) as { plugins: { name: string }[] };
+    manifest.plugins = manifest.plugins.filter((entry) => entry.name !== "y");
+    await writeFile(state.marketplaces.official.manifestPath, JSON.stringify(manifest), "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "x",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert: "x" enables cleanly; "y"'s brokenness never surfaces, because
+    // the walk never visits a plugin unrelated to what "x" declares.
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      ["● official [user]", "  ● x v1.0.0 (installed)", "", "/reload to pick up changes"].join(
+        "\n",
+      ),
+    );
+    const stateAfter = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(stateAfter.marketplaces.official!.plugins.x!.enabled, true);
   });
 });
 

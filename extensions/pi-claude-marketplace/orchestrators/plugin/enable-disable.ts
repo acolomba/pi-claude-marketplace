@@ -77,7 +77,7 @@ import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
 
-import { buildScopeDeclarationDetail, buildScopeDeclarationIndex } from "./dependency-index.ts";
+import { buildScopeDeclarationIndex, readRecordDeclarations } from "./dependency-index.ts";
 import {
   composeDisableRefusalCause,
   composeEnableCascadeRows,
@@ -104,7 +104,6 @@ import {
   type writeAdoptingConfigEntries,
 } from "./shared.ts";
 
-import type { AddressedDependency } from "./dependency-index.ts";
 import type {
   InstallFailureCapture,
   InstallLedgerResult,
@@ -491,43 +490,82 @@ interface EnableCascadeResolution {
 }
 
 /**
- * Reads a member's declared dependencies from the pre-built scope-wide map.
- * A key the map does not hold answers "declares nothing" (`dependencies:
- * []`), NOT `{ kind: "absent" }`: the enable cascade's question is "is there
- * a record here to turn on", and answering absent would reach the walk's
- * `not-found` arm and refuse an enable over a MISSING dependency that
- * LOAD-01's load-time check already owns reporting.
+ * WR-03 / ATTR-08: `readRecordDeclarations`'s only distinguishable-by-text
+ * failure this cascade treats specially -- the record's OWN manifest entry
+ * is absent from an otherwise-readable manifest. `dependency-index.ts`'s
+ * `unreadableDeclarer` builds this exact, internally-owned literal (never
+ * untrusted manifest text), so matching it is stable. Every OTHER
+ * unreadable-declarer cause (the manifest itself failed to load, or its
+ * `dependencies` field parses as unusable) is NOT this case and stays
+ * fail-closed.
  */
-function enableCascadeLookup(
-  declarations: ReadonlyMap<string, readonly AddressedDependency[]>,
-): ClosureLookup {
-  return (subject) =>
-    Promise.resolve({
-      kind: "found",
-      dependencies: declarations.get(subject.key) ?? [],
-    });
+function isDeclarerAbsentFromManifest(cause: Error): boolean {
+  return cause.message.endsWith(": not declared by its marketplace");
 }
 
 /**
- * Every marketplace name D-03-08's guard must not refuse for this cascade:
- * the union of every marketplace already added to the scope and every
- * marketplace named by a declaration in the scope's own map. This cascade
- * installs nothing, so seeding the guard so it cannot fire is the truthful
- * reading -- membership in the enabled closure is decided by the record
- * classification instead.
+ * WR-03: reads ONE record's declarations, lazily, as the walk visits it --
+ * replacing the former whole-scope eager read `buildScopeDeclarationDetail`
+ * did. D-05-07 fail-closed still applies, but now scoped to records the walk
+ * actually reaches: an unreadable record OUTSIDE the closure never blocks an
+ * unrelated enable. A record the scope never installed (or whose
+ * marketplace the scope never added) answers "found, declares nothing" --
+ * NOT `{ kind: "absent" }` -- for the same reason the former eager lookup
+ * did: the question is "is there a record here to turn on", and "absent"
+ * would reach the walk's `not-found` arm and refuse an enable over a MISSING
+ * dependency that LOAD-01's load-time check already owns reporting.
+ *
+ * `knownMarketplaces` is a MUTABLE set this function GROWS as each record's
+ * declarations are read -- see `resolveEnableCascade`'s own seed comment.
+ *
+ * Throws `EnableRefusedError("unreadable", ...)` on a genuinely unreadable
+ * declarer, fail-closed (D-05-07) -- EXCEPT for the root itself when its
+ * manifest is readable and its own entry is simply absent (ATTR-08 "not in
+ * manifest"): the root's own enable is going to refuse through the ledger's
+ * ordinary PI-3 lookup regardless, restoring the pre-EDEP-01 ENBL-07 bytes
+ * rather than misreporting `{unreadable}` over a fact this cascade cannot
+ * itself act on either way.
  */
-function enableCascadeKnownMarketplaces(
+function enableCascadeLookup(
   state: ExtensionState,
-  declarations: ReadonlyMap<string, readonly AddressedDependency[]>,
-): ReadonlySet<string> {
-  const names = new Set(Object.keys(state.marketplaces));
-  for (const declared of declarations.values()) {
-    for (const dependency of declared) {
-      names.add(dependency.marketplace);
+  locations: ScopedLocations,
+  knownMarketplaces: Set<string>,
+  rootKey: string,
+): ClosureLookup {
+  return async (subject) => {
+    const marketplace = state.marketplaces[subject.marketplace];
+    const record = marketplace?.plugins[subject.name];
+    if (marketplace === undefined || record === undefined) {
+      return { kind: "found", dependencies: [] };
     }
-  }
 
-  return names;
+    const read = await readRecordDeclarations({ state, locations }, marketplace, subject.name);
+    if (!read.ok) {
+      if (subject.key === rootKey && isDeclarerAbsentFromManifest(read.cause)) {
+        return { kind: "found", dependencies: [] };
+      }
+
+      throw new EnableRefusedError("unreadable", read.cause.message);
+    }
+
+    for (const dependency of read.declared) {
+      knownMarketplaces.add(dependency.marketplace);
+    }
+
+    return { kind: "found", dependencies: read.declared };
+  };
+}
+
+/**
+ * Seeded with every marketplace already added to the scope;
+ * `enableCascadeLookup` GROWS it as each record's own declarations are read
+ * -- WR-03's lazy per-key reads mean the full set can only be known as reads
+ * happen, not upfront. D-03-08's guard must never refuse for this cascade --
+ * it installs nothing, so membership in the enabled closure is decided by
+ * the record classification instead.
+ */
+function enableCascadeKnownMarketplaces(state: ExtensionState): Set<string> {
+  return new Set(Object.keys(state.marketplaces));
 }
 
 type ClosureFailure = Extract<DependencyClosureResult, { readonly ok: false }>;
@@ -540,9 +578,11 @@ type ClosureNotFoundOrMarketplaceFailure = Extract<
  * `not-found` needs an `"absent"` lookup result and `enableCascadeLookup`
  * always answers `"found"` (`walkEdge`'s `looked.kind === "absent"` branch).
  * `marketplace-not-added` needs a child edge's marketplace that
- * `enableCascadeKnownMarketplaces` did not already seed, and that function
- * adds every `AddressedDependency.marketplace` in the same declaration map
- * `enableCascadeLookup` reads from, which is the same value `buildChildEdge`
+ * `knownMarketplaces` does not already hold at check time, and
+ * `enableCascadeLookup` GROWS that same mutable set with every marketplace a
+ * declaring record's own read names, BEFORE the walk ever checks one of that
+ * record's own children (`walkEdge` calls `lookup` before `walkChildren`
+ * builds and checks each child edge) -- the same value `buildChildEdge`
  * computes for the edge (`AddressedDependency.marketplace` is never
  * `undefined`, so `buildChildEdge`'s `??` fallback never applies). Both arms
  * are unreachable for this walk's lookup and known-marketplaces pairing.
@@ -616,30 +656,32 @@ function classifyEnableCascadeMember(
  * idempotency is decided (D-08-03), so a dependency that is disabled still
  * turns on even when the root itself is already enabled.
  *
+ * WR-03: reads lazily, one record at a time, as the walk visits it
+ * (`enableCascadeLookup`) -- rather than the whole scope upfront -- so an
+ * unreadable record OUTSIDE the closure never blocks an unrelated enable.
+ * `readRecordDeclarations` is the same offline, fail-closed (D-05-07) read
+ * `buildScopeDeclarationDetail` composed from, and is already covered by the
+ * network-free gate.
+ *
  * Throws `EnableRefusedError` when the closure cannot be resolved -- an
- * unreadable declarer, or a cycle. `buildScopeDeclarationDetail` is offline,
- * fail-closed (D-05-07), and already covered by the network-free gate.
+ * unreadable declarer reached by the walk, or a cycle.
  */
 async function resolveEnableCascade(
   state: ExtensionState,
   locations: ScopedLocations,
   rootKey: string,
 ): Promise<EnableCascadeResolution> {
-  const detail = await buildScopeDeclarationDetail({ state, locations });
-  if (!detail.ok) {
-    throw new EnableRefusedError("unreadable", detail.cause.message);
-  }
-
+  const knownMarketplaces = enableCascadeKnownMarketplaces(state);
   const closure = await resolveDependencyClosure({
     rootKey,
-    lookup: enableCascadeLookup(detail.declarations),
+    lookup: enableCascadeLookup(state, locations, knownMarketplaces, rootKey),
     // EDEP-01: EMPTY on purpose. `walkDependencyEdge` returns WITHOUT
     // recursing on an `installedKeys` hit, so any non-empty set would
     // truncate the walk at the first installed dependency and make EDEP-01's
     // word "transitively" false. Being already installed is the
     // PRECONDITION for being enabled here, not a reason to stop walking.
     installedKeys: new Set<string>(),
-    knownMarketplaces: enableCascadeKnownMarketplaces(state, detail.declarations),
+    knownMarketplaces,
   });
   if (!closure.ok) {
     throw enableCascadeClosureFailure(closure);

@@ -139,7 +139,7 @@ export type ScopeDeclarationIndexResult =
       readonly cause: Error;
     };
 
-type IndexFailure = Extract<ScopeDeclarationIndexResult, { readonly ok: false }>;
+export type IndexFailure = Extract<ScopeDeclarationIndexResult, { readonly ok: false }>;
 
 /**
  * Every record's declarations with their constraints intact, keyed by the
@@ -159,7 +159,7 @@ export type ScopeDeclarationDetailResult =
     };
 
 /** One record's declarations, or the failure that ends the walk. */
-type RecordDeclarations =
+export type RecordDeclarations =
   { readonly ok: true; readonly declared: readonly AddressedDependency[] } | IndexFailure;
 
 function unreadableDeclarer(key: string, detail: string): IndexFailure {
@@ -175,8 +175,13 @@ function unreadableDeclarer(key: string, detail: string): IndexFailure {
  * addressed. A declaration naming no marketplace resolves in the declaring
  * record's own -- the same fill rule the closure walk applies -- so the keys
  * derived here compare exactly against the keys the callers ask about.
+ *
+ * Exported so a caller that needs ONE record's declarations (rather than the
+ * whole scope's) can reuse the identical D-05-06 read order and fail-closed
+ * shape without re-deriving it -- `enable-disable.ts`'s own per-key lazy
+ * cascade lookup is the first such caller (WR-03).
  */
-async function readRecordDeclarations(
+export async function readRecordDeclarations(
   options: ScopeDeclarationDetailOptions,
   marketplace: MarketplaceStateRecord,
   name: string,
