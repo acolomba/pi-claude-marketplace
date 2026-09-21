@@ -298,28 +298,28 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:79:54"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2280:42",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2273:42",
       "owner": "configuredSetPluginEnabled.opts",
       "key": "notifications",
       "category": "type-refinement",
       "purpose": "Narrows notifications at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2280:11"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2273:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2280:59",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2273:59",
       "owner": "configuredSetPluginEnabled.opts.notifications",
       "key": "mode",
       "category": "type-refinement",
       "purpose": "Narrows mode at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2280:11"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2273:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2438:41",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2431:41",
       "owner": "freshOutcomeToTypedResult.outcome",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2438:12"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2431:12"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:138:67",
@@ -346,20 +346,20 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:714:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1086:51",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1079:51",
       "owner": "runEnableCascadeWithRoot.root",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1086:22"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1079:22"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1127:76",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1120:76",
       "owner": "assertRootMaterialized.root",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1127:47"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1120:47"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:571:58",
@@ -378,60 +378,60 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:572:44"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2695:41",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2688:41",
       "owner": "enableFailedRow.outcome",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2695:12"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2688:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1466:3",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1459:3",
       "owner": "FailedUnstageOutcome",
       "key": "ok",
       "category": "type-refinement",
       "purpose": "Narrows ok at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1465:29"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1458:29"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1571:41",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1564:41",
       "owner": "addCachedHooksAfterSave.outcome",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within SetEnabledOutcome by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1571:12"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1564:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1649:72",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1642:72",
       "owner": "SelectedConfigWriteTarget",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within DeclaringConfigWriteTarget by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1649:34"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1642:34"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1741:62",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1734:62",
       "owner": "emitUnresolvedTarget.args.resolution",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Excludes from CrossScopePluginResolution by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1741:24"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:1734:24"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2270:42",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2263:42",
       "owner": "SetPluginEnabledOperation.opts",
       "key": "notifications",
       "category": "type-refinement",
       "purpose": "Narrows notifications at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2270:11"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2263:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2270:59",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2263:59",
       "owner": "SetPluginEnabledOperation.opts.notifications",
       "key": "mode",
       "category": "type-refinement",
       "purpose": "Narrows mode at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2270:11"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts:2263:11"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts:62:72",
@@ -1047,12 +1047,12 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:993:30"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1001:61",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1013:61",
       "owner": "InstalledLedgerResult",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within InstallLedgerResult by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1001:30"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1013:30"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts:74:42",

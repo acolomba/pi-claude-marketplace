@@ -875,9 +875,16 @@ function buildEnableCascadeMemberPhase(
  * `do` calls `materializeEnableRoot` -- the same call `runEnableBranch`
  * makes for `disable` and for an orchestrated enable -- but does NOT catch
  * its throw: the throw IS this phase's failure signal, and `runPhases`
- * reads it to unwind every phase before this one. `undo` puts the root back
- * to disabled through the same `unstageBackToDisabled` the cascade's own
- * member phases use.
+ * reads it to unwind every phase before this one.
+ *
+ * NO `undo`. This phase is unconditionally the LAST in the array
+ * (`runEnableCascadeWithRoot` pushes it after every member phase), and
+ * `runPhases` calls `undo` only from its own `catch` -- reached exclusively
+ * when a `do` THROWS. If this phase's `do` throws, `run.root` was never
+ * assigned, so there is nothing to unstage. If it succeeds, `runPhases`
+ * returns success directly with no phase after this one left to fail, so
+ * `undo` is never invoked on a root that DID materialize. A real unstage
+ * body here could never execute either branch.
  */
 function buildEnableRootPhase(
   transaction: EnableDisableTransaction,
@@ -906,20 +913,6 @@ function buildEnableRootPhase(
         run.rollbackPartials.push(...capture.rollbackPartials);
         throw err;
       }
-    },
-    undo: async (run) => {
-      if (run.root === undefined) {
-        return;
-      }
-
-      await unstageBackToDisabled(
-        transaction,
-        locations,
-        state,
-        opts.marketplace,
-        opts.plugin,
-        rootKey,
-      );
     },
   };
 }

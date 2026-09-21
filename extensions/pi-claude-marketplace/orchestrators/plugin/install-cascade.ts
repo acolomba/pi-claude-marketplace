@@ -974,6 +974,18 @@ async function resolveTransitiveReEnableSet(
     knownMarketplaces,
   });
   if (!folded.ok) {
+    // Not reachable given the discovery loop above: `queue` processes EVERY
+    // discovered disabled member as its OWN root (each `queue.push` pairs
+    // with a later `resolveDependencyClosure` call for that exact key), and
+    // each such call walks that member's FULL transitive closure with a
+    // fresh `path`/`visited` pair -- so any cycle or unusable declaration
+    // reachable from a discovered member is already caught during ITS OWN
+    // discovery call, before folding ever runs. The synthetic root's own
+    // "declaration" can never itself be unusable: it is built from already
+    // token-validated `ClosureMember.name`/`.marketplace` pairs, never a
+    // `sha`. Kept as a real fail-closed return (not an assertion) because
+    // the invariant depends on the discovery loop's own shape, not on a
+    // type-level guarantee.
     return folded;
   }
 

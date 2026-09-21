@@ -6029,6 +6029,77 @@ test("CR-01: the install cascade's re-enable arm overwrites a stale config enabl
   });
 });
 
+test("CR-01: the install cascade's re-enable arm leaves a member with no config entry untouched", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-cr01-reenable-no-entry-"));
+    try {
+      // arrange: "some-other-plugin" is installed and then disabled
+      // ORCHESTRATED (RECON-03 skips the config write-back), so its config
+      // entry never gains an `enabled` value at all -- D-04-02: no config
+      // file gains a key for a dependency the user never asked for by
+      // name. "hello" is installed FRESH afterward and declares
+      // "some-other-plugin", so the cascade's re-enable arm materializes
+      // it, and the config write-back must leave the entry exactly as it
+      // was.
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const { ctx, pi } = makeCtx();
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+      const locations = locationsFor("project", cwd);
+      const configAfterInstall = JSON.parse(await readFile(locations.configJsonPath, "utf8")) as {
+        plugins?: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(configAfterInstall.plugins?.["some-other-plugin@mp"], {});
+      const { createEnableOperation } =
+        await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts");
+      await createEnableOperation(createHooksRouting(createHooksRuntime(), { readHooksJson }))({
+        ctx,
+        pi,
+        cwd,
+        scope: "project",
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+        enable: false,
+        notifications: { mode: "orchestrated" },
+      });
+      const disabledState = await loadState(locations.extensionRoot);
+      assert.equal(
+        disabledState.marketplaces["mp"]?.plugins["some-other-plugin"]?.enabled,
+        false,
+        "the orchestrated disable stood",
+      );
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert: the record is re-enabled, but the config entry -- which
+      // never said `enabled: false` -- is untouched.
+      const state = await loadState(locations.extensionRoot);
+      assert.equal(state.marketplaces["mp"]?.plugins["some-other-plugin"]?.enabled, true);
+      const cfg = JSON.parse(await readFile(locations.configJsonPath, "utf8")) as {
+        plugins?: Record<string, unknown>;
+      };
+      assert.deepStrictEqual(cfg.plugins?.["some-other-plugin@mp"], {});
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("D-04-07: a plugin already recorded as a direct install still fails with the already-installed refusal", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-explicit-"));

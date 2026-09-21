@@ -4966,6 +4966,150 @@ test("CR-01: a re-enabled member's config entry is overwritten even when the roo
   });
 });
 
+test("EDEP-01: a member ledger failure unwinds every member even when the root is idempotent", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange: "a" is already enabled (idempotent root), so its cascade
+    // members materialize through their OWN ledger (runEnableCascadeMembers),
+    // not the merged root ledger (runEnableCascadeWithRoot) -- a member
+    // failure here unwinds only the OTHER members, never the root.
+    const { statePath, configPath } = await seedEdepGraph(home, [
+      {
+        name: "a",
+        version: "1.0.0",
+        dependencies: [{ name: "b" }, { name: "c" }],
+        enabled: true,
+      },
+      { name: "b", version: "1.0.0", enabled: false },
+      { name: "c", version: "1.0.0", enabled: false },
+    ]);
+    await mkdir(path.dirname(configPath), { recursive: true });
+    await writeFile(
+      configPath,
+      JSON.stringify({ schemaVersion: 1, plugins: { "a@official": { enabled: true } } }),
+      "utf8",
+    );
+    const failure = new Error("c's ledger failed");
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async runInstallLedger(state, locations, options, capture) {
+        if (options.plugin === "c") {
+          return rejectUnknown(failure);
+        }
+
+        return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert: the whole operation fails, and "b" -- materialized before "c"
+    // threw -- is unwound back to disabled. The root's own idempotent state
+    // is untouched either way (its branch never materializes it).
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(failed\)/);
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins.a!.enabled, true);
+    assert.equal(state.marketplaces.official!.plugins.b!.enabled, false);
+    assert.equal(state.marketplaces.official!.plugins.c!.enabled, false);
+  });
+});
+
+test("EDEP-01: a rollback partial on the idempotent-root path threads into the failed outcome", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange: "a" is already enabled (idempotent root); "b"'s own rollback
+    // unstage only partially completes when "c"'s ledger fails, exercising
+    // the idempotent path's own rollbackPartials threading (WR-01) -- the
+    // fresh-root path already has its own dedicated CR-05 coverage.
+    const { statePath, configPath } = await seedEdepGraph(home, [
+      {
+        name: "a",
+        version: "1.0.0",
+        dependencies: [{ name: "b" }, { name: "c" }],
+        enabled: true,
+      },
+      { name: "b", version: "1.0.0", enabled: false },
+      { name: "c", version: "1.0.0", enabled: false },
+    ]);
+    await mkdir(path.dirname(configPath), { recursive: true });
+    await writeFile(
+      configPath,
+      JSON.stringify({ schemaVersion: 1, plugins: { "a@official": { enabled: true } } }),
+      "utf8",
+    );
+    const ledgerFailure = new Error("c's ledger failed");
+    const unstageFailure = new Error("b's rollback unstage failed");
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async runInstallLedger(state, locations, options, capture) {
+        if (options.plugin === "c") {
+          return rejectUnknown(ledgerFailure);
+        }
+
+        return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture);
+      },
+      async cascadeUnstagePlugin(plugin, marketplace, locations, installedPlugin) {
+        if (plugin === "b") {
+          return {
+            ok: false,
+            dropped: { skills: ["s1"], commands: [], agents: [], hooks: [], mcpServers: [] },
+            cause: unstageFailure,
+          };
+        }
+
+        return cascadeUnstagePlugin(plugin, marketplace, locations, installedPlugin);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ a v1.0.0 (failed) {rollback partial}",
+        "    cause: c's ledger failed",
+        "    [b@official] (rollback failed)",
+        "      cause: b's rollback unstage failed",
+      ].join("\n"),
+    );
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins.a!.enabled, true);
+    assert.equal(state.marketplaces.official!.plugins.b!.enabled, false);
+  });
+});
+
 test("EDEP-01 / LOAD-02: enabling a consequence-disabled member clears its dependencyDisabled marker", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
@@ -5213,6 +5357,101 @@ test("WR-02: a re-enabled member's hooks are hydrated into the routing cache wit
       runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
       ["echo b-hook"],
     );
+  });
+});
+
+test("WR-02: a re-enabled member's hooks cache-read failure is non-fatal and does not surface as failed", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    await mkdir(path.join(mpRoot, "plugins", "b", "hooks"), { recursive: true });
+    await writeFile(
+      path.join(mpRoot, "plugins", "b", "hooks", "hooks.json"),
+      JSON.stringify({
+        PreToolUse: [{ hooks: [{ command: "echo b-hook", type: "command" }], matcher: "" }],
+      }),
+    );
+    const runtime = createHooksRuntime();
+    const hooksRouting = createHooksRouting(runtime, { readHooksJson });
+    const failingRouting: HooksRouting = {
+      ...hooksRouting,
+      async readAndCachePluginHooks(): Promise<void> {
+        await rejectUnknown(new Error("member hook cache read denied"));
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      REAL_ENABLE_DISABLE_TRANSACTION,
+      failingRouting,
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert: state.json already records the enable as successful
+    // (WR-02), so the cache failure must NOT surface as a failed row; the
+    // route stays absent until the next /reload rebuilds it from state.json.
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(installed\)/);
+    assert.doesNotMatch(notifications[0]!.message, /\(failed\)/);
+    assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+  });
+});
+
+test("WR-02: a re-enabled member's routing-table rebuild failure is non-fatal and does not surface as failed", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    await mkdir(path.join(mpRoot, "plugins", "b", "hooks"), { recursive: true });
+    await writeFile(
+      path.join(mpRoot, "plugins", "b", "hooks", "hooks.json"),
+      JSON.stringify({
+        PreToolUse: [{ hooks: [{ command: "echo b-hook", type: "command" }], matcher: "" }],
+      }),
+    );
+    const runtime = createHooksRuntime();
+    const hooksRouting = createHooksRouting(runtime, { readHooksJson });
+    const failingRouting: HooksRouting = {
+      ...hooksRouting,
+      rebuildRoutingTables(): void {
+        throw new Error("routing rebuild denied");
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      REAL_ENABLE_DISABLE_TRANSACTION,
+      failingRouting,
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert: the rebuild failure must NOT surface as a failed row either.
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(installed\)/);
+    assert.doesNotMatch(notifications[0]!.message, /\(failed\)/);
   });
 });
 
