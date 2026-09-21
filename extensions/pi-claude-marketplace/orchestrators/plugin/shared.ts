@@ -24,6 +24,7 @@ import {
 } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CrossPluginConflictError,
   errorMessage,
@@ -946,9 +947,10 @@ export async function resolvePluginVersion(
     if (typeof pluginJsonVersion === "string" && pluginJsonVersion.length > 0) {
       return pluginJsonVersion;
     }
-  } catch {
+  } catch (err) {
     // Fall through -- plugin.json is absent, unparseable, or carries no usable
     // version; tier 2 / tier 3 cover it.
+    hookDebugLog(`resolvePluginVersion: plugin.json read/parse failed: ${errorMessage(err)}`);
   }
 
   // Tier 2: the marketplace entry version.
@@ -971,7 +973,6 @@ function compareNames(a: string, b: string): number {
  */
 interface NameOwner {
   readonly plugin: string;
-  readonly marketplace: string;
   readonly disabled: boolean;
 }
 
@@ -997,11 +998,10 @@ function collectOwners(state: ExtensionState): {
   const commandOwners = new Map<string, NameOwner>();
   const agentOwners = new Map<string, NameOwner>();
 
-  for (const [mpName, mp] of Object.entries(state.marketplaces)) {
+  for (const mp of Object.values(state.marketplaces)) {
     for (const [pluginName, plugin] of Object.entries(mp.plugins)) {
       const owner: NameOwner = {
         plugin: pluginName,
-        marketplace: mpName,
         disabled: isRecordedButDisabled(plugin),
       };
       for (const n of plugin.resources.skills) {

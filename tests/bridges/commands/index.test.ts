@@ -65,9 +65,9 @@ void ({ kind: "missing" } satisfies BarrelPreparedCommandsStaging);
 // @ts-expect-error a command replacement handle has a closed discriminant set
 void ({ kind: "staged" } satisfies BarrelCommandsReplacement);
 // @ts-expect-error the barrel keeps the staged implementation type private
-void (true satisfies Same<CommandsBarrel.PreparedCommandsStaged, never>);
+void ({} satisfies { readonly retired?: CommandsBarrel.PreparedCommandsStaged });
 // @ts-expect-error the barrel does not export the commit-result implementation type
-void (true satisfies Same<CommandsBarrel.StageCommandsCommitResult, never>);
+void ({} satisfies { readonly retired?: CommandsBarrel.StageCommandsCommitResult });
 
 describe("abortPreparedCommands", () => {
   test("re-exports the defining binding", () => {

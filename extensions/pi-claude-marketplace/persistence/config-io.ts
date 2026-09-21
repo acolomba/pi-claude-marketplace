@@ -90,16 +90,13 @@ export function isDeclaredEnabled(entry: PluginConfigEntry): boolean {
 }
 
 /** JIT-compiled validator (D-07 mirror of STATE_VALIDATOR). */
-export const CONFIG_VALIDATOR = Compile(CONFIG_SCHEMA);
+const CONFIG_VALIDATOR = Compile(CONFIG_SCHEMA);
 
 /** Format the first validator error into a single-line message. */
-function firstConfigValidationErrorDetail(value: unknown): string {
-  const errors = CONFIG_VALIDATOR.Errors(value);
-  const first = errors[0];
-  if (!first) {
-    return "(no detail available)";
-  }
-
+function firstConfigValidationErrorDetail(first: {
+  readonly instancePath: string;
+  readonly message: string;
+}): string {
   return `${first.instancePath || "<root>"}: ${first.message}`;
 }
 
@@ -153,15 +150,17 @@ export async function loadConfig(filePath: string): Promise<ConfigLoadResult> {
     };
   }
 
-  if (!CONFIG_VALIDATOR.Check(parsed)) {
+  const [validationError] = CONFIG_VALIDATOR.Errors(parsed);
+  if (validationError !== undefined) {
     return {
       status: "invalid",
       filePath,
-      error: `schema validation failed: ${firstConfigValidationErrorDetail(parsed)}`,
+      error: `schema validation failed: ${firstConfigValidationErrorDetail(validationError)}`,
     };
   }
 
-  return { status: "valid", filePath, config: parsed };
+  // Errors uses the same compiled schema; no issues proves this parsed JSON has the public shape.
+  return { status: "valid", filePath, config: parsed as ScopeConfig };
 }
 
 /**
@@ -169,7 +168,7 @@ export async function loadConfig(filePath: string): Promise<ConfigLoadResult> {
  * containment.
  *
  * Order is load-bearing:
- *   1. `CONFIG_VALIDATOR.Check(config)` -- a caller bug (mutated config into
+ *   1. `CONFIG_VALIDATOR.Errors(config)` -- a caller bug (mutated config into
  *      an invalid shape) surfaces here, not on disk. Message format mirrors
  *      `saveState refused: ...` modulo the function name.
  *   2. `await assertPathInside(scopeRoot, filePath, "saveConfig")` --
@@ -184,9 +183,10 @@ export async function saveConfig(
   config: ScopeConfig,
   scopeRoot: string,
 ): Promise<void> {
-  if (!CONFIG_VALIDATOR.Check(config)) {
+  const [validationError] = CONFIG_VALIDATOR.Errors(config);
+  if (validationError !== undefined) {
     throw new Error(
-      `saveConfig refused: in-memory config failed schema validation: ${firstConfigValidationErrorDetail(config)}`,
+      `saveConfig refused: in-memory config failed schema validation: ${firstConfigValidationErrorDetail(validationError)}`,
     );
   }
 

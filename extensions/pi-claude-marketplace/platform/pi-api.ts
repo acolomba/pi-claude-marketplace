@@ -62,6 +62,8 @@ export type {
   ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
 
+import type { AgentEndEvent } from "@earendil-works/pi-coding-agent";
+
 /**
  * Structural `text` content block -- mirrors `pi-ai`'s `TextContent`
  * shape (peer-dep does not re-export it). The bridge's
@@ -104,8 +106,6 @@ export interface ResourcesDiscoverResult {
   promptPaths?: string[];
   themePaths?: string[];
 }
-
-import type { AgentEndEvent } from "@earendil-works/pi-coding-agent";
 
 /**
  * The Pi agent-message union and its assistant-message narrowing, surfaced
@@ -154,7 +154,7 @@ export interface ToolInventory {
  * RH-3: pi-subagents loaded iff `pi.getAllTools()` contains a tool named
  * "subagent". Probe failures degrade to unloaded.
  */
-export function hasLoadedPiSubagents(pi: ToolInventory): boolean {
+function hasLoadedPiSubagents(pi: ToolInventory): boolean {
   try {
     return pi.getAllTools().some((tool) => tool.name === "subagent");
   } catch {
@@ -169,7 +169,7 @@ export function hasLoadedPiSubagents(pi: ToolInventory): boolean {
  * registers only `workflow`, so probing the bare name would report a different
  * engine as the host. Probe failures degrade to unloaded.
  */
-export function hasLoadedWorkflowEngine(pi: ToolInventory): boolean {
+function hasLoadedWorkflowEngine(pi: ToolInventory): boolean {
   try {
     return pi.getAllTools().some((tool) => tool.name === "workflow_control");
   } catch {
@@ -182,7 +182,7 @@ export function hasLoadedWorkflowEngine(pi: ToolInventory): boolean {
  * `sourceInfo.source` substring-matches "pi-mcp-adapter". Probe failures
  * degrade to unloaded.
  */
-export function hasLoadedPiMcpAdapter(pi: ToolInventory): boolean {
+function hasLoadedPiMcpAdapter(pi: ToolInventory): boolean {
   try {
     return pi.getAllTools().some((tool) => {
       if (tool.name === "mcp") {

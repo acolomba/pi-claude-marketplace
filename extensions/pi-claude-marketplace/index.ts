@@ -11,7 +11,7 @@ import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
 import { DEFAULT_GIT_OPS } from "./orchestrators/marketplace/shared.ts";
 import { createPluginUpdateOperations } from "./orchestrators/plugin/update-flow.ts";
 import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
-import { applyReconcile } from "./orchestrators/reconcile/apply.ts";
+import { createApplyReconcile } from "./orchestrators/reconcile/apply.ts";
 import { locationsFor } from "./persistence/locations.ts";
 import { loadState } from "./persistence/state-io.ts";
 import { createCompletionCache } from "./shared/completion-cache.ts";
@@ -27,38 +27,45 @@ import type {
   ResourcesDiscoverResult,
 } from "./platform/pi-api.ts";
 
+/**
+ * Registers the extension's Pi hooks, tools, and slash command surface.
+ */
 // DISP-01: async factory; Pi's loader awaits this Promise (loader.d.ts
-// `loadExtensionFromFactory(...): Promise<Extension>`), so the 7 pi.on
+// `loadExtensionFromFactory(...): Promise<Extension>`), so the 11 pi.on
 // registrations inside `registerHooksBridge` complete BEFORE the loader
 // proceeds to emit any session-lifecycle event. The `void` fire-and-forget
 // alternative would race against the first session_start because the loader
 // does not see the un-awaited inner Promise.
+//
+// EXPORT-02: the only consumer of this default is the `pi.extensions` entry in
+// package.json, which Pi's loader reads at runtime. That edge lives in a
+// manifest, not in any import statement, so no static reachability analysis can
+// follow it -- the export is genuinely unreferenced in the source graph and
+// genuinely load-bearing. The one-line annotation below records exactly that,
+// for exactly this declaration: a sibling named export added to this file is
+// still reported, and an unrelated default elsewhere is still reported.
+// fallow-ignore-next-line unused-export -- package.json `pi.extensions` loads this default.
 export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Promise<void> {
   const hooksRuntime = createHooksRuntime();
   const hooksRouting = createHooksRouting(hooksRuntime, { readHooksJson });
   const completionCache = createCompletionCache();
   const pluginUpdateOperations = createPluginUpdateOperations(hooksRouting, completionCache);
   const hooksHydration = createHooksHydration(hooksRuntime, { loadState, readHooksJson });
-  const onResourcesDiscover = pi.on.bind(pi) as unknown as (
-    event: "resources_discover",
-    handler: (
-      event: ResourcesDiscoverEvent,
-      ctx: ExtensionContext,
-    ) => Promise<ResourcesDiscoverResult>,
-  ) => void;
+  // RECON-01..05: one reconcile operation per extension load, bound to the
+  // production state reader. The `resources_discover` handler below drives it;
+  // constructing it here keeps the single binding at extension lifetime rather
+  // than rebuilding it on every event.
+  const applyReconcile = createApplyReconcile({ loadState });
 
   // DISP-01 / DISP-02 / D-59-02 / D-59-03: register the hooks bridge at
-  // factory time. The bridge's signature requires `{ ctx; cwd }`, but neither
-  // exists at extension-load time -- Pi's `resources_discover` event is the
-  // first signal that delivers an `ExtensionContext` + project `cwd`. So:
+  // factory time. The bridge's signature requires a `cwd`, which does not
+  // exist at extension-load time -- Pi's `resources_discover` event is the
+  // first signal that delivers a project `cwd`. So:
   //
   //   1. Pass `homedir()` as cwd: this hydrates the USER scope correctly (the
   //      bridge derefs project cwd via `locationsFor("project", cwd)` and
   //      ignores it for user scope, which uses `getAgentDir()`).
-  //   2. Pass a placeholder `ctx`: the bridge's hydrate path does not consume
-  //      `opts.ctx` (only `opts.cwd`); the field is structurally required by
-  //      the signature but functionally unused at factory time.
-  //   3. Defer project-scope hydrate to event time, where a real `cwd` exists.
+  //   2. Defer project-scope hydrate to event time, where a real `cwd` exists.
   //      There are TWO deferral points, and the ORDER matters: the bridge's own
   //      `session_start` wrapper hydrates against `ctx.cwd` first (Pi emits
   //      `session_start` BEFORE `resources_discover`, so a project-scope
@@ -68,90 +75,106 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   //      project cache. Both are idempotent against the same cwd.
   //
   // The `await` is LOAD-BEARING: Pi's loader awaits the factory Promise, so
-  // the 7 pi.on calls + user-scope cache hydrate inside `registerHooksBridge`
+  // the 11 pi.on calls + user-scope cache hydrate inside `registerHooksBridge`
   // are guaranteed to complete BEFORE the first Pi event fires.
-  const placeholderCtx = {} as unknown as ExtensionContext;
-  await hooksHydration.registerHooksBridge(pi, { ctx: placeholderCtx, cwd: homedir() });
+  await hooksHydration.registerHooksBridge(pi, { cwd: homedir() });
 
-  onResourcesDiscover("resources_discover", async (event, ctx) => {
-    // D-59-02 deferred project-scope hydrate: the factory-time bridge
-    // registration could not know the project cwd, so re-run project hydrate
-    // here BEFORE applyReconcile rebuilds the per-scope routing tables.
-    // Failures are swallowed by the helper itself via the OBS-01 seam.
-    try {
-      await hooksHydration.hydrateProjectScopeForCwd(event.cwd);
-    } catch {
-      // Defensive: hydrateProjectScopeForCwd already swallows loadState
-      // failures internally via hookDebugLog. A bubbled throw here would
-      // be a programmer error in the bridge; we still must not let it
-      // propagate past resources_discover (NFR-2).
-    }
-
-    // RECON-01..05: apply the load-time reconcile BEFORE
-    // discovering resources so newly-materialized artifacts are picked up on
-    // the SAME load. The outer try/catch enforces NFR-2: a catastrophic
-    // throw NEVER blocks Pi load -- it surfaces as a single last-ditch
-    // notify (inside its own try/catch so a UI failure can't propagate
-    // either) and aggregateDiscoveredResources still runs.
-    try {
-      await applyReconcile({ ctx, pi, cwd: event.cwd, hooksRouting, completionCache });
-    } catch (err) {
+  // The peer's own `ExtensionAPI.on("resources_discover", ...)` overload checks
+  // this callback: its parameter and its return are compared against the
+  // installed `ExtensionHandler<ResourcesDiscoverEvent, ResourcesDiscoverResult>`
+  // declaration. The two annotations name the local `platform/pi-api.ts` mirrors
+  // of those upstream shapes, so the compiler -- not a hand-written assertion --
+  // is what holds the mirrors to the installed declaration.
+  pi.on(
+    "resources_discover",
+    async (
+      event: ResourcesDiscoverEvent,
+      ctx: ExtensionContext,
+    ): Promise<ResourcesDiscoverResult> => {
+      // D-59-02 deferred project-scope hydrate: the factory-time bridge
+      // registration could not know the project cwd, so re-run project hydrate
+      // here BEFORE applyReconcile rebuilds the per-scope routing tables.
+      // Failures are swallowed by the helper itself via the OBS-01 seam.
       try {
-        // AUTH-01 / IL-2 escape: makeRawNotifyFn is the sanctioned raw-text
-        // notify wrapper -- the last-ditch error path predates any structured
-        // NotificationMessage construction and routes through this seam to
-        // surface a single error string. The inner try/catch ensures a notify
-        // failure NEVER propagates past resources_discover (NFR-2).
-        // Y7 (PR #51): route through shared errorMessage so a non-Error
-        // throw (e.g. a literal string) renders its stringified form
-        // instead of `reconcile aborted: undefined`.
-        makeRawNotifyFn(ctx)(`reconcile aborted: ${errorMessage(err)}`, "error");
-      } catch {
-        // Last-ditch: never let a notify failure propagate past
-        // resources_discover (NFR-2 boundary preservation).
+        await hooksHydration.hydrateProjectScopeForCwd(event.cwd);
+      } catch (err) {
+        // Defensive: hydrateProjectScopeForCwd already swallows loadState
+        // failures internally via hookDebugLog. A bubbled throw here would
+        // be a programmer error in the bridge; we still must not let it
+        // propagate past resources_discover (NFR-2). Record it on the debug
+        // seam so a programmer-error throw does not vanish without a trace.
+        hookDebugLog(`project-scope hydrate threw unexpectedly: ${errorMessage(err)}`, "hydrate");
       }
-    }
 
-    // PENV-01 / D-90-03 / D-90-04: recompute the plugin-PATH (both scopes)
-    // AFTER applyReconcile has settled install state and BEFORE resource
-    // aggregation. Scope failures are isolated inside recomputePluginPath and
-    // reported back; each skipped scope surfaces as a warning notify (load
-    // carried out, PATH parity short for that scope). The outer wrap is the
-    // NFR-2 backstop -- a throw must never propagate past resources_discover,
-    // and a notify failure must not either.
-    try {
-      const pathResult = await recomputePluginPath(event.cwd);
-      for (const skip of pathResult.skipped) {
+      // RECON-01..05: apply the load-time reconcile BEFORE
+      // discovering resources so newly-materialized artifacts are picked up on
+      // the SAME load. The outer try/catch enforces NFR-2: a catastrophic
+      // throw NEVER blocks Pi load -- it surfaces as a single last-ditch
+      // notify (inside its own try/catch so a UI failure can't propagate
+      // either) and aggregateDiscoveredResources still runs.
+      try {
+        await applyReconcile({ ctx, pi, cwd: event.cwd, hooksRouting, completionCache });
+      } catch (err) {
         try {
-          makeRawNotifyFn(ctx)(
-            `plugin PATH not refreshed for ${skip.scope} scope (install state unreadable): ${skip.reason}`,
-            "warning",
-          );
+          // AUTH-01 / IL-2 escape: makeRawNotifyFn is the sanctioned raw-text
+          // notify wrapper -- the last-ditch error path predates any structured
+          // NotificationMessage construction and routes through this seam to
+          // surface a single error string. The inner try/catch ensures a notify
+          // failure NEVER propagates past resources_discover (NFR-2).
+          // Y7 (PR #51): route through shared errorMessage so a non-Error
+          // throw (e.g. a literal string) renders its stringified form
+          // instead of `reconcile aborted: undefined`.
+          makeRawNotifyFn(ctx)(`reconcile aborted: ${errorMessage(err)}`, "error");
         } catch (notifyErr) {
-          // A notify failure must never propagate past resources_discover
-          // (NFR-2 boundary preservation); record it on the debug seam so the
-          // skipped-scope warning does not vanish without a trace.
-          hookDebugLog(`plugin PATH warning notify failed: ${errorMessage(notifyErr)}`, "env");
+          // Last-ditch: never let a notify failure propagate past
+          // resources_discover (NFR-2 boundary preservation); record it on
+          // the debug seam so the reconcile-abort notify does not vanish
+          // without a trace.
+          hookDebugLog(`reconcile-abort notify failed: ${errorMessage(notifyErr)}`, "env");
         }
       }
-    } catch (err) {
-      hookDebugLog(`plugin PATH recompute skipped: ${errorMessage(err)}`, "env");
-    }
 
-    try {
-      const discovered = await aggregateDiscoveredResources(
-        locationsFor("user", homedir()),
-        locationsFor("project", event.cwd),
-      );
-      return {
-        skillPaths: [...discovered.skillPaths],
-        promptPaths: [...discovered.promptPaths],
-      };
-    } catch (err) {
-      hookDebugLog(`resource discovery skipped: ${errorMessage(err)}`, "resources");
-      return { skillPaths: [], promptPaths: [] };
-    }
-  });
+      // PENV-01 / D-90-03 / D-90-04: recompute the plugin-PATH (both scopes)
+      // AFTER applyReconcile has settled install state and BEFORE resource
+      // aggregation. Scope failures are isolated inside recomputePluginPath and
+      // reported back; each skipped scope surfaces as a warning notify (load
+      // carried out, PATH parity short for that scope). The outer wrap is the
+      // NFR-2 backstop -- a throw must never propagate past resources_discover,
+      // and a notify failure must not either.
+      try {
+        const pathResult = await recomputePluginPath(event.cwd);
+        for (const skip of pathResult.skipped) {
+          try {
+            makeRawNotifyFn(ctx)(
+              `plugin PATH not refreshed for ${skip.scope} scope (install state unreadable): ${skip.reason}`,
+              "warning",
+            );
+          } catch (notifyErr) {
+            // A notify failure must never propagate past resources_discover
+            // (NFR-2 boundary preservation); record it on the debug seam so the
+            // skipped-scope warning does not vanish without a trace.
+            hookDebugLog(`plugin PATH warning notify failed: ${errorMessage(notifyErr)}`, "env");
+          }
+        }
+      } catch (err) {
+        hookDebugLog(`plugin PATH recompute skipped: ${errorMessage(err)}`, "env");
+      }
+
+      try {
+        const discovered = await aggregateDiscoveredResources(
+          locationsFor("user", homedir()),
+          locationsFor("project", event.cwd),
+        );
+        return {
+          skillPaths: [...discovered.skillPaths],
+          promptPaths: [...discovered.promptPaths],
+        };
+      } catch (err) {
+        hookDebugLog(`resource discovery skipped: ${errorMessage(err)}`, "resources");
+        return { skillPaths: [], promptPaths: [] };
+      }
+    },
+  );
 
   // SENV-01/02/03: reset the Claude-Code session env on every session_start
   // (startup/reload/new/resume/fork). Overwrite is unconditional -- that IS the

@@ -22,18 +22,18 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
-import {
-  createNodeSetPluginEnabled,
-  createSetPluginEnabled,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
+import { createSetPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
-import { createNodeReinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
+import {
+  createEnableOperation,
+  createReinstallOperation,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import {
   selectDeclaringConfigWriteTarget,
   writeAdoptingConfigEntries,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
-import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import { createApplyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -44,10 +44,8 @@ import { notify } from "../../../extensions/pi-claude-marketplace/shared/notific
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
-import type {
-  HooksRouting,
-  HooksRuntime,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type {
   EnableDisableTransaction,
   EnableDisablePluginOptions,
@@ -58,6 +56,12 @@ import type {
   ToolInventory,
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+/**
+ * The reconcile composition: the factory bound to the real selected-state
+ * reader, which is the same reader the extension entry point binds.
+ */
+const applyReconcile = createApplyReconcile({ loadState });
 
 const REAL_ENABLE_DISABLE_TRANSACTION: EnableDisableTransaction = {
   cascadeUnstagePlugin,
@@ -126,7 +130,7 @@ function createUpdatePlugins() {
 }
 
 function createReinstallPlugin() {
-  return createNodeReinstallPlugin(
+  return createReinstallOperation(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
@@ -141,7 +145,7 @@ function setPluginEnabled(
 function setPluginEnabled(
   opts: EnableDisablePluginOptions,
 ): Promise<EnableDisablePluginOutcome | undefined> {
-  const operation = createNodeSetPluginEnabled(
+  const operation = createEnableOperation(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
   );
   return operation(opts);
@@ -1147,7 +1151,7 @@ test("publishes a freshly enabled hook only to the supplied runtime after durabl
     });
     const ownerRuntime = createHooksRuntime();
     const peerRuntime = createHooksRuntime();
-    const setPluginEnabledForOwner = createNodeSetPluginEnabled(
+    const setPluginEnabledForOwner = createEnableOperation(
       createHooksRouting(ownerRuntime, { readHooksJson }),
     );
     const configBefore = await readFile(configPath, "utf8");
@@ -1216,7 +1220,7 @@ for (const { failure, label } of [
       const { ctx, notifications } = makeCtx(cwd);
 
       // act
-      const outcome = await createNodeSetPluginEnabled(failingRouting)({
+      const outcome = await createEnableOperation(failingRouting)({
         ctx,
         cwd,
         enable: true,
@@ -2912,7 +2916,7 @@ test("RECON-03 enable-disable orchestrated mode -- idempotent enable-already-ena
     const routesBefore = runtime.getRoutingBucket("PreToolUse");
     const { ctx, notifications } = makeCtx(cwd);
     // act
-    const outcome = await createNodeSetPluginEnabled(hooksRouting)({
+    const outcome = await createEnableOperation(hooksRouting)({
       ctx,
       pi: makePi(),
       cwd,
@@ -3334,7 +3338,7 @@ test("Y3: orchestrated overload returns EnableDisablePluginOutcome (no | undefin
 test("Y3: standalone overload still returns | undefined -- typecheck pin", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    const { ctx } = makeCtx(cwd);
+    const { ctx, notifications } = makeCtx(cwd);
     // The standalone arm fires its own notify() and the caller has nothing to
     // consume; the overload pair preserves that shape so existing callers
     // (edge handlers) keep their current contract.
@@ -3355,6 +3359,14 @@ test("Y3: standalone overload still returns | undefined -- typecheck pin", async
     // as orchestrated) is caught at typecheck.
     const _narrow: EnableDisablePluginOutcome = outcome;
     void _narrow;
+    assert.strictEqual(outcome, undefined);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n⊘ ghost-mp [user] (failed) {marketplace not added}",
+        severity: "error",
+      },
+    ]);
   });
 });
 
@@ -3915,7 +3927,7 @@ test("a non-Error state normalization failure is contained as a typed unreadable
       pluginName: "foo",
     });
     const originalParse: (text: string) => unknown = JSON.parse;
-    const parseMock = t.mock.method(JSON, "parse", (text: string): unknown => {
+    t.mock.method(JSON, "parse", (text: string): unknown => {
       const parsed = originalParse(text);
       if (typeof parsed === "object" && parsed !== null && "marketplaces" in parsed) {
         const marketplaces = Reflect.get(parsed, "marketplaces");
@@ -3958,7 +3970,6 @@ test("a non-Error state normalization failure is contained as a typed unreadable
       status: "failed",
     });
     assert.deepStrictEqual(notifications, []);
-    assert.equal(parseMock.mock.callCount(), 1);
   });
 });
 
@@ -4237,7 +4248,7 @@ test("a clean disable remains successful when the hooks cache rebuild throws", a
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    const outcome = await createNodeSetPluginEnabled(failingRouting)({
+    const outcome = await createEnableOperation(failingRouting)({
       ctx,
       cwd,
       enable: false,

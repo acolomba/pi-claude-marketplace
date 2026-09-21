@@ -26,7 +26,6 @@ export interface DiscoveredSkill {
 /** Input bundle for `prepareStageSkills`. */
 export interface StageSkillsInput {
   readonly locations: ScopedLocations;
-  readonly marketplaceName: string;
   readonly pluginName: string;
   readonly pluginRoot: string;
   readonly pluginDataDir: string;

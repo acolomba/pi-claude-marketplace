@@ -384,14 +384,8 @@ export const WORKFLOW_SCRIPT_EXTENSIONS = [".js", ".mjs", ".cjs"] as const;
  *
  * Derived here, from the file NAME the caller passes, so the fallback name is
  * computed in one place rather than by each caller.
- *
- * Exported for the same reason `WORKFLOW_SCRIPT_EXTENSIONS` is: the read-only
- * `info` surface renders the stem for every script whose name it could not
- * resolve, and a second case-insensitive suffix strip would agree with this one
- * on `.js` and diverge on exactly the `.mjs` / `.cjs` / mixed-case cases this
- * one exists to handle.
  */
-export function fileStem(fileName: string): string {
+function fileStem(fileName: string): string {
   const lowered = fileName.toLowerCase();
   const suffix = WORKFLOW_SCRIPT_EXTENSIONS.find((ext) => lowered.endsWith(ext));
 

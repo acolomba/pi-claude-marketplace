@@ -128,7 +128,7 @@ function buildEnvelope(admitted: AdmittedWorkflow & { readonly source: string })
  * probe existed.
  */
 async function foreignOccupiedTargets(
-  pairs: readonly { name: string; from: string; to: string }[],
+  pairs: PreparedWorkflowsStaged["_renamePairs"],
   previousNames: readonly string[],
 ): Promise<readonly string[]> {
   const previous = new Set(previousNames);
@@ -267,6 +267,16 @@ export async function prepareStageWorkflows(
 export const DISPLACED_DIR = ".previous";
 
 /**
+ * One previous envelope moved aside by `displacePreviousTargets`: `from` is the
+ * target it was displaced from, `to` its resting place under the staging root.
+ * The commit's rollback reads both to restore it.
+ */
+interface DisplacedMove {
+  readonly from: string;
+  readonly to: string;
+}
+
+/**
  * Move every previously-named target aside into the staging root, recording
  * the moves so a failed commit can put them back.
  *
@@ -289,7 +299,7 @@ export const DISPLACED_DIR = ".previous";
  */
 async function displacePreviousTargets(
   prepared: PreparedWorkflowsStaged,
-  displaced: { from: string; to: string }[],
+  displaced: DisplacedMove[],
 ): Promise<void> {
   if (prepared._previousNames.length === 0) {
     return;
@@ -347,7 +357,7 @@ async function displacePreviousTargets(
  * the path entirely.
  */
 async function assertTargetsUnoccupied(
-  pairs: readonly { name: string; from: string; to: string }[],
+  pairs: PreparedWorkflowsStaged["_renamePairs"],
 ): Promise<void> {
   for (const pair of pairs) {
     if (await pathExists(pair.to)) {
@@ -408,7 +418,7 @@ export async function commitPreparedWorkflows(
   const completedRenames: { name: string; from: string; to: string }[] = [];
   // Declared out here so a displacement that throws part-way through still
   // hands the rollback below the moves it already made (CR-01).
-  const displaced: { from: string; to: string }[] = [];
+  const displaced: DisplacedMove[] = [];
 
   try {
     // Lazy-create: for project scope this creates the `projects/<key>/saved`

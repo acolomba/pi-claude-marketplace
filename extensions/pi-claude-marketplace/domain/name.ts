@@ -124,10 +124,8 @@ export function generatedSkillName(plugin: string, source: string): string {
  * no command name left underneath it.
  *
  * Commands only. `generatedWorkflowName` applies the same rule to the same
- * join. `generatedSkillName` and `generatedAgentName` keep their throw: a
- * source that is nothing but the stutter has no skill or agent name left
- * underneath it, and keeping it verbatim would install a name
- * ("acme:acme-") for a source that is a naming defect, not a namespace.
+ * join. `generatedSkillName` still rejects an empty elided suffix. Agent names
+ * preserve the complete source name without elision.
  */
 export function generatedCommandName(plugin: string, source: string): string {
   assertSafeName(plugin);
@@ -159,17 +157,13 @@ export function generatedCommandName(plugin: string, source: string): string {
  * Agent name generator (RN-1 / AG-1).
  *
  * Format: `pi-claude-marketplace-<plugin>-<agent>` (Pi-namespacing prefix
- * keeps cross-extension agents distinguishable). The `<plugin>-` prefix
- * is elided from `source` (acme + acme-bot -> pi-claude-marketplace-acme-bot,
- * NOT pi-claude-marketplace-acme-acme-bot).
+ * keeps cross-extension agents distinguishable). Appends the complete source
+ * name so bot and acme-bot remain distinct within plugin acme.
  */
 export function generatedAgentName(plugin: string, source: string): string {
   assertSafeName(plugin);
   assertSafeName(source);
-  const prefix = `${plugin}-`;
-  const elided = source.startsWith(prefix) ? source.slice(prefix.length) : source;
-  assertSafeName(elided);
-  const generated = `pi-claude-marketplace-${plugin}-${elided}`;
+  const generated = `pi-claude-marketplace-${plugin}-${source}`;
   assertSafeName(generated);
   return generated;
 }

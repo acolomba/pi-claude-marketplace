@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { narrowResolverReasons } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
+import { classifyEntityShapeError } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
+import { PluginShapeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import {
   narrowResolverNotes,
@@ -10,7 +11,38 @@ import {
 
 import { makeCtx, piWithBothLoaded, verifyPi } from "./catalog-uat/mock-pi.ts";
 
-import type { NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import type {
+  ContentReason,
+  NotificationMessage,
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+
+/**
+ * The install surface's reason narrowing is command-private, so parity is
+ * measured on the public result it feeds: the `unavailable` row
+ * `classifyEntityShapeError` composes from a thrown `not-installable` shape.
+ * Every case states its expected reasons as an independent literal, and the
+ * read-only surface is measured separately against that same literal, so
+ * neither side is derived from the other.
+ */
+function installSurfaceReasons(
+  notes: readonly string[],
+  unsupportedKinds: readonly string[] = [],
+  partialable = false,
+): readonly ContentReason[] {
+  const entityErrorRow = classifyEntityShapeError(
+    new PluginShapeError({
+      kind: "not-installable",
+      plugin: "helper",
+      reasons: notes,
+      partialable,
+      unsupportedKinds,
+    }),
+    { plugin: "helper", marketplace: "official", scope: "project" },
+  );
+  assert.ok(entityErrorRow, "a not-installable shape must classify to an entity error row");
+
+  return entityErrorRow.reasons;
+}
 
 for (const { note, reason } of [
   {
@@ -43,7 +75,7 @@ for (const { note, reason } of [
     const notes = [note];
 
     // act
-    const installReasons = narrowResolverReasons(notes);
+    const installReasons = installSurfaceReasons(notes);
     const readOnlyReasons = narrowResolverNotes(notes);
 
     // assert
@@ -58,7 +90,7 @@ test("keeps structural multi-defect reasons equal on install and read-only surfa
   const notes = ['malformed mcp reference: file not found: "x.mcp.json"', "contains monitors"];
 
   // act
-  const installReasons = narrowResolverReasons(notes, [], false);
+  const installReasons = installSurfaceReasons(notes, [], false);
   const readOnlyReasons = narrowResolverNotes(notes);
 
   // assert
@@ -78,7 +110,7 @@ for (const { kind, note, reason } of [
     const notes = [note];
 
     // act
-    const installReasons = narrowResolverReasons(notes, kinds, true);
+    const installReasons = installSurfaceReasons(notes, kinds, true);
     const listAndInfoReasons = narrowUnsupportedKinds(kinds);
 
     // assert
@@ -94,7 +126,7 @@ test("keeps multi-component install, list, and info markers in the same order", 
   const notes = ["contains lspServers", "contains themes"];
 
   // act
-  const installReasons = narrowResolverReasons(notes, kinds, true);
+  const installReasons = installSurfaceReasons(notes, kinds, true);
   const listAndInfoReasons = narrowUnsupportedKinds(kinds);
 
   // assert
@@ -108,7 +140,7 @@ test("keeps a typed hooks marker equal on install, list, and info surfaces", () 
   const kinds = ["hooks"];
 
   // act
-  const installReasons = narrowResolverReasons([], kinds, true);
+  const installReasons = installSurfaceReasons([], kinds, true);
   const listAndInfoReasons = narrowUnsupportedKinds(kinds);
 
   // assert
@@ -124,7 +156,7 @@ test("keeps structural hooks notes on the shared note axis", () => {
   ];
 
   // act
-  const installReasons = narrowResolverReasons(notes);
+  const installReasons = installSurfaceReasons(notes);
   const readOnlyReasons = narrowResolverNotes(notes);
 
   // assert
@@ -138,7 +170,7 @@ test("keeps structural hooks notes on the shared note axis", () => {
 // `notify()` composes from an identical array, so a divergence in ordering,
 // separator, or a dropped kind is caught on top of array equality. Both
 // surfaces are driven from ONE `narrowUnsupportedKinds` result -- the seam the
-// `list` row uses -- rather than the install-path `narrowResolverReasons`,
+// `list` row uses -- rather than the install-path reason narrowing,
 // which also folds in note-derived reasons and could diverge.
 
 const PARTIALLY_UPGRADABLE_BRACE = /\(partially-upgradable\) (\{[^}]*\})/;
@@ -187,7 +219,7 @@ test("keeps the update-decline and list partially-upgradable reason braces byte-
   });
 
   // assert
-  assert.equal(
+  assert.strictEqual(
     declineBrace,
     listBrace,
     "the update-decline reason brace must be byte-identical to the list partially-upgradable brace",

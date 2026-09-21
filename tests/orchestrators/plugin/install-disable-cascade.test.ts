@@ -108,7 +108,6 @@ test("disables a freshly installed record after a clean five-kind cascade", asyn
   // act
   const disableOutcome = await cascade.disableFreshInstall({
     state,
-    scope: "project",
     locations: locationsFor("project", "/workspace"),
     marketplace: "marketplace",
     plugin: "plugin",
@@ -149,7 +148,6 @@ test("returns the internal failure without running an unstage when the record is
   // act
   const disableOutcome = await cascade.disableFreshInstall({
     state,
-    scope: "project",
     locations: locationsFor("project", "/workspace"),
     marketplace: "marketplace",
     plugin: "plugin",
@@ -192,7 +190,6 @@ for (const row of [
     // act
     const disableOutcome = await cascade.disableFreshInstall({
       state,
-      scope: "project",
       locations: locationsFor("project", "/workspace"),
       marketplace: "marketplace",
       plugin: "plugin",

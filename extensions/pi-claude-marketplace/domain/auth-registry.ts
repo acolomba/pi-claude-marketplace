@@ -78,15 +78,16 @@ export const GITHUB_PROVIDER: GitAuthProvider = {
  *    response issues NO refresh_token, unlike GitHub's classic OAuth App
  *    tokens which do not expire by default. A GitLab user therefore
  *    re-authenticates occasionally. AUTH-07 / D-32-05's `onAuthFailure` (in
- *    `platform/git.ts::buildAuthCallbacks`) evicts the expired credential and
- *    always cancels the in-flight operation (CP-9); it does not itself
- *    retrigger Device Flow. Recovery happens on the NEXT auth attempt: with
- *    the credential evicted, `onAuth`'s `credentialOps.fill(host)` call
+ *    `platform/git-auth-callbacks.ts::buildAuthCallbacks`) evicts the
+ *    expired credential and always cancels the in-flight operation (CP-9);
+ *    it does not itself retrigger Device Flow. Recovery happens on the NEXT
+ *    auth attempt: with the credential evicted, `onAuth`'s
+ *    `credentialOps.fill(host)` call
  *    misses and falls through to `onAuthRequired`, so the following
  *    `marketplace update`/`install`/etc. invocation re-runs Device Flow.
  *    There is no refresh or expiry-tracking logic here by design.
  */
-export const GITLAB_PROVIDER: GitAuthProvider = {
+const GITLAB_PROVIDER: GitAuthProvider = {
   id: "gitlab",
   hostMatch: (host) => host === "gitlab.com",
   deviceCodeUrl: "https://gitlab.com/oauth/authorize_device",

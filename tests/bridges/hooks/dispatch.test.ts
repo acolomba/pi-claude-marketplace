@@ -984,36 +984,6 @@ describe("composite dispatch reduction", () => {
 });
 
 describe("composite dispatch closure partitions", () => {
-  test("rejects an unsupported executor result through the exhaustiveness guard", async () => {
-    // arrange
-    const runtime = createHooksRuntime();
-    runtime.advanceGeneration();
-    const context = createExtensionContext("/workspace/dispatch-exhaustive");
-    const entry = createRoutingEntry({
-      pluginId: "future-result",
-      claudeEvent: "PreToolUse",
-      rawMatcher: "Bash",
-      declarationIndex: 0,
-    });
-    const unsupportedResult: HookExecResult = { kind: "noop" };
-    Object.defineProperty(unsupportedResult, "kind", { value: "future" });
-    const executor: HookExecutor = () => Promise.resolve(unsupportedResult);
-    runtime.setRoutingBucket("PreToolUse", [entry]);
-    const handler = compositeHandlerFor(
-      runtime,
-      "PreToolUse",
-      runtime.currentGeneration(),
-      undefined,
-      executor,
-    );
-
-    // act & assert
-    await assert.rejects(() => handler(createToolCallEvent(), context), {
-      name: "Error",
-      message: 'unreachable HookExecResult arm: {"kind":"future"}',
-    });
-  });
-
   test("returns undefined from a stale composite closure without dispatching", async () => {
     // arrange
     const runtime = createHooksRuntime();

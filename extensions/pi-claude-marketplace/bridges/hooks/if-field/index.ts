@@ -12,13 +12,12 @@
 // observes a uniformly-shaped predicate on every routing entry; absent
 // or malformed `if` fields are normalized to `MATCH_ALL_IF` at parse
 // time. The always-present-with-sentinel stance keeps the dispatch
-// switch total and lets `assertNever` enforce NFR-7 exhaustiveness
-// without an `undefined` arm.
+// switch total without an `undefined` arm (NFR-7).
 //
-// NFR-7: the `IfPredicate` union has six arms; any switch over
-// `predicate.kind` must either cover every arm or terminate with
-// `assertNever(predicate)`. Adding a seventh arm without updating the
-// dispatch switch red-fails `npm run typecheck`.
+// NFR-7: the `IfPredicate` union has six arms; the dispatch switch over
+// `predicate.kind` lists every arm and carries no default. Adding a seventh
+// arm without updating the switch red-fails `npm run typecheck` and
+// `npm run lint`.
 //
 // Fail-open contract recap (D-61-02):
 //   - Unknown rule prefix (`Cd(...)`, typos)                -> MATCH_ALL_IF
@@ -31,13 +30,15 @@
 // blocks installation.
 //
 // CompileIfPredicateContext (D-61-03 substitute-cwd rule + A1
-// projectRoot fallback): the path-glob compiler consumes a homedir +
-// cwd + projectRoot triple to anchor `~`-prefixed patterns, bare
-// relative globs (`src/**`), and absolute project-root patterns
-// (`/docs/**`). Pi's `ExtensionContext` v0.73.x exposes only `cwd`
-// today; callers pass `ctx.cwd` as the `projectRoot` fallback so a
-// future Pi version exposing a separate `projectRoot` field can wire
-// it without renaming the type. Upstream Claude's permission engine
+// projectRoot fallback): an alias of `ResolveHookIfContext`, the single
+// declaration of the anchor triple, republished here under the bridge's
+// own name (D-11 puts that declaration in domain/). The path-glob
+// compiler consumes a homedir + cwd + projectRoot triple to anchor
+// `~`-prefixed patterns, bare relative globs (`src/**`), and absolute
+// project-root patterns (`/docs/**`). Pi's `ExtensionContext` v0.73.x
+// exposes only `cwd` today; callers pass `ctx.cwd` as the `projectRoot`
+// fallback so a future Pi version exposing a separate `projectRoot`
+// field can wire it without renaming the type. Upstream Claude's permission engine
 // follows the same "Grep / LS default to cwd internally" rationale,
 // so this fallback preserves byte-for-byte upstream truth-table
 // fidelity until a richer Pi context surfaces.
@@ -48,7 +49,6 @@ import { TOOL_EVENTS, type BucketAEvent } from "../../../domain/components/hook-
 import { IF_PREFIX_TARGETS } from "../../../domain/components/hook-if-targets.ts";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { errorMessage } from "../../../shared/errors.ts";
-import { assertNever } from "../exec-result.ts";
 
 import { bashSubcommandFires, parseBashSubcommands } from "./bash.ts";
 import { compileBashGlob, compilePathGlob } from "./glob.ts";
@@ -61,17 +61,8 @@ import {
 import type { ParseResult } from "./bash.ts";
 import type { CompiledBashGlob, CompiledPathGlob, CompiledPowerShellGlob } from "./glob.ts";
 import type { PiToolName } from "../../../domain/components/hook-tool-names.ts";
+import type { ResolveHookIfContext } from "../../../domain/components/hooks.ts";
 import type { ExtensionContext } from "../../../platform/pi-api.ts";
-
-export type { CompiledBashGlob, CompiledPathGlob, CompiledPowerShellGlob } from "./glob.ts";
-export { compileBashGlob, compilePathGlob, compilePowerShellGlob } from "./glob.ts";
-
-export { parseBashSubcommands, bashSubcommandFires } from "./bash.ts";
-export {
-  compilePowerShellRule,
-  parsePowerShellSubcommands,
-  powerShellSubcommandFires,
-} from "./powershell.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // IfPredicate discriminated union
@@ -83,9 +74,7 @@ export {
  * for absent or malformed `if` strings). The dispatch consult switches
  * on `predicate.kind`:
  *
- *   - `match-all`         -- fire unconditionally. The `reason` field
- *                            captures fall-open context for
- *                            `hookDebugLog`.
+ *   - `match-all`         -- fire unconditionally.
  *   - `bash`              -- check whether `event.toolName` is in the
  *                            `piEvents` set, then consult
  *                            `bashGlob.test(subcmd)` against every parsed
@@ -106,7 +95,7 @@ export {
  *                            `"__"` (e.g. `"mcp__puppeteer__"`).
  */
 export type IfPredicate =
-  | { readonly kind: "match-all"; readonly reason?: string }
+  | { readonly kind: "match-all" }
   | {
       readonly kind: "bash";
       readonly piEvents: ReadonlySet<PiToolName>;
@@ -145,6 +134,10 @@ export const MATCH_ALL_IF: IfPredicate = { kind: "match-all" };
 /**
  * Anchor context consumed by `compileIfPredicate` (parse-time entry in
  * `domain/components/hooks.ts`) and the underlying `compilePathGlob`.
+ * Published as an alias of `ResolveHookIfContext`, which is the one
+ * declaration of the triple: D-11 allows a bridge to name a domain type
+ * and forbids the reverse, so the domain side owns the shape and this
+ * name stays exported for the bridge's own consumers.
  * The three fields drive `~`-prefix substitution (homedir),
  * cwd-anchored bare relative globs (cwd), and project-root-anchored
  * absolute patterns (projectRoot).
@@ -159,11 +152,7 @@ export const MATCH_ALL_IF: IfPredicate = { kind: "match-all" };
  * `projectRoot` field; production call sites pass `ctx.cwd` for both
  * `cwd` and `projectRoot` until a richer Pi surface exists.
  */
-export interface CompileIfPredicateContext {
-  readonly homedir: string;
-  readonly cwd: string;
-  readonly projectRoot: string;
-}
+export type CompileIfPredicateContext = ResolveHookIfContext;
 
 // ──────────────────────────────────────────────────────────────────────────
 // compileIfPredicate (D-61-02 / D-61-03 / D-61-04 fail-open + cross-tool)
@@ -449,7 +438,7 @@ function resolveTarget(p: string, ctx: ExtensionContext): string {
 /**
  * MATCH-03 dispatch-time consult. Returns true iff the routing entry's
  * `if` field permits dispatch for the current event. Total switch over
- * `IfPredicate.kind` with `assertNever` exhaustiveness (NFR-7).
+ * `IfPredicate.kind` with no default arm (NFR-7).
  *
  * Per-arm contract:
  *
@@ -531,8 +520,5 @@ export function ifFires(
 
     case "mcp-server-prefix":
       return extractToolName(event).startsWith(predicate.serverPrefix);
-
-    default:
-      return assertNever(predicate);
   }
 }

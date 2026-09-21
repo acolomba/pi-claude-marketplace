@@ -59,7 +59,7 @@ import type { ClaudePluginVars } from "../../shared/vars.ts";
 type SkillsReplacementInternals = Readonly<{
   backupRoot: string;
   backups: readonly { name: string; from: string; to: string }[];
-  renamed: readonly { from: string; to: string }[];
+  renamed: readonly { to: string }[];
 }>;
 
 const skillsReplacementInternals = new WeakMap<
@@ -462,7 +462,7 @@ export async function replacePreparedSkills(
   await assertPathInside(prepared.locations.skillsStagingDir, backupRoot, "skills backup root");
 
   const backups: { name: string; from: string; to: string }[] = [];
-  const renamed: { from: string; to: string }[] = [];
+  const renamed: { to: string }[] = [];
 
   try {
     for (const name of prepared._previousNames) {
@@ -497,7 +497,7 @@ export async function replacePreparedSkills(
       }
 
       await rename(pair.from, pair.to);
-      renamed.push(pair);
+      renamed.push({ to: pair.to });
     }
   } catch (err) {
     const leaks = await rollbackSkillsReplacementInternal(
@@ -574,7 +574,7 @@ function requireSkillsReplacementInternals(
 async function rollbackSkillsReplacementInternal(
   ops: RemovalOps,
   prepared: Extract<PreparedSkillsStaging, { kind: "staged" }>,
-  renamed: readonly { from: string; to: string }[],
+  renamed: readonly { to: string }[],
   backups: readonly { name: string; from: string; to: string }[],
   backupRoot: string,
 ): Promise<readonly string[]> {

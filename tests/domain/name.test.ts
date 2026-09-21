@@ -21,7 +21,7 @@ describe("assertSafeName", () => {
       // act
       try {
         assertSafeName(safeName);
-      } catch (error) {
+      } catch (error: unknown) {
         actualError = error;
       }
 
@@ -108,7 +108,7 @@ describe("assertSafeName", () => {
       // act
       try {
         assertSafeName(safeName);
-      } catch (error) {
+      } catch (error: unknown) {
         actualError = error;
       }
 
@@ -412,7 +412,7 @@ describe("generatedAgentName", () => {
     {
       plugin: "acme",
       source: "acme-bot",
-      expectedAgentName: "pi-claude-marketplace-acme-bot",
+      expectedAgentName: "pi-claude-marketplace-acme-acme-bot",
     },
     {
       plugin: "ab",
@@ -422,18 +422,19 @@ describe("generatedAgentName", () => {
     {
       plugin: "acme",
       source: "acme-acme-bot",
-      expectedAgentName: "pi-claude-marketplace-acme-acme-bot",
+      expectedAgentName: "pi-claude-marketplace-acme-acme-acme-bot",
     },
     {
       plugin: "Ac.Me",
       source: "Ac.Me-Bot_v2",
-      expectedAgentName: "pi-claude-marketplace-Ac.Me-Bot_v2",
+      expectedAgentName: "pi-claude-marketplace-Ac.Me-Ac.Me-Bot_v2",
     },
     {
       plugin: "acme",
       source: "acme",
       expectedAgentName: "pi-claude-marketplace-acme-acme",
     },
+    { plugin: "acme", source: "acme-", expectedAgentName: "pi-claude-marketplace-acme-acme-" },
   ]) {
     test(`generates ${JSON.stringify(expectedAgentName)} from ${JSON.stringify(source)}`, () => {
       // arrange
@@ -461,7 +462,7 @@ describe("generatedAgentName", () => {
     },
     {
       pluginName: "acme",
-      sourceName: "acme-",
+      sourceName: "",
       errorMessage: "Name must be a non-empty string.",
     },
   ]) {

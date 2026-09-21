@@ -41,9 +41,9 @@ import type {
   StagedMcpRecord,
 } from "./types.ts";
 
-type McpReplacementInternals = Readonly<{
-  oldText: string | undefined;
-}>;
+interface McpReplacementInternals {
+  readonly oldText: string | undefined;
+}
 
 const mcpReplacementInternals = new WeakMap<
   Extract<McpReplacement, { kind: "replaced" }>,
@@ -90,7 +90,7 @@ async function readScopedDoc(filePath: string): Promise<{ doc: RawMcpDoc; malfor
 }
 
 /** Refusal for a present scoped `mcpServers` field that is not an object map. */
-export class MalformedMcpServersError extends Error {
+class MalformedMcpServersError extends Error {
   readonly mcpJsonPath: string;
   readonly valueKind: string;
 
@@ -261,12 +261,16 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   });
 
   // AS-8 noop: nothing new AND nothing previously-ours. Don't materialize
-  // the file; commit returns the noop result without touching disk.
+  // the file; commit returns the noop result without touching disk. A
+  // malformed doc is still reported here even though nothing is rewritten.
   if (newNames.length === 0 && ours.size === 0) {
+    const noopWarnings = malformed
+      ? [`existing mcp.json at ${locations.mcpJsonPath} is malformed; it was left untouched`]
+      : [];
     const noopResult: StageMcpCommitResult = {
       stagedNames: Object.freeze<string[]>([]),
       recorded: Object.freeze<StagedMcpRecord[]>([]),
-      warnings: Object.freeze<string[]>([]),
+      warnings: Object.freeze(noopWarnings),
     };
     return { kind: "noop", result: noopResult };
   }
@@ -288,8 +292,9 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   );
 
   // The commit overwrite is what actually destroys a malformed doc's foreign
-  // entries, and only the staged branch commits -- so the warning lives here,
-  // not on the AS-8 noop branch (which writes nothing).
+  // entries, so this staged-branch wording says "will be replaced" -- the
+  // AS-8 noop branch above reports the same malformed doc but says "left
+  // untouched" since its commit is a zero-op.
   const docWarnings = malformed
     ? [
         `existing mcp.json at ${locations.mcpJsonPath} is malformed; it will be replaced (non-plugin entries in it are lost)`,

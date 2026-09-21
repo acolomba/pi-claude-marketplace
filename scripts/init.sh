@@ -22,6 +22,10 @@ fi
 # npm
 npm install
 
+# skills
+npx --yes skills@latest add blader/humanizer -a universal claude-code -y
+npx --yes skills@latest add AminBlg/SimpleEnglish -a universal claude-code -y
+
 # gsd
 npx --yes @opengsd/gsd-core@latest --install --local --claude --codex --force-statusline
 
@@ -32,5 +36,10 @@ fi
 
 codegraph install --target claude,codex --location local --no-permissions --init --yes
 
-# prevents shadowing of CLAUDE.md in codex/pi
-rm -f AGENTS.md .claude/CLAUDE.md
+# removes the generated per-tool copy, which would shadow the root file
+rm -f .claude/CLAUDE.md
+
+# codegraph's install regenerates AGENTS.md's CodeGraph block with minor
+# drift (unicode dashes, blank lines); normalize it the same way
+# pre-commit would at commit time, so it doesn't sit dirty afterward.
+SKIP=trufflehog pre-commit run --files AGENTS.md || true

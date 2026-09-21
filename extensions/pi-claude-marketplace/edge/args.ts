@@ -18,13 +18,18 @@
 
 import type { Scope } from "../shared/types.ts";
 
+/** Result of `parseArgs`: positional tokens in input order, plus an extracted `--scope`. */
 export interface ParsedArgs {
   positional: string[];
   scope?: Scope;
 }
 
+/**
+ * Tokenize `args` and extract `--scope` (AP-1/AP-4); throws on an invalid or
+ * missing scope value (AP-2).
+ */
 export function parseArgs(args: string): ParsedArgs {
-  const tokens = tokenize(args);
+  const tokens = tokenizeArgs(args).map((token) => token.value);
   const positional: string[] = [];
   let scope: Scope | undefined;
 
@@ -59,29 +64,42 @@ export function parseArgs(args: string): ParsedArgs {
   return { positional };
 }
 
-function tokenize(input: string): string[] {
-  const tokens: string[] = [];
+/** One token recovered by `tokenizeArgs`, with its source span in the input string. */
+export interface ArgumentToken {
+  readonly value: string;
+  readonly start: number;
+  readonly end: number;
+}
+
+/** Tokenize once while retaining source spans for handlers that remove flags. */
+export function tokenizeArgs(input: string): ArgumentToken[] {
+  const tokens: ArgumentToken[] = [];
   let current = "";
+  let start = 0;
   let inSingle = false;
   let inDouble = false;
 
-  for (const ch of input) {
+  for (let index = 0; index < input.length; index++) {
+    const ch = input.charAt(index);
     if (ch === "'" && !inDouble) {
       inSingle = !inSingle;
     } else if (ch === '"' && !inSingle) {
       inDouble = !inDouble;
-    } else if (ch === " " && !inSingle && !inDouble) {
-      if (current.length > 0) {
-        tokens.push(current);
+    } else if (/\s/.test(ch) && !inSingle && !inDouble) {
+      // Source width preserves explicit empty quotes as a supplied argument.
+      if (index > start) {
+        tokens.push({ value: current, start, end: index });
         current = "";
       }
+
+      start = index + 1;
     } else {
       current += ch;
     }
   }
 
-  if (current.length > 0) {
-    tokens.push(current);
+  if (input.length > start) {
+    tokens.push({ value: current, start, end: input.length });
   }
 
   return tokens;

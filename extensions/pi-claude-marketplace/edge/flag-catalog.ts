@@ -22,7 +22,7 @@
 // SCOPE: this catalog models ONLY the per-verb EXTRA flags. `--scope` is a
 // global base flag consumed by the parseArgs tokenizer and hard-coded as the
 // base entry in flagCompletions; it is deliberately EXCLUDED here (and from both
-// sides of the drift guard) because it never varies per verb.
+// sides of the drift guard). Bootstrap rejects it explicitly.
 //
 // Each entry carries two orthogonal visibility bits:
 //   - parse:    the handler accepts the flag during argv parsing.
@@ -59,7 +59,17 @@ export type CatalogVerb =
   | "disable"
   | "pending"
   | "import"
-  | "bootstrap";
+  | "bootstrap"
+  | "browse"
+  | "help"
+  | "marketplace help"
+  | "marketplace add"
+  | "marketplace remove"
+  | "marketplace info"
+  | "marketplace list"
+  | "marketplace update"
+  | "marketplace autoupdate"
+  | "marketplace noautoupdate";
 
 // The write-target flag, shared by install/update/uninstall/reinstall/enable/
 // disable. It selects the PHYSICAL config file within a scope
@@ -148,10 +158,22 @@ const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
   pending: [],
   import: [],
   bootstrap: [],
+  // The three documentation/navigation verbs take no flags at all, not even
+  // the global `--scope`: `browse` and `marketplace help` reject any argument,
+  // and `help` reads whatever follows as a topic name. They are catalog
+  // members so the drift guard sees them; `NO_FLAG_VERBS` in
+  // completions/provider.ts is what keeps `--scope` off their suggestions.
+  browse: [],
+  help: [],
+  "marketplace help": [],
+  "marketplace add": [WRITE_TARGET_FLAG_ENTRY],
+  "marketplace remove": [WRITE_TARGET_FLAG_ENTRY],
+  "marketplace info": [],
+  "marketplace list": [],
+  "marketplace update": [],
+  "marketplace autoupdate": [WRITE_TARGET_FLAG_ENTRY],
+  "marketplace noautoupdate": [WRITE_TARGET_FLAG_ENTRY],
 };
-
-/** Every catalog verb, derived from the CATALOG keys (no hand-copied list). */
-export const CATALOG_VERBS = Object.keys(CATALOG) as readonly CatalogVerb[];
 
 /** Type guard narrowing a raw completion head to a catalog verb key. */
 export function isCatalogVerb(value: string): value is CatalogVerb {

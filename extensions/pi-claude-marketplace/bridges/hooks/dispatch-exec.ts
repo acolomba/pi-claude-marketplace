@@ -21,10 +21,10 @@
 //      otherwise -> `spawn(command, [], { ..., shell: entry.handlerDecl.shell
 //      ?? true })`. Note: `args: []` is exec-form -- the discriminator is
 //      "args defined" not "args non-empty".
-//   5. Arm the SIGTERM -> 5s -> SIGKILL ladder (EXEC-02). Attach
-//      `child.once("exit", ladder.cancel)` AND `child.once("error",
-//      ladder.cancel)` to close the TOCTOU window against the timer
-//      firing on a recycled pid.
+//   5. Arm the SIGTERM -> 5s -> SIGKILL ladder (EXEC-02). `ladder.cancel()`
+//      runs from the shared `settle()` closure, which both `child.once(
+//      "close", ...)` and `child.once("error", ...)` call, to close the
+//      TOCTOU window against the timer firing on a recycled pid.
 //   6. Stream stdout / stderr with manual caps (1 MB / 64 KB) -- maxBuffer
 //      does NOT apply to `spawn`, so on overflow the dispatcher kills the
 //      child and falls back to `{ kind: "noop" }`.
@@ -59,16 +59,16 @@ import { errorMessage } from "../../shared/errors.ts";
 import { spawnAndRegister } from "./async-rewake/registry.ts";
 import { installTimerLadder } from "./exec-timer.ts";
 import { prepareHookEnv } from "./hook-env.ts";
-import { translate as translatePostCompact } from "./payloads/post-compact.ts";
-import { translate as translatePostToolUseFailure } from "./payloads/post-tool-use-failure.ts";
-import { translate as translatePostToolUse } from "./payloads/post-tool-use.ts";
-import { translate as translatePreCompact } from "./payloads/pre-compact.ts";
-import { translate as translatePreToolUse } from "./payloads/pre-tool-use.ts";
-import { translate as translateSessionEnd } from "./payloads/session-end.ts";
-import { translate as translateSessionStart } from "./payloads/session-start.ts";
-import { translate as translateStopFailure } from "./payloads/stop-failure.ts";
-import { translate as translateStop } from "./payloads/stop.ts";
-import { translate as translateUserPromptSubmit } from "./payloads/user-prompt-submit.ts";
+import { translatePostCompact } from "./payloads/post-compact.ts";
+import { translatePostToolUseFailure } from "./payloads/post-tool-use-failure.ts";
+import { translatePostToolUse } from "./payloads/post-tool-use.ts";
+import { translatePreCompact } from "./payloads/pre-compact.ts";
+import { translatePreToolUse } from "./payloads/pre-tool-use.ts";
+import { translateSessionEnd } from "./payloads/session-end.ts";
+import { translateSessionStart } from "./payloads/session-start.ts";
+import { translateStopFailure } from "./payloads/stop-failure.ts";
+import { translateStop } from "./payloads/stop.ts";
+import { translateUserPromptSubmit } from "./payloads/user-prompt-submit.ts";
 import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
 import { resolveTimeoutSeconds } from "./timeout.ts";
 import { buildTranslationContext, type TranslationContext } from "./translation-context.ts";
@@ -349,7 +349,12 @@ async function spawnAndCollect(
       // arms the SIGKILL escalation 5s out for a child that ignores
       // SIGTERM.
       if (!child.killed) {
-        child.kill("SIGTERM");
+        const sent = child.kill("SIGTERM");
+        if (!sent) {
+          hookDebugLog(
+            `exec: SIGTERM kill() returned false (${entry.pluginId}/${entry.claudeEvent})`,
+          );
+        }
       }
 
       // 0 seconds: SIGTERM already went out synchronously above. The fresh
@@ -367,6 +372,8 @@ async function spawnAndCollect(
       () => {
         handleOverflow("stdout");
       },
+      "stdout",
+      ladderLabel,
     );
 
     accumulateStream(
@@ -378,6 +385,8 @@ async function spawnAndCollect(
       () => {
         handleOverflow("stderr");
       },
+      "stderr",
+      ladderLabel,
     );
 
     child.once("error", (err) => {
@@ -435,6 +444,8 @@ function accumulateStream(
   cap: number,
   onChunk: (chunk: string) => void,
   onOverflow: () => void,
+  which: "stdout" | "stderr",
+  label: string,
 ): void {
   if (stream === null) {
     return;
@@ -442,6 +453,13 @@ function accumulateStream(
 
   const decoder = new StringDecoder("utf8");
   let accumulated = 0;
+  // EPIPE/ECONNRESET defense: attach the error listener before "data" so a
+  // stream error during the SIGTERM/SIGKILL teardown races this dispatcher
+  // runs cannot surface as an unhandled exception. Mirrors child.stdin's
+  // error defense below.
+  stream.on("error", (err) => {
+    hookDebugLog(`exec: ${which} error (${label}): ${errorMessage(err)}`);
+  });
   stream.on("data", (chunk: Buffer | string) => {
     const text = typeof chunk === "string" ? chunk : decoder.write(chunk);
     accumulated += Buffer.byteLength(text, "utf8");

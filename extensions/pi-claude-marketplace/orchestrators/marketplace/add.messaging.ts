@@ -2,7 +2,7 @@
 //
 // The `marketplace add` command's co-located notification vocabulary: its
 // `CommandContext` (carrying `Messaging.label` and a render map over the
-// plugin-child-row statuses it emits) and its command-private failure reasons.
+// plugin-child-row statuses it emits) for its marketplace notifications.
 //
 // D-01 / MOD-01: each command owns the statuses, reasons, and render map of its
 // own notifications. The shared spine in `shared/notify-context.ts` dispatches
@@ -15,26 +15,8 @@
 // and `(failed) {<reason>}` header forms carry no local status declaration and
 // route through the central header seam.
 
-import { type Reason } from "../../shared/notification-types.ts";
-
 import type { CommandContext } from "../../shared/notify-context.ts";
 
-/**
- * D-09 / MOD-01: command-private reasons owned by `marketplace add`. These two
- * precondition causes are meaningful only to the add flow (a marketplace whose
- * derived name collides with an existing entry -> `duplicate name`; a leftover
- * `sources/<name>/` clone tree blocking a fresh add -> `stale clone`). The
- * shared failure-class reasons add also surfaces (`unsupported source`,
- * `lock held`) are referenced from `shared/notify-reasons.ts`, not redeclared
- * here.
- */
-// `_ReasonInSet<R extends Reason> = R` pins each private reason to the closed
-// `Reason` set as it derives `AddPrivateReason`: a typo or out-of-set literal
-// makes the tuple violate the `extends Reason` constraint -- a TS2344 compile
-// error here, with no runtime footprint.
-type _ReasonInSet<R extends Reason> = R;
-// fallow-ignore-next-line private-type-leak -- `_ReasonInSet` is the compile-time membership guard; exporting that helper would widen the command's public reason vocabulary.
-export type AddPrivateReason = _ReasonInSet<"duplicate name" | "stale clone">;
 /**
  * D-04 / D-05 / MOD-01: the `marketplace add` command context. `marketplace add`
  * emits no plugin child rows (the marketplace block is always `plugins: []`), so

@@ -21,7 +21,7 @@ field for: what the options are, what each costs, and a recommendation.
 
 These two are halves of one defect and cannot be settled independently.
 
-### Q1. What should `covered_files` cover? (#39, #53)
+### Q1. What should `covered_files` cover? (#66, #80)
 
 **What is true today.** A phase's `VERIFICATION.md` lists the files its
 conclusions depend on and stores a digest over them. Any later edit to a listed
@@ -29,11 +29,11 @@ file flips the phase to `stale`.
 
 Both failure directions have now been observed for real:
 
-- **Too broad** (#39, filed against phase 115): a list naming a file a later pass
+- **Too broad** (#66, filed against phase 115): a list naming a file a later pass
   rewrites makes its phase permanently un-completable. Seen twice more since —
   phase 114 went stale from a docs quick task on 2026-09-09, and again this
   session.
-- **Too narrow** (#53, filed against phase 114): the inclusion rule is
+- **Too narrow** (#80, filed against phase 114): the inclusion rule is
   inconsistent. Phase 114 listed `114-CONTEXT.md`, `114-REVIEW.md` and
   `114-REVIEW-FIX.md` while omitting `114-PATTERNS.md`, `114-RESEARCH.md`,
   `114-SECURITY.md`, `114-VALIDATION.md` and `deferred-items.md`. That last one
@@ -51,7 +51,7 @@ from it. Picking a rule per phase is what produced the inconsistency.
 | State one rule and apply it everywhere | Staleness becomes predictable | Re-derive 9 phases' lists and digests; some may flip to `stale` on the spot |
 | Exclude planning artifacts entirely; cover only source and tests | A doc edit stops staling a phase | Loses the signal that a graded document changed — which is exactly what caught the real drift this session |
 | Cover graded files only, named per criterion | Tightest possible signal | Every criterion needs a file list; largest authoring cost |
-| Leave as-is, re-verify at each boundary | Zero change | Re-verification stays a recurring boundary cost, and #39's "permanently un-completable" case can recur |
+| Leave as-is, re-verify at each boundary | Zero change | Re-verification stays a recurring boundary cost, and #66's "permanently un-completable" case can recur |
 
 **Recommendation.** State one rule: cover what a criterion actually grades, plus
 the phase's own PLAN and SUMMARY files. Exclude CONTEXT, RESEARCH, PATTERNS,
@@ -66,7 +66,7 @@ touches nine files and can flip completion state.
 Each of these is a statement about runtime behavior that no one has driven. None
 can be settled by re-reading source, which is why they are grouped.
 
-### Q2. Does the succeeded-arm record the right names? (#52)
+### Q2. Does the succeeded-arm record the right names? (#79)
 
 `update.ts:1992-1994` sets `resources.workflows` from the prepare's
 `stagedNames` when the commit succeeded, and from the commit-reported
@@ -88,7 +88,7 @@ exposed the question.
 **To settle it:** drive the leak path and observe what gets recorded. Do not
 decide from the source.
 
-### Q3. Is the reload-hint mechanism claim stale? (#47)
+### Q3. Is the reload-hint mechanism claim stale? (#74)
 
 `docs/messaging-style-guide.md:90` and `:37` describe the trailer as emitted on a
 status-set test plus a cascade kind. `shouldEmitReloadHint` (`notify.ts:3393`)
@@ -100,7 +100,7 @@ in `notify.ts` and once in the guide.
 **To settle it:** measure the `needsReload` plumbing across the producers that
 stamp it, then restate the guide at the grade that holds.
 
-### Q4. Wrong reason token for a held lock (#55)
+### Q4. Wrong reason token for a held lock (#82)
 
 A held state lock during a backfill re-materialize reaches the user as
 `unreadable`, not `lock held`. `reinstallPlugin` catches `StateLockHeldError` and
@@ -125,7 +125,7 @@ clear correct answer, and it is user-visible.
 
 ## Group C — Real code changes to a shipped bridge
 
-### Q5. The saved-directory symlink asymmetry (#48)
+### Q5. The saved-directory symlink asymmetry (#75)
 
 `stage.ts:215` anchors its containment check one level **above** the staging
 directory, precisely so a symlink planted at that segment is `lstat`'d. Its
@@ -146,7 +146,7 @@ to the next person.
 **Recommendation.** Fix it, or write down why not, directly beside the existing
 justification. Either resolves the ambiguity; leaving it silent does not.
 
-### Q6. `PathContainmentError` interpolates an untrusted path (#37)
+### Q6. `PathContainmentError` interpolates an untrusted path (#64)
 
 `shared/path-safety.ts:13` interpolates the untrusted resolved child path raw
 into its message, so escaping a caller's label cannot close the forgery. Five
@@ -159,7 +159,7 @@ blast radius of anything on this list.
 
 ## Group D — Needs something this machine does not have
 
-### Q7. The storage assertions were never driven live (#45)
+### Q7. The storage assertions were never driven live (#72)
 
 The W1/W2/W3 storage assertions in the archived phase-105 verification were never
 driven against a live engine, and their driver
@@ -171,7 +171,7 @@ the `agent()` failure canary was driven at 3.10.1. There is a recorded route for
 this — a disposable scratch install plus `PI_WORKFLOW_ENGINE_ROOT`, with a
 negative control.
 
-### Q8. Fifteen line-range citations into an unvendored package (#34)
+### Q8. Fifteen line-range citations into an unvendored package (#61)
 
 `docs/workflows-compatibility.md` cites 15 exact line ranges inside
 `@quintinshaw/pi-dynamic-workflows` 3.10.1, which this repo does not vendor. No
@@ -185,7 +185,7 @@ vendoring the package, which is explicitly out of scope.
 
 ## Group E — Small and self-contained
 
-### Q9. A catalog state id under-describes its row (#40)
+### Q9. A catalog state id under-describes its row (#67)
 
 `docs/output-catalog.md`'s `backfill-partially-installed-no-reasons` now carries
 the components-now-supported marker, so it is not brace-less and the id no longer
@@ -194,7 +194,7 @@ describes the row. The rename was deferred to the plan that owns the catalog.
 Cheap. Needs care only because catalog states are byte-pinned by
 `catalog-uat.test.ts`, so the id and its fixture must move together.
 
-### Q10. The threat-flag channel is never populated (#51)
+### Q10. The threat-flag channel is never populated (#78)
 
 Zero of 21 summaries across phases 109-113 carry a `## Threat Flags` section —
 absent, not empty. So every security audit's cross-check against
@@ -205,7 +205,7 @@ and none treated absence as evidence that no new surface appeared.
 answer is "None." Cheap, and it makes the next milestone's audits meaningfully
 stronger rather than nominally so.
 
-### Q11. The abort-path enumeration stays ungated (#54)
+### Q11. The abort-path enumeration stays ungated (#81)
 
 An accepted residual, recorded rather than hidden. The removed grep threshold
 guarded that no unwind path omits the workflows arm. That property holds, and
@@ -219,13 +219,13 @@ You chose the two gates and not a third. Listed so the absence stays visible.
 
 ## Suggested order, if you want one
 
-1. **Q4** (#55) — wrong reason token. Small, located, user-visible, clear answer.
-2. **Q10** (#51) — template change. Cheap, improves every future audit.
-3. **Q5** (#48) — fix the asymmetry or write down why not.
-4. **Q1** (#39, #53) — the `covered_files` rule, as its own task.
-5. **Q2** (#52) and **Q3** (#47) — measure, then restate.
-6. **Q7** (#45) — live canary, when a scratch engine is available.
-7. **Q6** (#37) — scope first.
-8. **Q9** (#40), **Q8** (#34), **Q11** (#54) — small, carried, and accepted respectively.
+1. **Q4** (#82) — wrong reason token. Small, located, user-visible, clear answer.
+2. **Q10** (#78) — template change. Cheap, improves every future audit.
+3. **Q5** (#75) — fix the asymmetry or write down why not.
+4. **Q1** (#66, #80) — the `covered_files` rule, as its own task.
+5. **Q2** (#79) and **Q3** (#74) — measure, then restate.
+6. **Q7** (#72) — live canary, when a scratch engine is available.
+7. **Q6** (#64) — scope first.
+8. **Q9** (#67), **Q8** (#61), **Q11** (#81) — small, carried, and accepted respectively.
 
 None of this blocks `/gsd-complete-milestone workflows-replay`.

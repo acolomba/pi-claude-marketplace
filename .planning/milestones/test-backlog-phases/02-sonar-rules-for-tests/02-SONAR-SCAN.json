@@ -1,0 +1,6182 @@
+[
+  {
+    "file": "tests/architecture/catalog-uat/catalog-contract.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 344,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 344,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/config-state-consistency.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 53,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/config-state-write-seams.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 185,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 192,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/disabled-state-classification.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/super-linear-regex",
+        "line": 114,
+        "message": "Simplify this regular expression to reduce its runtime, as it has super-linear performance due to backtracking."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/eslint-effective-config.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 94,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/flag-catalog-drift.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 80,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/gate-targets.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/regex-complexity",
+        "line": 74,
+        "message": "Simplify this regular expression to reduce its complexity from 25 to the 20 allowed."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 378,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 436,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/different-types-comparison",
+        "line": 610,
+        "message": "Remove this \"!==\" check; it will always be true. Did you mean to use \"!=\"?"
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 624,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/hooks-async-rewake.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 248,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 251,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/hooks-dispatch.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-misleading-array-reverse",
+        "line": 53,
+        "message": "Move this array \"sort\" operation to a separate statement or replace it with \"toSorted\"."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 53,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/hooks-foundation.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 275,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 278,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/import-boundaries.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 119,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 446,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/manifest-lookup-drift.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/super-linear-regex",
+        "line": 119,
+        "message": "Simplify this regular expression to reduce its runtime, as it has super-linear performance due to backtracking."
+      },
+      {
+        "ruleId": "sonarjs/super-linear-regex",
+        "line": 143,
+        "message": "Simplify this regular expression to reduce its runtime, as it has super-linear performance due to backtracking."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/manifest-read-seam.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/super-linear-regex",
+        "line": 29,
+        "message": "Simplify this regular expression to reduce its runtime, as it has super-linear performance due to backtracking."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/markers-snapshot.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 46,
+        "message": "Make sure publicly writable directories are used safely here."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/no-credential-leak.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/super-linear-regex",
+        "line": 102,
+        "message": "Simplify this regular expression to reduce its runtime, as it has super-linear performance due to backtracking."
+      },
+      {
+        "ruleId": "sonarjs/regex-complexity",
+        "line": 218,
+        "message": "Simplify this regular expression to reduce its complexity from 28 to the 20 allowed."
+      },
+      {
+        "ruleId": "sonarjs/regex-complexity",
+        "line": 247,
+        "message": "Simplify this regular expression to reduce its complexity from 39 to the 20 allowed."
+      },
+      {
+        "ruleId": "sonarjs/super-linear-regex",
+        "line": 307,
+        "message": "Simplify this regular expression to reduce its runtime, as it has super-linear performance due to backtracking."
+      },
+      {
+        "ruleId": "sonarjs/regex-complexity",
+        "line": 307,
+        "message": "Simplify this regular expression to reduce its complexity from 33 to the 20 allowed."
+      },
+      {
+        "ruleId": "sonarjs/regex-complexity",
+        "line": 339,
+        "message": "Simplify this regular expression to reduce its complexity from 33 to the 20 allowed."
+      },
+      {
+        "ruleId": "sonarjs/regex-complexity",
+        "line": 359,
+        "message": "Simplify this regular expression to reduce its complexity from 39 to the 20 allowed."
+      },
+      {
+        "ruleId": "sonarjs/regex-complexity",
+        "line": 402,
+        "message": "Simplify this regular expression to reduce its complexity from 39 to the 20 allowed."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/no-hooks-strict-additional-properties.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/super-linear-regex",
+        "line": 39,
+        "message": "Simplify this regular expression to reduce its runtime, as it has super-linear performance due to backtracking."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 74,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 81,
+        "message": "Make sure publicly writable directories are used safely here."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/no-lifecycle-default-enabled-read.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/super-linear-regex",
+        "line": 93,
+        "message": "Simplify this regular expression to reduce its runtime, as it has super-linear performance due to backtracking."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/no-shell-out.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 137,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/no-split-01-cast-reads.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 131,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/no-test-only-production-surface.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/concise-regex",
+        "line": 125,
+        "message": "Use concise character class syntax '\\W' instead of '[^A-Za-z0-9_]'."
+      },
+      {
+        "ruleId": "sonarjs/concise-regex",
+        "line": 125,
+        "message": "Use concise character class syntax '\\w' instead of '[A-Za-z0-9_]'."
+      },
+      {
+        "ruleId": "sonarjs/concise-regex",
+        "line": 127,
+        "message": "Use concise character class syntax '\\W' instead of '[^A-Za-z0-9_]'."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 147,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/notify-grammar-invariant.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/super-linear-regex",
+        "line": 725,
+        "message": "Simplify this regular expression to reduce its runtime, as it has super-linear performance due to backtracking."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/partial-vocabulary-guard.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/super-linear-regex",
+        "line": 699,
+        "message": "Simplify this regular expression to reduce its runtime, as it has super-linear performance due to backtracking."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/reconcile-planner-purity.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/super-linear-regex",
+        "line": 50,
+        "message": "Simplify this regular expression to reduce its runtime, as it has super-linear performance due to backtracking."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/source-scan.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/super-linear-regex",
+        "line": 55,
+        "message": "Simplify this regular expression to reduce its runtime, as it has super-linear performance due to backtracking."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/unit-suite-glob-completeness.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 77,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 91,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/architecture/unowned-exports-census.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-nested-assignment",
+        "line": 121,
+        "message": "Extract the assignment of \"census[finding.path]\" from this expression."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 125,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/agents/index.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 47,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 48,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 49,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 50,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 51,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 52,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 53,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 54,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 55,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 59,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 68,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 70,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 72,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 74,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 76,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/agents/stage.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 2474,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 2478,
+        "message": "Provide a compare function to avoid sorting elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/agents/types.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-empty-test-file",
+        "line": 0,
+        "message": "Add some tests to this file or delete it."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 31,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 41,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 54,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 68,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 75,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 82,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 90,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 101,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 119,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 122,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 131,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 142,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 153,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 159,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 165,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 172,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 174,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 176,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 177,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 178,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 179,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 184,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 185,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 191,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 197,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 198,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 199,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 200,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 201,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 202,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 203,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 210,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 217,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 245,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 247,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 249,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 251,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 253,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 255,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 257,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 263,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 269,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/agents/unstage.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-misleading-array-reverse",
+        "line": 124,
+        "message": "Move this array \"sort\" operation to a separate statement or replace it with \"toSorted\"."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 124,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-misleading-array-reverse",
+        "line": 463,
+        "message": "Move this array \"sort\" operation to a separate statement or replace it with \"toSorted\"."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 463,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/commands/index.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 41,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 42,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 43,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 44,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 45,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 46,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 47,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 48,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 49,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 53,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 62,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 64,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 66,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 68,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 70,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/commands/stage.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 115,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 257,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 307,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/commands/types.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-empty-test-file",
+        "line": 0,
+        "message": "Add some tests to this file or delete it."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 22,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 34,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 41,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 47,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 55,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 66,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 81,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 83,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 84,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 85,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 86,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 93,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 104,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 111,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 117,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 125,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 135,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 138,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 144,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 150,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 152,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 153,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 154,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 155,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 156,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 157,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 163,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 169,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 174,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 176,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 178,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 180,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 182,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 184,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 186,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 188,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 190,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 192,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 195,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 197,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 199,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 201,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 203,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 205,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 207,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 209,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 215,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 221,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/hooks/async-rewake/registry.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/different-types-comparison",
+        "line": 384,
+        "message": "Remove this \"!==\" check; it will always be true. Did you mean to use \"!=\"?"
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/hooks/dispatch-exec.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/different-types-comparison",
+        "line": 113,
+        "message": "Remove this \"!==\" check; it will always be true. Did you mean to use \"!=\"?"
+      },
+      {
+        "ruleId": "sonarjs/no-extra-arguments",
+        "line": 497,
+        "message": "This function expects no arguments, but 1 was provided."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/hooks/dispatch.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 40,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 49,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 51,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 53,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 55,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/no-identical-functions",
+        "line": 1093,
+        "message": "Update this function so that its implementation is not identical to the one on line 1053."
+      },
+      {
+        "ruleId": "sonarjs/no-identical-functions",
+        "line": 1315,
+        "message": "Update this function so that its implementation is not identical to the one on line 1053."
+      },
+      {
+        "ruleId": "sonarjs/no-undefined-argument",
+        "line": 2268,
+        "message": "Remove this redundant \"undefined\"."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/hooks/event-router.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 800,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 801,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/hooks/exec-result.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 8,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 9,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 11,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 12,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 14,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 22,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 23,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 25,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 26,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 29,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 31,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 33,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 35,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 37,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/hooks/exec-timer.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/different-types-comparison",
+        "line": 78,
+        "message": "Remove this \"!==\" check; it will always be true. Did you mean to use \"!=\"?"
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/hooks/hook-env.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-identical-functions",
+        "line": 143,
+        "message": "Update this function so that its implementation is not identical to the one on line 32."
+      },
+      {
+        "ruleId": "sonarjs/no-identical-functions",
+        "line": 226,
+        "message": "Update this function so that its implementation is not identical to the one on line 32."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/hooks/if-field/glob.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 466,
+        "message": "Make sure publicly writable directories are used safely here."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/hooks/if-field/index.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 73,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 74,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 75,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 76,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 77,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 78,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 79,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 80,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 84,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 88,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 92,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 96,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 97,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 124,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 125,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 130,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 135,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 140,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 141,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 144,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 146,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 148,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 149,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 156,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 158,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 160,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/hooks/index.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 23,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 29,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 31,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 33,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 35,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 37,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 39,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 41,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 43,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 45,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 47,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 49,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 51,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 53,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 55,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 57,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 59,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 61,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 63,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 65,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 67,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 69,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 71,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/hooks/payloads/stop-failure.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 19,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 24,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 26,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 33,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 38,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 40,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/different-types-comparison",
+        "line": 50,
+        "message": "Remove this \"===\" check; it will always be false. Did you mean to use \"==\"?"
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 69,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 74,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 98,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 103,
+        "message": "Make sure publicly writable directories are used safely here."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/hooks/payloads/stop.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 14,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 18,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 20,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 26,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 40,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 45,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 67,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 76,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 81,
+        "message": "Make sure publicly writable directories are used safely here."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/hooks/settle.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-extra-arguments",
+        "line": 1016,
+        "message": "This function expects no arguments, but 1 was provided."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/hooks/translation-context.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 30,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 39,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 45,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 51,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/mcp/index.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 40,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 41,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 42,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 43,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 44,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 45,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 46,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 47,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/mcp/substitute.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/different-types-comparison",
+        "line": 73,
+        "message": "Remove this \"!==\" check; it will always be true. Did you mean to use \"!=\"?"
+      },
+      {
+        "ruleId": "sonarjs/different-types-comparison",
+        "line": 165,
+        "message": "Remove this \"!==\" check; it will always be true. Did you mean to use \"!=\"?"
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/mcp/types.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-empty-test-file",
+        "line": 0,
+        "message": "Add some tests to this file or delete it."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 19,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 20,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 21,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 22,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 30,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 32,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 33,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 34,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 35,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 36,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 41,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 49,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 56,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 70,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 77,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 84,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 94,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 103,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 105,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 106,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 107,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 108,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 114,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 120,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 122,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 123,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 124,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 125,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 126,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 127,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 134,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 140,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 145,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 147,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 152,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 158,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 168,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 170,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 176,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 182,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 188,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 194,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 196,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 198,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 200,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 202,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 204,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 206,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 208,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 210,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 212,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 214,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 216,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 222,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 228,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 233,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 255,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 257,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 259,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 261,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 263,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 265,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/skills/index.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 43,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 44,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 45,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 46,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 47,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 48,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 49,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 50,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 51,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 52,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 53,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 64,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 68,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 77,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 79,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 81,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 83,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 85,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/bridges/skills/types.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-empty-test-file",
+        "line": 0,
+        "message": "Add some tests to this file or delete it."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 22,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 34,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 41,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 47,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 55,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 66,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 81,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 83,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 84,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 85,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 86,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 93,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 104,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 111,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 117,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 125,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 135,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 138,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 144,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 150,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 152,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 153,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 154,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 155,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 156,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 157,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 163,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 169,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 174,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 176,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 178,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 180,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 182,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 184,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 186,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 188,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 190,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 192,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 195,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 197,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 199,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 201,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 203,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 205,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 207,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 209,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 215,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 221,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/auth-registry.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 11,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 29,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 43,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 77,
+        "message": "Review this potentially hard-coded password."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/component-paths.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 12,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 23,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/components/hook-events.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 16,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 18,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 19,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 21,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 22,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 24,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 25,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 27,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 37,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/components/hook-tool-names.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 10,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 12,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/components/hooks/schema.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 10,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 11,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 12,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 22,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 24,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 26,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 28,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 30,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/components/plugin.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 11,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 12,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 19,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 21,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 23,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 25,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/device-flow-contract.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/assertions-in-tests",
+        "line": 398,
+        "message": "Add at least one assertion to this test case."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/github-auth.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-nested-conditional",
+        "line": 112,
+        "message": "Extract this nested ternary operation into an independent statement."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 132,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 133,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/no-nested-conditional",
+        "line": 818,
+        "message": "Extract this nested ternary operation into an independent statement."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/manifest-cache.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 12,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/manifest-lookup.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 10,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 11,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 15,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 16,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 18,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 20,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/manifest.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 15,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 16,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 23,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 25,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/mcp-resolution.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 14,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/no-nested-conditional",
+        "line": 28,
+        "message": "Extract this nested ternary operation into an independent statement."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 39,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/plugin-resolver.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/use-type-alias",
+        "line": 42,
+        "message": "Replace this union type with a type alias."
+      },
+      {
+        "ruleId": "sonarjs/no-misleading-array-reverse",
+        "line": 3135,
+        "message": "Move this array \"sort\" operation to a separate statement or replace it with \"toSorted\"."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 3135,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 3828,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 3831,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 3832,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/plugin-root.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 13,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/resolver-types.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 91,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 92,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 93,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 94,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 95,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 96,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 100,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 101,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 122,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 128,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 147,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 152,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 168,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 169,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 170,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 171,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 172,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 173,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 174,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 175,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 176,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 177,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 178,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 179,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 180,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/source.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-clear-text-protocols",
+        "line": 351,
+        "message": "Using http protocol is insecure. Use https instead."
+      },
+      {
+        "ruleId": "sonarjs/no-clear-text-protocols",
+        "line": 354,
+        "message": "Using http protocol is insecure. Use https instead."
+      },
+      {
+        "ruleId": "sonarjs/no-clear-text-protocols",
+        "line": 356,
+        "message": "Using http protocol is insecure. Use https instead."
+      },
+      {
+        "ruleId": "sonarjs/no-clear-text-protocols",
+        "line": 361,
+        "message": "Using ftp protocol is insecure. Use sftp, scp or ftps instead."
+      },
+      {
+        "ruleId": "sonarjs/no-clear-text-protocols",
+        "line": 364,
+        "message": "Using ftp protocol is insecure. Use sftp, scp or ftps instead."
+      },
+      {
+        "ruleId": "sonarjs/no-clear-text-protocols",
+        "line": 366,
+        "message": "Using ftp protocol is insecure. Use sftp, scp or ftps instead."
+      }
+    ]
+  },
+  {
+    "file": "tests/domain/unsupported-components.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 10,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 13,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/e2e/_targets.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 24,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 25,
+        "message": "Make sure publicly writable directories are used safely here."
+      }
+    ]
+  },
+  {
+    "file": "tests/edge/handlers/marketplace/remove.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 218,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/edge/handlers/plugin/bootstrap.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-unused-vars",
+        "line": 248,
+        "message": "Remove the declaration of the unused '_auth' variable."
+      }
+    ]
+  },
+  {
+    "file": "tests/edge/handlers/plugin/install.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 314,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/edge/handlers/plugin/pending.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 174,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/edge/handlers/plugin/reinstall.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 304,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/edge/handlers/plugin/uninstall.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 272,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/edge/handlers/plugin/update.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 425,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/edge/handlers/tools.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 406,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/edge/register.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-unused-vars",
+        "line": 336,
+        "message": "Remove the declaration of the unused '_auth' variable."
+      }
+    ]
+  },
+  {
+    "file": "tests/edge/types.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-empty-test-file",
+        "line": 0,
+        "message": "Add some tests to this file or delete it."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 80,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 81,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 89,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 91,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 97,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 103,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 112,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 123,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 132,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 145,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/integration/auth-e2e.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 214,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 263,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 300,
+        "message": "Review this potentially hard-coded password."
+      }
+    ]
+  },
+  {
+    "file": "tests/integration/concurrent-install.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 197,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 216,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 233,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/integration/hooks-additionalcontext-end-to-end.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 98,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 100,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 101,
+        "message": "Make sure publicly writable directories are used safely here."
+      }
+    ]
+  },
+  {
+    "file": "tests/integration/hooks-cross-scope-reconcile.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 210,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/integration/hooks-dispatch-end-to-end.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 69,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 71,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 72,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 76,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 107,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 109,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 110,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 114,
+        "message": "Make sure publicly writable directories are used safely here."
+      }
+    ]
+  },
+  {
+    "file": "tests/integration/hooks-spawn-end-to-end.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 98,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 100,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 101,
+        "message": "Make sure publicly writable directories are used safely here."
+      }
+    ]
+  },
+  {
+    "file": "tests/integration/load-reconcile-race.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 263,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/integration/provenance-invisibility.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-os-command-from-path",
+        "line": 58,
+        "message": "Make sure the \"PATH\" variable only contains fixed, unwriteable directories."
+      }
+    ]
+  },
+  {
+    "file": "tests/integration/skill-path-resolution.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-os-command-from-path",
+        "line": 72,
+        "message": "Make sure the \"PATH\" variable only contains fixed, unwriteable directories."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/auth-host.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 100,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 120,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 217,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 222,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 227,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 252,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 256,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 471,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 476,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 490,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 494,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 522,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 526,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-nested-conditional",
+        "line": 553,
+        "message": "Extract this nested ternary operation into an independent statement."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 605,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 611,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 619,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 682,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 688,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 705,
+        "message": "Review this potentially hard-coded password."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/import/execute.messaging.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 11,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 20,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 22,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/import/index.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 19,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 20,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 21,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 23,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 37,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 44,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 46,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 48,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 50,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 52,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 54,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 56,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 60,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/import/types.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-empty-test-file",
+        "line": 0,
+        "message": "Add some tests to this file or delete it."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 20,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 21,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 22,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 23,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 24,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 25,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 26,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 27,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 28,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 39,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 45,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 51,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 52,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 64,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 91,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 98,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 108,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 114,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 134,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 141,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 151,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 162,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 183,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 198,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 240,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 276,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 281,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 283,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 285,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 287,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 289,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 291,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 293,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 294,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 300,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 301,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 307,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 314,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 315,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 322,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 323,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 330,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 332,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 333,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 341,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 344,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 346,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 348,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 350,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 352,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 354,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 356,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 358,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 360,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 362,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 364,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/marketplace/add.messaging.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 9,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 12,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 16,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/marketplace/add.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 963,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 1104,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 1129,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 1199,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 1222,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 1548,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 1583,
+        "message": "Review this potentially hard-coded password."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/marketplace/list.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-nested-conditional",
+        "line": 103,
+        "message": "Extract this nested ternary operation into an independent statement."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/marketplace/remove.messaging.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 12,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 15,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 17,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 25,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 27,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 36,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 52,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/marketplace/shared.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 85,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 86,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 87,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/marketplace/update.messaging.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 13,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 22,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 31,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/marketplace/update.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-nested-template-literals",
+        "line": 211,
+        "message": "Refactor this code to not use nested template literals."
+      },
+      {
+        "ruleId": "sonarjs/no-identical-functions",
+        "line": 1992,
+        "message": "Update this function so that its implementation is not identical to the one on line 1886."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 3080,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/different-types-comparison",
+        "line": 3119,
+        "message": "Remove this \"!==\" check; it will always be true. Did you mean to use \"!=\"?"
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 3122,
+        "message": "Review this potentially hard-coded password."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/bootstrap.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-unused-vars",
+        "line": 71,
+        "message": "Remove the declaration of the unused '_auth' variable."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/clone-cache.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 1195,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/clone-gc.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 82,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/enable-disable.messaging.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 24,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 25,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/enable-disable.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 258,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 259,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 262,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 263,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 267,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 1970,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 2021,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 2383,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/assertions-in-tests",
+        "line": 2712,
+        "message": "Add at least one assertion to this test case."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 2735,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 3243,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/no-identical-functions",
+        "line": 3932,
+        "message": "Update this function so that its implementation is not identical to the one on line 3791."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/fetch.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 709,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 1871,
+        "message": "Review this potentially hard-coded password."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/info.messaging.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 11,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 14,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 16,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/info.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 1267,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 1287,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/install-flow.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 192,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 214,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 3020,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/super-linear-regex",
+        "line": 3399,
+        "message": "Simplify this regular expression to reduce its runtime, as it has super-linear performance due to backtracking."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 9088,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 9130,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 9137,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 9266,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/install.messaging.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 36,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/list-flow.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 62,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 64,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/list.messaging.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 11,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 18,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 26,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/plugin-state-classifier.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 15,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 16,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 20,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 24,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 33,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/reinstall-flow.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-nested-template-literals",
+        "line": 363,
+        "message": "Refactor this code to not use nested template literals."
+      },
+      {
+        "ruleId": "sonarjs/super-linear-regex",
+        "line": 950,
+        "message": "Simplify this regular expression to reduce its runtime, as it has super-linear performance due to backtracking."
+      },
+      {
+        "ruleId": "sonarjs/super-linear-regex",
+        "line": 951,
+        "message": "Simplify this regular expression to reduce its runtime, as it has super-linear performance due to backtracking."
+      },
+      {
+        "ruleId": "sonarjs/different-types-comparison",
+        "line": 2175,
+        "message": "Remove this \"!==\" check; it will always be true. Did you mean to use \"!=\"?"
+      },
+      {
+        "ruleId": "sonarjs/no-invariant-returns",
+        "line": 2325,
+        "message": "Refactor this function to not always return the same value."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 5769,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-invariant-returns",
+        "line": 7052,
+        "message": "Refactor this function to not always return the same value."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/reinstall-replace.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-undefined-argument",
+        "line": 174,
+        "message": "Remove this redundant \"undefined\"."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/reinstall.messaging.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 27,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 34,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 41,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/shared.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/assertions-in-tests",
+        "line": 1855,
+        "message": "Add at least one assertion to this test case."
+      },
+      {
+        "ruleId": "sonarjs/assertions-in-tests",
+        "line": 1866,
+        "message": "Add at least one assertion to this test case."
+      },
+      {
+        "ruleId": "sonarjs/assertions-in-tests",
+        "line": 1894,
+        "message": "Add at least one assertion to this test case."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/state-fifo.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-os-command-from-path",
+        "line": 175,
+        "message": "Make sure the \"PATH\" variable only contains fixed, unwriteable directories."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/uninstall.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-identical-functions",
+        "line": 1042,
+        "message": "Update this function so that its implementation is not identical to the one on line 876."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 3049,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 4217,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/update-flow.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-nested-template-literals",
+        "line": 511,
+        "message": "Refactor this code to not use nested template literals."
+      },
+      {
+        "ruleId": "sonarjs/different-types-comparison",
+        "line": 2559,
+        "message": "Remove this \"!==\" check; it will always be true. Did you mean to use \"!=\"?"
+      },
+      {
+        "ruleId": "sonarjs/different-types-comparison",
+        "line": 2561,
+        "message": "Remove this \"!==\" check; it will always be true. Did you mean to use \"!=\"?"
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 6956,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 7088,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/plugin/update.messaging.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 11,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 20,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 29,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 36,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/reconcile/apply-outcomes.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 36,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 37,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 38,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 39,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 45,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 46,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 52,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 57,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 68,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 80,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 87,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 94,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 101,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 113,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 120,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 130,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 137,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 143,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 149,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 156,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 162,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 169,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 172,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 174,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 175,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 182,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 188,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 195,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 201,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 208,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 215,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 224,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 233,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 242,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 249,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 257,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 264,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 272,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 279,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 287,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 295,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 302,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 309,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 316,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 323,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 330,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 338,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/reconcile/apply.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-unused-vars",
+        "line": 184,
+        "message": "Remove the declaration of the unused '_auth' variable."
+      },
+      {
+        "ruleId": "sonarjs/no-unused-vars",
+        "line": 198,
+        "message": "Remove the declaration of the unused '_auth' variable."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 923,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 2119,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 2518,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/reconcile/notify.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-identical-functions",
+        "line": 1929,
+        "message": "Update this function so that its implementation is not identical to the one on line 1910."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/reconcile/reconcile.messaging.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 22,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 23,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 24,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 25,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 26,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 33,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 40,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 46,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 52,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 58,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 65,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 67,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 69,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/reconcile/types.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 108,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 109,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 110,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 111,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 113,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 124,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 131,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 145,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 151,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 167,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 173,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 181,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 186,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 193,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 199,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 204,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 211,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 216,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 223,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 228,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 235,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 242,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 249,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 255,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 263,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 268,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 275,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 281,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 291,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 298,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 307,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 316,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 322,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 336,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 348,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 350,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 352,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 354,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 356,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 358,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 360,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 362,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 364,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/orchestrators/types.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-empty-test-file",
+        "line": 0,
+        "message": "Add some tests to this file or delete it."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 81,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 82,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 83,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 84,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 85,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 86,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 186,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 187,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 188,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 189,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 190,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 191,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 192,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 193,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 194,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 197,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 198,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 199,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 203,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 239,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 240,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 241,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 242,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 244,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 252,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 262,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 275,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 285,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 295,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 305,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 320,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 336,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 338,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 349,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 360,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 369,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 380,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 395,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 408,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 421,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 431,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 441,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 451,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 471,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 480,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 482,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 489,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 496,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 504,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 513,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 522,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 531,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 540,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 549,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 557,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 569,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 578,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/persistence/agents-index-schema.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 14,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 28,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 47,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 49,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 51,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/persistence/config-io.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 16,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 22,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/persistence/locations.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-selector-parameter",
+        "line": 73,
+        "message": "Provide multiple methods instead of using \"hadAgentDirectory\" to determine which action to take."
+      }
+    ]
+  },
+  {
+    "file": "tests/persistence/migrate-config.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 27,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 35,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/persistence/migrate.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 13,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 15,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/persistence/state-io.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 30,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 41,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/platform/credential-ops-contract.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 144,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 163,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 230,
+        "message": "Review this potentially hard-coded password."
+      },
+      {
+        "ruleId": "sonarjs/assertions-in-tests",
+        "line": 319,
+        "message": "Add at least one assertion to this test case."
+      }
+    ]
+  },
+  {
+    "file": "tests/platform/git-credential.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 14,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/no-hardcoded-passwords",
+        "line": 94,
+        "message": "Review this potentially hard-coded password."
+      }
+    ]
+  },
+  {
+    "file": "tests/platform/git-ops-fake.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-identical-functions",
+        "line": 84,
+        "message": "Update this function so that its implementation is not identical to the one on line 76."
+      },
+      {
+        "ruleId": "sonarjs/no-identical-functions",
+        "line": 92,
+        "message": "Update this function so that its implementation is not identical to the one on line 76."
+      }
+    ]
+  },
+  {
+    "file": "tests/platform/git.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 1079,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/platform/hermetic-environment.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-selector-parameter",
+        "line": 19,
+        "message": "Provide multiple methods instead of using \"hadValue\" to determine which action to take."
+      }
+    ]
+  },
+  {
+    "file": "tests/platform/pi-api.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 31,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 32,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 33,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 34,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 38,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 39,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 40,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 41,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 42,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 43,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 44,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 45,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 46,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 47,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 48,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 49,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 50,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 51,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 56,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 61,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 66,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 70,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 71,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 75,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 76,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 77,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 80,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 81,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 86,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 88,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 90,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 92,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 94,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 96,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 98,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 100,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 102,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 104,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 128,
+        "message": "Make sure publicly writable directories are used safely here."
+      },
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 134,
+        "message": "Make sure publicly writable directories are used safely here."
+      }
+    ]
+  },
+  {
+    "file": "tests/scripts/check-phase-06-hub-ledger.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-nested-template-literals",
+        "line": 228,
+        "message": "Refactor this code to not use nested template literals."
+      },
+      {
+        "ruleId": "sonarjs/no-nested-template-literals",
+        "line": 232,
+        "message": "Refactor this code to not use nested template literals."
+      }
+    ]
+  },
+  {
+    "file": "tests/shared/concerns/hooks.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 11,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 23,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 24,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 31,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 34,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 37,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 40,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 43,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 46,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 49,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/shared/concerns/soft-dep.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 9,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 10,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 12,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/shared/errors-bridges.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 15,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 20,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/shared/errors.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 43,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 48,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 53,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 58,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 59,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 61,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 63,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 68,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 73,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 80,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 87,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 89,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 90,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 91,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 92,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 94,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 96,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 102,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 108,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/shared/notification-grammar.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/publicly-writable-directories",
+        "line": 276,
+        "message": "Make sure publicly writable directories are used safely here."
+      }
+    ]
+  },
+  {
+    "file": "tests/shared/notification-types.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 201,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 202,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 203,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 204,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 205,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 206,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 207,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 209,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 217,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 225,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/shared/notify-context.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 40,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 42,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 49,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 50,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 54,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 59,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 65,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 69,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 74,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 78,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 120,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/shared/notify-reasons.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 13,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 14,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 15,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 16,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 17,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 18,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 19,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 20,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 21,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 22,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 23,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 24,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 25,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 26,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 27,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 28,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 29,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 30,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 32,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 34,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 36,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 38,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 39,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 41,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 48,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/shared/path-safety.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 138,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      },
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 170,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/shared/session-env.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/no-alphabetical-sort",
+        "line": 91,
+        "message": "Provide a compare function that depends on \"String.localeCompare\", to reliably sort elements alphabetically."
+      }
+    ]
+  },
+  {
+    "file": "tests/shared/types.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 6,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 7,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 9,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 11,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/shared/vars.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 9,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 14,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 21,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 29,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 32,
+        "message": "Remove this use of the \"void\" operator."
+      },
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 35,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  },
+  {
+    "file": "tests/transaction/phase-ledger.test.ts",
+    "findings": [
+      {
+        "ruleId": "sonarjs/void-use",
+        "line": 113,
+        "message": "Remove this use of the \"void\" operator."
+      }
+    ]
+  }
+]

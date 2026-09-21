@@ -1,5 +1,10 @@
 # ai harnesses
+# third-party skills; scripts/init.sh fetches the latest version of each
 /.agents/skills/herdr/
+/.agents/skills/humanizer/
+/.agents/skills/simple-english/
+# fetch record for the skills above, not a version pin (see CONTRIBUTING.md)
+/skills-lock.json
 
 # pi
 /.pi/git/
@@ -19,6 +24,7 @@
 /.claude/gsd-core/*
 /.claude/gsd-file-manifest.json
 /.claude/gsd-install-state.json
+/.claude/gsd-local-patches/*
 /.claude/gsd-migration-journal/*
 /.claude/hooks/gsd-*
 /.claude/hooks/lib/
@@ -28,6 +34,8 @@
 /.claude/package.json
 /.claude/scripts/*
 /.claude/skills/herdr
+/.claude/skills/humanizer
+/.claude/skills/simple-english
 /.claude/skills/spike-findings-*/
 
 # codex
@@ -37,6 +45,7 @@
 /.codex/gsd-core/*
 /.codex/gsd-file-manifest.json
 /.codex/gsd-install-state.json
+/.codex/gsd-local-patches/*
 /.codex/gsd-migration-journal/*
 # hooks.json is not ideal
 /.codex/hooks.json

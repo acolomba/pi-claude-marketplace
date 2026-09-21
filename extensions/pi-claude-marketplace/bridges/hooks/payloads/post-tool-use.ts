@@ -29,7 +29,10 @@ export interface PostToolUseStdin {
   readonly tool_response: unknown;
 }
 
-export function translate(event: ToolResultEvent, ctx: TranslationContext): PostToolUseStdin {
+export function translatePostToolUse(
+  event: ToolResultEvent,
+  ctx: TranslationContext,
+): PostToolUseStdin {
   return {
     session_id: ctx.sessionId,
     transcript_path: ctx.transcriptPath,

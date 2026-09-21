@@ -37,9 +37,9 @@
 //     `stop` debug-log the dropped reason and return `undefined`. NEVER
 //     notify. NEVER throw.
 //
-// Exhaustiveness gate: each adapter exhaustively switches on `result.kind`
-// and calls `assertNever` on the impossible default arm (NFR-7). Adding a
-// fifth `HookExecResult` arm would fail `tsc` at the call site.
+// Exhaustiveness gate: each adapter switches on every `result.kind` with no
+// default arm (NFR-7). Adding a fifth `HookExecResult` arm fails `tsc` and
+// the `switch-exhaustiveness-check` lint rule at each switch.
 //
 // Mutation surface: tool_call mutates `event.input` (Record<string,
 // unknown>), tool_result mutates `event.content` (the Pi-side
@@ -49,8 +49,7 @@
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 
-import { assertNever, type HookExecResult } from "./exec-result.ts";
-
+import type { HookExecResult } from "./exec-result.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type {
@@ -103,16 +102,28 @@ export function applyMutationInPlace(
 
 /**
  * CR-01: reject non-object patches (null, array, primitive) early so a hook
- * returning `updatedInput: null` cannot trip `Object.assign`'s null-source
- * path or pollute via array index keys. The patch must be a plain object
- * shape; anything else is silently dropped.
+ * returning `updatedInput: null` cannot pollute via array index keys. The
+ * patch must be a plain object shape; anything else is silently dropped.
+ *
+ * Copies own enumerable keys one at a time via `Object.entries` rather than
+ * `Object.assign`, skipping an own `"__proto__"` key: `JSON.parse` creates
+ * `__proto__` as an ordinary own data property (not the prototype link), so
+ * a hook-supplied patch carrying that key would otherwise let
+ * `Object.assign` reassign `event.input`'s prototype.
  */
 function applyToolCallInputPatch(event: ToolCallEvent, updatedInput: unknown): void {
   if (updatedInput === null || typeof updatedInput !== "object" || Array.isArray(updatedInput)) {
     return;
   }
 
-  Object.assign(event.input as Record<string, unknown>, updatedInput as Record<string, unknown>);
+  const target = event.input as Record<string, unknown>;
+  for (const [key, value] of Object.entries(updatedInput as Record<string, unknown>)) {
+    if (key === "__proto__") {
+      continue;
+    }
+
+    target[key] = value;
+  }
 }
 
 /**
@@ -128,13 +139,13 @@ function applyToolResultPatch(event: ToolResultEvent, updatedToolOutput: unknown
     return;
   }
 
-  const patch = updatedToolOutput as { content?: unknown; isError?: unknown };
+  const patch = updatedToolOutput as Partial<Pick<ToolResultEvent, "content" | "isError">>;
   if (Array.isArray(patch.content)) {
-    (event as { content: unknown }).content = patch.content;
+    event.content = patch.content;
   }
 
   if (typeof patch.isError === "boolean") {
-    (event as { isError: boolean }).isError = patch.isError;
+    event.isError = patch.isError;
   }
 }
 
@@ -170,9 +181,6 @@ export function adaptToolCallResult(
 
     case "noop":
       return undefined;
-
-    default:
-      return assertNever(result);
   }
 }
 
@@ -222,9 +230,6 @@ export function adaptToolResultResult(
 
     case "noop":
       return undefined;
-
-    default:
-      return assertNever(result);
   }
 }
 
@@ -262,9 +267,6 @@ export function adaptInputResult(
 
     case "noop":
       return undefined;
-
-    default:
-      return assertNever(result);
   }
 }
 
@@ -301,9 +303,8 @@ export function adaptInputResult(
  *       prompt. Deferred per D-60-03. `block` / `stop` are still
  *       debug-logged for observability.
  *
- * The adapter NEVER notifies and NEVER throws. `assertNever` only fires
- * when `HookExecResult` grows a new arm, which is a compile-time failure
- * at this call site (NFR-7).
+ * The adapter NEVER notifies and NEVER throws. A new `HookExecResult` arm
+ * is a compile-time failure at this switch (NFR-7).
  */
 export function adaptObservationResultForEvent(
   runtime: HooksRuntime,
@@ -346,8 +347,5 @@ export function adaptObservationResultForEvent(
 
     case "noop":
       return undefined;
-
-    default:
-      return assertNever(result);
   }
 }

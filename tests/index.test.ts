@@ -48,6 +48,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { It, when } from "strong-mock";
 
 import claudeMarketplaceExtension from "../extensions/pi-claude-marketplace/index.ts";
+import * as entryModule from "../extensions/pi-claude-marketplace/index.ts";
 import { EXTENSION_VERSION } from "../extensions/pi-claude-marketplace/shared/extension-version.ts";
 
 import { createNotificationBoundary } from "./edge/notification-boundary.ts";
@@ -759,6 +760,18 @@ async function seedInvalidConfig(cwd: string): Promise<void> {
   );
 }
 
+test("EXPORT-02: the entry module publishes exactly its default and nothing else", () => {
+  // arrange
+  const published = Object.keys(entryModule);
+
+  // act
+  const exported = entryModule.default;
+
+  // assert
+  assert.deepStrictEqual(published, ["default"]);
+  assert.strictEqual(exported, claudeMarketplaceExtension);
+});
+
 test("registers the slash command and the two read-only tools alongside the bridge surface", async (t) => {
   // arrange
   await createHermeticScope(t, "registration");
@@ -776,7 +789,7 @@ test("registers the slash command and the two read-only tools alongside the brid
   verifyBoundary();
 });
 
-test("constructs one runtime and completion cache for edge registration, hook hydration, and plugin update", async () => {
+test("constructs one runtime, completion cache and reconcile operation per extension load", async () => {
   // arrange
   const source = await readFile(
     path.join(import.meta.dirname, "../extensions/pi-claude-marketplace/index.ts"),
@@ -788,6 +801,7 @@ test("constructs one runtime and completion cache for edge registration, hook hy
     source.match(/createHooksRouting\(hooksRuntime, \{ readHooksJson \}\)/g) ?? [];
   const updateConstructions =
     source.match(/createPluginUpdateOperations\(hooksRouting, completionCache\)/g) ?? [];
+  const reconcileConstructions = source.match(/createApplyReconcile\(\{ loadState \}\)/g) ?? [];
 
   // act
   const hydrationConstruction = source.match(
@@ -806,6 +820,7 @@ test("constructs one runtime and completion cache for edge registration, hook hy
   assert.deepStrictEqual(hydrationConstruction, [
     "createHooksHydration(hooksRuntime, { loadState, readHooksJson })",
   ]);
+  assert.deepStrictEqual(reconcileConstructions, ["createApplyReconcile({ loadState })"]);
 });
 
 test("keeps hook routing and command completion state inside each extension-load owner graph", async (t) => {

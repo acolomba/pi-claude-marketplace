@@ -2,8 +2,9 @@
 //
 // Cross-subcommand helpers (D-01 -- shared.ts cap ~300 LOC).
 //
-//   - GitOps interface + DEFAULT_GIT_OPS (D-12, D-13). Five primitives:
-//     clone + fetch + forceUpdateRef + checkout + resolveRef.
+//   - GitOps interface + DEFAULT_GIT_OPS (D-12, D-13). Seven primitives:
+//     clone + fetch + forceUpdateRef + checkout + resolveRef +
+//     currentBranch + resolveRemoteRef.
 //     NO `pull` -- D-14 follow-upstream-blindly semantics require the
 //     three-step force-overwrite path that `pull --ff-only` cannot
 //     express.
@@ -63,9 +64,13 @@ import type { Scope } from "../../shared/types.ts";
  * removal, diagnostics, tests) can read individual failure reasons WITHOUT
  * re-parsing the textual message. The message formatting is preserved for the
  * user-visible surface.
+ *
+ * @param message The formatted user-visible failure message.
+ * @param failedAgents The structured per-agent failures from the agents bridge.
  */
 export class AgentsUnstageFailureError extends Error {
   readonly failedAgents: readonly UnstageAgentFailure[];
+
   constructor(message: string, failedAgents: readonly UnstageAgentFailure[]) {
     super(message);
     this.name = "AgentsUnstageFailureError";
@@ -532,7 +537,7 @@ export function classifyAutoupdateFlip(
  * caller's withStateGuard wraps the state mutation that follows; an
  * additional fresh load happens inside that guard.
  */
-export async function resolveScopeFromState(
+async function resolveScopeFromState(
   mpName: string,
   userLocations: ScopedLocations,
   projectLocations: ScopedLocations,
@@ -660,8 +665,7 @@ export async function loadVisibleMarketplaces(opts: {
 
 // ───────────────────────────────────────────────────────────────────────────
 // It lives here, beside `AgentsUnstageFailureError`, because that class is the
-// first thing it dispatches on. It was declared in remove.ts and reached
-// through a `__test_` re-export; a narrower kept apart from the error it
+// first thing it dispatches on. A narrower kept apart from the error it
 // narrows is how two cascade-failure mappings drift (FLOW-09).
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -669,8 +673,11 @@ export async function loadVisibleMarketplaces(opts: {
  * Narrow a per-plugin cascade Error.cause to a closed-set Reason for the
  * failed-plugin children block by dispatching on the typed cause
  * (`AgentsUnstageFailureError` or `NodeJS.ErrnoException.code`) rather than
- * substring-matching message text. Falls back to `"not in manifest"` as the
- * permissive default when no typed case matches.
+ * substring-matching message text. Falls back to `"not in manifest"` when no
+ * typed case matches -- the closed `ContentReason` vocabulary has no
+ * "unclassified" member, so an untyped error or an unrecognized errno code
+ * is mislabeled as this token; the raw `cause` still travels alongside it,
+ * so the real failure survives in the cause-chain trailer.
  */
 export function narrowCascadeFailure(cause: Error): ContentReason {
   if (cause instanceof AgentsUnstageFailureError) {

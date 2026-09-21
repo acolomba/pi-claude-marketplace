@@ -4,7 +4,6 @@
 // is silently treated as already-removed. Skills have no on-disk index and
 // no foreign-content marker (D-06: skills dir is owned end-to-end by name).
 
-import { rm } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
@@ -24,10 +23,14 @@ export interface SkillsUnstageRemover {
  * validated, but state.json corruption could surface bad names) and routed
  * through `assertPathInside` to refuse traversal escapes.
  *
- * `removedNames` lists names whose target dir actually existed pre-call;
- * ENOENT names are silently skipped (idempotent unstage). The existence
- * check is `pathExists` (lstat-based, non-symlink-following) BEFORE rm so
- * the result faithfully reports work done rather than work attempted.
+ * `removedNames` lists names whose target dir existed pre-call (via the
+ * `pathExists` lstat-based, non-symlink-following check BEFORE rm) AND whose
+ * `remover.removeTree` call resolved without throwing. A post-call ENOENT
+ * (TOCTOU race) is treated the same as a pre-call miss and excluded from
+ * `removedNames` -- even if `removeTree` performed the removal itself before
+ * reporting ENOENT. `removedNames` therefore reflects `removeTree`'s own
+ * success signal, not a guaranteed record of every directory actually
+ * removed.
  */
 export function createUnstagePluginSkills(
   remover: SkillsUnstageRemover,
@@ -66,12 +69,3 @@ export function createUnstagePluginSkills(
     };
   };
 }
-
-const NODE_SKILLS_UNSTAGE_REMOVER: SkillsUnstageRemover = {
-  async removeTree(target: string): Promise<void> {
-    await rm(target, { recursive: true, force: true });
-  },
-};
-
-/** Removes recorded skill trees through the Node filesystem adapter. */
-export const unstagePluginSkills = createUnstagePluginSkills(NODE_SKILLS_UNSTAGE_REMOVER);

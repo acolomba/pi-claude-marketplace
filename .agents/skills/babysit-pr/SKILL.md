@@ -3,10 +3,13 @@ name: babysit-pr
 description: After a PR is opened (e.g. by /gsd-ship), drive it to a clean state — pass the project's TypeScript review skills under skills/ and the pr-review-toolkit review, then get the SonarQube PR quality gate green — with the heavy work delegated to subagents. Invoke manually; not automatic.
 argument-hint: "[PR number] (defaults to the current branch's PR)"
 disable-model-invocation: true
+model: sonnet
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob, Agent, Skill, mcp__sonarqube__*
 ---
 
 # Babysit PR
+
+Run every subagent this skill spawns on Sonnet in Claude Code, or on gpt-5.6-terra where Sonnet is not offered.
 
 Take an already-open pull request and harden it in two phases: a local **review-convergence** loop, then a **SonarQube** pass once CI has analyzed the pushed head. The point is to hand a human reviewer a PR that already clears the automated bars, with the expensive review and fixing done in subagents rather than in this conversation's context.
 
@@ -26,7 +29,7 @@ Converge the PR's diff to review-clean before Sonar even runs. One review pass i
    - `skills/typescript-google-style-review/SKILL.md` for every changed `.ts` file.
    - `skills/typescript-unit-testing-review/SKILL.md` for every changed `tests/**/*.test.ts` file, and for every changed production module together with its paired test (`extensions/.../x.ts` ↔ `tests/.../x.test.ts`) — the skill reviews the pair, so send a source module and its test to the same subagent.
 
-   Spawn one subagent per file or source–test pair, in parallel only over disjoint file sets. Each subagent loops on its own files: run the applicable skill(s), fix every finding at its root, run the skill again, and stop only when the skill comes back clean — cap three passes per file. A subagent edits only its own files and does not commit; when the batch returns, run the project's checks once and commit the pass, staging explicit paths (never `git add -A`). A file that has not converged after three passes is reported, not ground on.
+   Batch units (files or source–test pairs) into groups of 5–10 per subagent instead of one per file — group by module/directory where the split allows it, sizing toward 5 for large or complex files and toward 10 for small ones, so a large PR does not spend its context on a subagent per file. Spawn one subagent per batch, in parallel only over disjoint file sets. Each subagent loops over its batch: run the applicable skill(s) on each file, fix every finding at its root, run the skill again, and stop on a file only when the skill comes back clean for it — cap three passes per file. A subagent edits only its own files and does not commit; when the batch returns, run the project's checks once and commit the pass, staging explicit paths (never `git add -A`). A file that has not converged after three passes is reported, not ground on.
 
 3. **Toolkit review.** Run `/pr-review-toolkit:review-pr` over all applicable aspects. Its specialized reviewers run as subagents. It sorts findings into **Critical** (must fix), **Important** (should fix), **Suggestions** (advisory), and **Strengths**.
 

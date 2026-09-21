@@ -1,10 +1,58 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
 import { discoverPluginAgents } from "../../../extensions/pi-claude-marketplace/bridges/agents/discover.ts";
+
+for (const { title, firstFile, secondFile, firstBytes, raw } of [
+  {
+    title: "same-directory frontmatter names",
+    firstFile: "a-first.md",
+    secondFile: "z-second.md",
+    firstBytes: "---\nname: shared\ntools: Read\n---\nfirst body\n",
+    raw: { name: "shared", tools: "Read" },
+  },
+  {
+    title: "filename fallback names",
+    firstFile: "shared.md",
+    secondFile: "z-second.md",
+    firstBytes: "first body\n",
+    raw: {},
+  },
+]) {
+  test(`keeps the first exact source for ${title} with both complete paths`, async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-exact-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const firstPath = path.join(directory, firstFile);
+    const secondPath = path.join(directory, secondFile);
+    await writeFile(firstPath, firstBytes);
+    await writeFile(secondPath, "---\nname: shared\n---\nsecond body\n");
+
+    // act
+    const discovery = await discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] });
+
+    // assert
+    assert.deepStrictEqual(discovery, {
+      discovered: [
+        {
+          sourceName: "shared",
+          generatedName: "pi-claude-marketplace-acme-shared",
+          sourcePath: firstPath,
+          sourceHash: createHash("sha256").update(firstBytes).digest("hex"),
+          raw,
+          body: "first body\n",
+        },
+      ],
+      warnings: [
+        `agent source "shared" at "${secondPath}" duplicates generated name "pi-claude-marketplace-acme-shared" already produced by agent source "shared" at "${firstPath}"; keeping first discovered source.`,
+      ],
+    });
+  });
+}
 
 test("discovers flat markdown agents in source order with complete records", async (t) => {
   // arrange
@@ -28,7 +76,7 @@ test("discovers flat markdown agents in source order with complete records", asy
     discovered: [
       {
         sourceName: "acme-helper",
-        generatedName: "pi-claude-marketplace-acme-helper",
+        generatedName: "pi-claude-marketplace-acme-acme-helper",
         sourcePath: helperPath,
         sourceHash: "af6c30f084d68c095f606272c9e31a10f3aafc0e8796e2a167be6ebd46f8106c",
         raw: {
@@ -233,7 +281,7 @@ test("keeps the first generated name across agent directories and reports the du
       },
     ],
     warnings: [
-      `agent source "shared" in "${secondDirectory}" elides to generated name "pi-claude-marketplace-acme-shared" already produced by an earlier componentPaths.agents entry; ignoring duplicate.`,
+      `agent source "shared" at "${path.join(secondDirectory, "shared.md")}" duplicates generated name "pi-claude-marketplace-acme-shared" already produced by agent source "shared" at "${firstPath}"; keeping first discovered source.`,
     ],
   };
 
@@ -245,9 +293,34 @@ test("keeps the first generated name across agent directories and reports the du
 
   // assert
   assert.deepStrictEqual(discovery, expectedDiscovery);
+
+  // act
+  const reversed = await discoverPluginAgents({
+    pluginName: "acme",
+    agentsDirs: [secondDirectory, firstDirectory],
+  });
+
+  // assert
+  assert.deepStrictEqual(reversed, {
+    discovered: [
+      {
+        sourceName: "shared",
+        generatedName: "pi-claude-marketplace-acme-shared",
+        sourcePath: path.join(secondDirectory, "shared.md"),
+        sourceHash: createHash("sha256")
+          .update("---\nname: shared\ntools: Write\n---\nsecond body\n")
+          .digest("hex"),
+        raw: { name: "shared", tools: "Write" },
+        body: "second body\n",
+      },
+    ],
+    warnings: [
+      `agent source "shared" at "${firstPath}" duplicates generated name "pi-claude-marketplace-acme-shared" already produced by agent source "shared" at "${path.join(secondDirectory, "shared.md")}"; keeping first discovered source.`,
+    ],
+  });
 });
 
-test("keeps the first source when distinct names collide after plugin-prefix elision", async (t) => {
+test("preserves distinct complete source names without a duplicate warning", async (t) => {
   // arrange
   const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-elided-collision-"));
   t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
@@ -258,16 +331,22 @@ test("keeps the first source when distinct names collide after plugin-prefix eli
     discovered: [
       {
         sourceName: "acme-reviewer",
-        generatedName: "pi-claude-marketplace-acme-reviewer",
+        generatedName: "pi-claude-marketplace-acme-acme-reviewer",
         sourcePath: firstPath,
         sourceHash: "4f1a28213ca1cd2f183a5679dd53221a9a7842eab3f713a0626cddecce6bfe65",
         raw: { name: "acme-reviewer" },
         body: "first\n",
       },
+      {
+        sourceName: "reviewer",
+        generatedName: "pi-claude-marketplace-acme-reviewer",
+        sourcePath: path.join(directory, "b-short.md"),
+        sourceHash: "a96ad208a08c2fc9202cf2f508546375d92fa6c9fd24fc446953700012aa838c",
+        raw: { name: "reviewer" },
+        body: "second\n",
+      },
     ],
-    warnings: [
-      `agent source "reviewer" in "${directory}" elides to generated name "pi-claude-marketplace-acme-reviewer" already produced by an earlier componentPaths.agents entry; ignoring duplicate.`,
-    ],
+    warnings: [],
   };
 
   // act
@@ -280,17 +359,30 @@ test("keeps the first source when distinct names collide after plugin-prefix eli
   assert.deepStrictEqual(discovery, expectedDiscovery);
 });
 
-test("rejects a source name that elides to an empty generated suffix", async (t) => {
+test("preserves a valid source ending in its plugin prefix", async (t) => {
   // arrange
-  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-empty-elision-"));
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-full-prefix-"));
   t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
-  await writeFile(path.join(directory, "empty.md"), "---\nname: acme-\n---\nbody\n");
+  const sourcePath = path.join(directory, "empty.md");
+  await writeFile(sourcePath, "---\nname: acme-\n---\nbody\n");
 
-  // act & assert
-  await assert.rejects(
-    () => discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] }),
-    { name: "Error", message: "Name must be a non-empty string." },
-  );
+  // act
+  const discovery = await discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        sourceName: "acme-",
+        generatedName: "pi-claude-marketplace-acme-acme-",
+        sourcePath,
+        sourceHash: "ff73ae6922b6dba7d5df325776d0e132ac109ae7c16ede7ecf55ca02793e736b",
+        raw: { name: "acme-" },
+        body: "body\n",
+      },
+    ],
+    warnings: [],
+  });
 });
 
 test("resolves the frontmatter name of a source led by a byte-order mark", async (t) => {

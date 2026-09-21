@@ -18,9 +18,13 @@
 // case that touches disk owns its own temporary roots and restores HOME and
 // PI_CODING_AGENT_DIR through a hook registered before the act phase.
 //
-// IL-2 is proved by sizing the notification boundary: `importClaudeSettings`
-// promises exactly one emission, so a second `ctx.ui.notify` call throws where it
-// is made rather than being counted afterwards.
+// IL-2 is proved by sizing the notification boundary: each case promises the
+// exact number of emissions it expects, so an extra `ctx.ui.notify` call
+// throws where it is made rather than being counted afterwards. A case whose
+// result carries `diagnostics` promises a second emission -- the sanctioned
+// `notifyDiagnostic` seam `importClaudeSettings` fires once after the
+// cascade (mirrors `reconcile/apply.ts`'s post-commit-warnings exception) --
+// every other case promises exactly one.
 
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -46,10 +50,8 @@ import { createNotificationBoundary } from "../../edge/notification-boundary.ts"
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
-import type {
-  HooksRouting,
-  HooksRuntime,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type {
   ClaudeImportExecutionResult,
   ImportClaudeSettingsOptions,
@@ -650,11 +652,13 @@ for (const { addMarketplace, cause, title } of [
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "A marketplace operation has failed.\n\n" +
-          "⊘ mp-a [user] (failed)\n\n" +
+          "Some operations have failed.\n\n" +
+          "⊘ mp-a [user] (failed)\n" +
+          "  ⊘ mp-a (failed)\n" +
+          `    cause: ${cause}\n\n` +
           "● mp-b [user] (added)\n  ● b (installed)\n\n" +
           "● mp-c [user] (added)\n  ● c (installed)\n\n" +
-          "Import: 1 failure, 4 successes\n\n" +
+          "Import: 2 failures, 4 successes\n\n" +
           "/reload to pick up changes",
         severity: "error",
       },
@@ -739,11 +743,13 @@ for (const { addMarketplace, cause, title } of [
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "A marketplace operation has failed.\n\n" +
+          "Some operations have failed.\n\n" +
           "● mp-a [user] (added)\n  ● a (installed)\n\n" +
-          "⊘ mp-b [user] (failed)\n\n" +
+          "⊘ mp-b [user] (failed)\n" +
+          "  ⊘ mp-b (failed)\n" +
+          `    cause: ${cause}\n\n` +
           "● mp-c [user] (added)\n  ● c (installed)\n\n" +
-          "Import: 1 failure, 4 successes\n\n" +
+          "Import: 2 failures, 4 successes\n\n" +
           "/reload to pick up changes",
         severity: "error",
       },
@@ -937,8 +943,11 @@ for (const { cause, declared, stored, title } of [
 test("fails a recorded marketplace whose stored source is unrecognized and renders its header", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "recorded-unknown");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 3);
   const cause = "unrecognized stored source format";
+  const diagnosticMessage =
+    'Marketplace "mp" has an unrecognized stored source format. ' +
+    "Verify state.json or remove and re-add the marketplace.";
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     marketplaceFailures: [addFailed("mp", "user", cause)],
@@ -947,9 +956,7 @@ test("fails a recorded marketplace whose stored source is unrecognized and rende
       {
         code: "unrecognized-stored-source",
         marketplace: "mp",
-        message:
-          'Marketplace "mp" has an unrecognized stored source format. ' +
-          "Verify state.json or remove and re-add the marketplace.",
+        message: diagnosticMessage,
         scope: "user",
         severity: "warning",
       },
@@ -985,10 +992,16 @@ test("fails a recorded marketplace whose stored source is unrecognized and rende
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "A marketplace operation has failed.\n\n" +
-        "⊘ mp [user] (failed)\n\n" +
-        "Import: 1 failure",
+        "Some operations have failed.\n\n" +
+        "⊘ mp [user] (failed)\n" +
+        "  ⊘ mp (failed)\n" +
+        `    cause: ${cause}\n\n` +
+        "Import: 2 failures",
       severity: "error",
+    },
+    {
+      message: `1 import diagnostic surfaced.\n\n${diagnosticMessage}`,
+      severity: "warning",
     },
   ]);
   verifyBoundary();
@@ -997,16 +1010,17 @@ test("fails a recorded marketplace whose stored source is unrecognized and rende
 test("warns about a plugin whose marketplace declares no supported source and renders no row for it", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "unmappable");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 3);
+  const unmappableDiagnosticMessage =
+    'Skipping Claude marketplace "unknown-mp" because it has no supported url, github, ' +
+    "or directory source (nested file/remote-marketplace.json sources are not importable).";
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     diagnostics: [
       {
         code: "unmappable-marketplace-source",
         marketplace: "unknown-mp",
-        message:
-          'Skipping Claude marketplace "unknown-mp" because it has no supported url, github, ' +
-          "or directory source (nested file/remote-marketplace.json sources are not importable).",
+        message: unmappableDiagnosticMessage,
         scope: "user",
         severity: "warning",
       },
@@ -1038,14 +1052,20 @@ test("warns about a plugin whose marketplace declares no supported source and re
 
   // assert
   assert.deepStrictEqual(importResult, expectedResult);
-  assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)\n\nImport: 0 successes" }]);
+  assert.deepStrictEqual(notifications, [
+    { message: "(no marketplaces)\n\nImport: 0 successes" },
+    {
+      message: `1 import diagnostic surfaced.\n\n${unmappableDiagnosticMessage}`,
+      severity: "warning",
+    },
+  ]);
   verifyBoundary();
 });
 
 test("carries the settings loader's own diagnostics onto the result", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "settings-diagnostics");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 3);
   const settingsDiagnostic: Diagnostic = {
     code: "malformed-json",
     message: "Unable to parse Claude base settings file: Unexpected token",
@@ -1073,7 +1093,13 @@ test("carries the settings loader's own diagnostics onto the result", async (t) 
 
   // assert
   assert.deepStrictEqual(importResult, expectedResult);
-  assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)\n\nImport: 0 successes" }]);
+  assert.deepStrictEqual(notifications, [
+    { message: "(no marketplaces)\n\nImport: 0 successes" },
+    {
+      message: `1 import diagnostic surfaced.\n\n${settingsDiagnostic.message}`,
+      severity: "warning",
+    },
+  ]);
   verifyBoundary();
 });
 
@@ -1458,7 +1484,7 @@ for (const { declaresAgents, declaresMcp, declaresWorkflows, marker } of [
 test("records each post-commit warning the installed outcome carried as its own diagnostic", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "post-commit");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 3);
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     addedMarketplaces: [added("mp", "user")],
@@ -1518,6 +1544,13 @@ test("records each post-commit warning the installed outcome carried as its own 
         "● mp [user] (added)\n  ● plugin (installed)\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
+    },
+    {
+      message:
+        "2 import diagnostics surfaced.\n\n" +
+        "data directory creation deferred: ENOSPC\n" +
+        "hook registration deferred: EACCES",
+      severity: "warning",
     },
   ]);
   verifyBoundary();
@@ -1686,7 +1719,7 @@ test("installs every plugin in orchestrated mode and never opts in to the defaul
 test("abandons only the scope whose state cannot be read and records why", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "state-unreadable");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 3);
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     addedMarketplaces: [added("mp-project", "project")],
@@ -1734,6 +1767,11 @@ test("abandons only the scope whose state cannot be read and records why", async
         "● mp-project [project] (added)\n  ● plugin (installed)\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
+    },
+    {
+      message:
+        "1 import diagnostic surfaced.\n\nCannot read user scope state: state.json is unreadable",
+      severity: "warning",
     },
   ]);
   verifyBoundary();
@@ -1919,7 +1957,7 @@ test("declares only the entries whose marketplace and install both succeeded", a
 test("abandons the post-pass for a scope whose config is invalid and still writes the other scope", async (t) => {
   // arrange
   const { cwd, project, user } = await createHermeticScopes(t, "batch-invalid");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 3);
   await createScopeRoots(project, user);
   const invalidBytes = "{ not valid json";
   await writeFile(user.configJsonPath, invalidBytes, "utf8");
@@ -1974,6 +2012,12 @@ test("abandons the post-pass for a scope whose config is invalid and still write
         "● mp-user [user] (added)\n  ● p (installed)\n\n" +
         "Import: 4 successes\n\n" +
         "/reload to pick up changes",
+    },
+    {
+      message:
+        "1 import diagnostic surfaced.\n\n" +
+        "Cannot write user scope claude-plugins.json: existing file is invalid.",
+      severity: "warning",
     },
   ]);
   verifyBoundary();
@@ -2232,21 +2276,22 @@ test("skips a repair for a marketplace the later scope plan never declared", asy
 test("records a diagnostic and keeps the result when the batched config write fails", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "batch-write-fails");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 3);
   await mkdir(project.scopeRoot, { recursive: true });
   // A regular file where the extension root belongs: taking the scope lock has
   // to create that directory first, so the post-pass fails before any write.
   await writeFile(project.extensionRoot, "not a directory", "utf8");
+  const writeFailureMessage =
+    "Failed to write project scope claude-plugins.json batched post-pass: " +
+    `EEXIST: file already exists, mkdir '${project.extensionRoot}'`;
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     addedMarketplaces: [added("mp", "project")],
     changedResources: true,
     diagnostics: [
       {
-        code: "settings-read-error",
-        message:
-          "Failed to write project scope claude-plugins.json batched post-pass: " +
-          `EEXIST: file already exists, mkdir '${project.extensionRoot}'`,
+        code: "settings-write-error",
+        message: writeFailureMessage,
         scope: "project",
         severity: "warning",
       },
@@ -2283,6 +2328,10 @@ test("records a diagnostic and keeps the result when the batched config write fa
         "● mp [project] (added)\n  ● plugin (installed)\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
+    },
+    {
+      message: `1 import diagnostic surfaced.\n\n${writeFailureMessage}`,
+      severity: "warning",
     },
   ]);
   verifyBoundary();

@@ -27,16 +27,16 @@ const RESTRICTED_PATHS = "import-x/no-restricted-paths";
 
 /** One zone of the `import-x/no-restricted-paths` options, as ESLint resolves it. */
 interface RestrictedPathsZone {
-  target: string | string[];
-  from: string | string[];
-  message?: string;
-  except?: string[];
+  readonly target: string | string[];
+  readonly from: string | string[];
+  readonly message?: string;
+  readonly except?: string[];
 }
 
 /** The rule's state for one file: the severity that applies and the zones it carries. */
 interface RestrictedPathsState {
-  severity: number;
-  zones: RestrictedPathsZone[];
+  readonly severity: number;
+  readonly zones: RestrictedPathsZone[];
 }
 
 const [
@@ -147,7 +147,8 @@ function assertZoneContract(state: RestrictedPathsState | null): void {
 }
 
 /**
- * D-11: whole-repo cycle detection must stay unfiltered.
+ * D-11: cycle detection must reach the whole repository, through BOTH
+ * `fallow dead-code` runs in `npm run fallow`.
  *
  * Cycles are caught by `fallow dead-code` inside `npm run fallow`, not by
  * ESLint. `import-x/no-cycle` reports NOTHING on a deliberate two-file
@@ -158,12 +159,28 @@ function assertZoneContract(state: RestrictedPathsState | null): void {
  * not a resolution problem. Asserting that a rule is merely CONFIGURED
  * cannot distinguish a working gate from an inert one.
  *
- * What needs pinning instead is that the `fallow dead-code` invocation stays
- * UNFILTERED: fallow's `--circular-deps` / `--boundary-violations` flags are
- * only-report filters, not additions, so naming one silently drops every
- * other class the subcommand computes. The bare form reports them all.
+ * ONE invocation does not reach the whole repository. `.fallowrc.json` scopes
+ * `deadCode` to production reachability, and production mode excludes the test
+ * and script trees, so the bare run is blind to a cycle that lives entirely
+ * outside the entry graph. Measured in this repository, with
+ * `x.ts` and `y.ts` under `tests/architecture/` importing each other: the bare run
+ * reports "No issues found" and exits 0, while `--no-production
+ * --circular-deps --re-export-cycles` names the cycle and exits 1.
+ * `fallow-production-mode.test.ts` carries that pair as a planted-offender
+ * control, which is the evidence this argv shape rests on.
+ *
+ * So two things need pinning:
+ *
+ * 1. The bare, production-scoped run stays UNFILTERED. fallow's
+ *    `--circular-deps` / `--boundary-violations` flags are only-report
+ *    filters, not additions, so naming one silently drops every other class
+ *    the subcommand computes. The bare form reports them all.
+ * 2. A second run carries the cycle classes over the whole tree. It has to
+ *    stay filtered to those classes: a bare `--no-production` run also
+ *    re-reads the two production-mode suppressions as stale and fails on
+ *    them, which is a different finding than the one this run exists for.
  */
-test("D-11: npm run fallow runs dead-code unfiltered, so cycles are gated", async () => {
+test("D-11: npm run fallow gates cycles over the whole repository", async () => {
   const pkgPath = path.join(REPO_ROOT, PACKAGE_JSON_REL);
   const pkg: unknown = JSON.parse(await readFile(pkgPath, "utf8"));
   const scripts = (pkg as { scripts?: Record<string, string> }).scripts ?? {};
@@ -193,10 +210,15 @@ test("D-11: npm run fallow runs dead-code unfiltered, so cycles are gated", asyn
   // two-file cycle from exit 1 to exit 0 while a denylist of three flags
   // stays green. Anything unrecognized here fails until someone proves the
   // addition still reports cycles.
-  const deadCodeSegment = fallowScript
+  const deadCodeSegments = fallowScript
     .split(/&&|\|\||;/)
     .map((segment) => segment.trim())
-    .find((segment) => /^(npx\s+)?fallow\s+dead-code(?![\w-])/.test(segment));
+    .filter((segment) => /^(npx\s+)?fallow\s+dead-code(?![\w-])/.test(segment));
+
+  // The FIRST dead-code command is the production-scoped one the allowlist
+  // below governs; the whole-tree cycle run is identified by its own flag, not
+  // by position, so reordering the chain cannot swap which rules apply to which.
+  const deadCodeSegment = deadCodeSegments.find((segment) => !segment.includes("--no-production"));
 
   assert.ok(
     deadCodeSegment !== undefined,
@@ -216,6 +238,55 @@ test("D-11: npm run fallow runs dead-code unfiltered, so cycles are gated", asyn
     assert.ok(
       ALLOWED_DEAD_CODE_TOKENS.has(token),
       `unrecognized token \`${token}\` in the \`fallow dead-code\` invocation. fallow's per-issue flags are only-report FILTERS, not additions: naming one narrows the run to that class and silently stops gating cycles. If this token is genuinely safe, add it to ALLOWED_DEAD_CODE_TOKENS after measuring that a planted cycle still exits 1.`,
+    );
+  }
+
+  // The second run is what carries the cycle classes across `tests/` and
+  // `scripts/`, which production reachability drops. Without it a cycle among
+  // the reusable fakes, `gate-targets.ts`, or `source-scan.ts` is reported by
+  // nothing.
+  const cycleSegment = deadCodeSegments.find((segment) => segment.includes("--no-production"));
+
+  assert.ok(
+    cycleSegment !== undefined,
+    "the `fallow` script has no `fallow dead-code --no-production` command. `.fallowrc.json` scopes dead-code to production reachability, so without this second run no cycle under tests/ or scripts/ is gated at all.",
+  );
+
+  // Every flag this run cannot lose. `--circular-deps` and `--re-export-cycles`
+  // are only-report filters, so BOTH have to be named to report both cycle
+  // classes, and the filtering is deliberate: a bare `--no-production` run
+  // fails on the production-mode suppressions instead.
+  for (const required of [
+    "--no-production",
+    "--circular-deps",
+    "--re-export-cycles",
+    "--fail-on-issues",
+  ]) {
+    assert.ok(
+      cycleSegment.includes(required),
+      `the whole-tree cycle run is missing \`${required}\`; without it the run either loses a cycle class or reports one and still exits 0`,
+    );
+  }
+
+  // The same allowlist discipline as above, for the same reason: any further
+  // only-report filter, `--file`, or `--top` narrows this run past the cycle
+  // classes it exists to carry.
+  const ALLOWED_CYCLE_TOKENS = new Set([
+    "npx",
+    "fallow",
+    "dead-code",
+    "--no-production",
+    "--circular-deps",
+    "--re-export-cycles",
+    "--fail-on-issues",
+    "--format",
+    "human",
+  ]);
+
+  for (const token of cycleSegment.split(/\s+/).filter((t) => t.length > 0)) {
+    assert.ok(
+      ALLOWED_CYCLE_TOKENS.has(token),
+      `unrecognized token \`${token}\` in the whole-tree \`fallow dead-code --no-production\` invocation. Adding an only-report filter, \`--file\`, or \`--top\` narrows the run away from the cycle classes. If this token is genuinely safe, add it to ALLOWED_CYCLE_TOKENS after measuring that a cycle planted under tests/ still exits 1.`,
     );
   }
 });
@@ -293,6 +364,7 @@ async function orchestratorFiles(rel: string): Promise<string[]> {
 }
 
 test("D-11: no orchestrators/marketplace file imports a plugin LEDGER module", async () => {
+  // act
   const files = await orchestratorFiles(MARKETPLACE_ORCHESTRATORS_REL);
   assert.ok(files.length > 0, `walked ${MARKETPLACE_ORCHESTRATORS_REL} and found no .ts files`);
 
@@ -304,7 +376,8 @@ test("D-11: no orchestrators/marketplace file imports a plugin LEDGER module", a
     }
   }
 
-  assert.deepEqual(
+  // assert
+  assert.deepStrictEqual(
     offenders,
     [],
     `D-11 violation -- these marketplace files import a plugin ledger module:\n  ${offenders.join("\n  ")}\nImport the leaf row composer (plugin/update-row.ts), a shared type from orchestrators/types.ts, or the injected pluginUpdate seam instead.`,
@@ -312,6 +385,7 @@ test("D-11: no orchestrators/marketplace file imports a plugin LEDGER module", a
 });
 
 test("D-11: no orchestrators/plugin LEDGER imports a marketplace ledger module", async () => {
+  // act
   const offenders: string[] = [];
   for (const rel of PLUGIN_LEDGER_TARGETS) {
     // A renamed or deleted ledger must fail loudly rather than silently
@@ -325,7 +399,8 @@ test("D-11: no orchestrators/plugin LEDGER imports a marketplace ledger module",
     }
   }
 
-  assert.deepEqual(
+  // assert
+  assert.deepStrictEqual(
     offenders,
     [],
     `D-11 violation -- these plugin ledgers import a marketplace ledger module:\n  ${offenders.join("\n  ")}\nonly orchestrators/marketplace/shared.ts is reachable from a plugin ledger.`,
@@ -453,7 +528,7 @@ test(
     for (const representative of ZONE_REPRESENTATIVE_TARGETS) {
       const state = restrictedPathsState(configs.get(representative) ?? null);
       assert.ok(state !== null, `\`${RESTRICTED_PATHS}\` does not reach ${representative}`);
-      assert.deepEqual(
+      assert.deepStrictEqual(
         forbiddenMatrix(state.zones),
         expectedMatrix,
         `the matrix resolved for ${representative} does not match the D-11 allowed-imports matrix`,

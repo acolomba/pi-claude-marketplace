@@ -17,7 +17,7 @@ This works but accrues cost: every new notify surface needs a new lint glob; the
 
 ## Decision
 
-v1.4 introduces a single structured `notify(ctx, NotificationMessage)` entrypoint and a single `notifyUsageError(ctx, UsageErrorMessage)` entrypoint. Per-outcome wrappers are NOT introduced. The discriminator on `status:` literal (per-variant interfaces joined in a discriminated union) recovers per-outcome-wrapper autocomplete ergonomics without the per-wrapper file maintenance cost; `assertNever` in the renderer's `switch` retains the compile-error gate that motivated the wrapper design. The design pivot is documented in the Alternatives section below (Alternative 2 flipped Rejected → ACCEPTED).
+v1.4 introduces a single structured `notify(ctx, NotificationMessage)` entrypoint and a single `notifyUsageError(ctx, UsageErrorMessage)` entrypoint. Per-outcome wrappers are NOT introduced. The discriminator on `status:` literal (per-variant interfaces joined in a discriminated union) recovers per-outcome-wrapper autocomplete ergonomics without the per-wrapper file maintenance cost; the renderer's exhaustive `switch` -- every variant listed, no `default` arm, enforced by `@typescript-eslint/switch-exhaustiveness-check` -- retains the compile-error gate that motivated the wrapper design. The design pivot is documented in the Alternatives section below (Alternative 2 flipped Rejected → ACCEPTED).
 
 ### Public surface
 
@@ -218,3 +218,9 @@ Phase 29 (UXG-07) adds a human-readable **summary line** to the `error` / `warni
 This gives the host `Error:` / `Warning:` prefix a meaningful sentence to introduce ("focus on the operation, not what happened to each plugin -- the cascade body already shows that"). The REQUIREMENTS.md UXG-07 spec (suppress the severity label by routing cascades to `info`) is **superseded** by the user decision captured in D-29-01/02: the label + color pair is kept, and the prefix is made meaningful by the prepended summary instead. The summary line is computed structurally, not caller-supplied, so the "no top-level free text" invariant (D-17-09) is preserved. `docs/output-catalog.md` error/warning byte blocks and the `docs/messaging-style-guide.md` Severity Routing section were updated in lockstep (Plan 29-02). `notifyUsageError()` is out of scope and byte-unchanged.
 
 The Decision section above reflects the post-amendment state for severity routing; this Amendment records the summary-line composition layered on top of it (per D-17.1-08: the accepted narrative is not rewritten).
+
+## Amendment: PR #202 (2026-09-20)
+
+The exhaustiveness gate the Decision section relies on is now the `@typescript-eslint/switch-exhaustiveness-check` rule, configured with `allowDefaultCaseForExhaustiveSwitch: false` and `considerDefaultExhaustiveForUnions: false`. A `switch` over a union either lists every member and carries no `default`, or lists some and carries one. A member added to `PluginStatus`, `MarketplaceStatus`, or `NotificationMessage["kind"]` is a lint error at every switch that omits it, and a `default` on a complete switch is an error too. The `assertNever` helper and the `default: assertNever(x)` arms the earlier text names are gone, together with the tests that reached them by smuggling an impossible discriminant past the type system: such an arm is unreachable by construction, and the tests that covered it proved only that the helper throws.
+
+The code blocks above that show `assertNever(plugin)` describe the accepted shape at the time; the Decision paragraph reflects the post-amendment mechanism (per D-17.1-08: the accepted narrative is not rewritten).

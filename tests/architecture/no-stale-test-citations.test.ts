@@ -28,6 +28,14 @@
  * the gate needs NO per-citation allowlist, so there is no list to grow and no
  * pressure to disable the gate over legitimate historical prose.
  *
+ * One shape is skipped by construction rather than by list: a `tests/...` path
+ * that is the entire content of a single- or double-quoted string literal in a
+ * `.ts` / `.mjs` file. That is a fixture path -- a file a gate control plants
+ * into a temporary root (`"tests/left.ts"`, `"tests/only.test.ts"`) -- and it
+ * describes the planted tree, not this one. A citation in code lives in a
+ * comment, where the backtick form is the convention, and backticks are not
+ * exempt.
+ *
  * This gate deliberately does NOT use `assertNoForbiddenSurface` or
  * `stripComments` from `./source-scan.ts`. That helper answers "do these named
  * files contain a forbidden token", which is the inverse question: here the
@@ -79,11 +87,25 @@ async function policedFiles(): Promise<string[]> {
   return found;
 }
 
+/** A quote that opens a string literal; a backtick is prose, not a literal here. */
+const STRING_DELIMITERS = new Set(['"', "'"]);
+
+function isPlantedFixturePath(rel: string, src: string, match: RegExpExecArray): boolean {
+  if (path.extname(rel) === ".md") {
+    return false;
+  }
+
+  const before = src[match.index - 1];
+  const after = src[match.index + match[0].length];
+
+  return before !== undefined && STRING_DELIMITERS.has(before) && after === before;
+}
+
 function deadCitations(rel: string, src: string): string[] {
   const dead: string[] = [];
 
   for (const match of src.matchAll(CITATION)) {
-    if (existsSync(path.join(REPO_ROOT, match[0]))) {
+    if (existsSync(path.join(REPO_ROOT, match[0])) || isPlantedFixturePath(rel, src, match)) {
       continue;
     }
 
@@ -110,3 +132,45 @@ test("every `tests/...` path cited in policed content resolves on disk", async (
     `Stale test-path citation. Each site below names a test file that does not exist, so the guarantee it claims points at nothing. Repoint it at the suite that enforces the claim TODAY; if no suite does, say so in the text instead of naming a file. Dated records (docs/adr, docs/plans, docs/research) are exempt and are not listed here.\n${offenders.join("\n")}`,
   );
 });
+
+// Planted controls for the one exemption above: the scanner must still report a
+// backticked or bare citation of an absent file, and must skip the same path
+// only when it is the whole content of a quoted string literal. The planted
+// sources are assembled from segments so this file never spells the absent
+// path itself -- the real scan above reads this file too.
+const PLANTED_REL = ["tests", "planted.ts"].join("/");
+const ABSENT = ["tests", "absent", "no-such.test.ts"].join("/");
+
+for (const { label, src, expected } of [
+  {
+    label: "a backticked comment citation of an absent suite",
+    src: `// asserted by \`${ABSENT}\`\n`,
+    expected: [`${PLANTED_REL}:1 cites ${ABSENT}`],
+  },
+  {
+    label: "a bare comment citation of an absent suite",
+    src: `// asserted by ${ABSENT}\n`,
+    expected: [`${PLANTED_REL}:1 cites ${ABSENT}`],
+  },
+  {
+    label: "a quoted string literal that is exactly a fixture path",
+    src: `const planted = "${ABSENT}";\n`,
+    expected: [],
+  },
+  {
+    label: "a quoted string literal carrying more than the path",
+    src: `const planted = "see ${ABSENT}";\n`,
+    expected: [`${PLANTED_REL}:1 cites ${ABSENT}`],
+  },
+]) {
+  test(`reports ${label} as the exemption intends`, () => {
+    // arrange
+    const rel = PLANTED_REL;
+
+    // act
+    const dead = deadCitations(rel, src);
+
+    // assert
+    assert.deepStrictEqual(dead, expected);
+  });
+}

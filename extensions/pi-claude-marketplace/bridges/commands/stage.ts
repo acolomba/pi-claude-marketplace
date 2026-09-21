@@ -67,7 +67,7 @@ import type { RemovalOps } from "../../shared/fs-utils.ts";
 type CommandsReplacementInternals = Readonly<{
   backupRoot: string;
   backups: readonly { name: string; from: string; to: string }[];
-  renamed: readonly { from: string; to: string }[];
+  renamed: readonly { to: string }[];
 }>;
 
 const commandsReplacementInternals = new WeakMap<
@@ -79,10 +79,12 @@ const commandsReplacementInternals = new WeakMap<
  * CMD-01 / D-86-07: neutralize an unparseable command source by stripping the
  * ENTIRE malformed frontmatter block -- the opening `---` line through the
  * matching closing `---` line -- leaving the real body. A re-parse of the
- * result RETURNS empty, so Pi's command loader falls back to name-from-filename
- * + description-from-first-body-line (NOT delimiter-only stripping, which would
- * leave ex-frontmatter junk as the first body line). Called ONLY on the gate-1
- * throw arm, where a closed `---`...`---` block is present by construction.
+ * result RETURNS: usually empty, so Pi's command loader falls back to
+ * name-from-filename + description-from-first-body-line (NOT delimiter-only
+ * stripping, which would leave ex-frontmatter junk as the first body line);
+ * see the third paragraph below for the case where a clean frontmatter block
+ * remains instead. Called ONLY on the gate-1 throw arm, where a closed
+ * `---`...`---` block is present by construction.
  *
  * Newlines are first normalized (CR/CRLF -> LF) with the SAME two-step replace
  * `parseFrontmatter` applies before its own `\n---` close search, so this scan
@@ -130,17 +132,6 @@ function neutralizeCommandFrontmatter(content: string): string {
 }
 
 /**
- * Stage commands into a fresh `<commandsStagingDir>/<uuid>/` tree. Reads
- * each source `.md`, substitutes `${CLAUDE_PLUGIN_ROOT}` /
- * `${CLAUDE_PLUGIN_DATA}` (CM-3), and writes the substituted body to a
- * staging file. Per-file rename to the target dir is deferred to
- * `commitPreparedCommands`.
- *
- * Returns a `kind: "noop"` short-circuit when `discovered.length === 0 &&
- * previousCommandNames.length === 0`: nothing to stage AND nothing to
- * remove, so creating the staging dir would be wasteful.
- */
-/**
  * Give a filesystem failure during staging the two facts it is missing.
  *
  * The staged basename is the generated command name, and CM-4 makes that name
@@ -164,6 +155,17 @@ function contextualStagingError(pluginName: string, generatedName: string, err: 
   );
 }
 
+/**
+ * Stage commands into a fresh `<commandsStagingDir>/<uuid>/` tree. Reads
+ * each source `.md`, substitutes `${CLAUDE_PLUGIN_ROOT}` /
+ * `${CLAUDE_PLUGIN_DATA}` (CM-3), and writes the substituted body to a
+ * staging file. Per-file rename to the target dir is deferred to
+ * `commitPreparedCommands`.
+ *
+ * Returns a `kind: "noop"` short-circuit when `discovered.length === 0 &&
+ * previousCommandNames.length === 0`: nothing to stage AND nothing to
+ * remove, so creating the staging dir would be wasteful.
+ */
 export async function prepareStageCommands(
   ops: RemovalOps,
   input: StageCommandsInput,
@@ -319,6 +321,10 @@ export async function commitPreparedCommands(
   for (const name of prepared._previousNames) {
     const target = path.join(prepared.locations.promptsTargetDir, name + ".md");
     await assertPathInside(prepared.locations.promptsTargetDir, target, "previous command file");
+    // Defense-in-depth (state.json corruption could surface a bad name), checked
+    // after containment so a path-separator name still surfaces as the existing
+    // PathContainmentError / SymlinkRefusedError, not this.
+    assertSafeName(name, "previous command name");
 
     try {
       await unlink(target);
@@ -397,7 +403,7 @@ export async function replacePreparedCommands(
   await assertPathInside(prepared.locations.commandsStagingDir, backupRoot, "commands backup root");
 
   const backups: { name: string; from: string; to: string }[] = [];
-  const renamed: { from: string; to: string }[] = [];
+  const renamed: { to: string }[] = [];
 
   try {
     for (const name of prepared._previousNames) {
@@ -432,7 +438,7 @@ export async function replacePreparedCommands(
       }
 
       await rename(pair.from, pair.to);
-      renamed.push(pair);
+      renamed.push({ to: pair.to });
     }
   } catch (err) {
     const leaks = await rollbackCommandsReplacementInternal(
@@ -509,7 +515,7 @@ function requireCommandsReplacementInternals(
 async function rollbackCommandsReplacementInternal(
   ops: RemovalOps,
   prepared: Extract<PreparedCommandsStaging, { kind: "staged" }>,
-  renamed: readonly { from: string; to: string }[],
+  renamed: readonly { to: string }[],
   backups: readonly { name: string; from: string; to: string }[],
   backupRoot: string,
 ): Promise<readonly string[]> {

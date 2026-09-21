@@ -1,6 +1,5 @@
 import { softDepStatus } from "../platform/pi-api.ts";
 
-import { assertNever } from "./errors.ts";
 import {
   composeMarketplaceBlock,
   composePluginLinesWith,
@@ -62,10 +61,10 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
  *  `${message.message}\n\n${message.usage}` at "error" severity
  *  (SNM-13).
  *
- * Closed-set source of truth: the `REASONS`, `STATUS_TOKENS`,
- * `PLUGIN_STATUSES` and `MARKETPLACE_STATUSES` const tuples and their derived
- * literal-union types live in `notification-types.ts`. No `MARKERS` / `PATTERN_CLASSES`
- * tuples sit alongside them: the `<autoupdate>` / `<no autoupdate>` chevron
+ * Closed-set source of truth: the `Reason`, `StatusToken`, `PluginStatus` and
+ * `MarketplaceStatus` literal-union vocabularies live in
+ * `notification-types.ts`. No `MARKERS` / `PATTERN_CLASSES`
+ * vocabularies sit alongside them: the `<autoupdate>` / `<no autoupdate>` chevron
  * tokens are written as literals at their render sites in `renderMpHeader`,
  * and the pattern-class labels only ever named message shapes in prose. The
  * `compare-name-scope.ts` owns the single per-scope row-order policy across
@@ -75,8 +74,20 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
  * dispatch behavior directly from this file. No barrel re-exports.
  */
 
-/** Emit one summary-composed payload at the sole Pi notification boundary. */
-export function emitWithSummary(
+/**
+ * Emit one summary-composed payload at the sole Pi notification boundary.
+ *
+ * Module-private: the state-change dispatch paths -- `notify`,
+ * `emitContextCascade`, `emitUpdateNoOpCascade`, and
+ * `emitReconcileAppliedContextCascade` (the latter three via the shared
+ * `emitCascadeWith` helper) -- route through it, so those paths' emitted
+ * bytes and one-call-per-invocation discipline are this seam's contract. The
+ * remaining public functions (`notifyUsageError`, `notifyUsageInfo`,
+ * `notifyDiagnostic`, `notifyAsyncRewakeSummary`, `notifyStopHookOverrideCap`,
+ * `makeRawNotifyFn`) carry no summary/tally/reload-hint to compose, so they
+ * call `ctx.ui.notify` directly instead.
+ */
+function emitWithSummary(
   ctx: NotificationContext,
   message: NotificationMessage,
   body: string,
@@ -247,9 +258,6 @@ function dispatchInfoMessage(
         "",
       );
       break;
-    default:
-      assertNever(message);
-      return;
   }
 
   emitWithSummary(ctx, message, body);
@@ -287,9 +295,9 @@ export function notify(
 
   // Exhaustiveness gate. After the standalone-arm return above, the only
   // legal residual `message.kind` values are `undefined` (back-compat)
-  // or the explicit `"cascade"`. The switch + `assertNever` ensures a
+  // or the explicit `"cascade"`. The switch has no default arm, so a
   // future standalone `kind` literal added without extending `isInfoKind`
-  // becomes a compile error here.
+  // becomes a type and lint error here.
   switch (message.kind) {
     case undefined:
     case "cascade":
@@ -298,9 +306,6 @@ export function notify(
       // reload-hint is driven by the per-row stamp, not by a distinguishing
       // kind.
       break;
-    default:
-      assertNever(message);
-      return;
   }
 
   // Cascade body. Caller-supplied order honored end-to-end (no internal

@@ -7,8 +7,15 @@ import {
   skipSeverity,
   type DegradeKind,
   type FailureReason,
-  type _ReasonsCoverageProof,
 } from "../../extensions/pi-claude-marketplace/shared/notify-reasons.ts";
+
+import type { Reason } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+
+type IsExact<Actual, Expected> = [Actual] extends [Expected]
+  ? [Expected] extends [Actual]
+    ? true
+    : false
+  : false;
 
 void ("permission denied" satisfies FailureReason);
 void ("source missing" satisfies FailureReason);
@@ -40,12 +47,39 @@ void ("command" satisfies DegradeKind);
 // @ts-expect-error DegradeKind excludes component kinds without degraded frontmatter behavior
 void ("hook" satisfies DegradeKind);
 
-type ReasonsCoverageProofIsExact = _ReasonsCoverageProof extends [never, never]
-  ? [never, never] extends _ReasonsCoverageProof
-    ? true
-    : false
-  : false;
-void (true satisfies ReasonsCoverageProofIsExact);
+/*
+ * OUT-08 coverage proof, observed through the contract it guards.
+ *
+ * The proof is module-private and is folded into the per-kind reason map's
+ * annotation, so a reason left without a topic home -- or a stray literal that
+ * is not a `Reason` -- collapses that map's value type to `never` and the owner
+ * stops compiling. What a caller can still see is the mapping's own result, and
+ * it is exactly the failure-class vocabulary rather than the empty type.
+ */
+void (true satisfies IsExact<ReturnType<typeof malformedReasonsForKinds>[number], FailureReason>);
+
+/*
+ * Controls for the gate the owner is annotated against. The offender pair plants
+ * each drift direction into a local restatement of the partition: a reason with
+ * no home, and a grouped literal that is not a reason. Both must collapse the
+ * gate to `never`, which is what turns the owner's `satisfies` into a build
+ * failure; the benign case proves the same gate passes a total partition
+ * through unchanged.
+ */
+type GateProven<Partition, T> = [Exclude<Reason, Partition>, Exclude<Partition, Reason>] extends [
+  never,
+  never,
+]
+  ? T
+  : never;
+
+type BenignPartition = Reason;
+type MissingReasonPartition = Exclude<Reason, "components now supported">;
+type StrayReasonPartition = Reason | "not a reason";
+
+void (true satisfies IsExact<GateProven<BenignPartition, FailureReason>, FailureReason>);
+void (true satisfies IsExact<GateProven<MissingReasonPartition, FailureReason>, never>);
+void (true satisfies IsExact<GateProven<StrayReasonPartition, FailureReason>, never>);
 
 const skipSeverityCases = [
   {

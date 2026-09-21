@@ -56,13 +56,19 @@ import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { RmOptions } from "node:fs";
 
 type BridgePhase = "skills" | "commands" | "agents" | "mcp" | "workflows";
 
-/** Filesystem removal seam used after a committed reinstall. */
+/**
+ * Filesystem removal seam used after a committed reinstall. The options
+ * narrow Node's own removal options: both slots are optional booleans there,
+ * and pinning each to `true` is what stops a non-recursive or non-forced
+ * removal from satisfying the seam.
+ */
 export type RemoveDataDirFn = (
   path: string,
-  options: { recursive: true; force: true },
+  options: RmOptions & { recursive: true; force: true },
 ) => Promise<void>;
 
 /** Prepared bridge handles retained until state persistence commits. */
@@ -137,6 +143,8 @@ export interface ReinstallReplaceOperations {
   readonly abortPreparedCommands: typeof abortPreparedCommands;
   readonly abortPreparedMcp: typeof abortPreparedMcp;
   readonly abortPreparedSkills: typeof abortPreparedSkills;
+  readonly abortPreparedWorkflows: typeof abortPreparedWorkflows;
+  readonly commitPreparedWorkflows: typeof commitPreparedWorkflows;
   readonly finalizeAgentsReplacement: typeof finalizeAgentsReplacement;
   readonly finalizeCommandsReplacement: typeof finalizeCommandsReplacement;
   readonly finalizeMcpReplacement: typeof finalizeMcpReplacement;
@@ -145,6 +153,7 @@ export interface ReinstallReplaceOperations {
   readonly prepareStageCommands: typeof prepareStageCommands;
   readonly prepareStageMcpServers: typeof prepareStageMcpServers;
   readonly prepareStageSkills: typeof prepareStageSkills;
+  readonly prepareStageWorkflows: typeof prepareStageWorkflows;
   readonly removeHookConfig: typeof removeHookConfig;
   readonly replacePreparedAgents: typeof replacePreparedAgents;
   readonly replacePreparedCommands: typeof replacePreparedCommands;
@@ -154,6 +163,7 @@ export interface ReinstallReplaceOperations {
   readonly rollbackCommandsReplacement: typeof rollbackCommandsReplacement;
   readonly rollbackMcpReplacement: typeof rollbackMcpReplacement;
   readonly rollbackSkillsReplacement: typeof rollbackSkillsReplacement;
+  readonly unstagePluginWorkflows: typeof unstagePluginWorkflows;
   readonly writeHookConfig: typeof writeHookConfig;
 }
 
@@ -165,17 +175,35 @@ export interface ReinstallMaintenanceInput {
   readonly removeDataDir?: RemoveDataDirFn;
 }
 
-/** Owns reinstall's prepare, replacement, compensation, and commit schedule. */
+/**
+ * Owns reinstall's prepare, replacement, compensation, and commit schedule.
+ *
+ * Each schedule step is declared as an explicit signature rather than `typeof`
+ * its implementation: the implementations are module-private, and the explicit
+ * form makes `REAL_REINSTALL_TRANSACTION`'s annotation the place a signature
+ * drift surfaces as a compile error.
+ */
 export interface ReinstallTransaction {
-  readonly finalizeReinstalledPlugin: typeof finalizeReinstalledPlugin;
+  readonly finalizeReinstalledPlugin: (
+    replacement: ReinstallReplacement,
+  ) => Promise<readonly string[]>;
   /**
    * D-05-01: the transaction owns which physical bridges the replacement
    * schedule drives, so replacement and compensation reach the same owner.
    */
   readonly replaceOperations: ReinstallReplaceOperations;
-  readonly replaceReinstalledPlugin: typeof replaceReinstalledPlugin;
-  readonly rollbackReinstalledPlugin: typeof rollbackReinstalledPlugin;
-  readonly runPostSuccessMaintenance: typeof runPostSuccessMaintenance;
+  readonly replaceReinstalledPlugin: (
+    input: ReplaceReinstalledPluginInput,
+    operations: ReinstallReplaceOperations,
+  ) => Promise<ReinstallReplacement>;
+  readonly rollbackReinstalledPlugin: (
+    replacement: ReinstallReplacement,
+  ) => Promise<readonly string[]>;
+  readonly runPostSuccessMaintenance: (
+    input: ReinstallMaintenanceInput,
+    locations: ScopedLocations,
+    completionCache: CompletionCache,
+  ) => Promise<readonly string[]>;
   readonly withLockedStateTransaction: typeof withLockedStateTransaction;
 }
 
@@ -184,6 +212,8 @@ const REAL_REINSTALL_REPLACE_OPERATIONS: ReinstallReplaceOperations = {
   abortPreparedCommands,
   abortPreparedMcp,
   abortPreparedSkills,
+  abortPreparedWorkflows,
+  commitPreparedWorkflows,
   finalizeAgentsReplacement,
   finalizeCommandsReplacement,
   finalizeMcpReplacement,
@@ -192,6 +222,7 @@ const REAL_REINSTALL_REPLACE_OPERATIONS: ReinstallReplaceOperations = {
   prepareStageCommands,
   prepareStageMcpServers,
   prepareStageSkills,
+  prepareStageWorkflows,
   removeHookConfig,
   replacePreparedAgents,
   replacePreparedCommands,
@@ -201,6 +232,7 @@ const REAL_REINSTALL_REPLACE_OPERATIONS: ReinstallReplaceOperations = {
   rollbackCommandsReplacement,
   rollbackMcpReplacement,
   rollbackSkillsReplacement,
+  unstagePluginWorkflows,
   writeHookConfig,
 };
 
@@ -219,7 +251,7 @@ const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
 };
 
 /** Prepare every bridge, then replace them as one compensatable operation. */
-export async function replaceReinstalledPlugin(
+async function replaceReinstalledPlugin(
   input: ReplaceReinstalledPluginInput,
   operations: ReinstallReplaceOperations,
 ): Promise<ReinstallReplacement> {
@@ -254,7 +286,7 @@ export async function replaceReinstalledPlugin(
 }
 
 /** Roll back every physically replaced bridge in reverse order. */
-export async function rollbackReinstalledPlugin(
+async function rollbackReinstalledPlugin(
   replacement: ReinstallReplacement,
 ): Promise<readonly string[]> {
   return [
@@ -267,7 +299,11 @@ export async function rollbackReinstalledPlugin(
     // path too, and that report -- not the class of the thrown error -- is the
     // removal payload. Empty unless the commit ran and stranded something, so
     // this is a no-op on every earlier step's failure.
-    ...(await unplaceWorkflows(replacement.locations, replacement.placedWorkflowNames)),
+    ...(await unplaceWorkflows(
+      replacement.operations,
+      replacement.locations,
+      replacement.placedWorkflowNames,
+    )),
   ];
 }
 
@@ -288,6 +324,7 @@ export async function rollbackReinstalledPlugin(
  * still user-visible -- rather than propagated.
  */
 async function unplaceWorkflows(
+  operations: ReinstallReplaceOperations,
   locations: ScopedLocations,
   placedWorkflowNames: readonly string[],
 ): Promise<readonly string[]> {
@@ -296,7 +333,7 @@ async function unplaceWorkflows(
   }
 
   try {
-    const result = await unstagePluginWorkflows({
+    const result = await operations.unstagePluginWorkflows({
       locations,
       previousWorkflowNames: placedWorkflowNames,
     });
@@ -309,7 +346,7 @@ async function unplaceWorkflows(
 }
 
 /** Remove bridge backups after the state transaction commits. */
-export async function finalizeReinstalledPlugin(
+async function finalizeReinstalledPlugin(
   replacement: ReinstallReplacement,
 ): Promise<readonly string[]> {
   return finalizeReplacements(
@@ -320,7 +357,7 @@ export async function finalizeReinstalledPlugin(
 }
 
 /** Run non-fatal cache and data-directory cleanup after commit. */
-export async function runPostSuccessMaintenance(
+async function runPostSuccessMaintenance(
   input: ReinstallMaintenanceInput,
   locations: ScopedLocations,
   completionCache: CompletionCache,
@@ -361,7 +398,6 @@ async function prepareAllHandles(
   try {
     handles.skills = await operations.prepareStageSkills(ops, {
       locations: input.locations,
-      marketplaceName: input.marketplace,
       pluginName: input.plugin,
       pluginRoot: input.installable.pluginRoot,
       pluginDataDir: input.pluginDataDir,
@@ -371,7 +407,6 @@ async function prepareAllHandles(
     });
     handles.commands = await operations.prepareStageCommands(ops, {
       locations: input.locations,
-      marketplaceName: input.marketplace,
       pluginName: input.plugin,
       pluginRoot: input.installable.pluginRoot,
       pluginDataDir: input.pluginDataDir,
@@ -385,7 +420,6 @@ async function prepareAllHandles(
       pluginName: input.plugin,
       pluginRoot: input.installable.pluginRoot,
       pluginDataDir: input.pluginDataDir,
-      resolved: input.installable,
       agentsDirs: input.agentsDirs,
       knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
       cwd: input.cwd,
@@ -405,7 +439,7 @@ async function prepareAllHandles(
     // skills and commands prepares above read theirs from -- so the commit
     // displaces this plugin's own envelopes aside instead of refusing the
     // occupied target.
-    handles.workflows = await prepareStageWorkflows({
+    handles.workflows = await operations.prepareStageWorkflows({
       locations: input.locations,
       pluginName: input.plugin,
       resolved: input.installable,
@@ -463,7 +497,7 @@ async function replaceAll(
     // lifecycle on BOTH its paths, so the catch must not abort it (see
     // `abortPartialHandles`'s `skipWorkflows` option).
     workflowsCommitEntered = true;
-    const workflowsLeak = await commitPreparedWorkflows(handles.workflows, {
+    const workflowsLeak = await operations.commitPreparedWorkflows(handles.workflows, {
       // The whole body is one assignment that cannot throw. The commit invokes
       // this callback on its failure paths too, so anything that could raise
       // here would mask the real failure.
@@ -477,7 +511,7 @@ async function replaceAll(
   } catch (error) {
     const leaks = [
       ...(await rollbackReplacements(ops, replacements, operations)),
-      ...(await unplaceWorkflows(hooks.locations, placedWorkflowNames)),
+      ...(await unplaceWorkflows(operations, hooks.locations, placedWorkflowNames)),
       // The commit owns its staging root on BOTH its paths, and DELIBERATELY
       // retains it when it holds the only copy of a displaced previous
       // envelope (stage.ts's failed-restore path). Aborting it here would
@@ -582,7 +616,7 @@ async function abortPartialHandles(
   // envelope. `cleanupStaging` is a recursive rm, so aborting a commit that
   // already ran would destroy exactly those bytes.
   if (handles.workflows !== undefined && opts?.skipWorkflows !== true) {
-    pushLeak(leaks, "workflows", await abortPreparedWorkflows(handles.workflows));
+    pushLeak(leaks, "workflows", await operations.abortPreparedWorkflows(handles.workflows));
   }
 
   if (handles.mcp !== undefined) {

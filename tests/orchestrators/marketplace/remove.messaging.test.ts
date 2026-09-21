@@ -3,16 +3,10 @@ import test from "node:test";
 
 import {
   REMOVE_CONTEXT,
-  type RemovePrivateReason,
   type RemoveRowMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.messaging.ts";
 
 import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-
-void ("plugins remain" satisfies RemovePrivateReason);
-
-// @ts-expect-error marketplace remove owns only the plugins-remain private reason
-void ("permission denied" satisfies RemovePrivateReason);
 
 void ({
   status: "uninstalled",

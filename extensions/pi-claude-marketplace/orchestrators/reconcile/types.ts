@@ -158,20 +158,26 @@ export interface PlannedPluginDisable {
  *      `rawKey`, NOT a punned `marketplace`, so the type system enforces
  *      "this is the user's typo, not a real marketplace name".
  */
-export interface PlannedSourceMismatchOfSourceMismatch {
-  readonly scope: Scope;
-  readonly cause: "source-mismatch";
-  readonly marketplace: string;
+/**
+ * The pair of source strings a source-disagreement carries. Named once so the
+ * planner's own conflict shape and the two mismatch arms that render it share
+ * one declaration instead of three spellings of the same detail.
+ */
+export interface PlannedSourceDetail {
   readonly declaredSource: string;
   readonly recordedSource: string;
 }
 
-export interface PlannedSourceMismatchOfUnknownStored {
+export interface PlannedSourceMismatchOfSourceMismatch extends PlannedSourceDetail {
+  readonly scope: Scope;
+  readonly cause: "source-mismatch";
+  readonly marketplace: string;
+}
+
+export interface PlannedSourceMismatchOfUnknownStored extends PlannedSourceDetail {
   readonly scope: Scope;
   readonly cause: "unknown-stored";
   readonly marketplace: string;
-  readonly declaredSource: string;
-  readonly recordedSource: string;
 }
 
 export interface PlannedSourceMismatchOfDanglingReference {
@@ -278,7 +284,6 @@ export interface ApplyReconcileOptions {
  * mass-uninstall).
  */
 export interface ScopeReadResult {
-  readonly scope: Scope;
   readonly plan: ReconcilePlan | undefined;
   /** CFG-03 + state-load failure rows surfaced from the read pass. */
   readonly invalidOutcomes: readonly PerEntryOutcome[];

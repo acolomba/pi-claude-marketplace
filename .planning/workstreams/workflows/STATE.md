@@ -54,9 +54,9 @@ and `cleanup` have NOT run. What is owed, in the order the audit lists it:
    `tests/architecture/messaging-guide-doc-pins.test.ts` (MSGDOC-01, 5 cases).
    Four further false claims in the surviving block were found and corrected on
    the way; one more — a stale statement of the reload-hint MECHANISM, not an
-   enumeration defect — became ledger entry 47, so item 2 below grew by one.
+   enumeration defect — became ledger entry 74, so item 2 below grew by one.
 2. **Twelve open Broken Windows entries**, all tagged `[workflows-replay]`:
-   #34, #37, #39, #40, #45, #47, #48, #51, #52, #53, #54, #55. **These are now
+   #61, #64, #66, #67, #72, #74, #75, #78, #79, #80, #81, #82. **These are now
    written up as decisions rather than a work queue** in
    [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) — eleven questions in five groups,
    each with its options, what it costs, and a recommendation. Read that file
@@ -69,7 +69,7 @@ and `cleanup` have NOT run. What is owed, in the order the audit lists it:
    operator's real `~/.pi/agent` — which exists, so its own `existsSync`
    follow-up waved it through — and building the ENBL-08 lock twin exposed that a
    held state lock reaches the user as `unreadable` rather than `lock held`
-   (filed as #55).
+   (filed as #82).
 
 3. ~~Phases 109-113 carry no SECURITY.md~~ — **DONE** (`2b7ffdc4`). One
    auditor per phase verified all 127 registered threats against the
@@ -119,7 +119,7 @@ determine the class.
 because Phase 117 edited `docs/workflows-compatibility.md`, which its
 verification grades; Phase 115 was stale because Phase 116 appended to
 `.planning/BACKLOG.md`, which criterion 5 grades directly. Both were legitimate
-coverage rather than the digest defect recorded as Broken Windows #39, and both
+coverage rather than the digest defect recorded as Broken Windows #66, and both
 were deliberately deferred to this boundary so that 116 and 117 had stopped
 moving the files they grade. Both re-verified `passed` at their previous scores
 with no gaps closed, none remaining, and no regressions.
@@ -175,7 +175,7 @@ eighth site printed `pass 1 / fail 0`. After the fix it prints `pass 1 / fail 1`
 Every gate this milestone adds gets a negative control run before it is
 believed, and the transcript goes in the SUMMARY.
 
-Carried debt, tracked not hidden: Broken Windows #34 (the compatibility doc's
+Carried debt, tracked not hidden: Broken Windows #61 (the compatibility doc's
 engine line-number citations are ungated and will rot; `WPIN-01` is the named
 future subject), and WDEP-03's live hop — installing the engine and reloading —
 has no automated home on this tree, resting on Spike 027 and the structural
@@ -236,7 +236,7 @@ replacement is a source pointer plus a status-by-field table that
 `PLUGIN_STATUSES` tuple, so a twentieth status turns a case red instead of
 quietly falsifying prose. Four further false claims in the surviving block were
 found and corrected during the work; a fifth, a stale statement of the
-reload-hint MECHANISM, was filed as ledger entry 47 because correcting it needs
+reload-hint MECHANISM, was filed as ledger entry 74 because correcting it needs
 its own measurement of the `needsReload` plumbing.
 
 ## Replay Ground Truth
@@ -338,7 +338,7 @@ integration.
 **Next Action:** the milestone lifecycle — audit, complete, cleanup. Phases 114
 and 115 were re-verified at this boundary and both passed (7/7 and 6/6); they had
 gone stale because later phases edited files their verifications grade, which is
-legitimate coverage rather than the digest defect recorded as Broken Windows #39. Do NOT re-run `npm run check` as a spot-check — it ran green after the fix
+legitimate coverage rather than the digest defect recorded as Broken Windows #66. Do NOT re-run `npm run check` as a spot-check — it ran green after the fix
 pass and no source has moved since.
 
 Four things this plan settled that 116's verification should not re-derive:
@@ -425,7 +425,7 @@ Two things this session settled that later phases should not re-litigate:
   `T-115-15` reasoned exactly that way and was falsified — widening the render to
   `install` and `reinstall` is what made the unescaped span reachable from them.
 
-Carried forward: Broken Windows **#37** (open) — `PathContainmentError`
+Carried forward: Broken Windows **#64** (open) — `PathContainmentError`
 interpolates the untrusted resolved child path raw, so escaping a caller's label
 closes nothing. Measured at **15 non-constant labels across 58 call sites**, not
 the 1-of-23 first recorded; that correction is the twelfth instance of this
@@ -653,8 +653,8 @@ debt work, then the archive:
 - ~~Re-derive the `PluginNotificationMessage` listing~~ — done as quick task
   `260909-ox9`; the listing is gone and its replacement is gated by
   `tests/architecture/messaging-guide-doc-pins.test.ts`
-- Work or waive the ten open `[workflows-replay]` Broken Windows entries; #44 is
-  a plain TODO, #41 and #42 are one inert test case seen twice, and #46 is a
+- Work or waive the ten open `[workflows-replay]` Broken Windows entries; #71 is
+  a plain TODO, #68 and #69 are one inert test case seen twice, and #73 is a
   substring guard in two live-UAT canaries
 - ~~Run `/gsd-secure-phase N` for 109-113~~ — done; all nine phases now carry a
   verified SECURITY.md at `threats_open: 0`

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { closeSync, openSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -32,6 +33,55 @@ const realSourcePath = "extensions/pi-claude-marketplace/shared/atomic-json.ts";
 // A real file under the test root that is not a corresponding test, so the mapping refusal is
 // planted against a path that exists and still cannot be mapped.
 const unmappablePath = "tests/edge/notification-boundary.ts";
+let childObservationCount = 0;
+
+/** Run a child with output files so Node does not use the sandbox-affected pipe path. */
+function observeChild(command, args, cwd = projectRoot) {
+  childObservationCount += 1;
+  const outputPrefix = path.join(fixtureRoot, `child-${childObservationCount}`);
+  const stdoutPath = `${outputPrefix}.stdout`;
+  const stderrPath = `${outputPrefix}.stderr`;
+  const stdoutDescriptor = openSync(stdoutPath, "w");
+  let run;
+
+  try {
+    const stderrDescriptor = openSync(stderrPath, "w");
+
+    try {
+      run = spawnSync(command, args, {
+        cwd,
+        stdio: ["ignore", stdoutDescriptor, stderrDescriptor],
+      });
+    } finally {
+      closeSync(stderrDescriptor);
+    }
+  } finally {
+    closeSync(stdoutDescriptor);
+  }
+
+  return {
+    error: run.error,
+    signal: run.signal,
+    status: run.status,
+    stderr: readFileSync(stderrPath, "utf8"),
+    stdout: readFileSync(stdoutPath, "utf8"),
+  };
+}
+
+/** Require one exact process result, with launch and signal failures reported separately. */
+function assertChildResult(label, observed, expected) {
+  if (observed.error !== undefined) {
+    throw new Error(`${label} did not launch: ${observed.error.message}`);
+  }
+
+  if (observed.signal !== null) {
+    throw new Error(`${label} terminated by signal ${observed.signal}`);
+  }
+
+  assert.equal(observed.status, expected.status, `${label} exit status`);
+  assert.equal(observed.stdout, expected.stdout, `${label} stdout`);
+  assert.equal(observed.stderr, expected.stderr, `${label} stderr`);
+}
 
 /** The absolute path a real coverage run would write for an in-repo module. */
 function inRepo(relativePath) {
@@ -60,17 +110,20 @@ function lcovRecord(recordSourcePath, counts) {
 // Every fixture git call is checked, because a fixture that failed to build would otherwise plant a
 // state nobody asked for and the assertion below it would pass or fail for the wrong reason.
 function fixtureGit(cwd, args) {
-  const run = spawnSync("git", args, { cwd, encoding: "utf8" });
+  const run = observeChild("git", args, cwd);
 
-  // A launch failure leaves `status`, `stdout` and `stderr` all null, so reading stderr first would
-  // report a TypeError from this helper instead of the reason git never ran.
   if (run.error !== undefined) {
     throw new Error(`Fixture git ${args.join(" ")} could not run in ${cwd}: ${run.error.message}`);
   }
 
+  if (run.signal !== null) {
+    throw new Error(`Fixture git ${args.join(" ")} terminated by signal ${run.signal} in ${cwd}`);
+  }
+
   if (run.status !== 0) {
-    const stderr = typeof run.stderr === "string" ? run.stderr.trim() : "";
-    throw new Error(`Fixture git ${args.join(" ")} exited ${run.status} in ${cwd}: ${stderr}`);
+    throw new Error(
+      `Fixture git ${args.join(" ")} exited ${run.status} in ${cwd}: ${run.stderr.trim()}`,
+    );
   }
 
   return run.stdout.trim();
@@ -201,25 +254,108 @@ try {
     /Expected one LCOV record.*found 0/,
   );
 
-  // The two mapping refusals no exported assertion can reach, driven through the command instead.
-  const outsideProject = spawnSync(process.execPath, [gatePath, "../outside-the-project.ts"], {
-    cwd: projectRoot,
-    encoding: "utf8",
+  // Prove the file-backed observer before trusting it with a negative control. The success case,
+  // deliberate failure, launch failure and signal termination have distinct process results.
+  const benignChild = observeChild(process.execPath, [
+    "-e",
+    'process.stdout.write("benign child completed\\n")',
+  ]);
+
+  assertChildResult("benign child", benignChild, {
+    status: 0,
+    stdout: "benign child completed\n",
+    stderr: "",
   });
 
-  assert.notEqual(outsideProject.status, 0);
-  assert.match(outsideProject.stderr, /Path is outside the project: \.\.\/outside-the-project\.ts/);
+  const diagnosticChild = observeChild(process.execPath, [
+    "-e",
+    [
+      'process.stdout.write("offender stdout\\n")',
+      'process.stderr.write("offender diagnostic\\n")',
+      "process.exitCode = 7",
+    ].join("; "),
+  ]);
 
-  const unmappableInTree = spawnSync(process.execPath, [gatePath, unmappablePath], {
-    cwd: projectRoot,
-    encoding: "utf8",
+  assertChildResult("diagnostic child", diagnosticChild, {
+    status: 7,
+    stdout: "offender stdout\n",
+    stderr: "offender diagnostic\n",
   });
-
-  assert.notEqual(unmappableInTree.status, 0);
-  assert.match(
-    unmappableInTree.stderr,
-    /Not a corresponding test path: tests\/edge\/notification-boundary\.ts/,
+  assert.throws(
+    () =>
+      assertChildResult(
+        "wrong-status control",
+        { ...diagnosticChild, status: 0 },
+        {
+          status: 7,
+          stdout: "offender stdout\n",
+          stderr: "offender diagnostic\n",
+        },
+      ),
+    /wrong-status control exit status/,
   );
+  assert.throws(
+    () =>
+      assertChildResult(
+        "missing-diagnostic control",
+        { ...diagnosticChild, stderr: "" },
+        {
+          status: 7,
+          stdout: "offender stdout\n",
+          stderr: "offender diagnostic\n",
+        },
+      ),
+    /missing-diagnostic control stderr/,
+  );
+
+  const missingExecutable = observeChild(path.join(fixtureRoot, "missing-executable"), []);
+
+  assert.equal(missingExecutable.error?.code, "ENOENT");
+  assert.equal(missingExecutable.signal, null);
+  assert.equal(missingExecutable.status, null);
+  assert.equal(missingExecutable.stdout, "");
+  assert.equal(missingExecutable.stderr, "");
+  assert.throws(
+    () =>
+      assertChildResult("launch-failure control", missingExecutable, {
+        status: 1,
+        stdout: "",
+        stderr: "offender diagnostic\n",
+      }),
+    /launch-failure control did not launch:/,
+  );
+
+  const signalledChild = observeChild(process.execPath, ["-e", "process.kill(process.pid, 15)"]);
+
+  assert.equal(signalledChild.error, undefined);
+  assert.equal(signalledChild.signal, "SIGTERM");
+  assert.equal(signalledChild.status, null);
+  assert.throws(
+    () =>
+      assertChildResult("signal control", signalledChild, {
+        status: 1,
+        stdout: "",
+        stderr: "",
+      }),
+    /signal control terminated by signal SIGTERM/,
+  );
+
+  // The two mapping refusals no exported assertion can reach, driven through the command instead.
+  const outsideProject = observeChild(process.execPath, [gatePath, "../outside-the-project.ts"]);
+
+  assertChildResult("outside-project mapping refusal", outsideProject, {
+    status: 1,
+    stdout: "",
+    stderr: "Path is outside the project: ../outside-the-project.ts\n",
+  });
+
+  const unmappableInTree = observeChild(process.execPath, [gatePath, unmappablePath]);
+
+  assertChildResult("unmappable test refusal", unmappableInTree, {
+    status: 1,
+    stdout: "",
+    stderr: "Not a corresponding test path: tests/edge/notification-boundary.ts\n",
+  });
 
   // The all-pair completeness assertion. These records are string pairs only -- the assertion never
   // reads the disk -- so the fixture names deliberately do not exist in the tree.
@@ -420,13 +556,17 @@ try {
 
   assert.equal(shallowBase.ok, true);
   assert.equal(shallowBase.candidate, "origin/main");
-  assert.notEqual(
-    spawnSync("git", ["rev-parse", "--verify", "HEAD~1"], {
-      cwd: shallowRepository,
-      encoding: "utf8",
-    }).status,
-    0,
+  const absentShallowParent = observeChild(
+    "git",
+    ["rev-parse", "--verify", "HEAD~1"],
+    shallowRepository,
   );
+
+  assert.equal(absentShallowParent.error, undefined);
+  assert.equal(absentShallowParent.signal, null);
+  assert.equal(absentShallowParent.status, 128);
+  assert.equal(absentShallowParent.stdout, "");
+  assert.notEqual(absentShallowParent.stderr, "");
 
   // With `origin/main`, `main`, and an upstream ref all absent, the chain falls through to its last
   // candidate instead of giving up.

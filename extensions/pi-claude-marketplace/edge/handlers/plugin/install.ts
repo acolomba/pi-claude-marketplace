@@ -20,7 +20,7 @@
 // BLOCK C: no imports from persistence/, domain/, bridges/, transaction/,
 // platform/. Only orchestrators/, shared/, edge/ (sibling) imports.
 
-import { createNodeInstallPlugin } from "../../../orchestrators/plugin/install-flow.ts";
+import { createInstallOperation } from "../../../orchestrators/plugin/operations.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { passThroughFlagNames } from "../../flag-catalog.ts";
 import { extractLocalFlag } from "../shared.ts";
@@ -49,7 +49,7 @@ export function makeInstallHandler(
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  const installPlugin = createNodeInstallPlugin(hooksRouting, completionCache);
+  const installPlugin = createInstallOperation(hooksRouting, completionCache);
   return async (args, ctx): Promise<void> => {
     // Shared scanner; see edge/handlers/shared.ts. The catalog-derived
     // pass-through flags are downstream-consumed; pass through verbatim.

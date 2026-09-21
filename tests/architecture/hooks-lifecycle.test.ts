@@ -38,10 +38,7 @@ import { REPO_ROOT } from "./source-scan.ts";
 
 import type { HooksHydrationDeps } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionAPI } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 // D-07-05: the four orchestrators this gate pins and the event-router where the
 // WR-01 prefix lives come from `HOOKS_LIFECYCLE_TARGETS`, so a literal-match
@@ -338,7 +335,8 @@ test("WR-03 Block F: every orchestrators/plugin/*.ts that mutates the cache also
     `D-07-03: walked ${PLUGIN_ORCHESTRATORS_REL} and found no .ts files, so this block inspected nothing`,
   );
 
-  let scanned = 0;
+  const scanned: string[] = [];
+  const missingRebuild: string[] = [];
   for (const file of tsFiles) {
     const filePath = path.join(orchestratorDir, file);
     const raw = await readFile(filePath, "utf8");
@@ -358,19 +356,24 @@ test("WR-03 Block F: every orchestrators/plugin/*.ts that mutates the cache also
       continue;
     }
 
-    assert.ok(
-      /\brebuildRoutingTables\(/.test(nonImportText),
-      `${file}: mutates the hooks-bridge parsed-config cache but does NOT call rebuildRoutingTables in the same file -- silent NFR-2 regression`,
-    );
-    scanned += 1;
+    scanned.push(file);
+    if (!/\brebuildRoutingTables\(/.test(nonImportText)) {
+      missingRebuild.push(file);
+    }
   }
+
+  assert.deepStrictEqual(
+    missingRebuild,
+    [],
+    "WR-03 Block F: these orchestrators mutate the hooks-bridge parsed-config cache but do NOT call rebuildRoutingTables in the same file -- silent NFR-2 regression",
+  );
 
   // Guard against a future refactor that moves the call sites elsewhere: the
   // scan MUST find at least the four wired lifecycle verbs (install,
   // uninstall, reinstall, update).
   assert.ok(
-    scanned >= 4,
-    `WR-03 Block F: expected at least 4 orchestrators with cache mutations + rebuild; found ${String(scanned)}`,
+    scanned.length >= 4,
+    `WR-03 Block F: expected at least 4 orchestrators with cache mutations + rebuild; found ${String(scanned.length)}`,
   );
 });
 
@@ -399,9 +402,8 @@ test("same-runtime reload makes every retained registration inert before argumen
   const hydration = createHooksHydration(runtime, reader);
   const factoryRoot = path.join(root, "factory");
   const projectRoot = path.join(root, "project");
-  const registrationContext = { cwd: factoryRoot } as ExtensionContext;
-  await hydration.registerHooksBridge(pi, { ctx: registrationContext, cwd: factoryRoot });
-  await hydration.registerHooksBridge(pi, { ctx: registrationContext, cwd: factoryRoot });
+  await hydration.registerHooksBridge(pi, { cwd: factoryRoot });
+  await hydration.registerHooksBridge(pi, { cwd: factoryRoot });
   const staleRegistrations = registrations.slice(0, 11);
   const liveRegistrations = registrations.slice(11);
   const registrationOrder = [
@@ -427,7 +429,8 @@ test("same-runtime reload makes every retained registration inert before argumen
   const forbiddenArgument = new Proxy(
     {},
     {
-      get(_target, property): never {
+      get(target, property): never {
+        void target;
         throw new Error(`stale callback read argument property ${String(property)}`);
       },
     },
@@ -436,11 +439,11 @@ test("same-runtime reload makes every retained registration inert before argumen
   // act
   for (const registration of staleRegistrations) {
     assert.strictEqual(typeof registration.handler, "function");
-    const result = (registration.handler as (...args: unknown[]) => unknown)(
+    const staleReturn = (registration.handler as (...args: unknown[]) => unknown)(
       forbiddenArgument,
       forbiddenArgument,
     );
-    assert.strictEqual(await Promise.resolve(result), undefined);
+    assert.strictEqual(await Promise.resolve(staleReturn), undefined);
   }
 
   const runtimeAfterStale = JSON.stringify({

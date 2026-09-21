@@ -62,7 +62,7 @@ const MS_PER_SECOND = 1000;
  * later has failed in a way a sweeper should not adjudicate, and the cost of
  * erring in the safe direction is one orphan surviving an extra pass.
  */
-export const WORKFLOWS_STAGING_MAX_AGE_MS =
+const WORKFLOWS_STAGING_MAX_AGE_MS =
   HOURS_PER_DAY * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MS_PER_SECOND;
 
 /**

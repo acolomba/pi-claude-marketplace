@@ -17,51 +17,14 @@ import {
 import { unstagePluginWorkflows as definingUnstagePluginWorkflows } from "../../../extensions/pi-claude-marketplace/bridges/workflows/unstage.ts";
 
 import type * as WorkflowsBarrel from "../../../extensions/pi-claude-marketplace/bridges/workflows/index.ts";
-import type {
-  CommitWorkflowsOptions as BarrelCommitWorkflowsOptions,
-  DiscoveredWorkflow as BarrelDiscoveredWorkflow,
-  DiscoverPluginWorkflowsResult as BarrelDiscoverPluginWorkflowsResult,
-  PreparedWorkflowsStaging as BarrelPreparedWorkflowsStaging,
-  StageWorkflowsCommitResult as BarrelStageWorkflowsCommitResult,
-  StageWorkflowsInput as BarrelStageWorkflowsInput,
-  UnstageWorkflowFailure as BarrelUnstageWorkflowFailure,
-  UnstageWorkflowsInput as BarrelUnstageWorkflowsInput,
-  UnstageWorkflowsResult as BarrelUnstageWorkflowsResult,
-  WorkflowDiscoveryTarget as BarrelWorkflowDiscoveryTarget,
-  WorkflowEnvelope as BarrelWorkflowEnvelope,
-} from "../../../extensions/pi-claude-marketplace/bridges/workflows/index.ts";
-import type {
-  CommitWorkflowsOptions as DefiningCommitWorkflowsOptions,
-  DiscoveredWorkflow as DefiningDiscoveredWorkflow,
-  DiscoverPluginWorkflowsResult as DefiningDiscoverPluginWorkflowsResult,
-  PreparedWorkflowsStaging as DefiningPreparedWorkflowsStaging,
-  StageWorkflowsCommitResult as DefiningStageWorkflowsCommitResult,
-  StageWorkflowsInput as DefiningStageWorkflowsInput,
-  UnstageWorkflowFailure as DefiningUnstageWorkflowFailure,
-  UnstageWorkflowsInput as DefiningUnstageWorkflowsInput,
-  UnstageWorkflowsResult as DefiningUnstageWorkflowsResult,
-  WorkflowDiscoveryTarget as DefiningWorkflowDiscoveryTarget,
-  WorkflowEnvelope as DefiningWorkflowEnvelope,
-} from "../../../extensions/pi-claude-marketplace/bridges/workflows/types.ts";
+import type { PreparedWorkflowsStaging as BarrelPreparedWorkflowsStaging } from "../../../extensions/pi-claude-marketplace/bridges/workflows/index.ts";
+import type { PreparedWorkflowsStaging as DefiningPreparedWorkflowsStaging } from "../../../extensions/pi-claude-marketplace/bridges/workflows/types.ts";
 
 type Same<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
 type PreparedWorkflowsNoop = Extract<BarrelPreparedWorkflowsStaging, { kind: "noop" }>;
 type PreparedWorkflowsStaged = Extract<BarrelPreparedWorkflowsStaging, { kind: "staged" }>;
 
-void (true satisfies Same<BarrelCommitWorkflowsOptions, DefiningCommitWorkflowsOptions>);
-void (true satisfies Same<BarrelDiscoveredWorkflow, DefiningDiscoveredWorkflow>);
-void (true satisfies Same<
-  BarrelDiscoverPluginWorkflowsResult,
-  DefiningDiscoverPluginWorkflowsResult
->);
 void (true satisfies Same<BarrelPreparedWorkflowsStaging, DefiningPreparedWorkflowsStaging>);
-void (true satisfies Same<BarrelStageWorkflowsCommitResult, DefiningStageWorkflowsCommitResult>);
-void (true satisfies Same<BarrelStageWorkflowsInput, DefiningStageWorkflowsInput>);
-void (true satisfies Same<BarrelUnstageWorkflowFailure, DefiningUnstageWorkflowFailure>);
-void (true satisfies Same<BarrelUnstageWorkflowsInput, DefiningUnstageWorkflowsInput>);
-void (true satisfies Same<BarrelUnstageWorkflowsResult, DefiningUnstageWorkflowsResult>);
-void (true satisfies Same<BarrelWorkflowDiscoveryTarget, DefiningWorkflowDiscoveryTarget>);
-void (true satisfies Same<BarrelWorkflowEnvelope, DefiningWorkflowEnvelope>);
 void (true satisfies Same<PreparedWorkflowsNoop["kind"], "noop">);
 void (true satisfies Same<PreparedWorkflowsStaged["kind"], "staged">);
 

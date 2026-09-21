@@ -44,18 +44,18 @@ import { readFile } from "node:fs/promises";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notification-dispatch.ts";
-import { installTimerLadder, type TimerLadder } from "../exec-timer.ts";
+import { installTimerLadder } from "../exec-timer.ts";
 import { prepareHookEnv } from "../hook-env.ts";
-import { translate as translatePostCompact } from "../payloads/post-compact.ts";
-import { translate as translatePostToolUseFailure } from "../payloads/post-tool-use-failure.ts";
-import { translate as translatePostToolUse } from "../payloads/post-tool-use.ts";
-import { translate as translatePreCompact } from "../payloads/pre-compact.ts";
-import { translate as translatePreToolUse } from "../payloads/pre-tool-use.ts";
-import { translate as translateSessionEnd } from "../payloads/session-end.ts";
-import { translate as translateSessionStart } from "../payloads/session-start.ts";
-import { translate as translateStopFailure } from "../payloads/stop-failure.ts";
-import { translate as translateStop } from "../payloads/stop.ts";
-import { translate as translateUserPromptSubmit } from "../payloads/user-prompt-submit.ts";
+import { translatePostCompact } from "../payloads/post-compact.ts";
+import { translatePostToolUseFailure } from "../payloads/post-tool-use-failure.ts";
+import { translatePostToolUse } from "../payloads/post-tool-use.ts";
+import { translatePreCompact } from "../payloads/pre-compact.ts";
+import { translatePreToolUse } from "../payloads/pre-tool-use.ts";
+import { translateSessionEnd } from "../payloads/session-end.ts";
+import { translateSessionStart } from "../payloads/session-start.ts";
+import { translateStopFailure } from "../payloads/stop-failure.ts";
+import { translateStop } from "../payloads/stop.ts";
+import { translateUserPromptSubmit } from "../payloads/user-prompt-submit.ts";
 import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
 import { resolveTimeoutSeconds } from "../timeout.ts";
 import { buildTranslationContext, type TranslationContext } from "../translation-context.ts";
@@ -69,11 +69,11 @@ import {
 } from "./pid-table.ts";
 import { RingBuffer, STDERR_CAP_BYTES, STDOUT_CAP_BYTES } from "./ring-buffer.ts";
 
-import type { BucketAEvent, DispatchableEvent } from "../../../domain/components/hook-events.ts";
+import type { DispatchableEvent } from "../../../domain/components/hook-events.ts";
 import type { ScopedLocations } from "../../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../../platform/pi-api.ts";
 import type { RoutingEntry } from "../routing-state.ts";
-import type { HooksRuntime } from "../runtime.ts";
+import type { HooksRuntime, HooksRuntimeChildEntry } from "../runtime.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Constants
@@ -84,7 +84,7 @@ import type { HooksRuntime } from "../runtime.ts";
  * orphan-reap pass can probe `/proc/<pid>/environ` on Linux and refuse
  * to SIGKILL a stranger process that may have inherited a recycled pid.
  */
-export const MARKER_ENV = "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH" as const;
+const MARKER_ENV = "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH" as const;
 
 /** HOOK-06: separator between `rewakeMessage` and the captured body. */
 const BODY_SEPARATOR = "\n\n";
@@ -119,29 +119,13 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * Per-child in-memory registry row. Readonly fields are populated at
- * `spawnAndRegister` time and never mutate; the ring-buffer handles ARE
- * mutable internally (write() appends bytes) but the entry's reference
- * to them is fixed.
+ * Per-child in-memory registry row: the bridge-facing name for
+ * `HooksRuntimeChildEntry`. The one value built here is handed straight to
+ * `runtime.registerChild`, whose parameter is that row, so the two are one
+ * declaration rather than two that happen to match structurally.
  */
 // fallow-ignore-next-line unused-type -- WR-01 compatibility: preserve the published registry row type; it remains internally consumed and has no replacement public binding.
-export interface AsyncRewakeEntry {
-  readonly dispatchId: string;
-  readonly pid: number;
-  readonly scope: "user" | "project";
-  readonly marketplace: string;
-  readonly pluginId: string;
-  readonly claudeEvent: BucketAEvent;
-  readonly spawnedAt: string;
-  readonly rewakeMessage: string | undefined;
-  readonly rewakeSummary: string | undefined;
-  readonly child: ChildProcess;
-  readonly ladder: TimerLadder;
-  readonly stdoutBuffer: RingBuffer;
-  readonly stderrBuffer: RingBuffer;
-  readonly capturedGeneration: number;
-  readonly loc: ScopedLocations;
-}
+export type AsyncRewakeEntry = HooksRuntimeChildEntry;
 
 // ──────────────────────────────────────────────────────────────────────────
 // Production dependency contracts
@@ -154,7 +138,7 @@ export interface AsyncRewakeEntry {
  * stranger pid, and a `/proc` read on a non-Linux host, are both unavailable
  * to a unit test. Production never passes them: `reapOrphans`, `isPidAlive`
  * and `readProcEnvironMarker` all default to `DEFAULT_ORPHAN_PROBES`, and
- * `event-router.ts`'s sole `reapOrphans(loc)` call takes that default.
+ * `event-router.ts`'s sole `reapOrphans(runtime, loc)` call takes that default.
  *
  * Exported because `reapOrphans` names it in its signature (a caller that
  * substitutes probes has to be able to name the shape it is passing).
@@ -260,7 +244,12 @@ export async function spawnAndRegister(
       });
       hookDebugLog(`async-rewake: child has no pid (${entry.pluginId}/${entry.claudeEvent})`);
       try {
-        child.kill("SIGKILL");
+        const killed = child.kill("SIGKILL");
+        if (!killed) {
+          hookDebugLog(
+            `async-rewake: kill(SIGKILL) returned false for pid-less child (${entry.pluginId}/${entry.claudeEvent})`,
+          );
+        }
       } catch {
         // best-effort
       }
@@ -275,8 +264,22 @@ export async function spawnAndRegister(
     // `defaultMaxListeners = 10` applies per-instance, not across the
     // bridge, so no `setMaxListeners` adjustment is needed even for
     // large fan-ins.
+    // EPIPE/ECONNRESET defense: attach the error listeners before "data" so a
+    // stream error during the SIGTERM/SIGKILL teardown races this registry
+    // runs cannot surface as an unhandled exception. Mirrors the child.stdin
+    // error defense below.
+    child.stderr?.on("error", (err) => {
+      hookDebugLog(
+        `async-rewake: stderr error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
+      );
+    });
     child.stderr?.on("data", (buf: Buffer) => {
       stderrBuffer.write(buf);
+    });
+    child.stdout?.on("error", (err) => {
+      hookDebugLog(
+        `async-rewake: stdout error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
+      );
     });
     child.stdout?.on("data", (buf: Buffer) => {
       stdoutBuffer.write(buf);
@@ -600,10 +603,9 @@ async function prepareAsyncEnv(
  * traps and `hookDebugLog`s its own failures.
  *
  * The shared `_shared/` dir gets a defensive `mkdir({ recursive: true })`
- * indirectly through `atomicWriteJson`'s internal directory creation
- * (verified at shared/atomic-json.ts:25), so a cold-start where the
- * directory does not yet exist is handled without an explicit
- * `ensureSharedDataDir` call here.
+ * indirectly through `atomicWriteJson`'s own internal directory creation,
+ * so a cold-start where the directory does not yet exist is handled
+ * without an explicit `ensureSharedDataDir` call here.
  */
 async function persistPidTableForLoc(
   runtime: HooksRuntime,
@@ -637,6 +639,9 @@ function isPidAlive(pid: number, probes: OrphanProbes = DEFAULT_ORPHAN_PROBES): 
       return true;
     }
 
+    hookDebugLog(
+      `async-rewake: isPidAlive unrecognized errno for pid ${pid}: ${errorMessage(err)}`,
+    );
     return false;
   }
 }

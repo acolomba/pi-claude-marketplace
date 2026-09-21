@@ -2,8 +2,8 @@
 //
 // StopFailure payload translator + error-type classifier (SFAIL-02, SFAIL-03).
 //
-// `translate` consumes the synthetic StopFailure event the settle handler
-// builds and emits the Claude `StopFailure` stdin envelope.
+// `translateStopFailure` consumes the synthetic StopFailure event the settle
+// handler builds and emits the Claude `StopFailure` stdin envelope.
 // `classifyStopFailure` maps Pi's rendered `errorMessage` into the closed
 // 10-value error-type vocabulary (D-88-02: errorMessage-only), with `unknown`
 // as the in-vocabulary fallback and a deterministic `length ->
@@ -35,7 +35,10 @@ export interface StopFailureEvent {
   readonly last_assistant_message: string;
 }
 
-export function translate(event: StopFailureEvent, ctx: TranslationContext): StopFailureStdin {
+export function translateStopFailure(
+  event: StopFailureEvent,
+  ctx: TranslationContext,
+): StopFailureStdin {
   return {
     session_id: ctx.sessionId,
     transcript_path: ctx.transcriptPath,

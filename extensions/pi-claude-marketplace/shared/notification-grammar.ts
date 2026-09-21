@@ -1,6 +1,6 @@
 import { appendHooksBlock } from "./concerns/hooks.ts";
 import { softDepMarkers } from "./concerns/soft-dep.ts";
-import { assertNever, causeChainTrailer, manualRecoveryLeaks } from "./errors.ts";
+import { causeChainTrailer, manualRecoveryLeaks } from "./errors.ts";
 
 import type { SoftDepStatus } from "../platform/pi-api.ts";
 import type { Dependency } from "./concerns/soft-dep.ts";
@@ -68,8 +68,12 @@ export const ICON_DISABLED = "◍";
  * `(remote)` row -- a not-installed git-source plugin whose clone/mirror is not
  * yet materialized locally. The dotted circle reads "declared but not
  * present". Distinct from `ICON_DISABLED`, which uses `◍` (U+25CD).
+ *
+ * Module-private: two renderers carry this glyph to a row -- `renderRemoteRow`
+ * below and `pluginInfoStatusGlyph`'s `remote` arm, which the `info` plugin row
+ * joins -- so those rows' bytes are its public contract.
  */
-export const ICON_REMOTE = "◌";
+const ICON_REMOTE = "◌";
 
 /**
  * FSTAT-02 / D-66-03: dedicated glyph for a `partially-installed` row -- a
@@ -91,8 +95,13 @@ export const ICON_PARTIALLY_INSTALLED = "◉";
  * components dropped" rather than "blocked". DISTINCT from `⊘`
  * (`ICON_UNINSTALLABLE`, reserved for unavailable / blocked / failed / manual-
  * recovery) and from `◉` (`ICON_PARTIALLY_INSTALLED`, the *installed*-degraded row).
+ *
+ * Module-private: two renderers carry this glyph to a row --
+ * `renderPartiallyAvailableRow` below and `pluginInfoStatusGlyph`'s
+ * `partially-available` arm, which the `info` plugin row joins -- so those
+ * rows' bytes are its public contract.
  */
-export const ICON_PARTIALLY_AVAILABLE = "⊖";
+const ICON_PARTIALLY_AVAILABLE = "⊖";
 
 /**
  * PL-4 column-66 description truncation. Strings longer than 66 chars are
@@ -301,14 +310,6 @@ export function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDe
         .filter((t) => t !== "")
         .join(" ");
     }
-
-    default: {
-      // Per-status discriminated union (TYPE-04): every arm is handled above,
-      // so `mp` narrows to `never` here -- pass the value itself rather than
-      // `mp.status` (which would be an access on `never`).
-      assertNever(mp);
-      return "";
-    }
   }
 }
 
@@ -334,11 +335,9 @@ export function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDe
 //
 // SNM-16: soft-dep markers are injected at render time from the per-row
 // `dependencies?` declaration + the threaded `SoftDepStatus` probe. The
-// switch ends with the hardened shape `default: { assertNever(p);
-// return ""; }` so a future `PluginNotificationMessage` variant becomes a
-// compile error at this switch (the typecheck relies on `assertNever`'s
-// throw at runtime, not on its `never` return type via a value-returning
-// expression).
+// switch lists every status and has no default arm, so a future
+// `PluginNotificationMessage` variant becomes a type and lint error at this
+// switch.
 // ---------------------------------------------------------------------------
 
 /**
@@ -518,7 +517,7 @@ export function composeReasons(
 /**
  * Compose a scope-bearing, reasons-bearing plugin row that carries NO
  * soft-dep marker. Folds the structurally-identical `renderPluginRow` arms
- * (`upgradable` / `skipped` / `failed` / `manual recovery` / `disabled`) that
+ * (`upgradable` / `partially-upgradable` / `skipped` / `failed` / `manual recovery`) that
  * differ only in their icon and their parenthesized status `label`. `label` is
  * the FULL parenthesized token (the caller passes `"(upgradable)"` etc.,
  * INCLUDING the parens, so the `"(manual recovery)"` literal keeps its space
@@ -860,8 +859,8 @@ function renderPendingRow(
 
 /**
  * Renders the plugin row (no leading indent -- caller adds it). SOLE
- * site for plugin-row grammar (SNM-17). assertNever default arm is the
- * compile-time exhaustiveness gate.
+ * site for plugin-row grammar (SNM-17). The switch lists every status and
+ * has no default arm, which is the compile-time exhaustiveness gate.
  *
  * Token order follows the grammar `icon name [scope] versionToken
  * (status) {reasons}` (MSG-GR-1). Scope bracket is emitted via the
@@ -885,15 +884,15 @@ function renderPendingRow(
  * staged counts, the inventory rows omit them.
  *
  * Per-variant `composeReasons` first argument, over the 19 plugin statuses:
- *  - 9 reasons-less variants (updated, uninstalled, available, remote, disabled,
+ *  - 7 reasons-less variants (uninstalled, available, remote,
  *  will install, will uninstall, will enable, will disable) pass `undefined` --
  *  or, on the arms that can carry no marker of any kind (remote and the four
  *  pending-tense rows), drop the call entirely;
- *  - 10 reasons-bearing variants (installed, reinstalled, unavailable,
- *  upgradable, failed, skipped, manual recovery, partially-installed,
- *  partially-upgradable, partially-available) pass `p.reasons`. `installed` and
- *  `reinstalled` are the two arms whose field is OPTIONAL, so they pass a
- *  possibly-undefined value.
+ *  - 12 reasons-bearing variants (installed, updated, reinstalled, disabled,
+ *  unavailable, upgradable, failed, skipped, manual recovery, partially-installed,
+ *  partially-upgradable, partially-available) pass `p.reasons`. `installed`,
+ *  `updated`, `reinstalled`, and `disabled` are the four arms whose field is
+ *  OPTIONAL, so they pass a possibly-undefined value.
  *
  * NOT rendered here (`notify` composes them as additional
  * indented lines AFTER the row):
@@ -1011,10 +1010,6 @@ function renderPluginRow(
       return renderPendingRow(p, mpScope);
     case "disabled":
       return renderDisabledRow(p, probe, mpScope);
-    default: {
-      assertNever(p);
-      return "";
-    }
   }
 }
 
@@ -1183,9 +1178,6 @@ export function renderMarketplaceInfo(
     case "path":
       lines.push(`path: ${message.source.absPath}`);
       break;
-
-    default:
-      assertNever(message.source);
   }
 
   // D-76-10: `last_updated:` renders for all git-backed kinds (github + url),
@@ -1260,7 +1252,7 @@ export function renderPluginInfoCascade(
 /**
  * Map a `PluginInfoRow` status literal to its rendering glyph.
  * `installed` -> `●`, `available` -> `○`,
- * `unavailable | failed` -> `⊘`. Exhaustive switch + `assertNever`
+ * `unavailable | failed` -> `⊘`. Exhaustive switch with no default arm,
  * so a 5th status member in `PluginInfoRowBase` would be a compile-
  * time error here rather than silently defaulting to the uninstallable
  * glyph.
@@ -1291,9 +1283,6 @@ function pluginInfoStatusGlyph(status: PluginInfoRow["status"]): string {
     case "failed":
       // Both use the prohibited-symbol glyph.
       return ICON_UNINSTALLABLE;
-    default:
-      assertNever(status);
-      return "";
   }
 }
 
@@ -1447,7 +1436,7 @@ export function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatu
     ),
   ];
 
-  const pluginRow = joinTokens([
+  const pluginRowLine = joinTokens([
     pluginInfoStatusGlyph(plugin.status),
     plugin.name,
     renderScopeBracket(plugin.scope, message.marketplaceScope),
@@ -1455,7 +1444,7 @@ export function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatu
     `(${plugin.status})`,
     composeReasons(plugin.reasons, false, false, false, probe),
   ]);
-  lines.push(`  ${pluginRow}`);
+  lines.push(`  ${pluginRowLine}`);
 
   if (plugin.description !== undefined && plugin.description.length > 0) {
     lines.push(...wrapDescription(plugin.description, 4, DESCRIPTION_MAX_COLS));
@@ -1470,9 +1459,6 @@ export function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatu
     case false:
       lines.push("    components: not resolved");
       break;
-
-    default:
-      assertNever(plugin);
   }
 
   // WR-09: per-file advisories LAST, after every component line and after the
@@ -1529,7 +1515,7 @@ export function composeReconcileAppliedBody(
  * losing its description line. The list inventory rows carry it; a cascade
  * `installed` row never sets `description`, so those stay single-line.
  */
-const DESCRIPTION_BEARING_STATUS: Record<PluginNotificationMessage["status"], boolean> = {
+const DESCRIPTION_BEARING_STATUS = {
   installed: true,
   upgradable: true,
   available: true,
@@ -1549,12 +1535,23 @@ const DESCRIPTION_BEARING_STATUS: Record<PluginNotificationMessage["status"], bo
   "will uninstall": false,
   "will enable": false,
   "will disable": false,
-};
+} as const satisfies Record<PluginNotificationMessage["status"], boolean>;
 
-/** Narrow to the rows whose variant declares an optional `description`. */
+/**
+ * The statuses the map above marks description-bearing, read back off that map
+ * so the predicate's narrowing and its runtime decision come from one place and
+ * cannot drift apart.
+ */
+type DescriptionBearingStatus = {
+  [K in PluginNotificationMessage["status"]]: (typeof DESCRIPTION_BEARING_STATUS)[K] extends true
+    ? K
+    : never;
+}[PluginNotificationMessage["status"]];
+
+/** Narrow to the rows whose variant carries an optional `description`. */
 function isDescriptionBearingRow(
   p: PluginNotificationMessage,
-): p is Extract<PluginNotificationMessage, { description?: string }> {
+): p is Extract<PluginNotificationMessage, { status: DescriptionBearingStatus }> {
   return DESCRIPTION_BEARING_STATUS[p.status];
 }
 

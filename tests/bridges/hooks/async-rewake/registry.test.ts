@@ -16,7 +16,6 @@ import {
   type PidTableEntry,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts";
 import {
-  MARKER_ENV,
   reapOrphans,
   shutdownInMemoryChildren,
   spawnAndRegister,
@@ -96,6 +95,7 @@ interface ChildOptions {
   readonly stdout?: "absent";
   readonly stderr?: "absent";
   readonly killError?: Error;
+  readonly killReturnsFalse?: boolean;
 }
 
 function createChild(pid: number | undefined, options: ChildOptions = {}): ChildHarness {
@@ -132,6 +132,10 @@ function createChild(pid: number | undefined, options: ChildOptions = {}): Child
       signals.push(signal ?? "SIGTERM");
       if (options.killError !== undefined) {
         throw options.killError;
+      }
+
+      if (options.killReturnsFalse === true) {
+        return false;
       }
 
       killed = true;
@@ -399,8 +403,12 @@ async function waitForPidTable(
   loc: ReturnType<typeof locationsFor>,
   expected: readonly PidTableEntry[],
 ): Promise<void> {
+  // The registry persists the table after `close` through async file
+  // operations it does not await, so the test reads the file until it
+  // settles. Wall-clock time is the only bound: a count of attempts is not,
+  // because a fast runner exhausts it in a fraction of the deadline.
   const deadline = process.hrtime.bigint() + 2_000_000_000n;
-  for (let attempt = 0; attempt < 1_000 && process.hrtime.bigint() < deadline; attempt += 1) {
+  while (process.hrtime.bigint() < deadline) {
     const entries = await readPidTable(loc);
     if (isDeepStrictEqual(entries, expected)) {
       return;
@@ -592,7 +600,7 @@ test(
         "data",
         "plugin-lifecycle",
       ),
-      [MARKER_ENV]: "dispatch-lifecycle",
+      ["PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH"]: "dispatch-lifecycle",
       CLAUDECODE: "1",
       CLAUDE_CODE_SESSION_ID: "session-lifecycle",
       CLAUDE_SESSION_ID: "session-lifecycle",
@@ -668,7 +676,6 @@ test(
           },
         },
       ]);
-      assert.strictEqual(MARKER_ENV, "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH");
       assert.strictEqual(Buffer.concat(stdinChunks).toString("utf8"), expectedStdin);
       assert.strictEqual(child.stdin?.writableEnded, true);
       assert.deepStrictEqual(listenersAfterRegistration, {
@@ -980,6 +987,54 @@ test("contains a kill failure for a spawned child that has no PID", async () => 
   }
 });
 
+test("logs a failed SIGKILL for a spawned child that has no PID", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-no-pid-kill-false-"));
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (previousDebug === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  shutdownInMemoryChildren(runtime);
+  const locations = locationsFor("project", root);
+  const context = createContext(root, "session-no-pid-kill-false", true);
+  const pi = createPi();
+  const child = createChild(undefined, { killReturnsFalse: true });
+  const diagnostics: string[] = [];
+  t.mock.method(console, "error", (...parts: unknown[]) => {
+    diagnostics.push(parts.map(String).join(" "));
+  });
+
+  try {
+    // act
+    await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
+      spawnImpl: createSpawn(child.child, []),
+      dispatchId: () => "dispatch-no-pid-kill-false",
+    });
+
+    // assert
+    assert.deepStrictEqual(child.signals, ["SIGKILL"]);
+    assert.strictEqual(diagnostics.length, 2);
+    assert.match(diagnostics[0] ?? "", /child has no pid/);
+    assert.match(diagnostics[1] ?? "", /kill\(SIGKILL\) returned false/);
+    assert.match(diagnostics[1] ?? "", /plugin-lifecycle\/PreToolUse/);
+    assert.deepStrictEqual(pi.messages, []);
+    assert.deepStrictEqual(context.notifications, []);
+  } finally {
+    shutdownInMemoryChildren(runtime);
+    child.child.removeAllListeners();
+    child.stdin?.destroy();
+    child.stdout.destroy();
+    child.stderr.destroy();
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
 test("contains stdin errors after registering the listener before delivery", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
@@ -1023,6 +1078,100 @@ test("contains stdin errors after registering the listener before delivery", asy
         throw new Error("dead child must not inspect environ");
       },
     });
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("contains stdout errors after registering the listener before delivery", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-stdout-error-"));
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (previousDebug === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  shutdownInMemoryChildren(runtime);
+  const locations = locationsFor("project", root);
+  const context = createContext(root, "session-stdout-error", true);
+  const pi = createPi();
+  const child = createChild(24_686);
+  const diagnostics: string[] = [];
+  t.mock.method(console, "error", (...parts: unknown[]) => {
+    diagnostics.push(parts.map(String).join(" "));
+  });
+
+  try {
+    // act
+    await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
+      spawnImpl: createSpawn(child.child, []),
+      dispatchId: () => "dispatch-stdout-error",
+    });
+    child.stdout.emit("error", new Error("EPIPE from case child stdout"));
+
+    // assert
+    assert.strictEqual(child.stdout.listenerCount("error"), 1);
+    assert.strictEqual(diagnostics.length, 1);
+    assert.match(diagnostics[0] ?? "", /stdout error/);
+    assert.match(diagnostics[0] ?? "", /plugin-lifecycle\/PreToolUse/);
+    assert.match(diagnostics[0] ?? "", /EPIPE from case child stdout/);
+    assert.deepStrictEqual(pi.messages, []);
+    assert.deepStrictEqual(context.notifications, []);
+  } finally {
+    shutdownInMemoryChildren(runtime);
+    destroyChild(child);
+    await reapOrphans(runtime, locations, deadOrphanProbes());
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("contains stderr errors after registering the listener before delivery", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-stderr-error-"));
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (previousDebug === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  shutdownInMemoryChildren(runtime);
+  const locations = locationsFor("project", root);
+  const context = createContext(root, "session-stderr-error", true);
+  const pi = createPi();
+  const child = createChild(24_687);
+  const diagnostics: string[] = [];
+  t.mock.method(console, "error", (...parts: unknown[]) => {
+    diagnostics.push(parts.map(String).join(" "));
+  });
+
+  try {
+    // act
+    await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
+      spawnImpl: createSpawn(child.child, []),
+      dispatchId: () => "dispatch-stderr-error",
+    });
+    child.stderr.emit("error", new Error("EPIPE from case child stderr"));
+
+    // assert
+    assert.strictEqual(child.stderr.listenerCount("error"), 1);
+    assert.strictEqual(diagnostics.length, 1);
+    assert.match(diagnostics[0] ?? "", /stderr error/);
+    assert.match(diagnostics[0] ?? "", /plugin-lifecycle\/PreToolUse/);
+    assert.match(diagnostics[0] ?? "", /EPIPE from case child stderr/);
+    assert.deepStrictEqual(pi.messages, []);
+    assert.deepStrictEqual(context.notifications, []);
+  } finally {
+    shutdownInMemoryChildren(runtime);
+    destroyChild(child);
+    await reapOrphans(runtime, locations, deadOrphanProbes());
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }
 });
@@ -2270,7 +2419,7 @@ test(
       environReader(pid): Promise<string> {
         calls.push({ kind: "environ", pid });
         return Promise.resolve(
-          `BROKEN\0OTHER=value\0${MARKER_ENV}=dispatch-owned\0${MARKER_ENV}_SUFFIX=ignored`,
+          `BROKEN\0OTHER=value\0PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=dispatch-owned\0PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH_SUFFIX=ignored`,
         );
       },
     } satisfies OrphanProbes;
@@ -2327,7 +2476,9 @@ test(
       },
       environReader(pid): Promise<string> {
         return Promise.resolve(
-          pid === 31_002 ? `${MARKER_ENV}=dispatch-other\0OTHER=x` : "OTHER=x\0NO_EQUALS",
+          pid === 31_002
+            ? `PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=dispatch-other\0OTHER=x`
+            : "OTHER=x\0NO_EQUALS",
         );
       },
     } satisfies OrphanProbes;
@@ -2422,7 +2573,7 @@ test(
         }
       },
       environReader(): Promise<string> {
-        return Promise.resolve(`${MARKER_ENV}=dispatch-permission`);
+        return Promise.resolve(`PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=dispatch-permission`);
       },
     } satisfies OrphanProbes;
 
@@ -2569,7 +2720,7 @@ test(
         }
       },
       environReader(): Promise<string> {
-        return Promise.resolve(`${MARKER_ENV}=dispatch-kill-failure`);
+        return Promise.resolve(`PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=dispatch-kill-failure`);
       },
     } satisfies OrphanProbes;
 

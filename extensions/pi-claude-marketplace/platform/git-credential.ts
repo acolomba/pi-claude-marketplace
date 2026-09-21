@@ -3,12 +3,14 @@
  * `git credential fill/approve/reject` via node:child_process.spawn.
  *
  * REJECTED: `pi.exec` from @earendil-works/pi-coding-agent -- verified at
- * node_modules/@earendil-works/pi-coding-agent/dist/core/exec.js:12 to use
+ * node_modules/@earendil-works/pi-coding-agent/dist/core/exec.js:15 to use
  * `stdio: ["ignore", ...]`. git credential REQUIRES stdin.
  *
- * D-21: this is the ONLY file in
+ * D-21: this is one of three files in
  * extensions/pi-claude-marketplace/ permitted to import node:child_process
- * (whitelist asserted in tests/architecture/no-shell-out.test.ts).
+ * (whitelist asserted in tests/architecture/no-shell-out.test.ts; the other
+ * two are bridges/hooks/dispatch-exec.ts and
+ * bridges/hooks/async-rewake/registry.ts).
  *
  * Failure-mode contract: when git is absent from PATH, the
  * subprocess spawn emits ENOENT. `credentialFill` catches and returns null;
@@ -35,6 +37,9 @@
 
 import { spawn } from "node:child_process";
 
+import { hookDebugLog } from "../shared/debug-log.ts";
+import { errorMessage } from "../shared/errors.ts";
+
 import type { GitCredentials } from "./git.ts";
 
 /**
@@ -44,8 +49,11 @@ import type { GitCredentials } from "./git.ts";
  *   - approve: persist a credential to the OS keychain
  *   - reject: evict a credential from the OS keychain
  *
- * The default implementation spawns `git credential fill/approve/reject`.
- * `createCredentialOps` accepts a process launcher for alternate adapters.
+ * `createCredentialOps` takes its process launcher and its timeout as
+ * explicit collaborators. `NODE_CREDENTIAL_SPAWN` is the launcher that runs
+ * the real `git credential fill/approve/reject` subprocess; the composition
+ * owner (`orchestrators/auth-host.ts`) supplies it, and an alternate adapter
+ * supplies its own.
  *
  * buildAuthCallbacks consumes this seam.
  *
@@ -92,15 +100,29 @@ export type CredentialSpawn = (
   options: CredentialSpawnOptions,
 ) => CredentialProcess;
 
+/**
+ * The real process launcher: Node's own `spawn`, narrowed to the
+ * `CredentialSpawn` contract.
+ *
+ * D-21 keeps the `node:child_process` IMPORT in this module; this binding is
+ * how the composition owner names the production launcher without acquiring
+ * that import itself. The cast narrows `ChildProcess` to the three streams
+ * and two events `gitCredentialIO` actually uses -- the runtime value is
+ * Node's `spawn`, unwrapped.
+ */
+export const NODE_CREDENTIAL_SPAWN = spawn as CredentialSpawn;
+
 export interface CreateCredentialOpsOptions {
-  readonly spawn?: CredentialSpawn;
-  readonly timeoutMs?: number;
+  /** The process launcher. `NODE_CREDENTIAL_SPAWN` in production. */
+  readonly spawn: CredentialSpawn;
+  /** Milliseconds before a pending `git credential` subprocess is SIGTERMed. */
+  readonly timeoutMs: number;
 }
 
 /**
  * Spawn `git credential <subcommand>` and feed `input` over stdin. Returns
  * { stdout, code } on close. Rejects on subprocess "error" (ENOENT
- * et al.) or on timeout (default 5_000ms).
+ * et al.) or on the caller-supplied timeout.
  *
  * Timeout discipline (CP-4): the setTimeout handle calls .unref() so a
  * pending timer cannot keep the host Pi process alive past success.
@@ -268,7 +290,11 @@ async function credentialApprove(
   const input = buildAttributeBlock(host, cred);
   try {
     await runGitCredential("approve", input);
-  } catch {
+  } catch (err) {
+    hookDebugLog(
+      `credentialApprove: git credential approve threw for ${host}: ${errorMessage(err)}`,
+      "auth",
+    );
     return;
   }
 }
@@ -289,16 +315,24 @@ async function credentialReject(
   const input = buildAttributeBlock(host, cred);
   try {
     await runGitCredential("reject", input);
-  } catch {
+  } catch (err) {
+    hookDebugLog(
+      `credentialReject: git credential reject threw for ${host}: ${errorMessage(err)}`,
+      "auth",
+    );
     return;
   }
 }
 
-export function createCredentialOps(options: CreateCredentialOpsOptions = {}): CredentialOps {
-  const spawnProcess = options.spawn ?? (spawn as CredentialSpawn);
-  const timeoutMs = options.timeoutMs ?? 5_000;
+/**
+ * Bind a `CredentialOps` triple to one launcher and one timeout.
+ *
+ * Construction performs no I/O: the three returned primitives close over the
+ * launcher and only invoke it when they are called.
+ */
+export function createCredentialOps(options: CreateCredentialOpsOptions): CredentialOps {
   const runGitCredential: RunGitCredential = (subcommand, input) =>
-    gitCredentialIO(subcommand, input, spawnProcess, timeoutMs);
+    gitCredentialIO(subcommand, input, options.spawn, options.timeoutMs);
 
   return {
     fill: (host) => credentialFill(host, runGitCredential),
@@ -306,5 +340,3 @@ export function createCredentialOps(options: CreateCredentialOpsOptions = {}): C
     reject: (host, cred) => credentialReject(host, cred, runGitCredential),
   };
 }
-
-export const DEFAULT_CREDENTIAL_OPS: CredentialOps = createCredentialOps();

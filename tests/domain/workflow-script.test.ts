@@ -4,7 +4,6 @@ import { describe, test } from "node:test";
 import {
   admitWorkflowScript,
   assertNoWorkflowNameCollisions,
-  fileStem,
   WORKFLOW_SCRIPT_EXTENSIONS,
   type AdmittedWorkflow,
   type NamedWorkflow,
@@ -1519,8 +1518,8 @@ describe("assertNoWorkflowNameCollisions", () => {
       },
     ] satisfies readonly NamedWorkflow[];
 
-    // act & assert
-    assert.notStrictEqual(composedName, decomposedName);
+    // act & assert -- the two literals differ as strings (NFC vs NFD), and
+    // that string difference is the whole reason the gate stays silent.
     assert.doesNotThrow(() => {
       assertNoWorkflowNameCollisions(verdicts);
     });
@@ -1539,6 +1538,9 @@ describe("fileStem", () => {
     assert.deepStrictEqual(extensions, expectedExtensions);
   });
 
+  // The stem is private to the admission: it surfaces only as the command half
+  // of a stem-fallback name, so each row drives a nameless script through the
+  // public admission and reads the stem back out of the generated name.
   for (const { fileName, stem } of [
     { fileName: "drafter.js", stem: "drafter" },
     { fileName: "drafter.mjs", stem: "drafter" },
@@ -1550,13 +1552,17 @@ describe("fileStem", () => {
   ] satisfies readonly StemDropRow[]) {
     test(`derives ${JSON.stringify(stem)} from ${JSON.stringify(fileName)}`, () => {
       // arrange
-      const expectedStem = stem;
+      const expectedVerdict = {
+        outcome: "stem-fallback",
+        metaName: undefined,
+        generatedName: `acme:${stem}`,
+      } satisfies Admission;
 
       // act
-      const derivedStem = fileStem(fileName);
+      const verdict = admitWorkflowScript("acme", fileName, "export const meta = {};\n");
 
       // assert
-      assert.strictEqual(derivedStem, expectedStem);
+      assert.deepStrictEqual(admission(verdict), expectedVerdict);
     });
   }
 });

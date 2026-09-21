@@ -20,12 +20,12 @@
 //
 // NFR-7: the `GlobToken` union and `PathAnchor` union are both
 // discriminated by `kind`; the `matchTokens` switch and the `resolveAnchor`
-// switch both terminate with `assertNever`. Adding a new arm without
-// updating the switch red-fails `npm run typecheck`.
+// switch list every arm and carry no default. Adding a new arm without
+// updating the switch red-fails `npm run typecheck` and `npm run lint`.
 //
 // Pure-and-total contract: `compileBashGlob` and `compilePathGlob` MUST
 // never throw. Malformed input compiles to a literal token run (which
-// simply never matches anything else). The `if`-layer is best-effort per
+// never matches anything else). The `if`-layer is best-effort per
 // upstream's "use the permission system rather than a hook to enforce a
 // hard allow or deny" caveat (D-61-02); throwing here would create a
 // portability regression because plugins that install in upstream Claude
@@ -50,8 +50,6 @@
 // in a future plan) passes `ctx.cwd` as the `projectRoot` fallback.
 
 import path from "node:path";
-
-import { assertNever } from "../exec-result.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Token + anchor discriminated unions
@@ -111,7 +109,7 @@ export interface PathAnchorContext {
  */
 export interface CompiledBashGlob {
   readonly raw: string;
-  readonly tokens: ReadonlyArray<GlobToken>;
+  readonly tokens: readonly GlobToken[];
   readonly trailingWordBoundary: boolean;
   readonly isCommandNameOnly: boolean;
   test(subcommand: string): boolean;
@@ -127,7 +125,7 @@ export interface CompiledBashGlob {
  */
 export interface CompiledPowerShellGlob {
   readonly raw: string;
-  readonly tokens: ReadonlyArray<GlobToken>;
+  readonly tokens: readonly GlobToken[];
   readonly trailingWordBoundary: boolean;
   readonly isCommandNameOnly: boolean;
   test(subcommand: string): boolean;
@@ -147,7 +145,7 @@ export interface CompiledPathGlob {
   readonly raw: string;
   readonly anchor: PathAnchor;
   readonly absoluteBase: string;
-  readonly tokens: ReadonlyArray<GlobToken>;
+  readonly tokens: readonly GlobToken[];
   testAbsolute(absPath: string): boolean;
 }
 
@@ -220,7 +218,7 @@ function tokenize(pattern: string): GlobToken[] {
  * word-boundary and path-tail-globstar conventions).
  */
 function matchStar(
-  tokens: ReadonlyArray<GlobToken>,
+  tokens: readonly GlobToken[],
   text: string,
   ti: number,
   xi: number,
@@ -242,7 +240,7 @@ function matchStar(
 }
 
 function matchGlobstar(
-  tokens: ReadonlyArray<GlobToken>,
+  tokens: readonly GlobToken[],
   text: string,
   ti: number,
   xi: number,
@@ -259,7 +257,7 @@ function matchGlobstar(
 }
 
 function matchTokens(
-  tokens: ReadonlyArray<GlobToken>,
+  tokens: readonly GlobToken[],
   text: string,
   ti: number,
   xi: number,
@@ -286,8 +284,6 @@ function matchTokens(
       return matchStar(tokens, text, ti, xi, crossSegment);
     case "globstar":
       return matchGlobstar(tokens, text, ti, xi, crossSegment);
-    default:
-      return assertNever(tok);
   }
 }
 
@@ -338,7 +334,7 @@ function normalizeCommandPattern(raw: string): {
  * `ls` and `timeout`-stripped `npm test`.
  */
 function matchCommandGlob(
-  tokens: ReadonlyArray<GlobToken>,
+  tokens: readonly GlobToken[],
   subcommand: string,
   trailingWordBoundary: boolean,
 ): boolean {
@@ -495,7 +491,7 @@ function stripBase(absoluteBase: string, absPath: string): string | null {
 function matchPathGlob(
   anchor: PathAnchor,
   absoluteBase: string,
-  tokens: ReadonlyArray<GlobToken>,
+  tokens: readonly GlobToken[],
   absPath: string,
 ): boolean {
   if (anchor.kind === "filesystem-root") {
@@ -530,9 +526,6 @@ function matchPathGlob(
 
       return false;
     }
-
-    default:
-      return assertNever(anchor);
   }
 }
 

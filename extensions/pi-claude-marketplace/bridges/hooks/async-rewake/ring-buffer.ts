@@ -61,8 +61,8 @@ export const STDOUT_CAP_BYTES = 1_048_576;
  * `truncated` on every non-empty write.
  */
 export class RingBuffer {
-  private readonly buf: Buffer;
   private readonly capacity: number;
+  private readonly buf: Buffer;
   private writeIndex = 0;
   private filled = 0;
   private truncated = false;
@@ -125,7 +125,16 @@ export class RingBuffer {
    * Decode the current contents as utf-8 and return them together with
    * the `truncated` latch. Returns chronological order: oldest byte
    * first, newest byte last. Never throws.
+   *
+   * EXPORT-02: `registry.ts`'s exit handler is the real production reader --
+   * it calls this twice, through the `stderrBuffer` and `stdoutBuffer` fields
+   * of the async-rewake entry, to build the inject payload. Production
+   * reachability does not resolve those two calls back to this declaration, so
+   * the annotation below records the callers rather than the absence of any.
+   * It is scoped to this one member: the sibling `write` is untouched, and the
+   * same method name on any other class is still reported.
    */
+  // fallow-ignore-next-line unused-class-member -- registry.ts reads this via entry.stderrBuffer/stdoutBuffer.
   read(): { text: string; truncated: boolean } {
     if (this.filled === 0) {
       return { text: "", truncated: this.truncated };

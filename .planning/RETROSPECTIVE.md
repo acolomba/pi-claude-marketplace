@@ -2,6 +2,46 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: test-backlog -- Test Backlog
+
+**Shipped:** 2026-09-18 (no npm release -- internal quality milestone)
+**Phases:** 8 (1-8) | **Plans:** 65 | **Tasks:** 127 | **Requirements:** 18/18 | **Tests:** 6,900 unit + 32 integration + 14 e2e, 0 failures | **Audit:** tech_debt (no blockers; 8/8 phases, 9/9 integration paths, 2/2 flows)
+
+### What Was Built
+- Every gate the project lacked: a member-usage gate that resolves reads by checker symbol and excuses members only by exact coordinate (614 to 5), and a CRAP 30 gate fed by a validated same-run Istanbul map built from a vendored, licensed one-line repair of the producer.
+- Fallow in production dead-code mode with the 111-finding census drained to zero through ownership, plus a second run so the cycle classes still cover `tests/` and `scripts/`.
+- The agent-collision and argument-validation contracts settled against upstream behavior, proved through real discovery/staging and a single parse chokepoint.
+- Direct-coverage negative controls that observe launch, signal, status and diagnostic independently on Node 26; three Sonar assertion rules over `tests/` with every other cluster dispositioned by measurement.
+- A closing phase that re-ran every gate as separate processes at HEAD and wrote the numbers down before anyone claimed them.
+
+### What Worked
+- **Measuring before planning.** Phase 8's researcher ran all sixteen `check` members, e2e, direct all-pairs and `pre-commit --all-files` before the plan existed, so the plan inherited a working shape (separate processes, `rc=$?` never through a pipe) and the executor hit no surprises in 56 minutes of gates.
+- **Census-by-set-difference.** Phases 5 and 6 drained findings by recording `(path, owner, key)` deltas per wave and reconciling the shared pin once per stable wave; "zero findings gained" was measured at every step, never asserted.
+- **Refusing the producer's own matching percentage as proof.** Phase 7 rejected `ast-v8-to-istanbul` 1.0.6 at the exact nested-callback identities it omits and shipped a bijective correspondence check instead of trusting a fallback.
+- **Classifying a red before acting on it.** The only red at close, TruffleHog in a worktree, was reproduced (`.git` is a file), controlled (`SKIP=trufflehog` exit 0) and recorded as environment, not patched around.
+
+### What Was Inefficient
+- **The 10-minute tool ceiling met a 21-minute chain.** Nothing in the workflow anticipated that `npm run check` cannot run in one call; research discovered it and the plan had to prescribe a detached runner with polling.
+- **`phase.complete` and `state.advance-plan` still undo hand edits.** Dropped `current_phase_name`, reset Current Position, rewrote a historical `Stopped at:` line. Every state verb needed a `git diff` and a repair.
+- **The acknowledge writer destroyed a record.** A quick-task SUMMARY whose frontmatter has a backtick-led list item reads `unknown`, and acknowledging it replaced the whole frontmatter with the marker. Same root cause as `260907-qqo` at the previous close, which was disclosed as "scanner misreads it" and never diagnosed.
+- **Per-phase verification never un-stales.** Third milestone where every `VERIFICATION.md` reads `stale` at close because `covered_files` name the files every close rewrites.
+
+### Patterns Established
+- **A closing phase runs the gates itself and records exits, not summaries.** `08-MEASUREMENT.md` is the shape: preconditions citing prior verifications, one row per member with exit and seconds, denominators kept apart by model, an independent recount, one classified row per red, and a "nothing loosened" diff.
+- **Quote a frontmatter scalar that begins with a backtick.** GSD's line parser stops there; the fix is one pair of quotes, not an acknowledgement.
+- **A docs-only wave does not re-run the suite.** When the phase's own plan just measured every gate at the same HEAD and `git diff --name-only` shows only `.planning/`, the post-merge and regression gates are satisfied by the measurement.
+
+### Key Lessons
+1. **Read a tool's output file before trusting its exit.** `milestone complete` exits 0 and leaves 213 renames unstaged; the acknowledge writer exits 0 and drops 44 lines of frontmatter. `git diff` after every GSD writer is not optional.
+2. **Diagnose the "scanner misreads it" disclosure instead of carrying it.** One bisect found the backtick; the previous close paid the same cost and recorded only the symptom.
+3. **A worktree changes what green means.** TruffleHog cannot open `.git` when it is a file; a per-commit hook that can never pass locally must be skipped by name (`SKIP=trufflehog`), never with `--no-verify`.
+4. **Sequential execution is the right default for a docs phase.** Nested worktrees have no `node_modules/`, `coverage/` or GSD tooling, and the isolation sentinel must be re-forced before every dispatch or the guard blocks the second one.
+
+### Cost Observations
+- Model mix: opus researcher, planner and executors; sonnet plan checker, verifier and integration checker
+- Phases: 8 over 5 days (2026-09-14 -> 2026-09-18), 65 plans, 316 commits on the branch
+- Notable: Phase 8 cost one 55-minute research pass and one 56-minute executor run, almost entirely gate wall-clock; the whole close (plan, execute, verify, audit, archive) fit in one session.
+
 ## Milestone: refine-unit-tests -- Refine Unit Tests
 
 **Shipped:** 2026-09-13 (no npm release -- internal quality milestone)

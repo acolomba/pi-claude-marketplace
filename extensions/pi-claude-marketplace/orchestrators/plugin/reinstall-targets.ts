@@ -7,7 +7,10 @@ import { MarketplaceNotAddedSignal } from "./shared.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
 
-type MarketplaceRecord = ExtensionState["marketplaces"][string];
+/** The scope a marketplace or plugin target resolves to. */
+interface ResolvedTargetScope {
+  readonly scope: Scope;
+}
 
 /** Target selected by the three public plugin-reinstall invocation forms. */
 export type ReinstallPluginsTarget =
@@ -93,7 +96,7 @@ async function resolveMarketplaceScope(
   cwd: string,
   explicitScope: Scope | undefined,
   target: Extract<ReinstallPluginsTarget, { kind: "marketplace" | "plugin" }>,
-): Promise<{ readonly scope: Scope; readonly record: MarketplaceRecord }> {
+): Promise<ResolvedTargetScope> {
   if (target.kind === "plugin") {
     return resolvePluginMarketplaceScope(cwd, explicitScope, target);
   }
@@ -105,7 +108,7 @@ async function resolvePluginMarketplaceScope(
   cwd: string,
   explicitScope: Scope | undefined,
   target: Extract<ReinstallPluginsTarget, { kind: "plugin" }>,
-): Promise<{ readonly scope: Scope; readonly record: MarketplaceRecord }> {
+): Promise<ResolvedTargetScope> {
   if (explicitScope !== undefined) {
     return resolveExplicitPluginScope(cwd, explicitScope, target);
   }
@@ -117,19 +120,19 @@ async function resolvePluginMarketplaceScope(
   const projectRecord = projectState.marketplaces[target.marketplace];
   const userRecord = userState.marketplaces[target.marketplace];
   if (projectRecord?.plugins[target.plugin] !== undefined) {
-    return { scope: "project", record: projectRecord };
+    return { scope: "project" };
   }
 
   if (userRecord?.plugins[target.plugin] !== undefined) {
-    return { scope: "user", record: userRecord };
+    return { scope: "user" };
   }
 
   if (projectRecord !== undefined) {
-    return { scope: "project", record: projectRecord };
+    return { scope: "project" };
   }
 
   if (userRecord !== undefined) {
-    return { scope: "user", record: userRecord };
+    return { scope: "user" };
   }
 
   throw new MarketplaceNotAddedSignal(target.marketplace);
@@ -139,11 +142,11 @@ async function resolveExplicitPluginScope(
   cwd: string,
   explicitScope: Scope,
   target: Extract<ReinstallPluginsTarget, { kind: "plugin" }>,
-): Promise<{ readonly scope: Scope; readonly record: MarketplaceRecord }> {
+): Promise<ResolvedTargetScope> {
   const requestedState = await loadScopeState(cwd, explicitScope);
   const requestedRecord = requestedState.marketplaces[target.marketplace];
   if (requestedRecord !== undefined) {
-    return { scope: explicitScope, record: requestedRecord };
+    return { scope: explicitScope };
   }
 
   const otherScope = explicitScope === "project" ? "user" : "project";
@@ -160,12 +163,12 @@ async function resolveMarketplaceTargetScope(
   cwd: string,
   explicitScope: Scope | undefined,
   marketplace: string,
-): Promise<{ readonly scope: Scope; readonly record: MarketplaceRecord }> {
+): Promise<ResolvedTargetScope> {
   if (explicitScope !== undefined) {
     const requestedState = await loadScopeState(cwd, explicitScope);
     const requestedRecord = requestedState.marketplaces[marketplace];
     if (requestedRecord !== undefined) {
-      return { scope: explicitScope, record: requestedRecord };
+      return { scope: explicitScope };
     }
 
     const otherScope = explicitScope === "project" ? "user" : "project";
@@ -179,12 +182,12 @@ async function resolveMarketplaceTargetScope(
   ]);
   const projectRecord = projectState.marketplaces[marketplace];
   if (projectRecord !== undefined) {
-    return { scope: "project", record: projectRecord };
+    return { scope: "project" };
   }
 
   const userRecord = userState.marketplaces[marketplace];
   if (userRecord !== undefined) {
-    return { scope: "user", record: userRecord };
+    return { scope: "user" };
   }
 
   throw new MarketplaceNotAddedSignal(marketplace);

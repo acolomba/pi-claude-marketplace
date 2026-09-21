@@ -7,3 +7,6 @@ tests/orchestrators/marketplace/_fixtures/invalid-manifest/.claude-plugin/market
 
 # Markdown is formatted by the mdformat pre-commit hook, never by prettier.
 *.md
+
+# Per-machine MCP wiring (codegraph); never committed, never formatted.
+.mcp.json

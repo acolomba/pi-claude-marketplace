@@ -5,7 +5,6 @@ import path from "node:path";
 import { test, type TestContext } from "node:test";
 
 import {
-  WORKFLOWS_STAGING_MAX_AGE_MS,
   garbageCollectWorkflowsStaging,
   scanRetainedWorkflowsStaging,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts";
@@ -14,11 +13,12 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 /**
- * Comfortably past the bound, expressed against the exported constant rather
- * than a transcribed copy: a later phase tuning the bound must not silently
- * turn this case's "aged" tree into a fresh one.
+ * Comfortably past the sweeper's one-day abandonment bound. The bound is the
+ * sweeper's own private constant, so this states the contract it holds the
+ * sweeper to -- a tree untouched for two days is abandoned -- rather than
+ * reading the number back out of the module under test.
  */
-const WELL_PAST_THE_BOUND_MS = WORKFLOWS_STAGING_MAX_AGE_MS + 60 * 60 * 1000;
+const WELL_PAST_THE_BOUND_MS = 2 * 24 * 60 * 60 * 1000;
 
 interface StagingScope {
   readonly home: string;

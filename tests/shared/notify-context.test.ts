@@ -7,6 +7,7 @@ import { type PluginAvailableMessage } from "../../extensions/pi-claude-marketpl
 import {
   type PluginDisabledMessage,
   type PluginNotificationMessage,
+  type ReconcileAppliedCascadeMessage,
   type Severity,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import {
@@ -83,6 +84,14 @@ void ({
     { status: "disabled", name: "alpha", severity: "info", needsReload: false },
   ],
 } satisfies MarketplaceRows<PluginAvailableMessage>);
+void ({
+  Messaging: { label: "Plugin inspect" },
+  render: { available: () => "row" },
+} satisfies CommandContext<
+  "available",
+  // @ts-expect-error the context message parameter is bounded by the plugin row union
+  { readonly available: "not a plugin row" }
+>);
 
 interface NotificationRecord {
   readonly message: string;
@@ -118,6 +127,18 @@ function omissionMustRemainATypeError(
 }
 
 void omissionMustRemainATypeError;
+
+function undeclaredStatusMustRemainATypeError(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  context: CommandContext<"available", PluginDisabledMessage>,
+  message: ReconcileAppliedCascadeMessage,
+): void {
+  // @ts-expect-error -- the reconcile emitter admits only rows whose status its render map declares.
+  notifyReconcileAppliedWithContext(ctx, pi, context, message);
+}
+
+void undeclaredStatusMustRemainATypeError;
 
 function createHarness(notification: NotificationRecord): Harness {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });

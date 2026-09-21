@@ -5,18 +5,33 @@ import {
   isScopeBearingListRow,
   pluginScopeOrFallback,
   pluginVersion,
-  MARKETPLACE_STATUSES,
-  PLUGIN_STATUSES,
-  REASONS,
-  STATUS_TOKENS,
   type ContentReason,
   type MarketplaceNotificationMessage,
+  type MarketplaceStatus,
   type NotificationMessage,
   type PluginInstalledMessage,
   type PluginNotificationMessage,
   type PluginSkippedMessage,
+  type PluginStatus,
+  type Reason,
   type Severity,
+  type StatusToken,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+
+/**
+ * The four closed vocabularies are declared privately by their owner and reach
+ * this file only as the literal unions `Reason`, `StatusToken`, `PluginStatus`
+ * and `MarketplaceStatus`. The lists below are this file's OWN hand-written
+ * copies -- independent literals, never derived from the owner -- and the
+ * `IsExact` proofs under them run BOTH directions. A one-sided
+ * `satisfies readonly Reason[]` would accept a list missing half the members,
+ * so it cannot prove no expansion and is not used here.
+ */
+type IsExact<Actual, Expected> = [Actual] extends [Expected]
+  ? [Expected] extends [Actual]
+    ? true
+    : false
+  : false;
 
 const EXPECTED_REASONS = [
   "up-to-date",
@@ -228,12 +243,63 @@ void ({
 const structuralReason: ContentReason = "marketplace not added";
 void structuralReason;
 
-test("exports the exact notification vocabulary from its named owner", () => {
-  assert.deepStrictEqual(REASONS, EXPECTED_REASONS);
-  assert.deepStrictEqual(STATUS_TOKENS, EXPECTED_STATUS_TOKENS);
-  assert.deepStrictEqual(PLUGIN_STATUSES, EXPECTED_PLUGIN_STATUSES);
-  assert.deepStrictEqual(MARKETPLACE_STATUSES, EXPECTED_MARKETPLACE_STATUSES);
-});
+// Each public union holds EXACTLY the members its list above names. Adding a
+// member to the owner's vocabulary without adding it here, or removing one,
+// collapses the corresponding proof to `false` and fails the build.
+void (true satisfies IsExact<Reason, (typeof EXPECTED_REASONS)[number]>);
+void (true satisfies IsExact<StatusToken, (typeof EXPECTED_STATUS_TOKENS)[number]>);
+void (true satisfies IsExact<PluginStatus, (typeof EXPECTED_PLUGIN_STATUSES)[number]>);
+void (true satisfies IsExact<MarketplaceStatus, (typeof EXPECTED_MARKETPLACE_STATUSES)[number]>);
+
+// Discriminating controls for the four proofs above: they assert `false`, so a
+// proof that had degenerated into something always-true would fail HERE. One
+// control per direction, on the largest set -- a member the union does not hold,
+// and a member it holds that the list drops.
+void (false satisfies IsExact<Reason, (typeof EXPECTED_REASONS)[number] | "not a reason">);
+void (false satisfies IsExact<
+  Reason,
+  Exclude<(typeof EXPECTED_REASONS)[number], "components now supported">
+>);
+void (false satisfies IsExact<
+  StatusToken,
+  (typeof EXPECTED_STATUS_TOKENS)[number] | "not a token"
+>);
+void (false satisfies IsExact<
+  PluginStatus,
+  (typeof EXPECTED_PLUGIN_STATUSES)[number] | "not a status"
+>);
+void (false satisfies IsExact<
+  MarketplaceStatus,
+  (typeof EXPECTED_MARKETPLACE_STATUSES)[number] | "not a status"
+>);
+
+const VOCABULARIES: readonly {
+  readonly name: string;
+  readonly members: readonly string[];
+}[] = [
+  { name: "reason", members: EXPECTED_REASONS },
+  { name: "status token", members: EXPECTED_STATUS_TOKENS },
+  { name: "plugin status", members: EXPECTED_PLUGIN_STATUSES },
+  { name: "marketplace status", members: EXPECTED_MARKETPLACE_STATUSES },
+];
+
+for (const { name, members } of VOCABULARIES) {
+  test(`the ${name} vocabulary names every member once`, () => {
+    // arrange
+    const expectedDuplicates: readonly string[] = [];
+
+    // act
+    // A union deduplicates, so the proofs above cannot see a literal written
+    // twice. This clause is what makes "the union holds exactly these N members"
+    // a statement about N: the list is its own witness.
+    const duplicates: readonly string[] = members.filter(
+      (member, index) => members.indexOf(member) !== index,
+    );
+
+    // assert
+    assert.deepStrictEqual(duplicates, expectedDuplicates);
+  });
+}
 
 for (const { name, row, expected } of [
   {
@@ -335,9 +401,14 @@ test("pluginVersion returns target version on updated row", () => {
   assert.equal(pluginVersion(row), "2.0.0");
 });
 
-test("pluginVersion handles each status arm", () => {
-  const cases: readonly PluginNotificationMessage[] = [
-    {
+const pluginVersionCases: readonly {
+  readonly title: string;
+  readonly row: PluginNotificationMessage;
+  readonly expectedVersion: string | undefined;
+}[] = [
+  {
+    title: "returns the version field for an installed row",
+    row: {
       status: "installed",
       name: "a",
       version: "1.0",
@@ -345,7 +416,11 @@ test("pluginVersion handles each status arm", () => {
       severity: "info",
       needsReload: false,
     },
-    {
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for a reinstalled row",
+    row: {
       status: "reinstalled",
       name: "a",
       version: "1.0",
@@ -353,14 +428,46 @@ test("pluginVersion handles each status arm", () => {
       severity: "info",
       needsReload: false,
     },
-    { status: "uninstalled", name: "a", version: "1.0", severity: "info", needsReload: false },
-    { status: "disabled", name: "a", version: "1.0", severity: "info", needsReload: false },
-    { status: "available", name: "a", version: "1.0" },
-    { status: "remote", name: "a", version: "1.0" },
-    { status: "unavailable", name: "a", version: "1.0", reasons: [] },
-    { status: "partially-available", name: "a", version: "1.0", reasons: [] },
-    { status: "upgradable", name: "a", version: "1.0", reasons: [] },
-    {
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for an uninstalled row",
+    row: { status: "uninstalled", name: "a", version: "1.0", severity: "info", needsReload: false },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for a disabled row",
+    row: { status: "disabled", name: "a", version: "1.0", severity: "info", needsReload: false },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for an available row",
+    row: { status: "available", name: "a", version: "1.0" },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for a remote row",
+    row: { status: "remote", name: "a", version: "1.0" },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for an unavailable row",
+    row: { status: "unavailable", name: "a", version: "1.0", reasons: [] },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for a partially-available row",
+    row: { status: "partially-available", name: "a", version: "1.0", reasons: [] },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for an upgradable row",
+    row: { status: "upgradable", name: "a", version: "1.0", reasons: [] },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for a partially-installed row",
+    row: {
       status: "partially-installed",
       name: "a",
       version: "1.0",
@@ -368,10 +475,26 @@ test("pluginVersion handles each status arm", () => {
       severity: "info",
       needsReload: false,
     },
-    { status: "partially-upgradable", name: "a", version: "1.0", reasons: [] },
-    { status: "failed", name: "a", version: "1.0", reasons: [], severity: "error" },
-    { status: "skipped", name: "a", version: "1.0", reasons: [] },
-    {
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for a partially-upgradable row",
+    row: { status: "partially-upgradable", name: "a", version: "1.0", reasons: [] },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for a failed row",
+    row: { status: "failed", name: "a", version: "1.0", reasons: [], severity: "error" },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the version field for a skipped row",
+    row: { status: "skipped", name: "a", version: "1.0", reasons: [] },
+    expectedVersion: "1.0",
+  },
+  {
+    title: "returns the target version for an updated row",
+    row: {
       status: "updated",
       name: "a",
       from: "1.0",
@@ -380,28 +503,44 @@ test("pluginVersion handles each status arm", () => {
       severity: "info",
       needsReload: false,
     },
-    { status: "manual recovery", name: "a", severity: "warning", reasons: [] },
-    { status: "will install", name: "a" },
-    { status: "will uninstall", name: "a" },
-    { status: "will enable", name: "a" },
-    { status: "will disable", name: "a" },
-  ];
-  for (const c of cases) {
-    if (c.status === "updated") {
-      assert.equal(pluginVersion(c), "2.0");
-    } else if (
-      c.status === "manual recovery" ||
-      c.status === "will install" ||
-      c.status === "will uninstall" ||
-      c.status === "will enable" ||
-      c.status === "will disable"
-    ) {
-      assert.equal(pluginVersion(c), undefined);
-    } else {
-      assert.equal(pluginVersion(c), "1.0");
-    }
-  }
-});
+    expectedVersion: "2.0",
+  },
+  {
+    title: "returns undefined for a manual recovery row",
+    row: { status: "manual recovery", name: "a", severity: "warning", reasons: [] },
+    expectedVersion: undefined,
+  },
+  {
+    title: "returns undefined for a will-install row",
+    row: { status: "will install", name: "a" },
+    expectedVersion: undefined,
+  },
+  {
+    title: "returns undefined for a will-uninstall row",
+    row: { status: "will uninstall", name: "a" },
+    expectedVersion: undefined,
+  },
+  {
+    title: "returns undefined for a will-enable row",
+    row: { status: "will enable", name: "a" },
+    expectedVersion: undefined,
+  },
+  {
+    title: "returns undefined for a will-disable row",
+    row: { status: "will disable", name: "a" },
+    expectedVersion: undefined,
+  },
+];
+
+for (const { title, row, expectedVersion } of pluginVersionCases) {
+  test(title, () => {
+    // act
+    const version = pluginVersion(row);
+
+    // assert
+    assert.equal(version, expectedVersion);
+  });
+}
 
 test("pluginVersion returns undefined when version omitted on supported row", () => {
   const row = {

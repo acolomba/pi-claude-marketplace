@@ -69,10 +69,8 @@ import { createHermeticEnvironment } from "../../../platform/hermetic-environmen
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
-import type {
-  HooksRouting,
-  HooksRuntime,
-} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksRouting } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /** The usage block, written out here rather than read back off the handler. */
@@ -121,7 +119,9 @@ const USER_OVERRIDE_REJECTED = {
 };
 
 /** Construct one isolated registered-handler routing owner per test case. */
-function makeHandlerUnderTest(pi: Parameters<typeof makeUninstallHandler>[0]) {
+function makeHandlerUnderTest(
+  pi: Parameters<typeof makeUninstallHandler>[0],
+): ReturnType<typeof makeUninstallHandler> {
   return makeUninstallHandler(
     pi,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -308,22 +308,21 @@ test("reports a missing plugin reference and removes nothing (D-116-06)", async 
   verifyBoundary();
 });
 
-test("drops a surplus positional token and removes the plugin the first token names", async (t) => {
+test("rejects a surplus positional token and leaves both records intact", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus-positional");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
-    value: workspace.cwd,
-    reads: 1,
-  });
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const uninstallHandler = makeHandlerUnderTest(pi);
 
   // act
   await uninstallHandler("demo@alpha surplus", ctx);
 
   // assert
-  assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED]);
-  assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_REMOVED);
+  assert.deepStrictEqual(notifications, [
+    { message: `Too many arguments.\n\n${USAGE_BLOCK}`, severity: "error" },
+  ]);
+  assert.deepStrictEqual(await readObservedEffects(workspace), BOTH_RECORDS_INTACT);
   verifyBoundary();
 });
 

@@ -21,8 +21,8 @@
  * same failure mode as the one this gate exists to remove.
  *
  * The status-by-field table is the guide's other checkable claim, and it is
- * bound at both ends. Its status column is compared against the imported
- * `PLUGIN_STATUSES` tuple, so appending a status reddens the case without any
+ * bound at both ends. Its status column is compared against the declared
+ * `PluginStatus` declaration, so appending a status reddens the case without any
  * reader re-checking the document. Its cells are compared against
  * `FIELD_DISCIPLINE`, whose value type is computed from the union's own
  * interfaces, so moving a field between required, optional and absent is a
@@ -51,8 +51,6 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-
-import { PLUGIN_STATUSES } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 import { REPO_ROOT, stripComments } from "./source-scan.ts";
 
@@ -126,7 +124,7 @@ type Discipline<S extends PluginStatus, F extends string> = F extends keyof ArmF
  * four columns, with every cell's legal value computed from the interfaces.
  *
  * Totality in both directions is what makes the literal below a gate rather
- * than a transcription. Appending a status to `PLUGIN_STATUSES` adds a key the
+ * than a transcription. Appending a status to `PluginStatus` adds a key the
  * literal does not supply, and moving a field between required, optional and
  * absent narrows a cell's type away from the literal's value. Either one is a
  * `npm run typecheck` error at the literal, before any case runs.
@@ -311,20 +309,48 @@ test("MSGDOC-01: every message type the messaging guide names is one notify.ts d
   );
 });
 
-test("MSGDOC-01: the status-by-field table's status column is PLUGIN_STATUSES in tuple order", async () => {
+/**
+ * The members of one closed vocabulary `notification-types.ts` declares, in
+ * declaration order. A union carries membership and not order, so the
+ * declaration text is the only place the order exists; reading it as data is
+ * what lets the table's row order be asserted rather than transcribed.
+ */
+function declaredVocabulary(src: string, name: string): readonly string[] {
+  const opening = `export type ${name} =`;
+  const start = src.indexOf(opening);
+  assert.notStrictEqual(
+    start,
+    -1,
+    `MSGDOC-01: ${NOTIFY} declares no ${name} vocabulary, so this case inspected nothing.`,
+  );
+
+  const end = src.indexOf(";", start);
+  assert.notStrictEqual(
+    end,
+    -1,
+    `MSGDOC-01: the ${name} declaration in ${NOTIFY} is unterminated, so its members could not be read.`,
+  );
+
+  return [...src.slice(start + opening.length, end).matchAll(/"([^"]*)"/g)].map(
+    (match) => match[1]!,
+  );
+}
+
+test("MSGDOC-01: the status-by-field table's status column is PluginStatus in declaration order", async () => {
   // arrange
-  const guide = await readRepoFile(GUIDE);
+  const [guide, notify] = await Promise.all([readRepoFile(GUIDE), readRepoFile(NOTIFY)]);
+  const declaredStatuses = declaredVocabulary(stripComments(notify), "PluginStatus");
 
   // act
   const rows = disciplineRows(guide);
 
-  // assert -- against the imported tuple, not a transcription of it, so a
-  // status appended to the closed set reddens this case with no reader
+  // assert -- against the declaration read as data, not a transcription of it,
+  // so a status appended to the closed set reddens this case with no reader
   // re-checking the guide.
   assert.deepEqual(
     rows.map((row) => row.status),
-    [...PLUGIN_STATUSES],
-    `MSGDOC-01: ${GUIDE}'s status-by-field table does not carry exactly the PLUGIN_STATUSES members, in tuple order. The table states the per-arm field discipline once, so a missing row is a variant whose discipline the guide no longer states at all.`,
+    declaredStatuses,
+    `MSGDOC-01: ${GUIDE}'s status-by-field table does not carry exactly the PluginStatus members, in declaration order. The table states the per-arm field discipline once, so a missing row is a variant whose discipline the guide no longer states at all.`,
   );
 });
 

@@ -4605,3 +4605,41 @@ test("WDEP-02: an empty persisted workflow inventory stamps no host-engine marke
     verify(ui);
   });
 });
+
+// The loader emits inventory/candidate rows; listPlugins owns failure notifications.
+type LoadedPluginRow = Awaited<ReturnType<typeof loadPluginListPayload>>[number]["plugins"][number];
+type ExpectedLoadedStatus =
+  | "installed"
+  | "upgradable"
+  | "partially-installed"
+  | "partially-upgradable"
+  | "disabled"
+  | "available"
+  | "remote"
+  | "partially-available"
+  | "unavailable";
+void (true satisfies [LoadedPluginRow["status"]] extends [ExpectedLoadedStatus]
+  ? [ExpectedLoadedStatus] extends [LoadedPluginRow["status"]]
+    ? true
+    : false
+  : false);
+// @ts-expect-error this notification status is not a loader row
+void ("failed" satisfies LoadedPluginRow["status"]);
+// @ts-expect-error this notification status is not a loader row
+void ("updated" satisfies LoadedPluginRow["status"]);
+// @ts-expect-error this notification status is not a loader row
+void ("reinstalled" satisfies LoadedPluginRow["status"]);
+// @ts-expect-error this notification status is not a loader row
+void ("uninstalled" satisfies LoadedPluginRow["status"]);
+// @ts-expect-error this notification status is not a loader row
+void ("skipped" satisfies LoadedPluginRow["status"]);
+// @ts-expect-error this notification status is not a loader row
+void ("manual recovery" satisfies LoadedPluginRow["status"]);
+// @ts-expect-error this notification status is not a loader row
+void ("will install" satisfies LoadedPluginRow["status"]);
+// @ts-expect-error this notification status is not a loader row
+void ("will uninstall" satisfies LoadedPluginRow["status"]);
+// @ts-expect-error this notification status is not a loader row
+void ("will enable" satisfies LoadedPluginRow["status"]);
+// @ts-expect-error this notification status is not a loader row
+void ("will disable" satisfies LoadedPluginRow["status"]);

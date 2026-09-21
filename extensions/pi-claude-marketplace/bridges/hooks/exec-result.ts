@@ -28,8 +28,9 @@
 //                 stop-shaped Pi return for v1.13 events (debug-logged).
 //
 // The union is a pure leaf -- no imports, no module-level state. NFR-7
-// (discriminated unions + assertNever exhaustiveness gate) drives the
-// shape: any future arm requires updating every `kind`-switch consumer.
+// (discriminated unions + exhaustive `kind` switches with no default arm)
+// drives the shape: any future arm requires updating every `kind`-switch
+// consumer.
 
 /**
  * D-60-01: four-arm discriminated outcome type. Every wire-protocol parse
@@ -48,13 +49,3 @@ export type HookExecResult =
       permissionDecisionReason?: string;
     }
   | { kind: "stop"; stopReason?: string };
-
-/**
- * Exhaustiveness gate for `HookExecResult` switch statements. Reaching
- * this call site at runtime means a new arm was added without updating
- * the consumer; the compile-time `never` parameter additionally fails
- * `tsc` so the gap is caught before CI. NFR-7 pattern.
- */
-export function assertNever(x: never): never {
-  throw new Error(`unreachable HookExecResult arm: ${JSON.stringify(x)}`);
-}

@@ -20,7 +20,6 @@ import { mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
-import { WORKFLOWS_STAGING_MAX_AGE_MS } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts";
 import { pendingReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
@@ -589,8 +588,8 @@ for (const { condition, stage, rendered, expectedMessage } of plannedInstallRows
 // bytes, once per invocation.
 // ---------------------------------------------------------------------------
 
-/** Comfortably past the sweeper's bound, expressed against the exported constant. */
-const WELL_PAST_THE_STAGING_BOUND_MS = WORKFLOWS_STAGING_MAX_AGE_MS + 60 * 60 * 1000;
+/** Two days: comfortably past the sweeper's one-day abandonment bound. */
+const WELL_PAST_THE_STAGING_BOUND_MS = 2 * 24 * 60 * 60 * 1000;
 
 /**
  * Plant the shape the sweeper keeps forever: an aged staging root whose

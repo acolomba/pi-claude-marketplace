@@ -180,17 +180,17 @@ export async function pathExists(p: string): Promise<boolean> {
  */
 export async function removeOrphanIfPresent(target: string, mode: "file" | "tree"): Promise<void> {
   try {
-    const s = await fs.stat(target);
-    if (mode === "tree" && s.isDirectory()) {
+    const stat = await fs.stat(target);
+    if (mode === "tree" && stat.isDirectory()) {
       await fs.rm(target, { recursive: true, force: true });
-    } else if (mode === "file" && s.isFile()) {
+    } else if (mode === "file" && stat.isFile()) {
       await fs.rm(target);
     }
     // Mismatched kind: leave alone. Subsequent rename will surface
     // ENOTDIR/ENOTEMPTY -- preserves PUP-6 phase-3 failure trigger.
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw e;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw err;
     }
   }
 }
@@ -222,7 +222,7 @@ export interface RollbackReplacementInput {
    */
   readonly ops: RemovalOps;
   /** New files/dirs that were renamed into place. Removed in reverse. */
-  readonly renamed: readonly { readonly from: string; readonly to: string }[];
+  readonly renamed: readonly { readonly to: string }[];
   /** Pre-replacement files/dirs moved aside. Restored in reverse. */
   readonly backups: readonly {
     readonly name: string;
@@ -260,7 +260,9 @@ export interface RollbackReplacementInput {
  *  2. Restore every backup (reverse order). Re-creates the destination
  *     parent before renaming back, in case the post-replacement state
  *     pruned the directory. Failures become leaks.
- *  3. Best-effort `cleanupStaging` on the staging + backup directories.
+ *  3. Optional `beforeCleanup` bridge-specific step (e.g. the agents bridge
+ *     restoring `agents-index.json`), run after backups are restored.
+ *  4. Best-effort `cleanupStaging` on the staging + backup directories.
  *
  * The returned readonly array is frozen so callers can splice it into
  * `appendLeakToError` chains without defensive copies.

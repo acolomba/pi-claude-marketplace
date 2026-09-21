@@ -32,7 +32,7 @@
 // on the flip surface, for byte-form parity with the marketplace-list surface
 // header. Fresh flips render the bare marker; idempotent flips render the
 // marker + the `{already autoupdate}` / `{already no autoupdate}` brace. The
-// renderer (shared/notification-dispatch.ts) owns the byte composition; per CLAUDE.md IL-2
+// renderer (shared/notification-dispatch.ts) owns the byte composition; per AGENTS.md IL-2
 // all output still flows through notify(). The `autoupdate enabled` /
 // `autoupdate disabled` / `skipped` MarketplaceStatus discriminators carry the
 // outcome; the REASONS members are `already autoupdate` / `already no
@@ -65,7 +65,11 @@ import path from "node:path";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
+import {
+  InvalidMarketplaceManifestError,
+  MarketplaceNotFoundError,
+  StateLockHeldError,
+} from "../../shared/errors.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
@@ -162,20 +166,33 @@ function missingEverywhere(
  * autoupdate-flip error to the user. The marketplace header alone cannot
  * carry a cause (SNM-10), so the child's `cause` drives the renderer's
  * depth-5 cause-chain trailer. A held state lock narrows to the `lock held`
- * reason (its message carries the retry hint); anything else falls back to
- * the permissive `not found`.
+ * reason (its message carries the retry hint); a CFG-03 invalid-config abort
+ * narrows to `invalid manifest`; anything else falls back to the permissive
+ * `not found`.
  *
  * ATTR-05: this row does not carry the missing-marketplace case. An
  * explicit-scope `MarketplaceNotFoundError` routes to the standalone
  * `MarketplaceNotAddedMessage` `{marketplace not added}` variant in
  * `setMarketplaceAutoupdate`, BEFORE this helper is reached, so this helper maps
- * only `StateLockHeldError` (-> `lock held`, whose message carries the retry
- * hint) and other non-not-found flip errors (-> the permissive `not found`
- * fallback).
+ * `StateLockHeldError` (-> `lock held`, whose message carries the retry
+ * hint), `InvalidMarketplaceManifestError` (-> `invalid manifest`, the
+ * CFG-03 arm), and other non-not-found flip errors (-> the permissive `not
+ * found` fallback).
  */
+function autoupdateFailedReason(err: Error): ContentReason {
+  if (err instanceof StateLockHeldError) {
+    return "lock held";
+  }
+
+  if (err instanceof InvalidMarketplaceManifestError) {
+    return "invalid manifest";
+  }
+
+  return "not found";
+}
+
 function autoupdateFailedRow(name: string, err: Error): PluginFailedMessage {
-  const reasons: readonly ContentReason[] =
-    err instanceof StateLockHeldError ? (["lock held"] as const) : (["not found"] as const);
+  const reasons: readonly ContentReason[] = [autoupdateFailedReason(err)];
   return {
     status: "failed",
     name,
@@ -303,8 +320,8 @@ function buildAutoupdatePatch(
   state: { marketplaces: Record<string, unknown> },
   name: string,
   enable: boolean,
-): { source?: string; autoupdate: boolean } {
-  const patch: { source?: string; autoupdate: boolean } = { autoupdate: enable };
+): Partial<MarketplaceConfigEntry> {
+  const patch: Partial<MarketplaceConfigEntry> = { autoupdate: enable };
   if (current.marketplaces?.[name]?.source !== undefined) {
     return patch;
   }
@@ -323,12 +340,10 @@ function buildAutoupdatePatch(
  * issue a SINGLE `writeBatchedConfigEntries` call (one `saveConfig`,
  * all-or-nothing).
  *
- * Per-name sequential `writeMarketplaceConfigEntry` calls against the same
- * stale `current` snapshot were a last-write-wins clobber: each save rebuilt
- * the whole file from `current` (which never gained the previous iteration's
- * patch), so a bare-form flip over N marketplaces persisted only the LAST
- * one. The batched form applies all N patches in memory before the single
- * atomic save, which also makes a mid-write failure all-or-nothing (NFR-3).
+ * Applying all N patches in memory against the same `current` snapshot
+ * before the single atomic save avoids a last-write-wins clobber across a
+ * bare-form flip over N marketplaces, and makes a mid-write failure
+ * all-or-nothing (NFR-3).
  *
  * WR-06(b): an entry is SKIPPED from the batch when no
  * string `source` can be synthesized for a first-time write (config entry
@@ -410,7 +425,9 @@ async function flipOneScope(
     // CFG-03 (T-56-02-05): abort BEFORE any state mutation; basename-only.
     const cfg = await loadConfig(targetConfigPath);
     if (cfg.status === "invalid") {
-      throw new Error(`Config file "${configBasename}" failed schema validation.`);
+      throw new InvalidMarketplaceManifestError(
+        `Config file "${configBasename}" failed schema validation.`,
+      );
     }
 
     // SPLIT-01: idempotency is measured against the CONFIG-side
@@ -497,7 +514,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   const flipContext = flipContextFor(opts.enable);
 
   const rows: AutoupdateFlipRow[] = [];
-  const errors: { scope: Scope; cause: unknown }[] = [];
+  const errors: { scope: Scope }[] = [];
 
   for (const scope of scopes) {
     try {
@@ -516,7 +533,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
         return;
       }
 
-      errors.push({ scope, cause: err });
+      errors.push({ scope });
     }
   }
 
