@@ -1,7 +1,7 @@
 # Open questions — workflows-replay
 
 **Raised:** 2026-09-10
-**Status:** awaiting operator discussion
+**Status:** settled 2026-09-21 -- every entry is fixed or carried; dispositions below
 **Blocks:** nothing mechanically. All nine phases are complete, verified, threat-verified
 and validated. The milestone can archive with these open.
 
@@ -14,6 +14,36 @@ to every phase in the workstream.
 Ledger is the source of truth for the entries themselves
 (`gsd-tools windows status`). This file carries the framing the ledger has no
 field for: what the options are, what each costs, and a recommendation.
+
+---
+
+## Dispositions (2026-09-21)
+
+The operator delegated the close ("continue as you think best"). The suggested
+order below was followed where a question had a clear answer and a small,
+located fix; everything that needed a measurement, a scratch engine, or a scope
+decision was carried to `.planning/BACKLOG.md` with a named item so the archive
+does not lose it. Ledger entries are `fixed` or `waived` with the carrier named
+in the reason.
+
+| Q | Entries | Disposition | Where |
+|---|---|---|---|
+| Q4 | #82 | **Fixed.** `reinstallReasonsFromError` maps `StateLockHeldError` to `lock held`; the ENBL-08 lock-collision twin is re-landed against `applyBackfillForScopeIsolated` asserting `lock held` (the merge of #202 had dropped it). | `orchestrators/plugin/reinstall-record.ts`, `tests/orchestrators/reconcile/backfill.test.ts` |
+| Q10 | #78 | **Fixed** as a committed project convention: every SUMMARY carries `## Threat Flags`, "None" when empty. The GSD executor template is not ours to edit and is gitignored. | `AGENTS.md` § Threat Flags in SUMMARY.md |
+| Q5 | #75 | **Fixed.** `commitPreparedWorkflows` anchors a containment check on the engine's storage root before the saved-directory `mkdir`, mirroring the staging root; a refusal test plants the link at `saved`. | `bridges/workflows/stage.ts`, `tests/bridges/workflows/stage.test.ts` |
+| Q9 | #67 | **Fixed.** `backfill-partially-installed-no-reasons` renamed `backfill-partially-installed-marker-only` in the catalog and its fixture together. | `docs/output-catalog.md`, `tests/architecture/catalog-uat/fixtures/reconcile-applied.ts` |
+| Q1 | #66, #80 | **Carried.** One `covered_files` rule for every phase, as its own task after the archive. The four stale phases were re-derived at this close, not re-listed. | `BACKLOG.md` VSTALE-01 |
+| Q2 | #79 | **Carried.** Drive the staging-cleanup leak path; do not decide from source. | `BACKLOG.md` WLREC-01 |
+| Q3 | #74 | **Carried.** Measure the `needsReload` plumbing, restate the guide, pin it. | `BACKLOG.md` RLHINT-01 |
+| Q6 | #64 | **Carried.** Scope before touching; widest blast radius on the list. | `BACKLOG.md` PCERR-01 |
+| Q7 | #72 | **Carried.** Needs a scratch engine this close did not have. | `BACKLOG.md` WSTOR-01 |
+| Q8 | #61 | **Carried** by the deferred requirement, which moves to the backlog at archive. | `BACKLOG.md` WPIN-01 |
+| Q11 | #81 | **Accepted residual**, waived with the mechanism in the reason so the absence stays visible. | ledger #81 |
+
+One thing the close found that the questions did not list: the merge of main
+(#202) had silently dropped the ENBL-08 lock-collision twin and left its header
+comment describing a lock the surviving test no longer holds. Both are repaired
+in the Q4 change.
 
 ---
 

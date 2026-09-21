@@ -1,7 +1,7 @@
 # Deferred Items
 
 - `.planning/HANDOFF.json` fails `npm run format:check`
-  status: closed
+  status: resolved
   **What:** `prettier --check "**/*.{js,json,ts}"` reports the file as unformatted,
   which fails `npm run check` at its `format:check` step before the test steps run.
   **Pre-existing:** committed at `9a1c0180` ("wip: workflows paused after planning
@@ -17,7 +17,7 @@
   34 integration tests.
 
 - The discovery-warning block's header claims a skip that a gate warning did not carry out
-  status: closed
+  status: resolved
   **What:** `surfaceDiscoveryWarnings` (`orchestrators/plugin/shared.ts:1453`) heads its
   block with `Plugin "<name>" installed; 1 declared component was skipped.` A gate
   warning's own line correctly says `was installed but the engine will refuse to load
@@ -49,6 +49,8 @@
 ---
 
 ## Closure, 2026-09-09
+
+status: resolved
 
 Both items above were fixed during the phase's code-review pass and are recorded
 `closed` rather than left `open`. Re-measured at the goal-verification gate:

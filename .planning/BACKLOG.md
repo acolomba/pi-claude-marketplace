@@ -3154,3 +3154,116 @@ is genuinely part of the function's public interface (the pattern
 restoring them is not the answer either -- they would be branches no test can
 enter, breaking the 100% direct-branch-coverage requirement that pairs
 `apply.ts` with its owner suite.
+
+## VSTALE-01: state one `covered_files` rule for VERIFICATION.md and apply it to every phase
+
+Carried from the workflows-replay close (WINDOWS #66, #80; OPEN-QUESTIONS Q1).
+
+A phase's `VERIFICATION.md` lists the files its conclusions depend on and stores
+a digest over them; any later edit to a listed file flips the phase to `stale`.
+Both failure directions were observed on this milestone:
+
+- **Too broad** (#66): a list naming a file a later pass rewrites makes its
+  phase permanently un-completable. Phase 114 went stale from a docs quick task,
+  again from the messaging-guide rewrite, and phases 114-117 went stale together
+  when main was merged in -- none of those edits changed what the phases graded.
+- **Too narrow** (#80): the inclusion rule was picked per phase. Phase 114 listed
+  its CONTEXT, REVIEW and REVIEW-FIX files while omitting PATTERNS, RESEARCH,
+  SECURITY, VALIDATION and `deferred-items.md`; the one that moved during the
+  quick task was never seen, and the one that DID trip the signal was caught by
+  luck of inclusion.
+
+**Why it is a decision, not a fix.** Any rule change alters what `stale` means
+for every phase in the workstream, and phase completion is computed from it.
+Picking a rule per phase is what produced the inconsistency.
+
+**Recommendation.** Cover what a criterion actually grades, plus the phase's
+own PLAN and SUMMARY files. Exclude CONTEXT, RESEARCH, PATTERNS, REVIEW and the
+sibling SECURITY / VALIDATION artifacts -- no criterion grades them. Do it as
+its own task: it touches every phase's report and can flip completion state on
+the spot. The four `stale` phases at this milestone's close were re-derived
+rather than re-listed, so the rule question is still open.
+
+## WLREC-01: does the succeeded-arm record the right workflow names on a staging-cleanup leak?
+
+Carried from the workflows-replay close (WINDOWS #79; OPEN-QUESTIONS Q2).
+
+`orchestrators/plugin/update.ts` sets `resources.workflows` from the prepare's
+`stagedNames` when the commit succeeded, and from the commit-reported
+`placedNames` otherwise, on the rationale "on a commit that ran, what it staged
+is the truth." A staging-cleanup leak is a recorded failure over a commit that
+fully succeeded -- and the comment directly above that line reasons about that
+exact case: envelopes left in `.previous/` rather than at their targets, a false
+`{stale workflow command}` stamp on the next update, phantom `info` rows. So the
+arm whose premise is "the commit ran, therefore the intent is the truth" is the
+arm that handles the case where the commit ran and the placement did not
+survive.
+
+Surfaced while writing the WLIF-02 architecture gate, which could not be written
+to the property as originally promised.
+
+**To settle it:** drive the leak path against a real tree and observe what the
+record carries. Do not decide it from the source; the source is what disagrees
+with itself.
+
+## RLHINT-01: the messaging guide's reload-hint mechanism claim is stale
+
+Carried from the workflows-replay close (WINDOWS #74; OPEN-QUESTIONS Q3).
+
+`docs/messaging-style-guide.md` describes the `Run /reload` trailer as emitted
+on a status-set test plus a cascade kind. `shouldEmitReloadHint`
+(`shared/notify.ts`) instead OR-reduces a caller-stamped per-row `needsReload`,
+with a kind-level short-circuit for info surfaces and
+`reconcile-applied-cascade`; its own comment says "no status-token or
+cascade-kind inference." `needsReload` occurs 34 times in `notify.ts` and once
+in the guide.
+
+**To settle it:** measure the `needsReload` plumbing across every producer that
+stamps it, then restate the guide at the grade that holds. A doc pin
+(`tests/architecture/messaging-guide-doc-pins.test.ts`) should bind the restated
+sentence to the source the way the variant names are bound.
+
+## PCERR-01: `PathContainmentError` interpolates the untrusted path raw
+
+Carried from the workflows-replay close (WINDOWS #64; OPEN-QUESTIONS Q6).
+
+`shared/path-containment.ts` interpolates the untrusted resolved child path into
+its message, so escaping a caller's label cannot close the forgery. Five bridges
+share the class and there are 58 measured `assertPathInside` call sites.
+
+**Scope before touching.** This is the widest blast radius of anything carried
+from the milestone: every caller's error text, every test that pins one, and
+the redaction pass (`redactAbsolutePaths`) that some surfaces already apply
+downstream. A scoped item decides whether the path belongs in the message at
+all, or only in a structured field the renderer redacts.
+
+## WSTOR-01: the W1/W2/W3 storage assertions were never driven against a live engine
+
+Carried from the workflows-replay close (WINDOWS #72; OPEN-QUESTIONS Q7).
+
+The storage assertions in the archived phase-105 verification were never driven
+against a live engine, and their driver
+(`tests/live-uat/workflow-storage-canary.mjs`) was never re-landed on this
+branch. The storage half of the host-engine contract rests on a source read;
+the `agent()` failure half was measured at 3.10.1 and refuted the source read.
+
+**To settle it:** re-land the driver and run it the way the `agent()` failure
+canary was run -- a disposable `npm install --prefix` scratch engine plus
+`PI_WORKFLOW_ENGINE_ROOT`, with the negative control.
+
+## WPIN-01: machine-check the engine internals the compatibility doc cites
+
+Carried from the workflows-replay REQUIREMENTS.md at archive (it was a deferred
+Future Requirement there) and folds in WINDOWS #61 (OPEN-QUESTIONS Q8).
+
+`docs/workflows-compatibility.md` cites 15 exact line ranges inside
+`@quintinshaw/pi-dynamic-workflows` 3.10.1, which this repo does not vendor, and
+instructs a human to re-read the vendored `DETERMINISM_BLOCKLIST` and the
+envelope/storage internals on every engine bump. No gate can detect that an
+upgrade moved them.
+
+**What a scoped item decides.** How to make the re-read machine-checkable
+without declaring the engine as a dependency, which is out of scope (a 0.x
+package with ~50 releases since May 2026 and no exported contract). The
+scratch-engine route above (WSTOR-01) is the only recorded way to reach the
+package's source from a test.
