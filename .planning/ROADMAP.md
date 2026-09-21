@@ -385,12 +385,12 @@ Plans:
 3. Installing or enabling a plugin whose already-installed dependency is disabled enables that dependency through its record — the config never names it (D-04-02) — and reports it on the row with a new closed-set token; RESV-05's `{already installed, dependency disabled}` warning skip is removed from the catalog (fixture, both contract constants, length lock, both enumeration pins), and `docs/plugin-enablement.md` §"Dependencies" is rewritten, not appended, since it argues the divergence this phase reverses. (EDEP-03)
 4. BACKLOG `ENBL-DEP-01` is closed by this phase; `DEPS-STATUS-01` (partial dependency degrades the dependent) stays open — it is not upstream parity and is not pulled in here.
 
-**Plans**: 3 plans
+**Plans**: 1/3 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 08-01-PLAN.md — `enable` cascades to its declared dependency closure and reports every member (EDEP-01, EDEP-03 enable arm)
+- [x] 08-01-PLAN.md — `enable` cascades to its declared dependency closure and reports every member (EDEP-01, EDEP-03 enable arm)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -528,7 +528,7 @@ plugin names — so plan these phases with the UI gate skipped.
 | 5. Prune on uninstall | v1.20 | 3/3 | Complete    | 2026-09-16 |
 | 6. Load-time dependency check and allowed uninstall | v1.20 | 4/4 | Complete    | 2026-09-19 |
 | 7. Marketplace-repository tag resolution for path-source dependencies | v1.20 | 3/3 | Complete    | 2026-09-19 |
-| 8. Enablement parity for dependencies | v1.20 | 0/0 | Not started | — |
+| 8. Enablement parity for dependencies | v1.20 | 1/3 | In Progress|  |
 | 9. Reload installs missing declared dependencies | v1.20 | 0/0 | Not started | — |
 | 10. Constraint-aware update | v1.20 | 0/0 | Not started | — |
 | 11. Cross-marketplace dependency allowlist | v1.20 | 0/0 | Not started | — |

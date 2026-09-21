@@ -5,16 +5,16 @@ milestone_name: transitive-dependencies
 current_phase: 08
 current_phase_name: Enablement parity for dependencies
 status: executing
-stopped_at: Phase 8 context gathered
-last_updated: "2026-09-20T01:10:28.498Z"
-last_activity: 2026-09-19
-last_activity_desc: Phase 08 execution started
+stopped_at: Phase 8 plan 08-01 executing (continuation after Task 1 ruling)
+last_updated: "2026-09-21T12:10:00.000Z"
+last_activity: 2026-09-21
+last_activity_desc: 08-01 Task 1 ruled; continuation executor dispatched
 state_head: 235a812b293ae32189f37adbf6f478004504b429
 progress:
   total_phases: 12
   completed_phases: 7
   total_plans: 32
-  completed_plans: 29
+  completed_plans: 30
   percent: 58
 ---
 
@@ -37,7 +37,7 @@ under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 08 (Enablement parity for dependencies) — EXECUTING
-Plan: 1 of 3
+Plan: 2 of 3 (08-01 complete 2026-09-21; 08-02 next)
 Status: Executing Phase 08
 
 All four plans are executed. LOAD-01, LOAD-02 and LOAD-03 are closed in
@@ -926,30 +926,34 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 8 context gathered
+**Stopped at:** Phase 8, plan 08-01 executing (continuation executor dispatched after the Task 1 ruling)
 
-**Resume file:** .planning/phases/08-enablement-parity-for-dependencies/08-CONTEXT.md
-`HANDOFF.json` were consumed and removed on 2026-09-15. Their still-live
-content was folded into `04-CONTEXT.md`: the supersession warning and the
-ordering constraint into `<decisions>`, and the operational anti-patterns
-(forcing the isolation sentinel per dispatch, `phase.complete`'s false
-"file not on disk" warnings, the verifier `covered_digest` hazard) into a
-carried-notes block under `<specifics>`.
+**Resume file:** .planning/phases/08-enablement-parity-for-dependencies/08-01-PLAN.md
 
-**Read beside it:** `.planning/phases/04-install-provenance/04-CONTEXT.md`
+**Read beside it:** `.planning/phases/08-enablement-parity-for-dependencies/08-CONTEXT.md`
 
-Last session: 2026-09-20T00:30:17.460Z
-resumed a paused Phase 4 discussion, answered its two open questions (the
-config-write reversal lands entirely in Phase 4 in a fixed order; reconcile
-keeps sweeping genuine orphans with one exemption), wrote `04-CONTEXT.md` and
-`04-DISCUSSION-LOG.md`, reworded PROV-04, and reconciled the ROADMAP's Phase 4
-criteria and notes against the decisions.
+Last session: 2026-09-21
+Resumed from `HANDOFF.json` (paused 2026-09-20 at 08-01 Task 1, a
+`checkpoint:decision`). Did the handoff's prerequisite first: ported main's
+`InstallTransactionOutcome` union onto `installPluginWithTransaction` as its
+own behaviour-preserving commit (`cd11171c`; typecheck, eslint, install-flow
+and reinstall-flow suites, the 100% unit-coverage gate and `lint:type-members`
+all green; the two install-flow contract pins moved one line). Then the
+operator ruled "proceed as recommended" on the Task 1 checkpoint: Decision A
+confirmed (`dependency enabled`), Decision B = B1 (re-add `dependents remain`
+at the `REASONS` tail in plan 08-02; B2 and B3 rejected), both discretion calls
+confirmed (an already-enabled member reuses `already enabled`; a manual
+`enable` clears `dependencyDisabled` at write time on root and every re-enabled
+member). A fresh `gsd-executor` continuation for 08-01 was dispatched
+sequentially (isolation `none`, sentinel forced immediately before the
+dispatch) carrying that ruling; it records it in `08-01-SUMMARY.md`
+key-decisions and proceeds from Task 2.
 
-**Next:** Plan Phase 4 via `/gsd-plan-phase 4`. CONTEXT.md exists. The one
-thing a planner must not get wrong is D-04-04's three-step order — step 3
-(remove the config write) must never land in an earlier wave than step 2
-(reconcile respects provenance).
-Milestone v1.19 already closed.
+**Next:** when the 08-01 executor returns, commit STATE.md, delete the consumed
+`HANDOFF.json` and `08/.continue-here.md`, then continue the wave loop:
+08-02 (wave 2) and 08-03 (wave 3), each dispatched with the sentinel re-forced
+to `none` as the immediately preceding call; then the phase's code-review,
+regression and verification gates.
 
 ### Historical v1.19 completion record
 
