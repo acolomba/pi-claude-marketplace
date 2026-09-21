@@ -494,36 +494,58 @@ function enableCascadeKnownMarketplaces(
 }
 
 type ClosureFailure = Extract<DependencyClosureResult, { readonly ok: false }>;
-type ClosureCycleFailure = Extract<ClosureFailure, { readonly reason: "cycle" }>;
+type ClosureNotFoundOrMarketplaceFailure = Extract<
+  ClosureFailure,
+  { readonly reason: "not-found" | "marketplace-not-added" }
+>;
 
 /**
- * `installedKeys: new Set()` (EDEP-01's empty set, see `resolveEnableCascade`)
- * and a lookup that always answers `"found"` make every OTHER
- * `DependencyClosureResult` failure arm unreachable for this walk: `not-found`
- * needs an `"absent"` lookup result, `marketplace-not-added` needs a
- * marketplace this walk did not already seed via
- * `enableCascadeKnownMarketplaces`, and `unusable-declaration` needs a lookup
- * that reports `"unusable"` -- this one never does. Evidence-backed type
- * narrowing only, mirroring `assertRecordedStateLedgerInstalled` above; the
- * invariant is established by `resolveEnableCascade`'s lookup and
- * `knownMarketplaces` construction, not by a runtime check here.
+ * `not-found` needs an `"absent"` lookup result and `enableCascadeLookup`
+ * always answers `"found"` (`walkEdge`'s `looked.kind === "absent"` branch).
+ * `marketplace-not-added` needs a child edge's marketplace that
+ * `enableCascadeKnownMarketplaces` did not already seed, and that function
+ * adds every `AddressedDependency.marketplace` in the same declaration map
+ * `enableCascadeLookup` reads from, which is the same value `buildChildEdge`
+ * computes for the edge (`AddressedDependency.marketplace` is never
+ * `undefined`, so `buildChildEdge`'s `??` fallback never applies). Both arms
+ * are unreachable for this walk's lookup and known-marketplaces pairing.
+ * Evidence-backed type narrowing only, mirroring
+ * `assertRecordedStateLedgerInstalled` above; the invariant is established by
+ * `resolveEnableCascade`'s lookup and `knownMarketplaces` construction, not by
+ * a runtime check here.
  */
-function assertOnlyCycleReachable(
+function assertNotFoundAndMarketplaceUnreachable(
   _failure: ClosureFailure,
-): asserts _failure is ClosureCycleFailure {
+): asserts _failure is ClosureNotFoundOrMarketplaceFailure {
   // Evidence-backed type narrowing only; the invariant is established by the caller.
 }
 
 /**
- * The `EnableRefusedError` a closure failure resolves to. Mirrors
+ * The `EnableRefusedError` a closure failure resolves to. `cycle` mirrors
  * `install-cascade.messaging.ts::closureFailureFacts`'s cycle arm.
+ * `unusable-declaration` is reachable here even though `enableCascadeLookup`
+ * never reports `"unusable"`: `buildChildEdge` returns it directly for a
+ * declared `sha` (D-03-36) or an unrenderable marketplace, before any lookup
+ * runs. It carries `closureFailureFacts`'s own token and cause shape for that
+ * arm.
  */
 function enableCascadeClosureFailure(failure: ClosureFailure): EnableRefusedError {
-  assertOnlyCycleReachable(failure);
-  return new EnableRefusedError(
-    "dependency cycle",
-    `Dependency cycle: ${failure.chain.join(" -> ")}.`,
-  );
+  switch (failure.reason) {
+    case "cycle":
+      return new EnableRefusedError(
+        "dependency cycle",
+        `Dependency cycle: ${failure.chain.join(" -> ")}.`,
+      );
+    case "unusable-declaration":
+      return new EnableRefusedError(
+        "invalid manifest",
+        `Plugin "${failure.key}" declares an unusable dependency (${failure.detail}).`,
+      );
+    case "not-found":
+    case "marketplace-not-added":
+      assertNotFoundAndMarketplaceUnreachable(failure);
+      throw new Error("unreachable");
+  }
 }
 
 /** Classify one non-root closure member against the live locked snapshot. */

@@ -4406,7 +4406,11 @@ async function seedEdepGraph(
   plugins: readonly {
     readonly name: string;
     readonly version: string;
-    readonly dependencies?: readonly { readonly name: string; readonly marketplace?: string }[];
+    readonly dependencies?: readonly {
+      readonly name: string;
+      readonly marketplace?: string;
+      readonly sha?: string;
+    }[];
     readonly enabled: boolean;
     readonly dependencyDisabled?: true;
   }[],
@@ -4622,6 +4626,48 @@ test("EDEP-01: a cycle refuses the enable and writes nothing", async () => {
         "● official [user]",
         "  ⊘ a (failed) {dependency cycle}",
         "    cause: Dependency cycle: a@official -> b@official -> a@official.",
+      ].join("\n"),
+    );
+    assert.equal((await stat(statePath)).mtimeMs, mtimeBefore);
+  });
+});
+
+test("CR-02: a sha-pinned declaration refuses the enable with {invalid manifest} and writes nothing", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      {
+        name: "a",
+        version: "1.0.0",
+        dependencies: [{ name: "b", sha: "abc1234" }],
+        enabled: false,
+      },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    const mtimeBefore = (await stat(statePath)).mtimeMs;
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      pi: makePi(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ a (failed) {invalid manifest}",
+        '    cause: Plugin "a@official" declares an unusable dependency (dependencies.0: sha pinning is not supported).',
       ].join("\n"),
     );
     assert.equal((await stat(statePath)).mtimeMs, mtimeBefore);
