@@ -5,16 +5,16 @@ milestone_name: transitive-dependencies
 current_phase: 08
 current_phase_name: Enablement parity for dependencies
 status: executing
-stopped_at: Phase 8 plan 08-01 executing (continuation after Task 1 ruling)
+stopped_at: Phase 8 waves 1-2 complete; plan 08-03 executing
 last_updated: "2026-09-21T12:10:00.000Z"
 last_activity: 2026-09-21
-last_activity_desc: 08-01 Task 1 ruled; continuation executor dispatched
+last_activity_desc: 08-01 and 08-02 complete; 08-03 dispatched
 state_head: 235a812b293ae32189f37adbf6f478004504b429
 progress:
   total_phases: 12
   completed_phases: 7
   total_plans: 32
-  completed_plans: 30
+  completed_plans: 31
   percent: 58
 ---
 
@@ -37,7 +37,7 @@ under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 08 (Enablement parity for dependencies) — EXECUTING
-Plan: 2 of 3 (08-01 complete 2026-09-21; 08-02 next)
+Plan: 3 of 3 (08-01 and 08-02 complete 2026-09-21; 08-03 next)
 Status: Executing Phase 08
 
 All four plans are executed. LOAD-01, LOAD-02 and LOAD-03 are closed in
@@ -926,9 +926,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 8, plan 08-01 executing (continuation executor dispatched after the Task 1 ruling)
+**Stopped at:** Phase 8, waves 1-2 complete; plan 08-03 (wave 3) executing
 
-**Resume file:** .planning/phases/08-enablement-parity-for-dependencies/08-01-PLAN.md
+**Resume file:** .planning/phases/08-enablement-parity-for-dependencies/08-03-PLAN.md
 
 **Read beside it:** `.planning/phases/08-enablement-parity-for-dependencies/08-CONTEXT.md`
 
@@ -949,11 +949,23 @@ sequentially (isolation `none`, sentinel forced immediately before the
 dispatch) carrying that ruling; it records it in `08-01-SUMMARY.md`
 key-decisions and proceeds from Task 2.
 
-**Next:** when the 08-01 executor returns, commit STATE.md, delete the consumed
-`HANDOFF.json` and `08/.continue-here.md`, then continue the wave loop:
-08-02 (wave 2) and 08-03 (wave 3), each dispatched with the sentinel re-forced
-to `none` as the immediately preceding call; then the phase's code-review,
-regression and verification gates.
+**Wave 1 (08-01) closed 2026-09-21:** `enable` cascades to its declared
+closure (EDEP-01, EDEP-03 enable arm); `dependency enabled` landed, `REASONS`
+59 -> 60; the cascade is scoped to standalone `enable` (a reconcile-driven
+call keeps its own dependency handling). Six commits `40bcedd7`..`ae073690`;
+full coverage gate 7364/7364 at 100%.
+
+**Wave 2 (08-02) closed 2026-09-21:** `disable` refuses while an enabled
+dependent still declares the target, `(failed) {dependents remain}` with a
+plain-English `cause:` naming dependents in order (EDEP-02, D-08-01, B1);
+`REASONS` 60 -> 61, catalog 219 -> 220 states. The guard skips orchestrated
+(reconcile-driven) disables -- LOAD-02's dependents-first propagation would
+otherwise deadlock on itself; two test fixtures that disabled a still-declared
+dependency through the standalone verb were re-seeded. Six commits
+`00b102a8`..`9dd32b86`.
+
+**Next:** when the 08-03 executor returns, commit STATE.md/ROADMAP.md, then the
+phase's code-review, regression and verification gates, then Phase 9.
 
 ### Historical v1.19 completion record
 
