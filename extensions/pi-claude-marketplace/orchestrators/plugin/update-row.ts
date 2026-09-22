@@ -2,9 +2,9 @@
 //
 // The shared row-fact leaf for BOTH update cascades: the `(updated)`
 // partition's row composer, and the constraint cause-line carrier the
-// `skipped` row reads (UPDT-02). A LEAF module: it imports the outcome type
-// from `../types.ts` plus the shared notify vocabulary, and nothing from
-// either update ledger.
+// `skipped` and `unchanged` rows read (UPDT-02, D-10-13). A LEAF module: it
+// imports the outcome type from `../types.ts` plus the shared notify
+// vocabulary, and nothing from either update ledger.
 //
 // D-05 / D-06 / D-11: the composer is shared by `plugin/update-cascade.ts` (the
 // manual update cascade) and `marketplace/update.ts` (the autoupdate cascade),
@@ -28,7 +28,11 @@ import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { PluginUpdateSkippedOutcome, PluginUpdateUpdatedOutcome } from "../types.ts";
+import type {
+  PluginUpdateSkippedOutcome,
+  PluginUpdateUnchangedOutcome,
+  PluginUpdateUpdatedOutcome,
+} from "../types.ts";
 
 /**
  * The caller's own success-severity policy for the `updated` partition, one
@@ -61,9 +65,17 @@ export interface UpdatedRowSeverity {
  * threaded onto one form while a caller short-circuits past it on the other
  * (CR-01).
  *
- * The partition carries three INDEPENDENT degradation axes and the row names
+ * The partition carries four INDEPENDENT degradation axes and the row names
  * whichever are present:
  *
+ *  - D-10-15, the CURRENT-COPY axis: a constrained path source with no
+ *    satisfying marketplace tag fell back to the marketplace's current copy,
+ *    and it landed in range. Reuses the install cascade's existing
+ *    `{dependency current copy}` token -- same fact, same phrase: no tag
+ *    pinned this, the marketplace's current copy is what landed. Named FIRST
+ *    in the brace: it says where the tree came from, which precedes anything
+ *    the staging then did with it. Moves NO severity channel -- the update
+ *    was carried out in full.
  *  - FSTAT-07 / D-66-04, the DROPPED-kind axis: a `--partial` update whose
  *    candidate re-resolved `partially-available` dropped the unsupported kinds,
  *    so the row reports `(partially-installed)` with the dropped-component
@@ -82,8 +94,8 @@ export interface UpdatedRowSeverity {
  *    handlers, and it moves NO severity channel -- the config bug names itself
  *    in the brace while the update itself was carried out in full.
  *
- * An update can do all three at once, and the row then carries every token in
- * ONE brace in the install row's established emit order -- orphan rewake, then
+ * An update can do all four at once, and the row then carries every token in
+ * ONE brace in the emit order above -- current copy, then orphan rewake, then
  * malformed kinds, then dropped kinds (`docs/output-catalog.md`,
  * `enable-orphan-rewake`). A clean update composes no reasons and keeps the
  * caller's severity, so its row is byte-identical to before (NREG-01).
@@ -101,9 +113,13 @@ export function updatedRowFromOutcome(
   baseSeverity: UpdatedRowSeverity,
 ): PluginUpdatedMessage | PluginPartiallyInstalledMessage {
   const malformed = malformedReasonsForKinds(outcome.degradedKinds);
-  // Emit order, shared by both row forms below: orphan rewake, then the
-  // malformed kinds, then whatever the dropped-kind form appends.
+  // Emit order, shared by both row forms below: current copy, then orphan
+  // rewake, then the malformed kinds, then whatever the dropped-kind form
+  // appends.
   const written: readonly ContentReason[] = [
+    ...(outcome.constraint?.fellBackToCurrentCopy === true
+      ? (["dependency current copy"] as const)
+      : []),
     ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
     ...malformed,
   ];
@@ -152,12 +168,20 @@ function outcomeDependencies(declaresAgents: boolean, declaresMcp: boolean): rea
 }
 
 /**
- * UPDT-02 / D-10-11: the held-update cause line, carried on the `skipped`
- * outcome's `notes` by the constraint gate. `undefined` for every other
- * skipped outcome, so its row stays byte-frozen (no other producer sets
- * `notes` under this reason).
+ * UPDT-02 / D-10-11 / D-10-13: the constraint gate's cause line, read off
+ * whichever partition carries it. The `skipped` arm carries the held-update
+ * cause on `notes`; the `unchanged` arm carries the D-10-13 ceiling
+ * disclosure on `constraint`. `undefined` for every other outcome, so its
+ * row stays byte-frozen (no other producer sets either field under this
+ * reason).
  */
-export function constraintCauseFor(outcome: PluginUpdateSkippedOutcome): Error | undefined {
+export function constraintCauseFor(
+  outcome: PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome,
+): Error | undefined {
+  if (outcome.partition === "unchanged") {
+    return outcome.constraint === undefined ? undefined : new Error(outcome.constraint.disclosure);
+  }
+
   if (!outcome.reasons.includes("dependents constrain") || outcome.notes.length === 0) {
     return undefined;
   }

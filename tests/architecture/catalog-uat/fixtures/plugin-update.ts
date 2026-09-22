@@ -576,6 +576,66 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
       },
     },
 
+    // D-10-14 / D-10-15: a constrained path source with no satisfying
+    // marketplace tag fell back to the marketplace's current copy, and it
+    // landed in range. Reuses the install cascade's existing `{dependency
+    // current copy}` token -- the same fact, the same phrase.
+    "update-current-copy": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "updated",
+                severity: "info",
+                needsReload: true,
+                name: "formatter",
+                from: "1.0.0",
+                to: "1.5.0",
+                dependencies: [],
+                reasons: ["dependency current copy"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-10-13: the plugin is already at the highest version its dependents
+    // jointly admit. The row keeps its existing `{up-to-date}` brace and
+    // discloses the range and its holders on the cause line -- no second
+    // token and no catalog churn.
+    "update-up-to-date-constrained": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                severity: "info",
+                needsReload: false,
+                name: "shared-lib",
+                reasons: ["up-to-date"],
+                cause: new Error(
+                  'already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"',
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // ATTR-02 / SCOPE-01 / M10 / M11: marketplace not added in the requested
     // explicit scope (or present only in the other scope) -> standalone
     // `marketplace-not-added` variant carrying the requested-scope bracket,

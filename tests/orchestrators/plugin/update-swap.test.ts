@@ -360,6 +360,116 @@ test("atomically replaces staged resources and finalizes the update ledger", asy
   });
 });
 
+test("D-10-17a: the updated outcome forwards the preflight's own constraint, key always present", async () => {
+  await withHermeticHome(async () => {
+    // arrange -- a constrained update (no pin, in-range) so the preflight's
+    // `constraint` slot carries a real disclosure.
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-constraint-"));
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "2.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const locations = locationsFor("project", cwd);
+      const preflight = await preparePluginUpdate({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        locations,
+        cleanupClones: () => Promise.resolve(),
+        constraintGate: () =>
+          Promise.resolve({
+            kind: "admits",
+            range: "<=2.0.0",
+            holders: [{ key: "alpha@mp", range: "<=2.0.0", disabled: false }],
+            fellBackToCurrentCopy: false,
+            disclosure: "already the highest version the combined range admits",
+          }),
+      });
+      assert.ok(!("partition" in preflight));
+      assert.ok(preflight.constraint !== undefined);
+
+      // act
+      const outcome = await swapPluginUpdate(
+        {
+          plugin: "hello",
+          marketplace: "mp",
+          scope: "project",
+          cwd,
+          locations,
+          hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+          completionCache: createCompletionCache(),
+          cascade: true,
+          cleanupClones: () => Promise.resolve(),
+        },
+        preflight,
+      );
+
+      // assert -- the SAME value the preflight computed.
+      assert.ok(outcome.partition === "updated");
+      assert.strictEqual(Object.hasOwn(outcome, "constraint"), true);
+      assert.deepStrictEqual(outcome.constraint, preflight.constraint);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-10-17a: an unconstrained update forwards constraint: undefined, key still present", async () => {
+  await withHermeticHome(async () => {
+    // arrange -- no `constraintGate` injected: the real gate walks a state
+    // that declares no dependent for "hello", so the verdict is
+    // unconstrained and `preflight.constraint` is `undefined`.
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-unconstrained-"));
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "2.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const locations = locationsFor("project", cwd);
+      const preflight = await preparePluginUpdate({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        locations,
+        cleanupClones: () => Promise.resolve(),
+      });
+      assert.ok(!("partition" in preflight));
+      assert.strictEqual(preflight.constraint, undefined);
+
+      // act
+      const outcome = await swapPluginUpdate(
+        {
+          plugin: "hello",
+          marketplace: "mp",
+          scope: "project",
+          cwd,
+          locations,
+          hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+          completionCache: createCompletionCache(),
+          cascade: true,
+          cleanupClones: () => Promise.resolve(),
+        },
+        preflight,
+      );
+
+      // assert -- the key is present (a plain assignment, not a conditional
+      // spread) even though its value is `undefined`.
+      assert.ok(outcome.partition === "updated");
+      assert.strictEqual(Object.hasOwn(outcome, "constraint"), true);
+      assert.strictEqual(outcome.constraint, undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("WR-01: a successful path-source swap drops a stale resolvedSha the fresh resolve did not reproduce", async () => {
   await withHermeticHome(async () => {
     // arrange: a STALE `resolvedSha` on the record, as a `path`-source record

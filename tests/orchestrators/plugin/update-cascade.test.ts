@@ -92,6 +92,69 @@ test("keeps an unchanged targeted result exact without a tally or reload hint", 
   boundary.verifyBoundary();
 });
 
+test("D-10-13: the ceiling version discloses its range and holders", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1, 4);
+  const outcomes: readonly UpdateCascadeOutcome[] = [
+    {
+      target: { marketplace: "mp", scope: "project" },
+      outcome: {
+        partition: "unchanged",
+        name: "shared-lib",
+        fromVersion: "1.5.0",
+        toVersion: "1.5.0",
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: {
+          disclosure:
+            'already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"',
+          fellBackToCurrentCopy: false,
+        },
+      },
+    },
+  ];
+  const expectedMessage = [
+    "● mp [project]",
+    "  ⊘ shared-lib (skipped) {up-to-date}",
+    '    cause: already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"',
+  ].join("\n");
+
+  // act
+  composeUpdateCascade(boundary.ctx, boundary.pi, outcomes, "single");
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
+  boundary.verifyBoundary();
+});
+
+test("an unconstrained unchanged outcome renders no cause line", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1, 4);
+  const outcomes: readonly UpdateCascadeOutcome[] = [
+    {
+      target: { marketplace: "mp", scope: "project" },
+      outcome: {
+        partition: "unchanged",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+      },
+    },
+  ];
+
+  // act
+  composeUpdateCascade(boundary.ctx, boundary.pi, outcomes, "single");
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [
+    { message: "● mp [project]\n  ⊘ hello (skipped) {up-to-date}" },
+  ]);
+  boundary.verifyBoundary();
+});
+
 test("UPDT-02: projects a held constraint outcome as a warning row with its notes as the cause", () => {
   // arrange
   const boundary = createNotificationBoundary(1, 4);

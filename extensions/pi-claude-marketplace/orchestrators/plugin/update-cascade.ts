@@ -113,7 +113,13 @@ function outcomeToCascadePluginMessage(
         updated: successSeverity,
         partiallyInstalled: successSeverity,
       });
-    case "unchanged":
+    case "unchanged": {
+      // D-10-13: the ceiling disclosure -- the effective range and its
+      // holders -- rides the SAME cause-line carrier the `skipped` arm
+      // reads; `undefined` for an unconstrained up-to-date plugin, so its
+      // row stays byte-identical (NREG-01).
+      const cause = constraintCauseFor(outcome);
+
       return {
         status: "skipped",
         name: outcome.name,
@@ -121,7 +127,10 @@ function outcomeToCascadePluginMessage(
         reasons: ["up-to-date"],
         severity: "info",
         needsReload: false,
+        ...(cause !== undefined && { cause }),
       };
+    }
+
     case "skipped":
       return projectSkippedOutcome(target, outcome, cardinality);
     case "failed":

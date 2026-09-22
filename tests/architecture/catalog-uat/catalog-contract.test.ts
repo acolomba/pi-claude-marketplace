@@ -127,8 +127,13 @@ const EXPECTED_SECTION_COUNT = 20;
 // UPDT-01 / UPDT-02 / D-10-01: +1 state for stage two's post-fetch guard --
 // a no-tag repository's fetched version lands outside the combined range,
 // held naming only the rejecting dependent (223 -> 224).
-const EXPECTED_STATE_COUNT = 224;
-const EXPECTED_UTF8_BYTES = 31_019;
+// D-10-14 / D-10-15: +1 state for the path-source current-copy fallback that
+// landed in range -- an `(updated)` row carrying `{dependency current copy}`
+// alone (224 -> 225).
+// D-10-13: +1 state for the ceiling disclosure -- an `{up-to-date}` row
+// whose cause line names the effective range and its holders (225 -> 226).
+const EXPECTED_STATE_COUNT = 226;
+const EXPECTED_UTF8_BYTES = 31_284;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -417,7 +422,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 224 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 226 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

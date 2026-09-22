@@ -791,7 +791,12 @@ test("UPDT-01: a second update of a tag-pinned plugin is unchanged", async (t) =
     toVersion: "1.2.0",
     declaresAgents: false,
     declaresMcp: false,
-    constraint: undefined,
+    // D-10-13: the pinned verdict's own disclosure, read from the SAME
+    // `verdict` local -- present even though nothing changed on disk.
+    constraint: {
+      disclosure: "already the highest version the combined range admits",
+      fellBackToCurrentCopy: false,
+    },
   });
   assert.strictEqual(after, before);
 });

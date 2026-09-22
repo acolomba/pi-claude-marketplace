@@ -1643,6 +1643,31 @@ A plugin operation needs attention.
 
 Stage one's tag probe found no satisfying tag, so the candidate resolves exactly as it does today and `preparePluginUpdate` re-checks the derived version against the SAME intersected range `admitResolvedVersion` (`update-constraint-gate.ts`) already computed. Here the fetched `2.0.0` falls outside `<=1.5.0`, so the update is held -- naming ONLY `alpha@mp`, the holder whose OWN declared range rejects `2.0.0`; a second, satisfied holder is absent from the line, which is the whole point of the state (naming a holder the fetched version DOES satisfy would send the user to the wrong plugin). The same `{dependents constrain}` token plan 10-01 minted carries this arm too (D-10-10: one token, four arms now, distinguished on the cause line). A verdict carrying a `pin` never reaches this check -- the tag was already selected FROM the range. Single cardinality, so no trailing tally. No reload-hint (nothing changed on disk).
 
+### A path-source update falls back to the marketplace's current copy (D-10-14 / D-10-15)
+
+<!-- catalog-state: update-current-copy -->
+
+```text
+● mp [user]
+  ● formatter v1.0.0 → v1.5.0 (updated) {dependency current copy}
+
+/reload to pick up changes
+```
+
+`formatter` is a constrained PATH-source dependency whose marketplace clone carries no release tag satisfying its dependents' combined range (UPDT-01). Rather than holding the update, `preparePluginUpdate` falls back to the marketplace's CURRENT copy and lets stage two decide (D-10-14) -- the arm that makes stage two earn its place: the install-side arm that always accepts is deliberately NOT ported here, because knowingly moving an in-range plugin to an out-of-range version is exactly what UPDT-01 forbids. Here the fallback landed IN range, so the update proceeds and the success row reuses Phase 7's existing `{dependency current copy}` token (D-10-15) -- no catalog amendment, same fact, same phrase. The token is FIRST in the brace, ahead of orphan-rewake and malformed-kind tokens, and it moves no severity channel: the update was carried out in full. Single cardinality, so no trailing tally. Reload-hint fires because a resource transition landed.
+
+### The ceiling version, still constrained (D-10-13)
+
+<!-- catalog-state: update-up-to-date-constrained -->
+
+```text
+● mp [user]
+  ⊘ shared-lib (skipped) {up-to-date}
+    cause: already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"
+```
+
+`shared-lib` is already at the highest version its installed dependents jointly admit. The row keeps its existing `{up-to-date}` brace unchanged -- no second reason token and no catalog churn -- and discloses the effective range and its holders on the cause line, composed by the SAME `describeConstraint` composer stage two's held arm uses (the `already-resolved` clause). This is what lets the user tell "nothing newer exists" from "nothing newer is allowed": an unconstrained up-to-date plugin renders the brace-less bytes above with no cause line, byte-identical to before. Severity stays `info` -- an up-to-date result is benign whether or not something constrains it. No reload-hint (nothing changed on disk).
+
 ### Failure -- marketplace not added, explicit scope (ATTR-02 / SCOPE-01)
 
 Triggered when `update @<marketplace>` names a marketplace that is NOT added in the requested `--scope`, or when `update <plugin>@<marketplace>` names one absent from BOTH scopes. SCOPE-01: the PLUGIN form with the marketplace present only in the OTHER scope renders the `update-not-installed-cross-scope` row instead -- nothing is installed at the requested scope, so the plugin is the subject. ATTR-02 makes the attribution form-INDEPENDENT: BOTH the `<plugin>@<mp>` and `@<mp>` forms flow through `enumerateMarketplaceTarget` and emit the standalone `MarketplaceNotAddedMessage` variant (`{marketplace not added}` on the marketplace subject) BEFORE any cascade row exists -- replacing the former raw `Error` (M10) / `MarketplaceNotFoundError` (M11) that escaped to a synthetic `(failed) {not found}` row. No raw throw escapes the orchestrator for the marketplace-existence case. The `[scope]` bracket carries the REQUESTED scope: the operator infers the other scope (SCOPE-01; resolved Open Question #1 -- the requested-scope bracket, no other-scope phrase). The cascade path (`updateSinglePlugin` / `preflightUpdate`) keeps its non-throwing concurrent-removal outcome and is unaffected (Pitfall 3 / A3). Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). No cause-chain trailer. Severity `error`; no reload-hint.

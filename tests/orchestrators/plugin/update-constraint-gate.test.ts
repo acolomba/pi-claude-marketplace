@@ -634,6 +634,35 @@ describe("evaluateUpdateConstraint", () => {
     assert.strictEqual(calls[0]?.range, ">=1.0.0 <2.0.0-0");
   });
 
+  test("D-10-14: a path source with no satisfying tag falls back and is re-checked", async () => {
+    // arrange -- the path arm's no-satisfying-tag result falls back to the
+    // marketplace's current copy; the git arm's equivalent does not, because
+    // a git source with no satisfying tag refreshes its own branch head.
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+    const pathVerdict = await evaluateUpdateConstraint(
+      options({ state, seam: seamReturning(declarations) }),
+    );
+    const gitVerdict = await evaluateUpdateConstraint(
+      options({
+        state,
+        entry: { name: "target", source: gitSource() },
+        seam: seamReturning(declarations),
+        auth: { ctx: silentCtx(), credentialOps: credentialOps() },
+      }),
+    );
+
+    // assert
+    assert.ok(pathVerdict.kind === "admits");
+    assert.strictEqual(pathVerdict.fellBackToCurrentCopy, true);
+    assert.strictEqual(pathVerdict.pin, undefined);
+    assert.ok(gitVerdict.kind === "admits");
+    assert.strictEqual(gitVerdict.fellBackToCurrentCopy, false);
+    assert.strictEqual(gitVerdict.pin, undefined);
+  });
+
   test("UPDT-01: a caret range whose boundary equals an available tag pins that tag", async () => {
     // arrange -- drives the REAL `selectHighestSatisfyingTag` through an
     // injected local listing seam, one level below the gate's own seam.

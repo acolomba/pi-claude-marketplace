@@ -622,6 +622,12 @@ async function refreshDisabledRecord(
 async function refreshDisabledPluginUpdate(
   options: PreparePluginUpdateOptions,
   preflight: PreparedPluginUpdate,
+  // D-10-13 / D-10-17a: the disabled record refresh runs outside the scope
+  // where the gate verdict is local, so the caller passes its OWN
+  // `constraintFromVerdict(verdict)` result here -- never
+  // `preflight.constraint`, which would make the prepared slot a second
+  // consumer and re-open D-10-17a.
+  constraint: UpdateConstraintDisclosure | undefined,
 ): Promise<PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome> {
   const wrote = disabledRefreshWouldWrite(preflight)
     ? await refreshDisabledRecord(options, preflight)
@@ -647,7 +653,7 @@ async function refreshDisabledPluginUpdate(
       toVersion: preflight.toVersion,
       declaresAgents: false,
       declaresMcp: false,
-      constraint: undefined,
+      constraint,
     };
   }
 
@@ -888,9 +894,9 @@ export async function preparePluginUpdate(
       toVersion,
       declaresAgents: false,
       declaresMcp: false,
-      // D-10-13's ceiling disclosure lands on this arm in a later task, read
-      // from the SAME `verdict` local this function already holds.
-      constraint: undefined,
+      // D-10-13: the ceiling disclosure, read from the SAME `verdict` local
+      // this function already holds -- never routed through `prepared`.
+      constraint: constraintFromVerdict(verdict),
     };
   }
 
@@ -908,7 +914,7 @@ export async function preparePluginUpdate(
     ...(resolvedSha !== undefined && { resolvedSha }),
   };
   return isRecordedButDisabled(triaged.record)
-    ? refreshDisabledPluginUpdate(options, prepared)
+    ? refreshDisabledPluginUpdate(options, prepared, constraintFromVerdict(verdict))
     : prepared;
 }
 

@@ -6,7 +6,10 @@ import {
   updatedRowFromOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts";
 
-import type { PluginUpdateSkippedOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
+import type {
+  PluginUpdateSkippedOutcome,
+  PluginUpdateUnchangedOutcome,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 
 test("composes agent and MCP dependencies in declared display order", () => {
   // arrange
@@ -340,6 +343,55 @@ test("reports orphan rewake without overriding clean base severity", () => {
   });
 });
 
+test("D-10-15: an in-range current-copy fallback names itself on the success row", () => {
+  // arrange
+  const outcome = {
+    constraint: {
+      disclosure: "already the highest version ^1.0.0 admits",
+      fellBackToCurrentCopy: true,
+    },
+    declaresAgents: false,
+    declaresMcp: false,
+    fromVersion: "1.0.0",
+    name: "shared-lib",
+    partition: "updated" as const,
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    toVersion: "1.5.0",
+  };
+  const severity = { partiallyInstalled: "warning" as const, updated: "warning" as const };
+
+  // act
+  const result = updatedRowFromOutcome(outcome, "user", severity);
+
+  // assert
+  assert.ok("reasons" in result);
+  assert.strictEqual(result.reasons?.[0], "dependency current copy");
+  assert.strictEqual(result.severity, "warning");
+});
+
+test("an outcome with no constraint produces a message with no reasons key at all", () => {
+  // arrange
+  const outcome = {
+    constraint: undefined,
+    declaresAgents: false,
+    declaresMcp: false,
+    fromVersion: "1.0.0",
+    name: "shared-lib",
+    partition: "updated" as const,
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    toVersion: "1.5.0",
+  };
+  const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
+
+  // act
+  const result = updatedRowFromOutcome(outcome, "user", severity);
+
+  // assert
+  assert.strictEqual(Object.hasOwn(result, "reasons"), false);
+});
+
 function skippedOutcome(
   overrides: Partial<PluginUpdateSkippedOutcome> = {},
 ): PluginUpdateSkippedOutcome {
@@ -386,6 +438,52 @@ test("constraintCauseFor returns undefined for an outcome not held by the constr
 test("constraintCauseFor returns undefined for a held reason carrying no notes", () => {
   // arrange
   const outcome = skippedOutcome({ reasons: ["dependents constrain"], notes: [] });
+
+  // act
+  const cause = constraintCauseFor(outcome);
+
+  // assert
+  assert.strictEqual(cause, undefined);
+});
+
+test("D-10-13: constraintCauseFor composes an Error from an unchanged outcome's disclosure", () => {
+  // arrange
+  const outcome: PluginUpdateUnchangedOutcome = {
+    partition: "unchanged",
+    name: "shared-lib",
+    fromVersion: "1.5.0",
+    toVersion: "1.5.0",
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: {
+      disclosure:
+        'already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"',
+      fellBackToCurrentCopy: false,
+    },
+  };
+
+  // act
+  const cause = constraintCauseFor(outcome);
+
+  // assert
+  assert.ok(cause instanceof Error);
+  assert.strictEqual(
+    cause.message,
+    'already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"',
+  );
+});
+
+test("constraintCauseFor returns undefined for an unconstrained unchanged outcome", () => {
+  // arrange
+  const outcome: PluginUpdateUnchangedOutcome = {
+    partition: "unchanged",
+    name: "shared-lib",
+    fromVersion: "1.5.0",
+    toVersion: "1.5.0",
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+  };
 
   // act
   const cause = constraintCauseFor(outcome);
