@@ -337,7 +337,9 @@ describe("evaluateUpdateConstraint", () => {
     },
     {
       title: "D-05-07: a declarer its marketplace does not list",
-      cause: new Error("cannot read the dependencies of helper@mp: not declared by its marketplace"),
+      cause: new Error(
+        "cannot read the dependencies of helper@mp: not declared by its marketplace",
+      ),
     },
     {
       title: "D-05-07: a declarer's own manifest present but unusable",
@@ -380,7 +382,9 @@ describe("evaluateUpdateConstraint", () => {
   ] as const) {
     test(`UPDT-01: a ${title} declared range holds the update with a distinct arm clause`, async () => {
       // arrange
-      const declarations = new Map<string, readonly AddressedDependency[]>([["alpha@mp", [holder]]]);
+      const declarations = new Map<string, readonly AddressedDependency[]>([
+        ["alpha@mp", [holder]],
+      ]);
       const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
 
       // act
