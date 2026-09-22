@@ -178,6 +178,29 @@ the cross-marketplace allowlist (Phase 11).
   optional field is the silent-omission class this milestone has already shipped
   three times: it compiles clean at every derivation site that forgets it.
 
+- **D-10-17a:** *(operator clarification, 2026-09-22, raised by the planner and
+  confirmed at the plan-check gate)* **D-10-17 governs the PIN's route, not every
+  member.** The pin still travels as `resolvedSha` / `toVersion`, which is the
+  property D-10-17 exists to protect. The user-visible **disclosure residue** is a
+  separate mechanism, and `PreparedPluginUpdate` is the only channel from the
+  preflight to `swapPluginUpdate(args, preflight)` — so D-10-15's
+  `{dependency current copy}` row, composed after the swap from the `updated`
+  outcome, has no other carrier short of recomputing the dependents walk.
+
+  Two constraints on that carrier, both from D-10-17's own rationale:
+
+  1. It is declared **required-but-nullable**
+     (`readonly constraint: UpdateConstraintDisclosure | undefined`), never
+     `constraint?:`. With `exactOptionalPropertyTypes` on and four construction
+     sites in the tree, that makes a derivation site which forgets it a compile
+     error — which the atomic sub-object shape alone does NOT do. An atomic shape
+     stops a HALF-FILLED disclosure; it does nothing about an omitted key, and
+     the omitted key is the silent-omission class D-10-17 named.
+  2. **D-10-13 does not use it.** Both `unchanged` outcomes are built inside
+     `update-preflight.ts`, where the gate verdict is already in scope, so the
+     `{up-to-date}` row's range disclosure is attached there directly. D-10-15 is
+     the single justified consumer of the prepared-update slot.
+
 - **D-10-18:** **One tag memo per run, shared across the whole bulk update.** A
   bulk `update` or an autoupdate cascade touches many plugins from one
   marketplace; a run-scoped memo bounds that to one listing per URL and one per
