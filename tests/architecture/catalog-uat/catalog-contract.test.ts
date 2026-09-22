@@ -295,11 +295,11 @@ test("catalog contract rejects duplicate fixture tuples and empty sections", () 
 
   assert.throws(
     () => mergeFixtureMaps([one, one]),
-    /Duplicate catalog fixture tuple: section::state/u,
+    new Error("Duplicate catalog fixture tuple: section::state"),
   );
   assert.throws(
     () => mergeFixtureMaps([{ section: {} }]),
-    /Catalog fixture section must not be empty: section/u,
+    new Error("Catalog fixture section must not be empty: section"),
   );
 });
 

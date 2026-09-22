@@ -2,7 +2,6 @@ import { mock, verify, when } from "strong-mock";
 
 import type {
   NotificationContext,
-  NotificationUi,
   ToolInventory,
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -10,9 +9,9 @@ import type {
 export type MockCtx = NotificationContext;
 export type MockPi = ToolInventory;
 type NotifyArguments = [message: string, severity?: "info" | "warning" | "error"];
-type MockNotificationUi = Omit<NotificationUi, "notify"> & {
+interface MockNotificationUi {
   readonly notify: (...args: NotifyArguments) => void;
-};
+}
 
 export interface CapturedNotification {
   readonly message: string;

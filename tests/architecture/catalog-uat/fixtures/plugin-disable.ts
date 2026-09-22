@@ -114,9 +114,7 @@ export const PLUGIN_DISABLE_FIXTURES: FixtureMap = {
     },
   },
 
-  // -------------------------------------------------------------------------
   // Manual recovery anchors -- per-plugin manual-recovery row inside a block.
-  // -------------------------------------------------------------------------
   "manual-recovery-anchors": {
     "per-plugin-manual-recovery": {
       pi: piWithBothLoaded(),

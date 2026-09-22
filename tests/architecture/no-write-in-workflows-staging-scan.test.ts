@@ -138,6 +138,7 @@ test("WR-06: the retained-staging scan carries no filesystem-write call", async 
     `WR-06 unbound gate: ${STAGING_GC} stripped to nothing, so every assertion below would pass over zero inspected bytes.`,
   );
 
+  // act
   const scanBody = requireBody(src, READ_ONLY_FN);
   const sweepBody = requireBody(src, DESTRUCTIVE_FN);
 

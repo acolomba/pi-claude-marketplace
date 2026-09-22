@@ -149,7 +149,7 @@ const REMOTE_GLYPH = "\u25CC";
 const PARTIALLY_AVAILABLE_GLYPH = "\u2296";
 
 /** A soft-dep probe with every companion loaded, so no marker joins a row. */
-const BOTH_COMPANIONS_LOADED = {
+const ALL_COMPANIONS_LOADED = {
   piSubagentsLoaded: true,
   piMcpAdapterLoaded: true,
   workflowEngineLoaded: true,
@@ -458,13 +458,13 @@ test("COMPAT-01: the two module-private glyphs reach the output on their own row
   const rows = [
     renderRemoteRow(
       { status: "remote", name: "alpha", version: "1.0.0" },
-      BOTH_COMPANIONS_LOADED,
+      ALL_COMPANIONS_LOADED,
       "user",
       undefined,
     ),
     renderPartiallyAvailableRow(
       { status: "partially-available", name: "alpha", version: "1.0.0", reasons: ["lsp"] },
-      BOTH_COMPANIONS_LOADED,
+      ALL_COMPANIONS_LOADED,
       "user",
     ),
   ];
@@ -490,7 +490,7 @@ test("COMPAT-01: the two module-private glyphs reach the info row through their 
 
   // act
   const infoRows = (["remote", "partially-available"] as const).map(
-    (status) => renderPluginInfo(infoMessageFor(status), BOTH_COMPANIONS_LOADED).split("\n")[1],
+    (status) => renderPluginInfo(infoMessageFor(status), ALL_COMPANIONS_LOADED).split("\n")[1],
   );
 
   // assert

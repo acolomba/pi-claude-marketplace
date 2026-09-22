@@ -271,6 +271,8 @@ function disciplineRows(doc: string): DisciplineRow[] {
 
     return {
       status: /^`([^`]+)`$/.exec(cells[0] ?? "")?.[1] ?? cells[0] ?? "",
+      // fromEntries widens to a string index; DISCIPLINE_FIELDS supplies exactly
+      // this record's key set, one entry per field, so the narrowing is safe.
       cells: Object.fromEntries(
         DISCIPLINE_FIELDS.map((field, index) => [field, cells[index + 1] ?? ""]),
       ) as Record<DisciplineField, string>,
@@ -332,7 +334,7 @@ function declaredVocabulary(src: string, name: string): readonly string[] {
   );
 
   return [...src.slice(start + opening.length, end).matchAll(/"([^"]*)"/g)].map(
-    (match) => match[1]!,
+    (match) => match[1] ?? "",
   );
 }
 
