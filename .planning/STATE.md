@@ -5,16 +5,16 @@ milestone_name: transitive-dependencies
 current_phase: 09
 current_phase_name: Reload installs missing declared dependencies
 status: executing
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-09-22T04:40:17.561Z"
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-09-22T05:05:12.063Z"
 last_activity: 2026-09-21
 last_activity_desc: Phase 09 execution started
-state_head: 036b1e7c15b29d7bd53855506105f8e2944ca627
+state_head: c6a972c4693028ddb8fa1e5a0af52b0c0b4791a4
 progress:
   total_phases: 12
   completed_phases: 8
   total_plans: 36
-  completed_plans: 33
+  completed_plans: 34
   percent: 67
 ---
 
@@ -37,7 +37,7 @@ under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 09 (Reload installs missing declared dependencies) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 
 **Phase 8 closed 2026-09-21**, verified 13/13 must-haves with no human items;
@@ -559,6 +559,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 06 P03 | 45min | 3 tasks | 20 files |
 | Phase 06 P04 | 20min | 2 tasks | 4 files |
 | Phase 09 P01 | 195 min | 3 tasks | 20 files |
+| Phase 09 P02 | 50 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -829,6 +830,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 09]: D-09-01/02/05/06: pluginsToDependencyInstall (ninth bucket) filters the verdict's missing arm through a three-armed eligibility predicate, dedupes per dependency key, carries raw unfolded ranges
 - [Phase 09]: D-09-08: the LOAD-02 lift becomes provenance-independent via a record-walk sibling of buildUninstallBucket, recovering a marker-held dependency-provenance record whether or not config names it
 - [Phase 09]: D-09-09: dependency installed lands as the 61st closed-set reason on every pinning surface in one commit, rendering {dependency installed} first on a materialized reload row with no cause line
+- [Phase 09]: D-09-05: effectiveRanges folds the root's caller-supplied rootRanges into the root member's own (empty) range list at the cascade's existing fold site, so a missing dependency's root is pinned by every declarer's constraint exactly like a constrained member.
+- [Phase 09]: D-09-04: treatDisabledAsWall keeps a recorded disabled key in installedKeys (skipping the liveInstalledKeys strip) so the reload path treats it as a wall, not a re-enable-through member.
 
 ### Pending Todos
 
@@ -961,13 +964,13 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 09-01-PLAN.md
+**Stopped at:** Completed 09-02-PLAN.md
 
 **Resume file:** None
 
 **Read beside it:** `.planning/phases/08-enablement-parity-for-dependencies/08-CONTEXT.md`
 
-Last session: 2026-09-22T04:40:17.297Z
+Last session: 2026-09-22T05:05:11.801Z
 Resumed from `HANDOFF.json` (paused 2026-09-20 at 08-01 Task 1, a
 `checkpoint:decision`). Did the handoff's prerequisite first: ported main's
 `InstallTransactionOutcome` union onto `installPluginWithTransaction` as its
