@@ -19,9 +19,7 @@ import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/p
 
 type PluginStateRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 
-function pluginRecord(
-  overrides: Partial<PluginStateRecord> = {},
-): PluginStateRecord {
+function pluginRecord(overrides: Partial<PluginStateRecord> = {}): PluginStateRecord {
   return {
     version: "1.0.0",
     resolvedSource: "/plugins/x",
@@ -36,9 +34,7 @@ function pluginRecord(
 }
 
 /** One marketplace's `plugins` map, keyed by name, with its own `plugins` order. */
-function stateOf(
-  marketplaces: Record<string, Record<string, PluginStateRecord>>,
-): ExtensionState {
+function stateOf(marketplaces: Record<string, Record<string, PluginStateRecord>>): ExtensionState {
   const built: ExtensionState["marketplaces"] = {};
   for (const [name, plugins] of Object.entries(marketplaces)) {
     built[name] = {
@@ -55,7 +51,9 @@ function stateOf(
   return { schemaVersion: 2, marketplaces: built };
 }
 
-function dependency(overrides: Partial<AddressedDependency> & { readonly name: string }): AddressedDependency {
+function dependency(
+  overrides: Partial<AddressedDependency> & { readonly name: string },
+): AddressedDependency {
   return { marketplace: "mp", ...overrides };
 }
 
@@ -82,9 +80,7 @@ function seamFailingWith(declarer: string, cause: Error): UpdateConstraintSeam {
   };
 }
 
-function options(
-  overrides: Partial<UpdateConstraintOptions> = {},
-): UpdateConstraintOptions {
+function options(overrides: Partial<UpdateConstraintOptions> = {}): UpdateConstraintOptions {
   return {
     plugin: "target",
     marketplace: "mp",
@@ -228,7 +224,9 @@ describe("evaluateUpdateConstraint", () => {
 
   test("UPDT-02: an unreadable declarer holds the update and names itself", async () => {
     // arrange
-    const cause = new Error("cannot read the dependencies of alpha@mp: not declared by its marketplace");
+    const cause = new Error(
+      "cannot read the dependencies of alpha@mp: not declared by its marketplace",
+    );
     const seam = seamFailingWith("alpha@mp", cause);
 
     // act
@@ -310,9 +308,7 @@ describe("evaluateUpdateConstraint", () => {
     ]);
 
     // act
-    const verdict = await evaluateUpdateConstraint(
-      options({ seam: seamReturning(declarations) }),
-    );
+    const verdict = await evaluateUpdateConstraint(options({ seam: seamReturning(declarations) }));
 
     // assert
     assert.deepStrictEqual(verdict, { kind: "unconstrained" });
@@ -344,7 +340,11 @@ describe("describeConstraint", () => {
     ];
 
     // act
-    const cause = describeConstraint("no version satisfies all 2 declared ranges", holders, "disjoint");
+    const cause = describeConstraint(
+      "no version satisfies all 2 declared ranges",
+      holders,
+      "disjoint",
+    );
 
     // assert
     assert.strictEqual(

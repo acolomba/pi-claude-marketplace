@@ -330,7 +330,9 @@ test("reports orphan rewake without overriding clean base severity", () => {
   });
 });
 
-function skippedOutcome(overrides: Partial<PluginUpdateSkippedOutcome> = {}): PluginUpdateSkippedOutcome {
+function skippedOutcome(
+  overrides: Partial<PluginUpdateSkippedOutcome> = {},
+): PluginUpdateSkippedOutcome {
   return {
     partition: "skipped",
     name: "hello",
