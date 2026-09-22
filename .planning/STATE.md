@@ -5,16 +5,16 @@ milestone_name: transitive-dependencies
 current_phase: 10
 current_phase_name: Constraint-aware update
 status: executing
-stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-09-22T17:10:51.788Z"
+stopped_at: Completed 10-03-PLAN.md
+last_updated: "2026-09-22T19:29:08.629Z"
 last_activity: 2026-09-22
 last_activity_desc: Phase 10 execution started
-state_head: e9805c213c34d1d386d173aac349a2d4daa75a8f
+state_head: e50ec02596293108656dbdce11f3c7c7a5fbc6e9
 progress:
   total_phases: 12
   completed_phases: 9
   total_plans: 40
-  completed_plans: 38
+  completed_plans: 39
   percent: 75
 ---
 
@@ -37,7 +37,7 @@ under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 10 (Constraint-aware update) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 
 **Phase 9 closed 2026-09-22**, verified 12/12 must-haves with no human items;
@@ -611,6 +611,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 09 P04 | 80 min | 3 tasks | 10 files |
 | Phase 10 P01 | 62min | 3 tasks | 24 files |
 | Phase 10 P02 | 1h53m | 3 tasks | 8 files |
+| Phase 10-constraint-aware-update P03 | 56 min | 3 tasks | 26 files |
 
 ## Accumulated Context
 
@@ -894,6 +895,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 10]: UpdateTagPin promoted to a shared exported type so the type-member analyzer credits its .version field as runtime-observed
 - [Phase 10]: update-swap.ts derives memo field types from PreparePluginUpdateOptions instead of importing platform/git.ts, to stay off the network-free gate's import surface
 - [Phase 10]: Path-arm tag-listing-once behavior verified functionally (real local git marketplace fixture) rather than by call-count mocking, since isomorphic-git's package exports are non-configurable
+- [Phase 10]: Phase 10 plan 03 closed stage two (admitResolvedVersion), threaded the required-but-nullable UpdateConstraintDisclosure through PreparedPluginUpdate and both update outcome types (D-10-17a), and gave the autoupdate cascade the same held-row token/cause/warning severity the manual cascade renders (D-10-12). Catalog moved 223 -> 227 states.
 
 ### Pending Todos
 
@@ -1027,13 +1029,13 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 10-02-PLAN.md
+**Stopped at:** Completed 10-03-PLAN.md
 
 **Resume file:** None
 
 **Read beside it:** `.planning/phases/09-reload-installs-missing-dependencies/09-CONTEXT.md`
 
-Last session: 2026-09-22T17:10:51.498Z
+Last session: 2026-09-22T19:28:58.804Z
 Autonomous run (`/gsd-autonomous --from 9`) took Phase 9 from discuss through
 transition in one session: smart discuss (four areas, every decision checked
 against the 2.1.267 binary at the operator's "follow upstream" instruction),
