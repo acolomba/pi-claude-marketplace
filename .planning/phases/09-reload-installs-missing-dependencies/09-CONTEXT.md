@@ -85,9 +85,11 @@ upstream facts are in `<specifics>`.
   config overwrite (the install cascade rewrites an `enabled: false` config
   entry to `true` for a re-enabled member; a load-time step must not).
   Consequence for the cascade: on this path a disabled record is a WALL, not
-  a read-through member -- `installedKeys` includes disabled records rather
-  than going through `liveInstalledKeys`, so the closure contains only
-  never-installed keys and the phase array has no `re-enable` entries.
+  a read-through member. `runInstallCascade` applies `liveInstalledKeys`
+  unconditionally (research R2), so this needs its own cascade option (a
+  "treat disabled records as installed" flag beside the root-range input),
+  after which the closure contains only never-installed keys and the phase
+  array has no `re-enable` entries.
   -- **Reversibility:** reversible -- one input of the walk.
 
 ### How the install runs
@@ -191,16 +193,23 @@ upstream facts are in `<specifics>`.
   -- **Reversibility:** one-way -- a published catalog row.
 
 - **D-09-10: A failure is two existing rows and no new token.** The failing
-  dependency's own `(failed)` row carries the cascade's existing closed-set
-  reason (`{dependency marketplace not added}`, `{no matching version}`,
-  `{network unreachable}`, ...) and the redacted cause chain, through the
-  existing `plugin-install-failed` outcome and `redactedDependencyCascadeError`
-  path. The dependent gets Phase 6's `(disabled) {dependency unsatisfied}`
-  row with the `Install "X" or uninstall "Y"` remedy from the re-derived
-  check (or nothing, if it was already down -- the idempotent arm). No
-  `{dependency failed}` row for the dependent: nothing was being installed
-  for it, and its own row already names the remedy. Upstream: ` -- N
-  dependencies still unresolved: x, y. Is the "mp" marketplace added?`.
+  dependency's own `(failed)` row goes through the existing
+  `plugin-install-failed` outcome and `classifyOrchestratorThrow` exactly as
+  the reconcile install row does today: a closure or constraint failure the
+  cascade wraps as `DependencyCascadeError` renders `{dependency failed}`
+  with the redacted cause chain naming the specific reason (`requires
+  marketplace "mp", which is not added`, `has no release tag satisfying
+  "^2"`, ...), and only a transport failure of the member's own ledger keeps
+  its specific token (`{network unreachable}`, ...). This is the shipped
+  precedent (`docs/output-catalog.md` "Load-time install failed by a
+  dependency"); no new classification code reads `CascadeConstraintFailure`
+  for a per-kind token (research R1). The dependent gets Phase 6's
+  `(disabled) {dependency unsatisfied}` row with the `Install "X" or
+  uninstall "Y"` remedy from the re-derived check (or nothing, if it was
+  already down -- the idempotent arm). No `{dependency failed}` row for the
+  dependent: nothing was being installed for it, and its own row already
+  names the remedy. Upstream: ` -- N dependencies still unresolved: x, y. Is
+  the "mp" marketplace added?`.
   -- **Reversibility:** reversible in wording; reuses existing rows.
 
 - **D-09-11: A member the walk skipped as already installed gets no row.**
