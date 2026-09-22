@@ -416,7 +416,7 @@ Plans:
 2. When such a dependency cannot be installed, the reload completes, the failure is reported on its own row with its cause, and the dependent is disabled by Phase 6's check with the install remedy; nothing is half-materialized (NFR-1/NFR-3). (MISS-02)
 3. A reload with nothing missing installs nothing and stays offline (NFR-5); the new reconcile bucket is exercised by `tests/integration/reconcile-plan-convergence.test.ts` alongside the existing ones.
 
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 
 Plans:
 **Wave 1**
@@ -426,7 +426,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 09-03-PLAN.md — the orchestrated entry point, the reload-only apply step with its re-plan, and `event.reason` threaded from `index.ts`; every failure on the dependency's own row (MISS-01, MISS-02, D-09-03/06/07/10/11/13/14)
+- [x] 09-03-PLAN.md — the orchestrated entry point, the reload-only apply step with its re-plan, and `event.reason` threaded from `index.ts`; every failure on the dependency's own row (MISS-01, MISS-02, D-09-03/06/07/10/11/13/14)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -539,7 +539,7 @@ plugin names — so plan these phases with the UI gate skipped.
 | 6. Load-time dependency check and allowed uninstall | v1.20 | 4/4 | Complete    | 2026-09-19 |
 | 7. Marketplace-repository tag resolution for path-source dependencies | v1.20 | 3/3 | Complete    | 2026-09-19 |
 | 8. Enablement parity for dependencies | v1.20 | 3/3 | Complete    | 2026-09-21 |
-| 9. Reload installs missing declared dependencies | v1.20 | 2/4 | In Progress|  |
+| 9. Reload installs missing declared dependencies | v1.20 | 3/4 | In Progress|  |
 | 10. Constraint-aware update | v1.20 | 0/0 | Not started | — |
 | 11. Cross-marketplace dependency allowlist | v1.20 | 0/0 | Not started | — |
 | 12. Standalone prune with dry-run | v1.20 | 0/0 | Not started | — |
