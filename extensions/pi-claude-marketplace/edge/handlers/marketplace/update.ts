@@ -7,8 +7,14 @@
 //   - bare    -> updateAllMarketplaces
 //   - <name>  -> updateMarketplace
 //
-// The lifecycle CompletionCache travels beside the unchanged `pluginUpdate`
-// callback. The handler creates neither owner and always supplies both.
+// The lifecycle CompletionCache travels beside the autoupdate-cascade seam.
+// The handler creates neither owner and always supplies both.
+//
+// D-10-18: this handler IS the run boundary for the autoupdate cascade, so
+// it allocates the cascade's `PluginUpdateFn` once per invocation through
+// `deps.beginPluginUpdateRun()`. Both command forms share that one
+// allocation, because a bare `marketplace update` refreshing several
+// marketplaces is still one run.
 //
 // `update` is a merged read that never writes configuration, so a
 // write-target flag has no meaning for it and `parseCommandArgs` rejects
@@ -28,7 +34,7 @@ const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|p
 
 export function makeMarketplaceUpdateHandler(
   pi: ExtensionAPI,
-  deps: Pick<EdgeDeps, "completionCache" | "gitOps" | "pluginUpdate">,
+  deps: Pick<EdgeDeps, "beginPluginUpdateRun" | "completionCache" | "gitOps">,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
     const parsed = parseCommandArgs(
@@ -50,6 +56,7 @@ export function makeMarketplaceUpdateHandler(
       return;
     }
 
+    const pluginUpdate = deps.beginPluginUpdateRun();
     if (parsed.name === undefined) {
       await updateAllMarketplaces({
         completionCache: deps.completionCache,
@@ -57,7 +64,7 @@ export function makeMarketplaceUpdateHandler(
         pi,
         cwd: ctx.cwd,
         gitOps: deps.gitOps,
-        pluginUpdate: deps.pluginUpdate,
+        pluginUpdate,
         ...(parsed.scope !== undefined && { scope: parsed.scope }),
       });
       return;
@@ -70,7 +77,7 @@ export function makeMarketplaceUpdateHandler(
       name: parsed.name,
       cwd: ctx.cwd,
       gitOps: deps.gitOps,
-      pluginUpdate: deps.pluginUpdate,
+      pluginUpdate,
       ...(parsed.scope !== undefined && { scope: parsed.scope }),
     });
   };

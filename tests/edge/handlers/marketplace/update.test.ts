@@ -75,7 +75,7 @@ import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/
 // Both port shapes are derived from the handler's own dependency object, so a
 // change to either injection seam is a compile error in this suite rather than a
 // silently stale hand-copied type.
-type PluginUpdate = EdgeDeps["pluginUpdate"];
+type PluginUpdate = ReturnType<EdgeDeps["beginPluginUpdateRun"]>;
 type PluginUpdateOutcome = Awaited<ReturnType<PluginUpdate>>;
 type GitFetchCall = ReturnType<typeof createGitOpsFake>["state"]["calls"]["fetch"][number];
 
@@ -257,7 +257,7 @@ test("updates every recorded marketplace in both scopes when no name is supplied
   const marketplaceUpdateHandler = makeMarketplaceUpdateHandler(pi, {
     completionCache: createCompletionCache(),
     gitOps: git.gitOps,
-    pluginUpdate,
+    beginPluginUpdateRun: () => pluginUpdate,
   });
 
   // act
@@ -296,7 +296,7 @@ for (const { args, label, arity } of [
     const marketplaceUpdateHandler = makeMarketplaceUpdateHandler(pi, {
       completionCache: createCompletionCache(),
       gitOps: git.gitOps,
-      pluginUpdate,
+      beginPluginUpdateRun: () => pluginUpdate,
     });
 
     // act
@@ -354,7 +354,7 @@ for (const { emissions, probes, rows, scope, touched } of [
     const marketplaceUpdateHandler = makeMarketplaceUpdateHandler(pi, {
       completionCache: createCompletionCache(),
       gitOps: git.gitOps,
-      pluginUpdate,
+      beginPluginUpdateRun: () => pluginUpdate,
     });
 
     // act
@@ -382,7 +382,7 @@ test("reports an unrecognised scope value with the update usage block and never 
   const marketplaceUpdateHandler = makeMarketplaceUpdateHandler(pi, {
     completionCache: createCompletionCache(),
     gitOps: git.gitOps,
-    pluginUpdate,
+    beginPluginUpdateRun: () => pluginUpdate,
   });
 
   // act
@@ -419,7 +419,7 @@ for (const { args, diagnostic } of [
     const handler = makeMarketplaceUpdateHandler(pi, {
       completionCache: createCompletionCache(),
       gitOps: git.gitOps,
-      pluginUpdate,
+      beginPluginUpdateRun: () => pluginUpdate,
     });
 
     // act
@@ -486,7 +486,7 @@ for (const { args, tally } of [
     const handler = makeMarketplaceUpdateHandler(pi, {
       completionCache,
       gitOps: git.gitOps,
-      pluginUpdate: operations.pluginUpdate,
+      beginPluginUpdateRun: operations.beginPluginUpdateRun,
     });
 
     // act

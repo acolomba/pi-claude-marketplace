@@ -257,7 +257,7 @@ function createEdgeDeps(
   return {
     completionCache,
     gitOps: selectedGitOps,
-    pluginUpdate: (): Promise<PluginUpdateOutcome> => {
+    beginPluginUpdateRun: () => (): Promise<PluginUpdateOutcome> => {
       throw new Error("the registration glue must not run a plugin update");
     },
     importClaudeSettings:

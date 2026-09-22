@@ -54,7 +54,7 @@ function createUpdateSinglePlugin(): PluginUpdateFn {
   return createPluginUpdateOperations(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
-  ).pluginUpdate;
+  ).beginPluginUpdateRun();
 }
 
 interface MarketplaceGitOpsSeed {

@@ -209,7 +209,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     {
       completionCache,
       gitOps: DEFAULT_GIT_OPS,
-      pluginUpdate: pluginUpdateOperations.pluginUpdate,
+      beginPluginUpdateRun: pluginUpdateOperations.beginPluginUpdateRun,
     },
     hooksRouting,
     pluginUpdateOperations.updatePlugins,

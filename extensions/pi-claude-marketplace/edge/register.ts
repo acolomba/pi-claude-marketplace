@@ -80,7 +80,7 @@ const COMMAND_DESCRIPTION =
  * dedupe; callers MUST invoke this exactly once per session lifecycle
  * (`index.ts` is the single call site).
  *
- * `deps.gitOps` and `deps.pluginUpdate` are threaded into the marketplace
+ * `deps.gitOps` and `deps.beginPluginUpdateRun` are threaded into the marketplace
  * add/update/remove handlers per D-04 EdgeDeps.
  */
 export function registerClaudePluginCommand(
@@ -118,7 +118,7 @@ export function registerClaudePluginCommand(
     marketplaceUpdate: makeMarketplaceUpdateHandler(pi, {
       completionCache: deps.completionCache,
       gitOps: deps.gitOps,
-      pluginUpdate: deps.pluginUpdate,
+      beginPluginUpdateRun: deps.beginPluginUpdateRun,
     }),
     marketplaceAutoupdate: makeAutoupdateHandler(pi, true),
     marketplaceNoautoupdate: makeAutoupdateHandler(pi, false),

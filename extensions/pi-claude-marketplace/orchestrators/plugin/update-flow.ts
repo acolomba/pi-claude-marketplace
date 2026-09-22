@@ -562,10 +562,10 @@ async function updateSinglePluginWith(
       // The manual `update` path (`updatePlugins` -> `runThreePhaseUpdate`
       // directly) is unaffected; it sets `partial` from the user's `--partial` flag.
       partial: true,
-      // D-10-18: the SAME pair for every plugin `createPluginUpdateOperations`
-      // drives through this seam, so an autoupdate cascade over many plugins
-      // of one marketplace lists it once -- see the memo's own allocation
-      // site below for why it lives at that scope and not here.
+      // D-10-18: the SAME pair for every plugin of ONE autoupdate run, so a
+      // cascade over many plugins of one marketplace lists it once -- see
+      // `beginPluginUpdateRun` below for why the pair is allocated per run
+      // and not beside the binding.
       constraintTagMemo: constraintMemos.tagMemo,
       constraintMarketplaceTagMemo: constraintMemos.marketplaceTagMemo,
       cleanupClones: garbageCollectPluginClones,
@@ -991,7 +991,14 @@ export type UpdatePluginsFn = (options: UpdatePluginsOptions) => Promise<void>;
 /** The direct and cascade update operations owned by one extension lifecycle. */
 export interface PluginUpdateOperations {
   readonly updatePlugins: UpdatePluginsFn;
-  readonly pluginUpdate: PluginUpdateFn;
+  /**
+   * Allocates the autoupdate cascade's `PluginUpdateFn` for ONE run. The
+   * caller invokes this once per `marketplace update` command and drives
+   * every plugin of that command through the returned function, which is
+   * what bounds the D-10-18 tag memos to the run (see
+   * `createPluginUpdateOperations`).
+   */
+  readonly beginPluginUpdateRun: () => PluginUpdateFn;
 }
 
 /**
@@ -1024,23 +1031,28 @@ export function createPluginUpdateOperations(
       runPluginUpdate,
       composeUpdateCascade,
     );
-  // D-10-18: one memo pair for the WHOLE `pluginUpdate` seam this binding
-  // exposes -- the autoupdate cascade calls it once per plugin with no
-  // per-call scope of its own to allocate a memo at, so this is the only
-  // place that spans every one of those calls and keeps a marketplace
-  // common to several plugins listed once. This is also what keeps the
-  // autoupdate cascade's warm-cache expectation honest for path sources.
-  const constraintTagMemo = new Map<string, readonly RemoteTag[]>();
-  const constraintMarketplaceTagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
-  const pluginUpdate: PluginUpdateFn = (plugin, marketplace, scope) =>
-    updateSinglePluginWith(
-      hooksRouting,
-      completionCache,
-      runPluginUpdate,
-      plugin,
-      marketplace,
-      scope,
-      { tagMemo: constraintTagMemo, marketplaceTagMemo: constraintMarketplaceTagMemo },
-    );
-  return { updatePlugins, pluginUpdate };
+  // D-10-18: ONE memo pair per autoupdate run, allocated inside this factory
+  // rather than in `createPluginUpdateOperations`'s own body. The binding
+  // this function belongs to lives for the whole extension load, so a memo
+  // pair allocated beside it would outlive every run and serve a stale
+  // listing -- a release tag pushed after the first cascade would stay
+  // invisible until the process restarted. The memos still span every
+  // plugin of ONE run, so a marketplace common to several of them is listed
+  // once, and the cascade's warm-cache expectation for path sources holds.
+  const beginPluginUpdateRun = (): PluginUpdateFn => {
+    const constraintTagMemo = new Map<string, readonly RemoteTag[]>();
+    const constraintMarketplaceTagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
+    return (plugin, marketplace, scope) =>
+      updateSinglePluginWith(
+        hooksRouting,
+        completionCache,
+        runPluginUpdate,
+        plugin,
+        marketplace,
+        scope,
+        { tagMemo: constraintTagMemo, marketplaceTagMemo: constraintMarketplaceTagMemo },
+      );
+  };
+
+  return { updatePlugins, beginPluginUpdateRun };
 }

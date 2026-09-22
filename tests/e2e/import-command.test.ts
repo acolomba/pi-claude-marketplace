@@ -115,7 +115,7 @@ function registerImportCommand(cwd: string, gitOps: GitOps) {
     {
       completionCache,
       gitOps,
-      pluginUpdate: () =>
+      beginPluginUpdateRun: () => () =>
         Promise.resolve({
           partition: "unchanged",
           name: "unused",

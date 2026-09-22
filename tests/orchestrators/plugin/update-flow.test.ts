@@ -91,7 +91,7 @@ function updatePlugins(options: UpdatePluginsOptions): Promise<void> {
 }
 
 const updateSinglePlugin: PluginUpdateFn = (plugin, marketplace, scope) =>
-  createUpdateOperations().pluginUpdate(plugin, marketplace, scope);
+  createUpdateOperations().beginPluginUpdateRun()(plugin, marketplace, scope);
 
 const UPDATE_REMOTE_URLS = [
   "https://github.com/anthropics/test.git",
@@ -6056,7 +6056,7 @@ test("WR-03: one update owner refreshes direct and cascade routes without leakin
         JSON.stringify(cascadeHooksJson),
       );
 
-      const cascadeOutcome = await operations.pluginUpdate("hello", "mp", "user");
+      const cascadeOutcome = await operations.beginPluginUpdateRun()("hello", "mp", "user");
 
       assert.equal(cascadeOutcome.partition, "updated");
       assert.equal(
@@ -7407,7 +7407,7 @@ test("D-10-18: a failed listing is re-queried for the next plugin in the same ru
   });
 });
 
-test("D-10-18: two separate updatePlugins invocations do not share a memo", async (t) => {
+test("D-10-18: two updatePlugins runs through one binding do not share a memo", async (t) => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-constraint-memo-fresh-"));
     try {
@@ -7420,12 +7420,12 @@ test("D-10-18: two separate updatePlugins invocations do not share a memo", asyn
       ]);
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, pi } = makeCtx();
+      // ONE binding for both runs, the shape production has: the binding
+      // lives for the whole extension load while each command is its own run.
+      const operations = createUpdateOperations();
 
-      // act -- two SEPARATE single-plugin `updatePlugins` calls (each
-      // `updatePlugins(...)` in this test module composes a fresh
-      // `createPluginUpdateOperations`, matching production's own per-command
-      // construction).
-      await updatePlugins({
+      // act -- two SEPARATE single-plugin runs.
+      await operations.updatePlugins({
         ctx,
         pi,
         scope: "project",
@@ -7433,7 +7433,7 @@ test("D-10-18: two separate updatePlugins invocations do not share a memo", asyn
         target: { kind: "plugin", plugin: "gitfoo", marketplace: "mp" },
         cloneCacheSeam: seamWith(gitOps),
       });
-      await updatePlugins({
+      await operations.updatePlugins({
         ctx,
         pi,
         scope: "project",
@@ -7442,10 +7442,111 @@ test("D-10-18: two separate updatePlugins invocations do not share a memo", asyn
         cloneCacheSeam: seamWith(gitOps),
       });
 
-      // assert -- a shared memo would have answered gitbar's probe from
-      // gitfoo's run; two fresh runs re-query instead.
+      // assert -- `updatePluginsWith` allocates the memo pair per call, so
+      // gitbar's probe re-queries instead of reading gitfoo's listing.
       assert.strictEqual(infoRefsCalls.length, 2);
     } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Seeds a path-source marketplace "mp" whose dependent "app" holds
+ * "pathfoo" to `^1.0.0`, in a real git repository carrying no release tag
+ * yet. Returns the commit a later `pathfoo--v<version>` tag can name.
+ */
+async function seedConstrainedPathTarget(
+  cwd: string,
+): Promise<{ readonly marketplaceRoot: string; readonly oid: string }> {
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  for (const [name, dependencies] of [
+    ["app", [{ name: "pathfoo", version: "^1.0.0" }]],
+    ["pathfoo", undefined],
+  ] as const) {
+    const root = path.join(marketplaceRoot, "plugins", name);
+    await mkdir(path.join(root, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(root, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name,
+        version: "1.0.0",
+        ...(dependencies !== undefined && { dependencies }),
+      }),
+    );
+  }
+
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: "mp",
+      plugins: [
+        { name: "app", source: "./plugins/app" },
+        { name: "pathfoo", source: "./plugins/pathfoo" },
+      ],
+    }),
+  );
+
+  await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
+  await git.add({ fs, dir: marketplaceRoot, filepath: "." });
+  const oid = await git.commit({
+    fs,
+    dir: marketplaceRoot,
+    message: "seed marketplace",
+    author: { name: "test", email: "test@example.com" },
+  });
+
+  const locations = locationsFor("project", cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 1,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "project",
+        source: pathSource("./mp-src"),
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins: { app: makePluginRecord("1.0.0"), pathfoo: makePluginRecord("0.9.0") },
+      },
+    },
+  });
+  return { marketplaceRoot, oid };
+}
+
+test("D-10-18: a tag published between two cascade runs is visible to the second", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-constraint-memo-lifetime-"));
+    const previousCwd = process.cwd();
+    try {
+      // arrange -- the cascade seam reads `process.cwd()`, and the
+      // marketplace clone carries no satisfying tag for "pathfoo" yet.
+      const { marketplaceRoot, oid } = await seedConstrainedPathTarget(cwd);
+      const locations = locationsFor("project", cwd);
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+      );
+      process.chdir(cwd);
+
+      // act -- two cascade runs through ONE binding, with the release tag
+      // published between them.
+      await operations.beginPluginUpdateRun()("pathfoo", "mp", "project");
+      await git.tag({ fs, dir: marketplaceRoot, ref: "pathfoo--v1.2.0", object: oid });
+      await operations.beginPluginUpdateRun()("pathfoo", "mp", "project");
+
+      // assert -- run one listed no tag and fell back to the marketplace's
+      // current copy; run two pins the published tag. A memo bound to the
+      // binding rather than to the run would serve run one's tag-less
+      // listing again and leave the record at the fallback's 1.0.0.
+      const after = await loadState(locations.extensionRoot);
+      assert.strictEqual(after.marketplaces.mp?.plugins.pathfoo?.version, "1.2.0");
+      assert.strictEqual(after.marketplaces.mp?.plugins.pathfoo?.resolvedSha, oid);
+    } finally {
+      process.chdir(previousCwd);
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -9380,7 +9481,8 @@ test("owns plugin update flow composition", () => {
 
   // act and assert
   assert.strictEqual(typeof operations.updatePlugins, "function");
-  assert.strictEqual(typeof operations.pluginUpdate, "function");
+  assert.strictEqual(typeof operations.beginPluginUpdateRun, "function");
+  assert.strictEqual(typeof operations.beginPluginUpdateRun(), "function");
 });
 
 test("routes cascade-safe preflight outcomes through the flow owner", async () => {
@@ -9402,7 +9504,7 @@ test("routes cascade-safe preflight outcomes through the flow owner", async () =
       process.chdir(cwd);
 
       // act
-      const outcome = await operations.pluginUpdate("present", "mp", "project");
+      const outcome = await operations.beginPluginUpdateRun()("present", "mp", "project");
 
       // assert
       assert.strictEqual(outcome.partition, "skipped");
