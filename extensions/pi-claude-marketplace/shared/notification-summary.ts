@@ -425,18 +425,20 @@ function tallyCategory(count: number, singular: string, plural: string): string 
 }
 
 /**
- * OUT-03 / OUT-04 / D-04: build the trailing per-operation tally for a PLURAL
- * (bulk) cascade. Returns `<Operation>: <n> failure(s), <n> warning(s), <n>
- * success(es)` where `<Operation>` is the threaded `Messaging.label`, the counts
- * come from `countRowsBySeverity` over the marketplace + nested plugin rows
- * (D-03 mixed-subject: all rows counted uniformly under the operation name),
- * zero-count categories are OMITTED, and there is NO terminal period.
+ * OUT-03 / OUT-04 / D-04: build the trailing per-operation tally for a
+ * structurally PLURAL (bulk) cascade. Plural cardinality makes the tally
+ * eligible. Returns `<Operation>: <n> failure(s), <n> warning(s), <n>
+ * success(es)` where `<Operation>` is the threaded `Messaging.label`, the
+ * counts come from `countRowsBySeverity` over the marketplace + nested plugin
+ * rows (D-03 mixed-subject: all rows counted uniformly under the operation
+ * name), zero-count categories are OMITTED, and there is NO terminal period.
  *
  * Returns `""` when the tally must not render: the operation is single-target
  * (cardinality !== "plural" -- D-04, never a row-count heuristic),
- * the label is absent (legacy `notify()` emissions), or every category is zero.
- * Per OUT-03 the tally renders on plural ops regardless of severity, so a
- * successful bulk import shows `Plugin import: 3 success(es)`.
+ * the label is absent (legacy `notify()` emissions), the default result is
+ * empty, or every category is zero. Per OUT-03 the tally renders on eligible
+ * plural ops regardless of severity, so a successful bulk import shows
+ * `Plugin import: 3 success(es)`.
  */
 export function composeTally(message: {
   readonly label?: string;
@@ -481,10 +483,11 @@ export function composeTally(message: {
     ).length;
     const successes = successCount.plugins + successCount.marketplaces - bareHeaders;
 
-    // A structurally plural operation reports its zero outcome too. This branch
-    // is restricted to the default tally: an explicit owner tally with count 0
-    // retains its existing omission semantics.
-    if (successes > 0 || parts.length === 0) {
+    // Structural plural cardinality makes the default success tally eligible.
+    // An empty result suppresses this line, while a populated result with no
+    // other tally category reports zero successes. An explicit owner tally with
+    // count 0 retains its omission semantics.
+    if (successes > 0 || (message.marketplaces.length > 0 && parts.length === 0)) {
       parts.push(tallyCategory(successes, "success", "successes"));
     }
   } else if (message.tally.count > 0) {

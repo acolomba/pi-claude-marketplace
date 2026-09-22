@@ -110,9 +110,9 @@ for (const { name, cardinality, expected } of [
 
 for (const { name, marketplaces, expected } of [
   {
-    name: "plural invocation reports zero successes for zero rendered rows",
+    name: "empty plural invocation emits only the empty-state sentinel",
     marketplaces: [],
-    expected: "(no marketplaces)\n\nMarketplace autoupdate: 0 successes",
+    expected: "(no marketplaces)",
   },
   {
     name: "plural invocation reports one success for one rendered row",
@@ -169,7 +169,7 @@ for (const { name, marketplaces, expected } of [
   });
 }
 
-test("severity summary, tally, and reload hint retain their exact order", (t) => {
+test("nonempty all-failure summary, tally, and reload hint retain their exact order", (t) => {
   // arrange
   const message = {
     kind: "cascade",
@@ -246,8 +246,17 @@ for (const { name, message, expected } of [
     expected: "",
   },
   {
-    name: "empty plural invocation emits zero successes",
+    name: "empty plural invocation suppresses the default success tally",
     message: { cardinality: "plural", label: "Plugin list", marketplaces: [] },
+    expected: "",
+  },
+  {
+    name: "populated plural invocation can emit zero successes",
+    message: {
+      cardinality: "plural",
+      label: "Plugin list",
+      marketplaces: [{ name: "official", scope: "user", plugins: [] }],
+    },
     expected: "Plugin list: 0 successes",
   },
   {
