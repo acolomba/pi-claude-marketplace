@@ -32,7 +32,7 @@ component as a working Pi artifact.
 Phase: Milestone test-backlog complete
 Plan: —
 Status: test-backlog milestone shipped — PR #202
-Last activity: 2026-09-20 — Completed quick task 260920-qx0: `--local` rejected on marketplace info/list/update (it was a no-op on all three merged-read verbs)
+Last activity: 2026-09-21 — Completed quick task 260921-t5t: suppress success-count lines for empty cascades and non-bulk operations
 
 ### test-backlog closeout: `override_closeout`
 
@@ -126,6 +126,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
 | 260920-qx0 | Reject `--local` on the merged-read marketplace verbs (info, list, update) | 2026-09-20 | f2fbd402 | complete | [260920-qx0-remove-local-from-marketplace-info](./quick/260920-qx0-remove-local-from-marketplace-info/) |
+| 260921-t5t | Suppress success-count lines for empty cascades and non-bulk operations | 2026-09-21 | ffdecc5f | complete | [260921-t5t-when-a-command-returns-an-empty-result-a](./quick/260921-t5t-when-a-command-returns-an-empty-result-a/) |
 
 ## Session Continuity
 
