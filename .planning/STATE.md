@@ -4,17 +4,17 @@ milestone: v1.20
 milestone_name: transitive-dependencies
 current_phase: 09
 current_phase_name: Reload installs missing declared dependencies
-status: executing
-stopped_at: Completed 09-03-PLAN.md
-last_updated: "2026-09-22T06:49:11.588Z"
+status: verifying
+stopped_at: Completed 09-04-PLAN.md
+last_updated: "2026-09-22T07:50:41.821Z"
 last_activity: 2026-09-21
 last_activity_desc: Phase 09 execution started
-state_head: 71dcea214cc44e68531c3da2dd5efecda1f70da0
+state_head: 1f1a9f800e0bc7490066ef0e7192784f78972106
 progress:
   total_phases: 12
   completed_phases: 8
   total_plans: 36
-  completed_plans: 35
+  completed_plans: 36
   percent: 67
 ---
 
@@ -38,7 +38,7 @@ under `.planning/milestones/v1.19-*`.
 
 Phase: 09 (Reload installs missing declared dependencies) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 
 **Phase 8 closed 2026-09-21**, verified 13/13 must-haves with no human items;
 full `npm run check` green on the final tree (7423 unit + 36 integration,
@@ -561,6 +561,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 09 P01 | 195 min | 3 tasks | 20 files |
 | Phase 09 P02 | 50 min | 2 tasks | 2 files |
 | Phase 09 P03 | 275min | 2 tasks | 11 files |
+| Phase 09 P04 | 80 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -835,6 +836,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 09]: D-09-04: treatDisabledAsWall keeps a recorded disabled key in installedKeys (skipping the liveInstalledKeys strip) so the reload path treats it as a wall, not a re-enable-through member.
 - [Phase 09]: 09-03: Both MISS-02 failure shapes fall out of reusing installPlugin's unwrapCascade/handleCascadeThrow/handleInstallThrow verbatim, with no new classification code.
 - [Phase 09]: 09-03: applyDependencyInstalls gates on opts.reason === "reload" in one if; refreshTogglePlan re-plans only pluginsToEnable/Disable/DependencyDisable from a fresh read pass, never the mutating buckets or source-mismatch rows.
+- [Phase 09]: The catalog's reconcile-dependency-install-failed fenced bytes were rendered through the real notify() dispatcher and matched the apply test's own MISS-02 closure-failure assertion exactly. — Never hand-type published-contract bytes (08-03/09-01 precedent).
+- [Phase 09]: check-unused-type-members.contracts.json's remap removed one entry 09-03's own reason: event.reason thread made redundant and added one 09-03 never registered for its new assertOrchestratedFailedOutcome narrowing function; net entry count held at 133. — Task 3's own gate demanded both corrections; neither is a 09-04 addition of new excuse surface.
 
 ### Pending Todos
 
@@ -865,6 +868,7 @@ session that must settle it:
   and passed — this note was stale (the report was already on disk when it was
   written). Phase 2 also closed clean: `02-VERIFICATION.md` passed 10/10.
 - RESOLVED by 117-12: D-117-20 in `117-CONTEXT.md` now reads 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only, matching the operator decision taken in plan 117-11 and the retained all-pair artifact. The superseded 197 + 7 wording is gone.
+- npm run check is not fully green: an ESLint require-await violation in tests/orchestrators/plugin/install-flow.test.ts:11732 (from plan 09-03's commit 71dcea21) is deferred (deferred-items.md, WINDOWS.md entry 60) rather than fixed by 09-04, per Task 3's own scope instruction.
 
 ### Quick Tasks Completed
 
@@ -967,13 +971,13 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 09-03-PLAN.md
+**Stopped at:** Completed 09-04-PLAN.md
 
 **Resume file:** None
 
 **Read beside it:** `.planning/phases/08-enablement-parity-for-dependencies/08-CONTEXT.md`
 
-Last session: 2026-09-22T06:49:11.317Z
+Last session: 2026-09-22T07:50:41.553Z
 Resumed from `HANDOFF.json` (paused 2026-09-20 at 08-01 Task 1, a
 `checkpoint:decision`). Did the handoff's prerequisite first: ported main's
 `InstallTransactionOutcome` union onto `installPluginWithTransaction` as its

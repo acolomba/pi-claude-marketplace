@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 21
+open_count: 22
 waived_count: 18
 fixed_count: 20
-total_count: 59
-last_updated: 2026-09-18T20:55:54.554Z
+total_count: 60
+last_updated: 2026-09-22T07:47:54.363Z
 ---
 
 # Broken Windows Ledger
@@ -74,6 +74,7 @@ last_updated: 2026-09-18T20:55:54.554Z
 | 57 | 07 | deviation | scripts/coverage-acceptance.mjs |  | 07-07 Task 1 touched five files outside the plan's list (Rule 2, T-07-07-01): scripts/coverage-acceptance.mjs (new), scripts/coverage-unit.mjs, scripts/coverage-validate.mjs, scripts/coverage-capture.manifest.mjs and tests/scripts/check-coverage-risk-fixtures.ts, so the accepted-bundle readback recomputes the recorded population and denominators and refuses copied counts (summary-mismatch) | open |  | 2026-09-18T18:18:32.642Z |  |
 | 58 | 07 | deviation | tests/architecture/pre-commit-hooks.ts |  | 07-08 Task 1 touched five files outside the plan's list: scripts/coverage-capture.mjs (--plain mode the plan names as its example), tests/architecture/pre-commit-hooks.ts (new; the hook reader moved out of unused-type-member-gate.test.ts so both gates share one parser), tests/architecture/unused-type-member-gate.test.ts, tests/architecture/unit-suite-glob-completeness.test.ts and tests/scripts/coverage-capture.test.ts (both scraped the unit glob out of package.json and now read the one authoritative selection); no production source changed | open |  | 2026-09-18T20:55:54.554Z |  |
 | 59 | 01 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/info.ts |  | buildRemoteNotInstalledRow spreads a dependencies field the componentsResolved:false row shape does not carry, so the D-01-32 cold-git fallback renders nothing | fixed |  | 2026-09-13T19:27:02.848Z | 2026-09-17T16:14:30.946Z |
+| 60 | 09 | deviation | tests/orchestrators/plugin/install-flow.test.ts | 11732 | ESLint @typescript-eslint/require-await on marketplaceTagProbe (introduced by 09-03's 71dcea21); plan 09-04 defers the fix per Task 3's own instruction not to fix earlier-plan defects | open |  | 2026-09-22T07:47:54.363Z |  |
 
 ````json
 [
@@ -811,6 +812,19 @@ last_updated: 2026-09-18T20:55:54.554Z
     "reason": "",
     "recorded_at": "2026-09-13T19:27:02.848Z",
     "resolved_at": "2026-09-17T16:14:30.946Z"
+  },
+  {
+    "id": 60,
+    "kind": "deviation",
+    "phase": "09",
+    "file": "tests/orchestrators/plugin/install-flow.test.ts",
+    "line": 11732,
+    "description": "ESLint @typescript-eslint/require-await on marketplaceTagProbe (introduced by 09-03's 71dcea21); plan 09-04 defers the fix per Task 3's own instruction not to fix earlier-plan defects",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-22T07:47:54.363Z",
+    "resolved_at": null,
+    "milestone": "v1.20"
   }
 ]
 ````

@@ -178,10 +178,10 @@ already-installed dependency disabled (RESV-05; BACKLOG ENBL-DEP-01).
 Parity with upstream reload. Today reconcile keeps recorded dependencies
 (D-04-05) but never fetches a declared one that is absent.
 
-- [ ] **MISS-01**: A reload installs every declared dependency of an installed
+- [x] **MISS-01**: A reload installs every declared dependency of an installed
   plugin that is not yet installed, through the install cascade, with
   provenance `dependency`.
-- [ ] **MISS-02**: When such a dependency cannot be installed, the reload
+- [x] **MISS-02**: When such a dependency cannot be installed, the reload
   completes, the failure is reported on its own row, and the dependent is
   handled by LOAD-01.
 
@@ -281,8 +281,8 @@ this milestone.
 | EDEP-01 | Phase 8 | Complete |
 | EDEP-02 | Phase 8 | Complete |
 | EDEP-03 | Phase 8 | Complete |
-| MISS-01 | Phase 9 | Pending |
-| MISS-02 | Phase 9 | Pending |
+| MISS-01 | Phase 9 | Complete |
+| MISS-02 | Phase 9 | Complete |
 | UPDT-01 | Phase 10 | Pending |
 | UPDT-02 | Phase 10 | Pending |
 | XMKT-01 | Phase 11 | Pending |
