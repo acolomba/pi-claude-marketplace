@@ -22,14 +22,14 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-17 after Phase 5 prune-on-uninstall)
+See: `.planning/PROJECT.md` (updated 2026-09-21 after Phase 8 enablement parity for dependencies)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 08 — Enablement parity for dependencies
-shipped dependency feature with the Claude Code dependency docs.
-Installing a plugin that declares dependencies should install what it needs.
+**Current focus:** Phase 09 — Reload installs missing declared dependencies,
+the next of the seven phases (6-12) that align the shipped dependency feature
+with the Claude Code dependency docs. Phases 6-8 are complete.
 44 requirements across 12 phases (25 shipped in Phases 1-5 as PR #198, 19
 added 2026-09-18). v1.19 Unit Test Refactor closed 2026-09-04 and is archived
 under `.planning/milestones/v1.19-*`.
