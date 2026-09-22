@@ -27,10 +27,12 @@ import { resolvePluginVersion } from "./shared.ts";
 import { evaluateUpdateConstraint } from "./update-constraint-gate.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
+import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { GitBackedSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { RemoteTag } from "../../platform/git.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -41,7 +43,11 @@ import type {
   PluginUpdateSkippedOutcome,
   PluginUpdateUnchangedOutcome,
 } from "../types.ts";
-import type { UpdateConstraintVerdict, UpdateTagPin } from "./update-constraint-gate.ts";
+import type {
+  UpdateConstraintOptions,
+  UpdateConstraintVerdict,
+  UpdateTagPin,
+} from "./update-constraint-gate.ts";
 
 /** Target selected by the three public plugin-update invocation forms. */
 export type UpdatePluginsTarget =
@@ -109,6 +115,13 @@ export interface PreparePluginUpdateOptions {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /**
+   * D-10-18: the run-scoped tag memos an update run allocates once and
+   * threads into every target's gate evaluation, so a repository or
+   * marketplace clone shared by several targets is listed once.
+   */
+  readonly constraintTagMemo?: Map<string, readonly RemoteTag[]>;
+  readonly constraintMarketplaceTagMemo?: Map<string, readonly ReleaseTagCandidate[]>;
   readonly cleanupClones: (locations: ScopedLocations) => Promise<unknown>;
 }
 
@@ -676,6 +689,25 @@ async function resolvePinnedUpdateCandidate(
   };
 }
 
+/**
+ * Builds the constraint gate's own options, threading the run-scoped tag
+ * memos in only when the caller supplied them (D-10-18) -- kept out of
+ * `preparePluginUpdate`'s own body for the same cognitive-complexity reason
+ * as `resolvePinnedUpdateCandidate` above.
+ */
+function constraintGateOptions(
+  options: PreparePluginUpdateOptions,
+  base: Omit<UpdateConstraintOptions, "marketplaceTagMemo" | "seam" | "tagMemo">,
+): UpdateConstraintOptions {
+  return {
+    ...base,
+    ...(options.constraintTagMemo !== undefined && { tagMemo: options.constraintTagMemo }),
+    ...(options.constraintMarketplaceTagMemo !== undefined && {
+      marketplaceTagMemo: options.constraintMarketplaceTagMemo,
+    }),
+  };
+}
+
 /** Resolves, validates, and classifies one plugin before any staged replacement. */
 export async function preparePluginUpdate(
   options: PreparePluginUpdateOptions,
@@ -716,15 +748,17 @@ export async function preparePluginUpdate(
   // stays inside the leaf -- `preparePluginUpdate` is already close to
   // ESLint's cognitive-complexity cap.
   const constraintGate = options.constraintGate ?? evaluateUpdateConstraint;
-  const verdict = await constraintGate({
-    plugin: options.plugin,
-    marketplace: options.marketplace,
-    entry: triaged.entry,
-    marketplaceRoot: marketplace.marketplaceRoot,
-    state,
-    locations: options.locations,
-    auth,
-  });
+  const verdict = await constraintGate(
+    constraintGateOptions(options, {
+      plugin: options.plugin,
+      marketplace: options.marketplace,
+      entry: triaged.entry,
+      marketplaceRoot: marketplace.marketplaceRoot,
+      state,
+      locations: options.locations,
+      auth,
+    }),
+  );
   if (verdict.kind === "held") {
     return skippedCandidate(
       { plugin: options.plugin, fromVersion: triaged.record.version },

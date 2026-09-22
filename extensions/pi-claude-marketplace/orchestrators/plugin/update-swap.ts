@@ -127,7 +127,11 @@ import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
-import type { PreparedPluginUpdate, UpdateCloneCacheSeam } from "./update-preflight.ts";
+import type {
+  PreparedPluginUpdate,
+  PreparePluginUpdateOptions,
+  UpdateCloneCacheSeam,
+} from "./update-preflight.ts";
 import type { PluginUpdateFailedOutcome, PluginUpdateOutcome } from "../types.ts";
 
 /** Common collaborators and identity for one prepared plugin replacement. */
@@ -146,6 +150,19 @@ export interface ThreePhaseArgsBase {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /**
+   * D-10-18: the run-scoped tag memos, one per repository URL and one per
+   * marketplace root, threaded into every target's preflight so one bulk run
+   * or cascade lists a shared repository's or clone's tags once. Typed off
+   * `PreparePluginUpdateOptions`'s own fields rather than importing
+   * `platform/git.ts`'s `RemoteTag` directly -- this file is one of the
+   * network-free-gated owners, and a type-only import from `platform/git`
+   * still names the surface the gate greps for.
+   */
+  readonly constraintTagMemo?: NonNullable<PreparePluginUpdateOptions["constraintTagMemo"]>;
+  readonly constraintMarketplaceTagMemo?: NonNullable<
+    PreparePluginUpdateOptions["constraintMarketplaceTagMemo"]
+  >;
   readonly cleanupClones: (locations: ScopedLocations) => Promise<unknown>;
 }
 

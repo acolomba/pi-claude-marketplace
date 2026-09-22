@@ -117,6 +117,8 @@ async function prepare(
     readonly cloneCacheSeam?: UpdateCloneCacheSeam;
     readonly constraintGate?: PreparePluginUpdateOptions["constraintGate"];
     readonly pathPinProbe?: PreparePluginUpdateOptions["pathPinProbe"];
+    readonly constraintTagMemo?: PreparePluginUpdateOptions["constraintTagMemo"];
+    readonly constraintMarketplaceTagMemo?: PreparePluginUpdateOptions["constraintMarketplaceTagMemo"];
     readonly cleanupClones?: () => Promise<void>;
     readonly ctx?: NotificationContext;
     readonly credentialOps?: CredentialOps;
@@ -134,6 +136,10 @@ async function prepare(
     ...(options.cloneCacheSeam !== undefined && { cloneCacheSeam: options.cloneCacheSeam }),
     ...(options.constraintGate !== undefined && { constraintGate: options.constraintGate }),
     ...(options.pathPinProbe !== undefined && { pathPinProbe: options.pathPinProbe }),
+    ...(options.constraintTagMemo !== undefined && { constraintTagMemo: options.constraintTagMemo }),
+    ...(options.constraintMarketplaceTagMemo !== undefined && {
+      constraintMarketplaceTagMemo: options.constraintMarketplaceTagMemo,
+    }),
     ...(options.ctx !== undefined && { ctx: options.ctx }),
     ...(options.credentialOps !== undefined && { credentialOps: options.credentialOps }),
     ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
@@ -780,6 +786,53 @@ test("D-10-17: an unconstrained update supplies no path pin to the resolver", as
   assert.ok(!("partition" in prepared));
   assert.strictEqual(prepared.toVersion, "2.0.0");
   assert.strictEqual(prepared.resolvedSha, undefined);
+});
+
+test("D-10-18: the run-scoped tag memos reach the gate as the SAME objects the caller supplied", async (t) => {
+  // arrange -- proves the wiring `update-flow.ts` relies on: whatever memo
+  // objects the caller threads in, the gate receives those SAME references,
+  // never a copy or a freshly-allocated one.
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const constraintTagMemo = new Map<string, readonly []>();
+  const constraintMarketplaceTagMemo = new Map<string, readonly []>();
+  const received: { tagMemo: unknown; marketplaceTagMemo: unknown }[] = [];
+  const constraintGate: PreparePluginUpdateOptions["constraintGate"] = (gateOptions) => {
+    received.push({
+      tagMemo: gateOptions.tagMemo,
+      marketplaceTagMemo: gateOptions.marketplaceTagMemo,
+    });
+    return Promise.resolve({ kind: "unconstrained" });
+  };
+
+  // act
+  await prepare(seed, { constraintGate, constraintTagMemo, constraintMarketplaceTagMemo });
+
+  // assert
+  assert.strictEqual(received.length, 1);
+  assert.strictEqual(received[0]?.tagMemo, constraintTagMemo);
+  assert.strictEqual(received[0]?.marketplaceTagMemo, constraintMarketplaceTagMemo);
+});
+
+test("the constraint gate call omits both tag memos when the caller supplies neither", async (t) => {
+  // arrange -- the conditional spread in `constraintGateOptions` must add
+  // NOTHING when no memo was threaded, exactly like every other optional
+  // field on this call.
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const received: unknown[] = [];
+  const constraintGate: PreparePluginUpdateOptions["constraintGate"] = (gateOptions) => {
+    received.push(gateOptions);
+    return Promise.resolve({ kind: "unconstrained" });
+  };
+
+  // act
+  await prepare(seed, { constraintGate });
+
+  // assert -- `received[0]` is always the object literal `constraintGate`
+  // pushed above, never anything else.
+  assert.strictEqual(Object.hasOwn(received[0] as object, "tagMemo"), false);
+  assert.strictEqual(Object.hasOwn(received[0] as object, "marketplaceTagMemo"), false);
 });
 
 test("classifies a clone transport failure without exposing a raw throw", async (t) => {
