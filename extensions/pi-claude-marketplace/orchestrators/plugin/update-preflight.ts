@@ -24,7 +24,7 @@ import {
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { resolvePluginVersion } from "./shared.ts";
-import { evaluateUpdateConstraint } from "./update-constraint-gate.ts";
+import { admitResolvedVersion, evaluateUpdateConstraint } from "./update-constraint-gate.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
@@ -42,6 +42,7 @@ import type {
   PluginUpdateFailedOutcome,
   PluginUpdateSkippedOutcome,
   PluginUpdateUnchangedOutcome,
+  UpdateConstraintDisclosure,
 } from "../types.ts";
 import type {
   UpdateConstraintOptions,
@@ -88,6 +89,18 @@ export interface PreparedPluginUpdate {
   readonly fromVersion: string;
   readonly toVersion: string;
   readonly resolvedSha?: string;
+  /**
+   * D-10-17a: the constraint gate's disclosure, carried from the verdict this
+   * preflight already evaluated. REQUIRED-BUT-NULLABLE (never `constraint?:`),
+   * so `exactOptionalPropertyTypes` makes an omitting construction site a
+   * compile error. This slot has exactly ONE justified consumer --
+   * `update-swap.ts`'s `updated`-outcome literal -- because that literal is
+   * composed AFTER the swap and this is its only channel back to the
+   * preflight's verdict; the `unchanged` rows are built HERE, where the
+   * verdict is already in scope, so they read it directly and never this
+   * slot. A second consumer re-opens D-10-17a.
+   */
+  readonly constraint: UpdateConstraintDisclosure | undefined;
 }
 
 /** Inputs required to classify and prepare one installed plugin update. */
@@ -634,6 +647,7 @@ async function refreshDisabledPluginUpdate(
       toVersion: preflight.toVersion,
       declaresAgents: false,
       declaresMcp: false,
+      constraint: undefined,
     };
   }
 
@@ -690,6 +704,69 @@ async function resolvePinnedUpdateCandidate(
 }
 
 /**
+ * UPDT-01 / UPDT-02 / D-10-01 stage two: a verdict that admitted with NO
+ * pin (a no-tag repository, or a path source that fell back to the
+ * marketplace's current copy) has not yet been checked against the
+ * intersection -- the tag probe answered nothing. Re-checks the version
+ * that actually landed against the SAME range and returns a `skipped`
+ * outcome when it is held, or `undefined` to let the caller continue. A
+ * pinned verdict skips the check entirely: the tag was already selected
+ * FROM the range, so it would always pass. Kept out of
+ * `preparePluginUpdate`'s own body for the same cognitive-complexity reason
+ * as `resolvePinnedUpdateCandidate` above.
+ */
+function postFetchGuard(
+  verdict: UpdateConstraintVerdict,
+  toVersion: string,
+  base: { readonly plugin: string; readonly fromVersion: string },
+): PluginUpdateSkippedOutcome | undefined {
+  if (verdict.kind !== "admits" || verdict.pin !== undefined) {
+    return undefined;
+  }
+
+  const stageTwo = admitResolvedVersion(verdict, toVersion);
+  if (stageTwo.kind === "admitted") {
+    return undefined;
+  }
+
+  return skippedCandidate(base, [stageTwo.cause], ["dependents constrain"]);
+}
+
+/**
+ * AUTH-09: the ONE credential composition `preparePluginUpdate` shares
+ * between the constraint gate and the clone probe -- kept out of its own
+ * body for the same cognitive-complexity reason as the other extractions
+ * on this file.
+ */
+function buildUpdateAuth(options: PreparePluginUpdateOptions): {
+  readonly ctx?: NotificationContext;
+  readonly credentialOps: CredentialOps;
+  readonly deviceFlowHttp?: DeviceFlowHttp;
+  readonly authMemo?: Map<string, AuthAttemptResult>;
+} {
+  return {
+    ...(options.ctx !== undefined && { ctx: options.ctx }),
+    credentialOps: options.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
+    ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
+    ...(options.authMemo !== undefined && { authMemo: options.authMemo }),
+  };
+}
+
+/**
+ * The `admits` verdict's disclosure, ready for `PreparedPluginUpdate.constraint`
+ * (D-10-17a). `undefined` for an unconstrained or held verdict -- held never
+ * reaches this call, since `preparePluginUpdate` returns on it earlier, but
+ * the type still carries the arm.
+ */
+function constraintFromVerdict(
+  verdict: UpdateConstraintVerdict,
+): UpdateConstraintDisclosure | undefined {
+  return verdict.kind === "admits"
+    ? { disclosure: verdict.disclosure, fellBackToCurrentCopy: verdict.fellBackToCurrentCopy }
+    : undefined;
+}
+
+/**
  * Builds the constraint gate's own options, threading the run-scoped tag
  * memos in only when the caller supplied them (D-10-18) -- kept out of
  * `preparePluginUpdate`'s own body for the same cognitive-complexity reason
@@ -735,12 +812,7 @@ export async function preparePluginUpdate(
 
   // AUTH-09: ONE credential composition in this function, shared by the
   // constraint gate and the clone probe below.
-  const auth = {
-    ...(options.ctx !== undefined && { ctx: options.ctx }),
-    credentialOps: options.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
-    ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
-    ...(options.authMemo !== undefined && { authMemo: options.authMemo }),
-  };
+  const auth = buildUpdateAuth(options);
 
   // D-10-03: the gate runs after triage (there must be a record and a
   // manifest entry to constrain) and before candidate resolution (a held
@@ -799,6 +871,15 @@ export async function preparePluginUpdate(
     resolvedSha,
     pin?.version,
   );
+
+  const stageTwoHold = postFetchGuard(verdict, toVersion, {
+    plugin: options.plugin,
+    fromVersion: triaged.record.version,
+  });
+  if (stageTwoHold !== undefined) {
+    return stageTwoHold;
+  }
+
   if (toVersion === triaged.record.version && !isRecordedButDisabled(triaged.record)) {
     return {
       partition: "unchanged",
@@ -807,6 +888,9 @@ export async function preparePluginUpdate(
       toVersion,
       declaresAgents: false,
       declaresMcp: false,
+      // D-10-13's ceiling disclosure lands on this arm in a later task, read
+      // from the SAME `verdict` local this function already holds.
+      constraint: undefined,
     };
   }
 
@@ -817,6 +901,10 @@ export async function preparePluginUpdate(
     installable: candidate,
     fromVersion: triaged.record.version,
     toVersion,
+    // D-10-17a: the ONE consumer of this slot is `update-swap.ts`'s
+    // `updated`-outcome literal -- the prepared update is its only channel
+    // back to the verdict this preflight already evaluated.
+    constraint: constraintFromVerdict(verdict),
     ...(resolvedSha !== undefined && { resolvedSha }),
   };
   return isRecordedButDisabled(triaged.record)

@@ -50,6 +50,7 @@ const gitOps = {
 
 const pluginUpdate = (() =>
   Promise.resolve({
+    constraint: undefined,
     declaresAgents: false,
     declaresMcp: false,
     fromVersion: "1.0.0",

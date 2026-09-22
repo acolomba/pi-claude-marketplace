@@ -11,6 +11,7 @@ import type { PluginUpdateSkippedOutcome } from "../../../extensions/pi-claude-m
 test("composes agent and MCP dependencies in declared display order", () => {
   // arrange
   const outcome = {
+    constraint: undefined,
     declaresAgents: true,
     declaresMcp: true,
     fromVersion: "1.0.0",
@@ -41,6 +42,7 @@ test("composes agent and MCP dependencies in declared display order", () => {
 test("composes agent-only dependencies without an MCP marker", () => {
   // arrange
   const outcome = {
+    constraint: undefined,
     declaresAgents: true,
     declaresMcp: false,
     fromVersion: "2.0.0",
@@ -71,6 +73,7 @@ test("composes agent-only dependencies without an MCP marker", () => {
 test("composes MCP-only dependencies without an agent marker", () => {
   // arrange
   const outcome = {
+    constraint: undefined,
     declaresAgents: false,
     declaresMcp: true,
     fromVersion: "3.0.0",
@@ -101,6 +104,7 @@ test("composes MCP-only dependencies without an agent marker", () => {
 test("composes no dependencies and truly omits clean optional reasons", () => {
   // arrange
   const outcome = {
+    constraint: undefined,
     declaresAgents: false,
     declaresMcp: false,
     fromVersion: "4.0.0",
@@ -132,6 +136,7 @@ test("composes no dependencies and truly omits clean optional reasons", () => {
 test("keeps an empty partial degradation on the updated row", () => {
   // arrange
   const outcome = {
+    constraint: undefined,
     declaresAgents: false,
     declaresMcp: false,
     fromVersion: "5.0.0",
@@ -164,6 +169,7 @@ test("keeps an empty partial degradation on the updated row", () => {
 test("preserves orphan, malformed, and dropped reason order on a partial row", () => {
   // arrange
   const outcome = {
+    constraint: undefined,
     declaresAgents: true,
     declaresMcp: true,
     degradedKinds: ["command", "skill", "command"] as const,
@@ -207,6 +213,7 @@ test("preserves orphan, malformed, and dropped reason order on a partial row", (
 test("raises a clean updated row only for malformed written content", () => {
   // arrange
   const outcome = {
+    constraint: undefined,
     declaresAgents: false,
     declaresMcp: false,
     degradedKinds: ["command"] as const,
@@ -239,6 +246,7 @@ test("raises a clean updated row only for malformed written content", () => {
 test("retains base info severity for an already degraded partial update", () => {
   // arrange
   const outcome = {
+    constraint: undefined,
     declaresAgents: false,
     declaresMcp: false,
     fromVersion: "8.0.0",
@@ -270,6 +278,7 @@ test("retains base info severity for an already degraded partial update", () => 
 test("retains base warning severity for a newly degraded partial update", () => {
   // arrange
   const outcome = {
+    constraint: undefined,
     declaresAgents: false,
     declaresMcp: false,
     fromVersion: "9.0.0",
@@ -301,6 +310,7 @@ test("retains base warning severity for a newly degraded partial update", () => 
 test("reports orphan rewake without overriding clean base severity", () => {
   // arrange
   const outcome = {
+    constraint: undefined,
     declaresAgents: false,
     declaresMcp: false,
     fromVersion: "10.0.0",

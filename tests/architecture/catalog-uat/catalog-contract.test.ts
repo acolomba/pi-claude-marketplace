@@ -124,8 +124,11 @@ const EXPECTED_SECTION_COUNT = 20;
 // held row -- disjoint declared ranges hold the plugin's update, and the
 // cause line names both declarers in key order, marking the disabled one
 // (222 -> 223).
-const EXPECTED_STATE_COUNT = 223;
-const EXPECTED_UTF8_BYTES = 30_806;
+// UPDT-01 / UPDT-02 / D-10-01: +1 state for stage two's post-fetch guard --
+// a no-tag repository's fetched version lands outside the combined range,
+// held naming only the rejecting dependent (223 -> 224).
+const EXPECTED_STATE_COUNT = 224;
+const EXPECTED_UTF8_BYTES = 31_019;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -414,7 +417,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 223 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 224 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

@@ -158,6 +158,7 @@ function unchangedHello(): PluginUpdateOutcome {
     toVersion: "0.0.1",
     declaresAgents: false,
     declaresMcp: false,
+    constraint: undefined,
   };
 }
 

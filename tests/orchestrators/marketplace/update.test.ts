@@ -1420,6 +1420,7 @@ test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called o
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
+        constraint: undefined,
       });
     };
 
@@ -1475,6 +1476,7 @@ test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
+        constraint: undefined,
       });
     };
 
@@ -1796,6 +1798,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
           stagedMcpServerNames: [],
           declaresAgents: false,
           declaresMcp: false,
+          constraint: undefined,
         });
       }
 
@@ -1807,6 +1810,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
           toVersion: "0.0.1",
           declaresAgents: false,
           declaresMcp: false,
+          constraint: undefined,
         });
       }
 
@@ -1900,6 +1904,7 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
+        constraint: undefined,
       });
 
     // act
@@ -1948,6 +1953,7 @@ test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade a
         toVersion: "0.0.1",
         declaresAgents: false,
         declaresMcp: false,
+        constraint: undefined,
       });
     // act
     await updateMarketplace({
@@ -2006,6 +2012,7 @@ test("UXG-05 (UAT Test-3 gap) regression guard: autoupdate-ON cascade where a pl
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
+        constraint: undefined,
       });
     // act
     await updateMarketplace({
@@ -2131,6 +2138,7 @@ test("drops a changed target after persistence and before its plugin cascade", a
         toVersion: "0.0.1",
         declaresAgents: false,
         declaresMcp: false,
+        constraint: undefined,
       };
     };
 
@@ -2259,6 +2267,7 @@ test("a newly degraded autoupdate cascade emits its partial row and warning enve
         declaresAgents: false,
         declaresMcp: false,
         partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
+        constraint: undefined,
       });
 
     // act
@@ -2571,6 +2580,7 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
         toVersion: "0.0.1",
         declaresAgents: false,
         declaresMcp: false,
+        constraint: undefined,
       });
     };
 
@@ -3207,6 +3217,7 @@ test("WR-12: the autoupdate cascade row is byte-identical to the standalone upda
         declaresAgents: false,
         declaresMcp: false,
         degradedKinds: ["skill"],
+        constraint: undefined,
       });
 
     // act

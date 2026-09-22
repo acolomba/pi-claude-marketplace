@@ -214,6 +214,7 @@ test("projects a clean updated outcome with dependency order and optional reason
     stagedMcpServerNames: ["docs"],
     declaresAgents: true,
     declaresMcp: true,
+    constraint: undefined,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -246,6 +247,7 @@ test("projects orphan rewake before canonical malformed reasons on an updated ro
     declaresMcp: false,
     orphanRewake: true,
     degradedKinds: ["command", "skill", "command"],
+    constraint: undefined,
   } as const satisfies PluginUpdateOutcome;
 
   // act
@@ -277,6 +279,7 @@ test("keeps an empty newly-degraded signal on the clean updated row", () => {
     declaresAgents: false,
     declaresMcp: false,
     partialDegrade: { kinds: [], newlyDegraded: true },
+    constraint: undefined,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -308,6 +311,7 @@ test("projects a newly degraded partial update with warning severity", () => {
     declaresAgents: false,
     declaresMcp: true,
     partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
+    constraint: undefined,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -338,6 +342,7 @@ test("projects an already degraded partial update with info severity", () => {
     declaresAgents: true,
     declaresMcp: false,
     partialDegrade: { kinds: ["hooks"], newlyDegraded: false },
+    constraint: undefined,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -373,6 +378,7 @@ test("preserves orphan, malformed, and dropped reason order on a partial update"
       kinds: ["hooks", "lspServers", "commands", "hooks"],
       newlyDegraded: false,
     },
+    constraint: undefined,
   } as const satisfies PluginUpdateOutcome;
 
   // act
@@ -407,6 +413,7 @@ test("projects an unchanged outcome as a complete benign skipped message", () =>
     toVersion: "7.0.0",
     declaresAgents: false,
     declaresMcp: false,
+    constraint: undefined,
   } satisfies PluginUpdateOutcome;
 
   // act

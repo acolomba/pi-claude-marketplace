@@ -162,6 +162,7 @@ async function assertAgentsMigrated(params: {
     stagedMcpServerNames: [],
     declaresAgents: true,
     declaresMcp: false,
+    constraint: undefined,
   });
   const expectedAgents = [
     {

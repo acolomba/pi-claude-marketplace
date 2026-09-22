@@ -5,6 +5,7 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import { probeDependencyTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts";
 import { probeMarketplaceTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import {
+  admitResolvedVersion,
   describeConstraint,
   evaluateUpdateConstraint,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts";
@@ -25,6 +26,7 @@ import type {
   ConstraintHolder,
   UpdateConstraintOptions,
   UpdateConstraintSeam,
+  UpdateConstraintVerdict,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { RemoteTag } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -310,7 +312,12 @@ describe("evaluateUpdateConstraint", () => {
       kind: "admits",
       range: ">=1.0.0 <2.0.0-0 >=1.2.0",
       holders: expectedHolders,
-      fellBackToCurrentCopy: false,
+      // D-10-14: `options()` defaults to a `path` entry source and the
+      // default seam's `probeMarketplaceTags` answers `no-matching-tag`, so
+      // this falls back to the marketplace's current copy.
+      fellBackToCurrentCopy: true,
+      disclosure:
+        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0 >=1.2.0) -- required by "alpha@mp", "beta@mp"',
     });
   });
 
@@ -347,7 +354,11 @@ describe("evaluateUpdateConstraint", () => {
       kind: "admits",
       range: ">=1.0.0 <2.0.0-0",
       holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
-      fellBackToCurrentCopy: false,
+      // D-10-14: a `path` entry source with no satisfying marketplace tag
+      // falls back to the current copy.
+      fellBackToCurrentCopy: true,
+      disclosure:
+        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
     });
   });
 
@@ -492,6 +503,8 @@ describe("evaluateUpdateConstraint", () => {
       holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
       pin: { oid: "oid-git", version: "1.4.0" },
       fellBackToCurrentCopy: false,
+      disclosure:
+        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
     });
     assert.strictEqual(calls.length, 1);
     assert.strictEqual(calls[0]?.pluginName, "target");
@@ -574,6 +587,8 @@ describe("evaluateUpdateConstraint", () => {
       range: ">=1.0.0 <2.0.0-0",
       holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
       fellBackToCurrentCopy: false,
+      disclosure:
+        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
     });
   });
 
@@ -610,6 +625,8 @@ describe("evaluateUpdateConstraint", () => {
       holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
       pin: { oid: "oid-path", version: "1.4.0" },
       fellBackToCurrentCopy: false,
+      disclosure:
+        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
     });
     assert.strictEqual(calls.length, 1);
     assert.strictEqual(calls[0]?.pluginName, "target");
@@ -775,6 +792,8 @@ describe("evaluateUpdateConstraint", () => {
       range: ">=1.0.0 <2.0.0-0",
       holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
       fellBackToCurrentCopy: false,
+      disclosure:
+        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
     });
   });
 
@@ -913,5 +932,84 @@ describe("describeConstraint", () => {
       cause,
       'the declared ranges admit no version in common (no version satisfies all 2 declared ranges) -- required by "alpha@mp", "beta@mp" (currently disabled)',
     );
+  });
+});
+
+describe("admitResolvedVersion", () => {
+  /** An `admits` verdict fixture; `disclosure` is unused by stage two. */
+  function admits(
+    range: string,
+    holders: readonly ConstraintHolder[],
+  ): Extract<UpdateConstraintVerdict, { readonly kind: "admits" }> {
+    return { kind: "admits", range, holders, fellBackToCurrentCopy: false, disclosure: "unused" };
+  }
+
+  test("admits a version inside the range", () => {
+    // arrange
+    const verdict = admits("^1.0.0", []);
+
+    // act
+    const result = admitResolvedVersion(verdict, "1.4.2");
+
+    // assert
+    assert.deepStrictEqual(result, { kind: "admitted" });
+  });
+
+  test("UPDT-02: the out-of-range hold names only the rejecting dependents", () => {
+    // arrange
+    const holders: readonly ConstraintHolder[] = [
+      { key: "a@mp", range: "<=1.5.0", disabled: false },
+      { key: "b@mp", range: "^1.0.0", disabled: false },
+    ];
+    const verdict = admits("<=1.5.0", holders);
+
+    // act
+    const result = admitResolvedVersion(verdict, "1.6.0");
+
+    // assert
+    assert.ok(result.kind === "held");
+    assert.match(result.cause, /"a@mp"/);
+    assert.doesNotMatch(result.cause, /"b@mp"/);
+  });
+
+  test("UPDT-02: an inclusive upper bound admits the boundary version", () => {
+    // arrange
+    const holders: readonly ConstraintHolder[] = [
+      { key: "a@mp", range: "<=1.5.0", disabled: false },
+    ];
+    const verdict = admits("<=1.5.0", holders);
+
+    // act
+    const result = admitResolvedVersion(verdict, "1.5.0");
+
+    // assert
+    assert.deepStrictEqual(result, { kind: "admitted" });
+  });
+
+  test("UPDT-02: an exclusive upper bound holds the boundary version", () => {
+    // arrange
+    const holders: readonly ConstraintHolder[] = [
+      { key: "a@mp", range: "<1.5.0", disabled: false },
+    ];
+    const verdict = admits("<1.5.0", holders);
+
+    // act
+    const result = admitResolvedVersion(verdict, "1.5.0");
+
+    // assert
+    assert.strictEqual(result.kind, "held");
+  });
+
+  test("a holder with no declared range never rejects", () => {
+    // arrange
+    const holders: readonly ConstraintHolder[] = [{ key: "a@mp", disabled: false }];
+    const verdict = admits("^1.0.0", holders);
+
+    // act
+    const result = admitResolvedVersion(verdict, "5.0.0");
+
+    // assert
+    assert.ok(result.kind === "held");
+    assert.doesNotMatch(result.cause, /a@mp/);
   });
 });

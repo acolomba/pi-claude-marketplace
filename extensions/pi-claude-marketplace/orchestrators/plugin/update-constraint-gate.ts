@@ -24,6 +24,7 @@
 import {
   intersectDependencyRanges,
   isUnconstrainedRange,
+  recordedVersionSatisfies,
   renderConstraintRange,
 } from "../../domain/dependency-range.ts";
 import { parsePluginSource } from "../../domain/source.ts";
@@ -107,8 +108,21 @@ export type UpdateConstraintVerdict =
       readonly holders: readonly ConstraintHolder[];
       readonly pin?: UpdateTagPin;
       readonly fellBackToCurrentCopy: boolean;
+      /**
+       * D-10-13 / D-10-17a: the ceiling disclosure -- the effective range and
+       * its holders, composed once here so every `admits` arm has it ready
+       * for the two `unchanged` construction sites and for
+       * `PreparedPluginUpdate.constraint`. Composed the same way whether or
+       * not a pin or a fallback produced this verdict; the caller decides
+       * which row (if any) actually shows it.
+       */
+      readonly disclosure: string;
     }
   | { readonly kind: "held"; readonly cause: string };
+
+/** Stage two's re-check of the version that actually landed. */
+export type StageTwoVerdict =
+  { readonly kind: "admitted" } | { readonly kind: "held"; readonly cause: string };
 
 const REAL_UPDATE_CONSTRAINT_SEAM: UpdateConstraintSeam = Object.freeze({
   buildScopeDeclarationDetail,
@@ -117,10 +131,20 @@ const REAL_UPDATE_CONSTRAINT_SEAM: UpdateConstraintSeam = Object.freeze({
 });
 
 /**
- * The ways stage one can fail to admit a version, plus the two ranges
- * `intersectDependencyRanges` can fail to fold a set into (D-10-10).
+ * The ways stage one can fail to admit a version, the two ranges
+ * `intersectDependencyRanges` can fail to fold a set into (D-10-10), and the
+ * two arms that describe a version already in hand rather than a search
+ * failure: `out-of-range` is stage two's post-fetch guard (UPDT-02),
+ * `already-resolved` is the D-10-13 ceiling disclosure.
  */
-type ConstraintArm = "disjoint" | "invalid" | "too-complex" | "no-satisfying-tag" | "transport";
+type ConstraintArm =
+  | "disjoint"
+  | "invalid"
+  | "too-complex"
+  | "no-satisfying-tag"
+  | "transport"
+  | "out-of-range"
+  | "already-resolved";
 
 /** Fixed clause per arm (D-10-10): the situation, never an identifier. */
 const ARM_CLAUSE: Record<ConstraintArm, string> = {
@@ -132,6 +156,14 @@ const ARM_CLAUSE: Record<ConstraintArm, string> = {
   // see `decodeTagProbe` below).
   "no-satisfying-tag": "no release tag satisfies the combined range",
   transport: "the release tags could not be listed",
+  // UPDT-02: the version that actually landed (a no-tag repository, or a
+  // drifted path-source current copy) falls outside what the dependents
+  // named below admit.
+  "out-of-range": "falls outside what the combined range admits",
+  // D-10-13: the plugin is already at the highest version the combined
+  // range admits -- disclosed on an `{up-to-date}` row's cause line, never a
+  // second reason token.
+  "already-resolved": "already the highest version the combined range admits",
 };
 
 function nameHolder(holder: ConstraintHolder): string {
@@ -146,10 +178,14 @@ function nameHolder(holder: ConstraintHolder): string {
  * holder-naming half is identical across all of them, so a second composer
  * would be a second place to drift the disabled marking. `detail` carries
  * whatever bounded diagnostic text the calling arm has -- `intersectDependencyRanges`'
- * own measurement/position-only text for the three range-fold arms, or the
- * transport classification for the `transport` arm -- passed through
+ * own measurement/position-only text for the three range-fold arms, the
+ * transport classification for the `transport` arm, or the effective range
+ * for the `out-of-range` / `already-resolved` arms -- passed through
  * `renderConstraintRange` so a synthesized detail cannot flood the line and
- * never a declared range's raw content.
+ * never a declared range's raw content. `version` is stage two's own arm
+ * only: the fetched version that landed, interpolated with NO transformation
+ * (never bounded -- a resolved version is never attacker-controlled length
+ * the way a declared range is) ahead of the arm clause.
  */
 // fallow-ignore-next-line unused-export -- production reaches this through the "held" arm below in the same module; exported so the paired test drives it directly, and later arms extend it rather than writing a second composer.
 export function describeConstraint(
@@ -157,10 +193,12 @@ export function describeConstraint(
   holders: readonly ConstraintHolder[],
   // fallow-ignore-next-line private-type-leak -- ConstraintArm enumerates the closed set of situations this composer renders a clause for; callers pass the string literals the fold and the tag probes already emit.
   arm: ConstraintArm,
+  version?: string,
 ): string {
   const bounded = renderConstraintRange(detail);
   const required = holders.map(nameHolder).join(", ");
-  return `${ARM_CLAUSE[arm]} (${bounded}) -- required by ${required}`;
+  const fetched = version === undefined ? "" : `version ${version} `;
+  return `${fetched}${ARM_CLAUSE[arm]} (${bounded}) -- required by ${required}`;
 }
 
 /** The `name@marketplace` key naming one record, on the D-05-06 convention. */
@@ -237,18 +275,25 @@ function constraintTagSource(entry: PluginEntry): ConstraintTagSource {
   return { kind: "absent" };
 }
 
-/** The `admits` arm, with or without a pin (the shape every stage-one branch below returns). */
+/**
+ * The `admits` arm, with or without a pin (the shape every stage-one branch
+ * below returns). `disclosure` is composed here ONCE per verdict, from the
+ * SAME range and holders every branch already has, so it is ready for the
+ * `unchanged` ceiling row (D-10-13) and `PreparedPluginUpdate.constraint`
+ * (D-10-17a) without a second composition site.
+ */
 function admitsRange(
   range: string,
   holders: readonly ConstraintHolder[],
-  pin?: UpdateTagPin,
+  options?: { readonly pin?: UpdateTagPin; readonly fellBackToCurrentCopy?: boolean },
 ): UpdateConstraintVerdict {
   return {
     kind: "admits",
     range,
     holders,
-    ...(pin !== undefined && { pin }),
-    fellBackToCurrentCopy: false,
+    ...(options?.pin !== undefined && { pin: options.pin }),
+    fellBackToCurrentCopy: options?.fellBackToCurrentCopy === true,
+    disclosure: describeConstraint(range, holders, "already-resolved"),
   };
 }
 
@@ -276,7 +321,7 @@ function decodeTagProbe(
       },
 ): UpdateConstraintVerdict {
   if (probed.kind === "pinned") {
-    return admitsRange(range, holders, { oid: probed.oid, version: probed.version });
+    return admitsRange(range, holders, { pin: { oid: probed.oid, version: probed.version } });
   }
 
   if (probed.kind === "no-matching-tag") {
@@ -352,11 +397,16 @@ async function probePathStageOne(
     ...(options.marketplaceTagMemo !== undefined && { tagMemo: options.marketplaceTagMemo }),
   });
 
-  // D-10-16: an unreadable local listing and an empty one are the same
-  // user-visible fact, so both leave the outcome to a later stage instead of
-  // holding the update the way an unreachable remote does above.
+  // D-10-14 / D-10-16: an unreadable local listing and an empty one are the
+  // same user-visible fact, so both fall back to the marketplace's CURRENT
+  // copy and leave the outcome to a later stage instead of holding the
+  // update the way an unreachable remote does above. The git arm's own
+  // no-satisfying-tag branch (`decodeTagProbe` above) leaves
+  // `fellBackToCurrentCopy` at its `false` default -- a git source with no
+  // satisfying tag refreshes its own branch head, not a marketplace's
+  // current copy, so it must not claim that token.
   if (probed.kind === "no-matching-tag" || probed.kind === "tag-listing-failed") {
-    return admitsRange(range, holders);
+    return admitsRange(range, holders, { fellBackToCurrentCopy: true });
   }
 
   return decodeTagProbe(range, holders, probed);
@@ -418,4 +468,35 @@ export async function evaluateUpdateConstraint(
   // `npm` / `unknown`: no tag listing either probe can read, so the fold
   // admits the range with no pin and makes no probe call.
   return admitsRange(fold.range, holders);
+}
+
+/**
+ * Stage two: re-checks the version that actually landed against the SAME
+ * intersected range stage one already computed (UPDT-01, D-10-01). Catches a
+ * no-tag repository and a drifted path-source current copy -- the two cases
+ * a tag probe cannot answer on its own. PURE: no I/O, no seam, and no second
+ * range fold -- `admits.range` is the fold stage one already produced.
+ *
+ * A version that fails the fold is held naming only the holders whose OWN
+ * declared range rejects it (`!recordedVersionSatisfies(toVersion,
+ * holder.range)`), never the whole holder set: a holder whose own range the
+ * fetched version DOES satisfy would send the user to the wrong plugin. A
+ * holder with no declared range never rejects -- it has nothing to test the
+ * version against.
+ */
+export function admitResolvedVersion(
+  admits: Extract<UpdateConstraintVerdict, { readonly kind: "admits" }>,
+  toVersion: string,
+): StageTwoVerdict {
+  if (recordedVersionSatisfies(toVersion, admits.range)) {
+    return { kind: "admitted" };
+  }
+
+  const rejecting = admits.holders.filter(
+    (holder) => holder.range !== undefined && !recordedVersionSatisfies(toVersion, holder.range),
+  );
+  return {
+    kind: "held",
+    cause: describeConstraint(admits.range, rejecting, "out-of-range", toVersion),
+  };
 }

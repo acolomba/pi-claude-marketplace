@@ -136,7 +136,9 @@ async function prepare(
     ...(options.cloneCacheSeam !== undefined && { cloneCacheSeam: options.cloneCacheSeam }),
     ...(options.constraintGate !== undefined && { constraintGate: options.constraintGate }),
     ...(options.pathPinProbe !== undefined && { pathPinProbe: options.pathPinProbe }),
-    ...(options.constraintTagMemo !== undefined && { constraintTagMemo: options.constraintTagMemo }),
+    ...(options.constraintTagMemo !== undefined && {
+      constraintTagMemo: options.constraintTagMemo,
+    }),
     ...(options.constraintMarketplaceTagMemo !== undefined && {
       constraintMarketplaceTagMemo: options.constraintMarketplaceTagMemo,
     }),
@@ -243,6 +245,7 @@ test("returns an exact unchanged outcome for an enabled current plugin", async (
     toVersion: "2.0.0",
     declaresAgents: false,
     declaresMcp: false,
+    constraint: undefined,
   });
   assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), before);
 });
@@ -312,6 +315,113 @@ test("UPDT-02: a held update writes nothing and repeats byte-identically", async
   // act
   const first = await prepare(seed, { constraintGate: heldGate });
   const second = await prepare(seed, { constraintGate: heldGate });
+  const after = await loadState(seed.locations.extensionRoot);
+
+  // assert
+  assert.deepStrictEqual(first, second);
+  assert.deepStrictEqual(after, before);
+});
+
+test("UPDT-01: a pinned verdict skips the post-fetch guard entirely", async (t) => {
+  // arrange -- the pin's own version ("9.9.9") would fail the range if stage
+  // two ran, but a pin was selected FROM the range by stage one, so the
+  // check must not run at all.
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "9.9.9" });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const pathPinProbe: PreparePluginUpdateOptions["pathPinProbe"] = () =>
+    Promise.resolve({ kind: "materialized", pluginRoot: seed.pluginRoot, resolvedSha: "pin-oid" });
+  const constraintGate: PreparePluginUpdateOptions["constraintGate"] = () =>
+    Promise.resolve({
+      kind: "admits",
+      range: "<=2.0.0",
+      holders: [{ key: "alpha@mp", range: "<=2.0.0", disabled: false }],
+      pin: { oid: "pin-oid", version: "9.9.9" },
+      fellBackToCurrentCopy: false,
+      disclosure: "already the highest version the combined range admits",
+    });
+
+  // act
+  const outcome = await prepare(seed, { constraintGate, pathPinProbe });
+
+  // assert -- proceeds to a prepared update rather than a stage-two hold.
+  assert.ok(!("partition" in outcome));
+  assert.strictEqual(outcome.toVersion, "9.9.9");
+});
+
+test("UPDT-01: a no-tag repository is still gated by the post-fetch guard", async (t) => {
+  // arrange -- the manifest and the plugin's own materialized version both
+  // resolve to "5.0.0", outside the range a no-satisfying-tag `admits`
+  // verdict (no `pin`) folds from its declared dependents.
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "5.0.0" });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const constraintGate: PreparePluginUpdateOptions["constraintGate"] = () =>
+    Promise.resolve({
+      kind: "admits",
+      range: "<=2.0.0",
+      holders: [{ key: "alpha@mp", range: "<=2.0.0", disabled: false }],
+      fellBackToCurrentCopy: false,
+      disclosure: "already the highest version the combined range admits",
+    });
+
+  // act
+  const outcome = await prepare(seed, { constraintGate });
+
+  // assert -- stage two re-checks the derived "5.0.0" against the SAME
+  // range, holds, and names the one holder whose own range rejects it.
+  assert.deepStrictEqual(outcome, {
+    partition: "skipped",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: [
+      'version 5.0.0 falls outside what the combined range admits (<=2.0.0) -- required by "alpha@mp"',
+    ],
+    reasons: ["dependents constrain"],
+    declaresAgents: false,
+    declaresMcp: false,
+  });
+});
+
+test("UPDT-01: a no-tag repository proceeds when the fetched version satisfies the range", async (t) => {
+  // arrange -- the manifest and the plugin's own materialized version both
+  // resolve to "1.5.0", inside the range a no-satisfying-tag `admits`
+  // verdict (no `pin`) folds from its declared dependents.
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "1.5.0" });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const constraintGate: PreparePluginUpdateOptions["constraintGate"] = () =>
+    Promise.resolve({
+      kind: "admits",
+      range: "<=2.0.0",
+      holders: [{ key: "alpha@mp", range: "<=2.0.0", disabled: false }],
+      fellBackToCurrentCopy: false,
+      disclosure: "already the highest version the combined range admits",
+    });
+
+  // act
+  const outcome = await prepare(seed, { constraintGate });
+
+  // assert -- stage two admits "1.5.0" against the SAME range, so the update
+  // proceeds to a prepared candidate rather than a stage-two hold.
+  assert.ok(!("partition" in outcome));
+  assert.strictEqual(outcome.toVersion, "1.5.0");
+});
+
+test("UPDT-02: a stage-two hold writes nothing and repeats byte-identically", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "5.0.0" });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const constraintGate: PreparePluginUpdateOptions["constraintGate"] = () =>
+    Promise.resolve({
+      kind: "admits",
+      range: "<=2.0.0",
+      holders: [{ key: "alpha@mp", range: "<=2.0.0", disabled: false }],
+      fellBackToCurrentCopy: false,
+      disclosure: "already the highest version the combined range admits",
+    });
+  const before = await loadState(seed.locations.extensionRoot);
+
+  // act
+  const first = await prepare(seed, { constraintGate });
+  const second = await prepare(seed, { constraintGate });
   const after = await loadState(seed.locations.extensionRoot);
 
   // assert
@@ -522,6 +632,7 @@ test("does not rewrite an unchanged disabled pin", async (t) => {
     toVersion: "2.0.0",
     declaresAgents: false,
     declaresMcp: false,
+    constraint: undefined,
   });
   assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), before);
 });
@@ -628,6 +739,7 @@ test("UPDT-01: a tag-pinned update records the tag's version, not a sha", async 
       holders: [],
       pin: { oid: pinnedSha, version: "1.2.0" },
       fellBackToCurrentCopy: false,
+      disclosure: "already the highest version the combined range admits",
     });
 
   // act
@@ -662,6 +774,7 @@ test("UPDT-01: a second update of a tag-pinned plugin is unchanged", async (t) =
       holders: [],
       pin: { oid: pinnedSha, version: "1.2.0" },
       fellBackToCurrentCopy: false,
+      disclosure: "already the highest version the combined range admits",
     });
   const before = await readFile(seed.locations.stateJsonPath, "utf8");
 
@@ -678,6 +791,7 @@ test("UPDT-01: a second update of a tag-pinned plugin is unchanged", async (t) =
     toVersion: "1.2.0",
     declaresAgents: false,
     declaresMcp: false,
+    constraint: undefined,
   });
   assert.strictEqual(after, before);
 });
@@ -704,6 +818,7 @@ test("UPDT-01: a path-source pin materializes through the marketplace's own tag 
       holders: [],
       pin: { oid: pinOid, version: "1.2.0" },
       fellBackToCurrentCopy: false,
+      disclosure: "already the highest version the combined range admits",
     });
 
   // act
@@ -748,6 +863,7 @@ test("UPDT-01: without an injected pathPinProbe, a path-source pin uses the real
       holders: [],
       pin: { oid, version: "1.2.0" },
       fellBackToCurrentCopy: false,
+      disclosure: "already the highest version the combined range admits",
     });
 
   // act

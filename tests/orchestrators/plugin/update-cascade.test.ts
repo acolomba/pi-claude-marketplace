@@ -23,6 +23,7 @@ function updated(
       stagedMcpServerNames: [],
       declaresAgents: false,
       declaresMcp: false,
+      constraint: undefined,
     },
   };
 }
@@ -76,6 +77,7 @@ test("keeps an unchanged targeted result exact without a tally or reload hint", 
         toVersion: "1.0.0",
         declaresAgents: false,
         declaresMcp: false,
+        constraint: undefined,
       },
     },
   ];
@@ -270,6 +272,7 @@ test("suppresses an unchanged cascade after a separately reported failure", () =
         toVersion: "1.0.0",
         declaresAgents: false,
         declaresMcp: false,
+        constraint: undefined,
       },
     },
   ];

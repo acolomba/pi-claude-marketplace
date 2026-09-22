@@ -1182,6 +1182,11 @@ export async function swapPluginUpdate(
     stagedMcpServerNames,
     declaresAgents: stagedAgentNames.length > 0,
     declaresMcp: stagedMcpServerNames.length > 0,
+    // D-10-17a: forwarded from the preflight by a plain assignment, never a
+    // conditional spread -- the member is required, so its ABSENCE is
+    // spelled `undefined`, not an omitted key. This literal is the SINGLE
+    // justified consumer of `PreparedPluginUpdate.constraint`.
+    constraint: preflight.constraint,
     // Spread only when non-empty: a clean update's outcome keeps the key ABSENT
     // rather than present-and-empty, so its shape is unchanged (NREG-01).
     ...(degradedKinds.length > 0 && { degradedKinds }),

@@ -8082,6 +8082,7 @@ test("updateSinglePlugin keeps a recorded provider SHA offline without an auth c
       toVersion: "sha-111111111111",
       declaresAgents: false,
       declaresMcp: false,
+      constraint: undefined,
     });
   });
 });

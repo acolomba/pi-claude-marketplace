@@ -105,6 +105,7 @@ const PLUGIN_UPDATE_BASE = {
 } satisfies PluginUpdateBase;
 
 const PLUGIN_UPDATE_UPDATED_CLEAN = {
+  constraint: undefined,
   declaresAgents: false,
   declaresMcp: false,
   fromVersion: "1.0.0",
@@ -116,6 +117,10 @@ const PLUGIN_UPDATE_UPDATED_CLEAN = {
 } satisfies PluginUpdateUpdatedOutcome;
 
 const PLUGIN_UPDATE_UPDATED_FULL = {
+  constraint: {
+    disclosure: "already the highest version ^1.0.0 admits",
+    fellBackToCurrentCopy: true,
+  },
   declaresAgents: true,
   declaresMcp: true,
   degradedKinds: ["skill", "command"],
@@ -134,6 +139,7 @@ const PLUGIN_UPDATE_UPDATED_FULL = {
 } satisfies PluginUpdateUpdatedOutcome;
 
 const PLUGIN_UPDATE_UNCHANGED = {
+  constraint: undefined,
   declaresAgents: false,
   declaresMcp: false,
   fromVersion: "1.0.0",
@@ -337,6 +343,7 @@ void ({
 void ({ declaresAgents: false, declaresMcp: false, name: "alpha" } satisfies PluginUpdateOutcome);
 
 void ({
+  constraint: undefined,
   declaresAgents: false,
   declaresMcp: false,
   fromVersion: "1.0.0",
@@ -348,6 +355,7 @@ void ({
 } satisfies PluginUpdateUpdatedOutcome);
 
 void ({
+  constraint: undefined,
   declaresAgents: false,
   declaresMcp: false,
   fromVersion: "1.0.0",
@@ -379,6 +387,7 @@ void ({
 } satisfies PluginUpdateOutcome);
 
 void ({
+  constraint: undefined,
   declaresAgents: false,
   declaresMcp: false,
   fromVersion: "1.0.0",
@@ -394,6 +403,7 @@ void ({
 } satisfies PluginUpdateUpdatedOutcome);
 
 void ({
+  constraint: undefined,
   declaresAgents: false,
   declaresMcp: false,
   fromVersion: "1.0.0",
@@ -407,6 +417,7 @@ void ({
 } satisfies PluginUpdateUpdatedOutcome);
 
 void ({
+  constraint: undefined,
   declaresAgents: false,
   declaresMcp: false,
   fromVersion: "1.0.0",
@@ -450,6 +461,7 @@ void ({
 } satisfies PluginUpdateFailedOutcome);
 
 void ({
+  constraint: undefined,
   declaresAgents: false,
   declaresMcp: false,
   fromVersion: "1.0.0",
@@ -461,6 +473,38 @@ void ({
   // @ts-expect-error outcome types do not carry rendered-row dependencies
   dependencies: ["agents"],
 } satisfies PluginUpdateOutcome);
+
+// D-10-17a: the disclosure member is REQUIRED-BUT-NULLABLE, never `constraint?:`
+// -- omitting the key entirely is a compile error, unlike an ordinary optional
+// member.
+void ({
+  declaresAgents: false,
+  declaresMcp: false,
+  fromVersion: "1.0.0",
+  name: "alpha",
+  partition: "updated",
+  stagedAgentNames: [],
+  stagedMcpServerNames: [],
+  toVersion: "2.0.0",
+  // @ts-expect-error the constraint disclosure is required-but-nullable and cannot be omitted
+} satisfies PluginUpdateUpdatedOutcome);
+
+// D-10-17a: the sub-object is atomically shaped -- both fields required inside
+// it -- so a site cannot produce a HALF-FILLED disclosure.
+void ({
+  // @ts-expect-error the disclosure sub-object is atomic and requires fellBackToCurrentCopy
+  constraint: {
+    disclosure: "already the highest version ^1.0.0 admits",
+  },
+  declaresAgents: false,
+  declaresMcp: false,
+  fromVersion: "1.0.0",
+  name: "alpha",
+  partition: "updated",
+  stagedAgentNames: [],
+  stagedMcpServerNames: [],
+  toVersion: "2.0.0",
+} satisfies PluginUpdateUpdatedOutcome);
 
 const PLUGIN_UPDATE_FN_WITH_WRONG_PARAMETER = (
   _plugin: number,
