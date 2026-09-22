@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v1.20
 milestone_name: transitive-dependencies
-current_phase: 08
-current_phase_name: Enablement parity for dependencies
-status: executing
-stopped_at: Phase 8 all plans executed; post-execution gates running
-last_updated: "2026-09-21T12:10:00.000Z"
+current_phase: 09
+current_phase_name: Reload installs missing declared dependencies
+status: planning
+stopped_at: Phase 8 complete, ready to plan Phase 09
+last_updated: "2026-09-22T01:47:10.674Z"
 last_activity: 2026-09-21
-last_activity_desc: 08-03 complete; phase 8 gates running
-state_head: 235a812b293ae32189f37adbf6f478004504b429
+last_activity_desc: Phase 8 complete, transitioned to Phase 09
+state_head: c2596178eae111b54912cda68907b702e435fa01
 progress:
   total_phases: 12
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 32
   completed_plans: 32
-  percent: 58
+  percent: 67
 ---
 
 # Project State
@@ -36,9 +36,39 @@ under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 08 (Enablement parity for dependencies) — EXECUTING
-Plan: 3 of 3 (all three plans complete 2026-09-21)
-Status: Phase 08 executed; code review, regression and verification gates pending
+Phase: 09 — Reload installs missing declared dependencies
+Plan: Not started
+Status: Ready to plan
+
+**Phase 8 closed 2026-09-21**, verified 13/13 must-haves with no human items;
+full `npm run check` green on the final tree (7423 unit + 36 integration,
+100% coverage). Three plans ran in three sequential waves on this checkout
+(worktree isolation degraded per #683). `enable <plugin>` now resolves the
+declared closure transitively and reports one row per member; a disabled
+member is re-materialized through its own record as `(installed) {dependency
+enabled}` (EDEP-01, EDEP-03 enable arm); `disable <plugin>` refuses while an
+enabled dependent still declares it, `(failed) {dependents remain}` with a
+plain-English `cause:` naming the dependents in order (EDEP-02, D-08-01); the
+install cascade re-enables a disabled already-installed dependency
+transitively and installs anything it declares that was never installed, and
+`{already installed, dependency disabled}` is RETIRED with a documented
+supersession (`REASONS` 59 -> 60 -> 61 -> 60, catalog 220 states). Both
+cascades overwrite an EXISTING `enabled: false` config entry for a re-enabled
+member to `true` and never add one (D-04-02); the enable cascade and the
+disable guard are standalone-only, the install-cascade re-enable runs on every
+install. BACKLOG `ENBL-DEP-01` closed, `DEPS-STATUS-01` open.
+
+**The code review took four iterations** (`08-REVIEW.md`, `08-REVIEW-FIX.md`,
+per-iteration copies retained as `.iterN.md`): 5 critical / 7 warning in
+iteration 1, all fixed; the install cascade's transitive re-enable then
+regressed on every pass (CR-04 -> CR-07 -> CR-08) until an opus pass collapsed
+the discovery-walk / synthetic-root-fold split into one walk
+(`liveInstalledKeys`); iteration 4 found two stale comments, fixed directly.
+Ten Info findings are left open by ruling (naming, DRY, an optional-vs-
+discriminated member, a pre-existing double JSDoc, the D-04-07 promotion path
+not walking a disabled root's own dependencies -- IN-09 is the one worth a
+backlog entry). ROADMAP criterion 2 and REQUIREMENTS EDEP-02 were reworded to
+D-08-01's plain-English instruction (`8f291c20`).
 
 All four plans are executed. LOAD-01, LOAD-02 and LOAD-03 are closed in
 `REQUIREMENTS.md`. PRUNE-05 stays in the record with a pointer naming LOAD-03,
@@ -335,7 +365,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-19 — Phase 08 execution started
+Last activity: 2026-09-21 — Phase 8 complete, transitioned to Phase 09
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 5 of 5 phases complete (100%).
@@ -362,7 +392,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 
 **Velocity:**
 
-- Total plans completed: 180
+- Total plans completed: 183
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -383,6 +413,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | 5 | 3 | - | - |
 | 06 | 4 | - | - |
 | 07 | 3 | - | - |
+| 8 | 3 | - | - |
 
 **Recent Trend:** 35 Phase 113 plans completed with all direct owner, review, validation, verification, security, and clean-repository gates green.
 **Per-Plan Metrics:**
@@ -926,7 +957,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 8 all plans executed; running the post-execution gates (code review -> regression -> verification)
+**Stopped at:** Phase 8 complete, ready to plan Phase 09
 
 **Resume file:** .planning/phases/08-enablement-parity-for-dependencies/08-03-PLAN.md
 
@@ -964,18 +995,13 @@ otherwise deadlock on itself; two test fixtures that disabled a still-declared
 dependency through the standalone verb were re-seeded. Six commits
 `00b102a8`..`9dd32b86`.
 
-**Wave 3 (08-03) closed 2026-09-21:** the install cascade turns a disabled
-already-installed dependency back on through its own record and reports
-`(installed) {already installed, dependency enabled}` (EDEP-03 install arm);
-`{already installed, dependency disabled}` is RETIRED with a documented
-supersession (`REASONS` 61 -> 60, catalog held at 220 states);
-`docs/plugin-enablement.md` and `docs/dependency-resolution.md` rewritten;
-BACKLOG `ENBL-DEP-01` closed, `DEPS-STATUS-01` left open. Four commits
-`1b6752b0`..`e9fe19de`; the executor ran the full `npm run check` chain green.
+**Phase 8 closed 2026-09-21** (see Current Position). The install-flow
+outcome-union port (`cd11171c`) landed first as its own commit.
 
-**Next:** code review gate (`/gsd-code-review 8`), regression gate (already
-covered by 08-03's full `npm run check`), phase-goal verification
-(`gsd-verifier` -> `08-VERIFICATION.md`), then `phase complete` and Phase 9.
+**Next:** Phase 9 (Reload installs missing declared dependencies) — discuss
+via `/gsd-discuss-phase 9`, or plan directly with `/gsd-plan-phase 9`. Consider
+a BACKLOG entry for IN-09 (D-04-07 promotion re-materializes a disabled
+dependency-provenance root without walking its own disabled dependencies).
 
 ### Historical v1.19 completion record
 
