@@ -3239,3 +3239,28 @@ row). Any change must be evaluated against both call sites --
 `buildScopeDeclarationDetail` (LOAD-01) and `buildScopeDeclarationIndex`
 (uninstall's dependents guard) -- and the two tests that currently encode
 D-05-07 as intentional will need to move with it, not just be deleted.
+
+## MISS-MPADD-01: marketplace add and post-install activation do not resolve missing dependencies
+
+Surfaced by Phase 9's upstream check (D-09-15, 2026-09-22). Upstream runs its
+missing-dependency resolver on `marketplace add` and again after an install
+completes, so a plugin that gained a satisfiable declaration through either
+path resolves it right away. Here, neither `marketplace add`, `bootstrap.ts`
+nor `autoupdate.ts` reaches `applyReconcile`, so nothing installs a missing
+dependency until the next `/reload` completes the closure instead.
+
+Scope when picked up: run the load-time verdict and the dependency-install
+step for one scope from each of those call sites, the same step `/reload`
+already drives.
+
+## RECON-REPLAN-01: the toggles are re-planned only after a dependency install
+
+Surfaced by Phase 9's D-09-07 design (2026-09-22). The reload's toggle buckets
+are re-planned from a fresh read pass only when the dependency-install step
+itself installed or found something (D-09-07). A config-driven uninstall of a
+dependency in the SAME pass is invisible to the round-1 read-pass verdict, so
+the dependent it should hold down is only caught one reload late.
+
+Scope when picked up: re-plan the toggle buckets after any mutating bucket,
+not only the dependency-install step, and measure the added read-pass cost on
+a steady-state reload before shipping it.

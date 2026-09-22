@@ -213,6 +213,34 @@ A disable you asked for is never lifted this way. The check lifts only the disab
 
 One broken dependency reaches every plugin above it in a single reload. If `a` needs `b` and `b` needs `c`, then uninstalling `c` disables both `b` and `a` on the next reload, not one of them per reload. Installing `c` again brings both back on the next reload too.
 
+A `/reload` also installs a dependency the scope has never seen. If an installed plugin declares a dependency with no install record, `/reload` installs it through the same install cascade `install` uses, from the marketplace the declaration names, at a version inside every declaring plugin's range, and records it as installed for a dependency, not by name. The dependent then loads in the same reload.
+
+```text
+● mp [project]
+  ● secrets-vault v1.0.0 (installed) {dependency installed}
+  ● deploy-kit v1.0.0 (installed)
+
+Reconcile: 2 successes
+```
+
+Session start does not install anything. It reports the missing dependency and waits for a `/reload`.
+
+A dependency that is installed but disabled is not enabled by a reload. The row still tells you to enable it or uninstall the dependent.
+
+When the install fails, the dependency gets its own row naming the reason. The dependent stays disabled with the install remedy. Nothing is left half installed. The next `/reload` tries again.
+
+```text
+A plugin operation has failed.
+
+● mp [project]
+  ⊘ secrets-vault (failed) {dependency failed}
+    cause: Dependency "crypto-core@mp" is not declared by its marketplace.
+  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}
+    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"
+
+Reconcile: 1 failure, 1 warning
+```
+
 ## Why a dependency can fail
 
 Each cause shows as a reason in braces on the failing dependency's own row. This table names every reason the cascade can show.
