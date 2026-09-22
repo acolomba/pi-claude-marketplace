@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Internal: the GSD discuss phase now loads a Claude Code compatibility research skill before it generates questions, so phase decisions cite verified upstream behavior instead of assumption. `AGENTS.md` and `PROJECT.md` now state the upstream-parity rule and the two things that license a divergence, and both record the hook bridge that their component list had been omitting. (#210)
+  - Internal: the marketplace-remove test that covers the in-lock concurrent disappearance now injects the state load instead of racing a real filesystem writer, so the branch is covered on every run rather than only when the race lands. It was the intermittent cause of sub-100% coverage runs in CI.
 
 ## [0.19.0] - 2026-09-22
 
