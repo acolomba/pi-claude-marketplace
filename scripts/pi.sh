@@ -5,8 +5,8 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/pi.sh [--clear] [--home PATH] [--cd PATH] [--] [pi args...]
 
-Runs Pi with only this project, pi-mcp-adapter, and pi-subagents loaded as
-extensions.
+Runs Pi with only this project, pi-mcp-adapter, pi-subagents, and
+@quintinshaw/pi-dynamic-workflows loaded as extensions.
 
 Options:
   --cd PATH    Run Pi from PATH instead of the current directory.
@@ -82,12 +82,14 @@ ensure_global_package() {
 
 ensure_global_package pi-mcp-adapter
 ensure_global_package pi-subagents
+ensure_global_package @quintinshaw/pi-dynamic-workflows
 
 npm_root=$(npm root -g)
 mcp_adapter_extension="$npm_root/pi-mcp-adapter/index.ts"
 subagents_extension="$npm_root/pi-subagents/src/extension/index.ts"
+workflows_extension="$npm_root/@quintinshaw/pi-dynamic-workflows/extensions/workflow.ts"
 
-for extension_path in "$project_extension" "$mcp_adapter_extension" "$subagents_extension"; do
+for extension_path in "$project_extension" "$mcp_adapter_extension" "$subagents_extension" "$workflows_extension"; do
   if [[ ! -f "$extension_path" ]]; then
     echo "scripts/pi.sh: extension not found: $extension_path" >&2
     exit 1
@@ -107,4 +109,5 @@ exec pi \
   -e "$project_extension" \
   -e "$mcp_adapter_extension" \
   -e "$subagents_extension" \
+  -e "$workflows_extension" \
   "${pi_args[@]}"
