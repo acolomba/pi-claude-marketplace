@@ -2278,6 +2278,7 @@ test("session_start contains a lazy project cwd failure and still delegates safe
     executor,
   });
   const sessionStart = registeredHandler(registrations, "session_start");
+  // A throwing getter is the only way to make a later read of `ctx.cwd` fail.
   Object.defineProperty(context, "cwd", {
     configurable: true,
     get(): string {

@@ -189,7 +189,7 @@ function redefineRenamePairPath(
   prepared: PreparedWorkflowsStaged,
   name: string,
   property: "from" | "to",
-  resolve: (actual: string) => string,
+  resolve: (realPath: string) => string,
 ): void {
   const pair = prepared._renamePairs.find((candidate) => candidate.name === name);
 
@@ -197,12 +197,12 @@ function redefineRenamePairPath(
     throw new Error(`no rename pair is named "${name}"`);
   }
 
-  const actual = pair[property];
+  const realPath = pair[property];
 
   Object.defineProperty(pair, property, {
     configurable: true,
     enumerable: true,
-    get: () => resolve(actual),
+    get: () => resolve(realPath),
   });
 }
 
@@ -970,9 +970,9 @@ describe("commitPreparedWorkflows", () => {
     for (const stillPlacedName of ["acme:greet", "acme:shout"]) {
       let reads = 0;
 
-      redefineRenamePairPath(prepared, stillPlacedName, "from", (actual) => {
+      redefineRenamePairPath(prepared, stillPlacedName, "from", (realPath) => {
         reads += 1;
-        return reads === 1 ? actual : rollbackBlocker;
+        return reads === 1 ? realPath : rollbackBlocker;
       });
     }
 
@@ -1026,9 +1026,9 @@ describe("commitPreparedWorkflows", () => {
     // what drives the commit into its rollback.
     let greetReads = 0;
 
-    redefineRenamePairPath(prepared, "acme:greet", "from", (actual) => {
+    redefineRenamePairPath(prepared, "acme:greet", "from", (realPath) => {
       greetReads += 1;
-      return greetReads === 1 ? actual : rollbackBlocker;
+      return greetReads === 1 ? realPath : rollbackBlocker;
     });
     redefineRenamePairPath(prepared, "acme:shout", "from", () =>
       path.join(prepared.stagingRoot, "absent.json"),

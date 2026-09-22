@@ -592,6 +592,7 @@ const PROJECT_ONE_UPDATED: ScopeFootprint = {
 };
 
 test("forwards the exact direct update request through the required update operation", async (t) => {
+  // arrange
   const workspace = await createHermeticWorkspace(t, "forward-operation");
   const { ctx, pi } = createNotificationBoundary(1, 4, {
     value: workspace.cwd,
@@ -605,8 +606,10 @@ test("forwards the exact direct update request through the required update opera
 
   const updateHandler = makeUpdateHandler(pi, updateOperation);
 
+  // act
   await updateHandler("one@alpha --scope project --map-model --partial --local", ctx);
 
+  // assert
   assert.deepStrictEqual(calls, [
     {
       ctx,

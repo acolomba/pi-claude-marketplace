@@ -1220,7 +1220,7 @@ test("WGATE-01: states one gate line in both tenses, differing only in the outco
   await mkdir(workflowsDir);
   await writeFile(path.join(workflowsDir, "gated.js"), GATED_NAMED);
   const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
-  const subject = `workflow script "gated.js" in "${workflowsDir}"`;
+  const openingPhrase = `workflow script "gated.js" in "${workflowsDir}"`;
 
   // act
   const installed = await discoverPluginWorkflows({
@@ -1234,13 +1234,13 @@ test("WGATE-01: states one gate line in both tenses, differing only in the outco
     tense: "preview",
   });
 
-  // assert -- the subject and the reason are shared bindings, so only the
-  // outcome phrase may differ between the two expected strings.
+  // assert -- the opening phrase and the reason are shared bindings, so only
+  // the outcome phrase may differ between the two expected strings.
   assert.deepStrictEqual(installed.warnings, [
-    `${subject} was installed but the engine will refuse to load it: ${CHECK_3_REASON}`,
+    `${openingPhrase} was installed but the engine will refuse to load it: ${CHECK_3_REASON}`,
   ]);
   assert.deepStrictEqual(previewed.warnings, [
-    `${subject} would be installed but the engine will refuse to load it: ${CHECK_3_REASON}`,
+    `${openingPhrase} would be installed but the engine will refuse to load it: ${CHECK_3_REASON}`,
   ]);
 });
 

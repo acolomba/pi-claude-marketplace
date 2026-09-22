@@ -69,14 +69,11 @@
 // the offline `(will install)` row beside it is what says the workflow answered
 // from disk.
 //
-// D-08-A03: this pair reads COMPLETE. It used to carry one uncovered branch, at
-// the `?? ""` fallback on the first positional, which existed only because
-// `noUncheckedIndexedAccess` (tsconfig.json:12) types a dense index read as
-// possibly undefined. Destructuring removed the read rather than the guard:
+// D-08-A03: this pair reads COMPLETE. `noUncheckedIndexedAccess`
+// (tsconfig.json:12) types a dense index read as possibly undefined, and
 // `const [first] = parsed.positional` already yields `string | undefined`, so
 // `if (first !== undefined)` narrows it with no fallback literal, no non-null
-// assertion and no type assertion. The uncovered arm is gone because the code
-// that produced it is gone.
+// assertion and no type assertion.
 //
 // Which pairs fall short is recorded in one place, `scripts/test-coverage-direct.pin.json`,
 // and a pair absent from it reads complete. This one is absent from it.
