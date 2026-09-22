@@ -259,13 +259,48 @@ test("returns the complete prepared candidate for a version transition", async (
   // act
   const prepared = await prepare(seed);
 
+  // assert -- the WHOLE prepared value, so a member added to
+  // `PreparedPluginUpdate` cannot slip past this case the way `constraint`
+  // did. `resolvedSha` is absent rather than `undefined`: a path source is
+  // spread in only when a commit resolved.
+  assert.ok(!("partition" in prepared));
+  assert.deepStrictEqual(prepared, {
+    state: prepared.state,
+    record: pluginRecord("1.0.0"),
+    entry: { name: "hello", source: "./plugins/hello", version: "2.0.0" },
+    installable: prepared.installable,
+    fromVersion: "1.0.0",
+    toVersion: "2.0.0",
+    constraint: undefined,
+  });
+  assert.strictEqual(prepared.installable.pluginRoot, seed.pluginRoot);
+  assert.deepStrictEqual(prepared.state.marketplaces.mp?.plugins.hello, pluginRecord("1.0.0"));
+});
+
+test("D-10-15: the current-copy fallback reaches the prepared update's disclosure slot", async (t) => {
+  // arrange -- a path-source verdict that admitted with no pin after
+  // falling back to the marketplace's current copy. `update-row.ts` reads
+  // `fellBackToCurrentCopy` off this slot to stamp `{dependency current
+  // copy}`, and the prepared update is its only channel from here.
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const disclosure = 'constrained to the combined range (>=1.0.0) -- required by "alpha@mp"';
+  const constraintGate: PreparePluginUpdateOptions["constraintGate"] = () =>
+    Promise.resolve({
+      kind: "admits",
+      range: ">=1.0.0",
+      holders: [{ key: "alpha@mp", range: ">=1.0.0", disabled: false }],
+      fellBackToCurrentCopy: true,
+      disclosure,
+    });
+
+  // act
+  const prepared = await prepare(seed, { constraintGate });
+
   // assert
   assert.ok(!("partition" in prepared));
-  assert.strictEqual(prepared.record.version, "1.0.0");
-  assert.strictEqual(prepared.installable.pluginRoot, seed.pluginRoot);
-  assert.strictEqual(prepared.fromVersion, "1.0.0");
+  assert.deepStrictEqual(prepared.constraint, { disclosure, fellBackToCurrentCopy: true });
   assert.strictEqual(prepared.toVersion, "2.0.0");
-  assert.strictEqual(prepared.resolvedSha, undefined);
 });
 
 test("D-10-03: the gate runs after triage and before candidate resolution", async (t) => {

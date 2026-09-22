@@ -7458,6 +7458,7 @@ test("D-10-18: two updatePlugins runs through one binding do not share a memo", 
  */
 async function seedConstrainedPathTarget(
   cwd: string,
+  installedVersion = "0.9.0",
 ): Promise<{ readonly marketplaceRoot: string; readonly oid: string }> {
   const marketplaceRoot = path.join(cwd, "mp-src");
   for (const [name, dependencies] of [
@@ -7510,12 +7511,49 @@ async function seedConstrainedPathTarget(
         addedFromCwd: cwd,
         manifestPath,
         marketplaceRoot,
-        plugins: { app: makePluginRecord("1.0.0"), pathfoo: makePluginRecord("0.9.0") },
+        plugins: { app: makePluginRecord("1.0.0"), pathfoo: makePluginRecord(installedVersion) },
       },
     },
   });
   return { marketplaceRoot, oid };
 }
+
+test("D-10-13: an up-to-date constrained plugin discloses the range that admits it", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-constraint-ceiling-"));
+    try {
+      // arrange -- "app" holds "pathfoo" to ^1.0.0, the marketplace clone
+      // carries no release tag, and the record already sits at the version
+      // the current copy resolves to.
+      await seedConstrainedPathTarget(cwd, "1.0.0");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "pathfoo", marketplace: "mp" },
+      });
+
+      // assert -- no tag search established a ceiling here, so the cause
+      // line names the range and its holder without claiming the version is
+      // the highest one admitted.
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [project]",
+            "  ⊘ pathfoo (skipped) {up-to-date}",
+            '    cause: constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "app@mp"',
+          ].join("\n"),
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 test("D-10-18: a tag published between two cascade runs is visible to the second", async () => {
   await withHermeticHome(async () => {

@@ -133,9 +133,10 @@ const REAL_UPDATE_CONSTRAINT_SEAM: UpdateConstraintSeam = Object.freeze({
 /**
  * The ways stage one can fail to admit a version, the two ranges
  * `intersectDependencyRanges` can fail to fold a set into (D-10-10), and the
- * two arms that describe a version already in hand rather than a search
+ * three arms that describe a version already in hand rather than a search
  * failure: `out-of-range` is stage two's post-fetch guard (UPDT-02),
- * `already-resolved` is the D-10-13 ceiling disclosure.
+ * `already-resolved` is the D-10-13 ceiling disclosure, and `range-only`
+ * is its counterpart on an arm where no tag search established a ceiling.
  */
 type ConstraintArm =
   | "disjoint"
@@ -144,7 +145,8 @@ type ConstraintArm =
   | "no-satisfying-tag"
   | "transport"
   | "out-of-range"
-  | "already-resolved";
+  | "already-resolved"
+  | "range-only";
 
 /** Fixed clause per arm (D-10-10): the situation, never an identifier. */
 const ARM_CLAUSE: Record<ConstraintArm, string> = {
@@ -162,8 +164,14 @@ const ARM_CLAUSE: Record<ConstraintArm, string> = {
   "out-of-range": "falls outside what the combined range admits",
   // D-10-13: the plugin is already at the highest version the combined
   // range admits -- disclosed on an `{up-to-date}` row's cause line, never a
-  // second reason token.
+  // second reason token. Only a PIN earns this clause: the tag search ran
+  // and selected the highest satisfying release.
   "already-resolved": "already the highest version the combined range admits",
+  // D-10-13 on an arm that established no ceiling -- no tag matched, the
+  // listing was unreadable, or the entry source has no tag listing at all.
+  // The range and its holders are still the truth; "highest admitted" is
+  // not.
+  "range-only": "constrained to the combined range",
 };
 
 function nameHolder(holder: ConstraintHolder): string {
@@ -279,6 +287,12 @@ function constraintTagSource(entry: PluginEntry): ConstraintTagSource {
  * SAME range and holders every branch already has, so it is ready for the
  * `unchanged` ceiling row (D-10-13) and `PreparedPluginUpdate.constraint`
  * (D-10-17a) without a second composition site.
+ *
+ * The clause follows the PIN. A pin means the tag search ran and chose the
+ * highest satisfying release, so the ceiling is established and the line
+ * may claim it. Every other admitting branch -- no matching tag, an
+ * unreadable listing, a source with no tag listing at all -- searched
+ * nothing or found nothing, so its line discloses the range alone.
  */
 function admitsRange(
   range: string,
@@ -291,7 +305,11 @@ function admitsRange(
     holders,
     ...(options?.pin !== undefined && { pin: options.pin }),
     fellBackToCurrentCopy: options?.fellBackToCurrentCopy === true,
-    disclosure: describeConstraint(range, holders, "already-resolved"),
+    disclosure: describeConstraint(
+      range,
+      holders,
+      options?.pin === undefined ? "range-only" : "already-resolved",
+    ),
   };
 }
 

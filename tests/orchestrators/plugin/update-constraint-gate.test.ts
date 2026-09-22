@@ -315,8 +315,10 @@ describe("evaluateUpdateConstraint", () => {
       // default seam's `probeMarketplaceTags` answers `no-matching-tag`, so
       // this falls back to the marketplace's current copy.
       fellBackToCurrentCopy: true,
+      // D-10-13: no tag matched, so nothing established a ceiling and the
+      // disclosure names the range alone.
       disclosure:
-        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0 >=1.2.0) -- required by "alpha@mp", "beta@mp"',
+        'constrained to the combined range (>=1.0.0 <2.0.0-0 >=1.2.0) -- required by "alpha@mp", "beta@mp"',
     });
   });
 
@@ -357,7 +359,7 @@ describe("evaluateUpdateConstraint", () => {
       // falls back to the current copy.
       fellBackToCurrentCopy: true,
       disclosure:
-        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+        'constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
     });
   });
 
@@ -587,7 +589,7 @@ describe("evaluateUpdateConstraint", () => {
       holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
       fellBackToCurrentCopy: false,
       disclosure:
-        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+        'constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
     });
   });
 
@@ -821,7 +823,7 @@ describe("evaluateUpdateConstraint", () => {
       holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
       fellBackToCurrentCopy: false,
       disclosure:
-        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+        'constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
     });
   });
 
