@@ -191,10 +191,10 @@ Parity with upstream update. Today `update` and `autoupdate` never read
 constraints, so an update can move a dependency out of every range that
 depends on it.
 
-- [ ] **UPDT-01**: `update` and `autoupdate` move a plugin that installed
+- [x] **UPDT-01**: `update` and `autoupdate` move a plugin that installed
   plugins constrain only to the highest version that satisfies every
   dependent's range.
-- [ ] **UPDT-02**: When no version satisfies every range, the update of that
+- [x] **UPDT-02**: When no version satisfies every range, the update of that
   plugin is skipped and reported, naming the constraining plugin(s).
 
 ### Cross-marketplace dependency allowlist (XMKT)
@@ -283,8 +283,8 @@ this milestone.
 | EDEP-03 | Phase 8 | Complete |
 | MISS-01 | Phase 9 | Complete |
 | MISS-02 | Phase 9 | Complete |
-| UPDT-01 | Phase 10 | Pending |
-| UPDT-02 | Phase 10 | Pending |
+| UPDT-01 | Phase 10 | Complete |
+| UPDT-02 | Phase 10 | Complete |
 | XMKT-01 | Phase 11 | Pending |
 | XMKT-02 | Phase 11 | Pending |
 | PRUNE-06 | Phase 12 | Pending |
