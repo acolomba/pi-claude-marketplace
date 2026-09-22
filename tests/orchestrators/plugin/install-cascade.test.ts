@@ -41,6 +41,7 @@ import type {
 import type {
   CascadeConstraintFailure,
   CascadeMarketplaceTagProbe,
+  CascadeMemberOutcome,
   CascadeTagProbe,
   InstallCascadeLedgerSeam,
   InstallCascadeOptions,
@@ -1797,7 +1798,7 @@ test("EDEP-03 a disabled already-installed dependency's record ends enabled, mat
     state,
     locations,
     rootKey: `foo@${MARKETPLACE}`,
-    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }] }),
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
     installedKeys: new Set([`bar@${MARKETPLACE}`]),
     knownMarketplaces: new Set([MARKETPLACE]),
@@ -1819,9 +1820,7 @@ test("EDEP-03 a disabled already-installed dependency's record ends enabled, mat
 
 test("CR-04: a depth-2 disabled dependency chain re-enables transitively", async (t) => {
   // arrange: `foo` declares `bar`; `bar` declares `baz`. Both `bar` and
-  // `baz` are pre-installed and disabled, so the outer walk's
-  // already-installed wall stops at `bar` and never reaches `baz` on its
-  // own -- the exact truncation CR-04 closes.
+  // `baz` are recorded and disabled.
   const environment = await createHermeticEnvironment(t, "install-cascade-cr04-transitive-");
   const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo"], {
     preinstalled: ["bar", "baz"],
@@ -1869,11 +1868,7 @@ test("CR-04: a depth-2 disabled dependency chain re-enables transitively", async
 
 test("CR-04: a cycle among disabled dependencies fails the cascade closed", async (t) => {
   // arrange: `foo` declares `bar`; `bar` declares `baz`; `baz` declares
-  // `bar` back -- a cycle entirely among already-installed, disabled
-  // members. `bar` (the direct disabled dependency of `foo`) is the first
-  // member CR-04's transitive discovery walks, and that per-member walk
-  // explores bar's own FULL transitive closure, so the cycle back to `bar`
-  // is caught there.
+  // `bar` back -- a cycle entirely among recorded, disabled members.
   const environment = await createHermeticEnvironment(t, "install-cascade-cr04-cycle-");
   const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo"], {
     preinstalled: ["bar", "baz"],
@@ -1910,16 +1905,10 @@ test("CR-04: a cycle among disabled dependencies fails the cascade closed", asyn
   assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.baz?.enabled, false);
 });
 
-test("CR-07: a toReEnable member absent from its own manifest fails closed with a real requiredBy, not a throw", async (t) => {
-  // arrange: "foo" directly declares both "bar" and "qux"; "bar" declares
-  // "baz". All three are pre-installed and disabled. "qux" has no catalog
-  // entry at all -- the marketplace-update case ATTR-08 names. Discovery
-  // walks "bar" and "qux" each as their OWN root, tolerating "qux"'s
-  // catalog-absent answer there (root-exempt) and finding "baz" through
-  // "bar"; the fold then walks all three as children of the synthetic root,
-  // where "qux"'s absence is a real `not-found` the fold cannot tolerate --
-  // this is exactly where the pre-fix code dereferenced `folded.closure` on
-  // a failure arm and threw a TypeError.
+test("CR-07: a disabled dependency absent from its own manifest fails closed naming its real dependent", async (t) => {
+  // arrange: "foo" declares "bar" and "qux"; "bar" declares "baz". All three
+  // are recorded and disabled, and "qux" has no catalog entry at all -- the
+  // marketplace-update state ATTR-08 names.
   const environment = await createHermeticEnvironment(t, "install-cascade-cr07-not-found-");
   const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo"], {
     preinstalled: ["bar", "baz", "qux"],
@@ -1952,9 +1941,8 @@ test("CR-07: a toReEnable member absent from its own manifest fails closed with 
     knownMarketplaces: new Set([MARKETPLACE]),
   });
 
-  // assert: the cascade fails closed and reports the failure against "foo",
-  // the real dependent that declared "qux" -- not the internal synthetic
-  // root's key -- and nothing is re-enabled.
+  // assert: the cascade fails closed against "foo", the dependent that
+  // declared "qux", and nothing is re-enabled.
   assert.strictEqual(cascade.kind, "closure-failed");
   assert.ok(cascade.kind === "closure-failed");
   assert.deepStrictEqual(cascade.failure, {
@@ -1968,14 +1956,11 @@ test("CR-07: a toReEnable member absent from its own manifest fails closed with 
   assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.qux?.enabled, false);
 });
 
-test("WR-11(a): the discovery walk stops at a live (enabled, installed) dependency, exactly like the outer walk", async (t) => {
+test("WR-11(a): the walk stops at a live (enabled, installed) dependency below a disabled one", async (t) => {
   // arrange: "foo" declares "bar" (disabled); "bar" declares "baz", which is
-  // already installed and ENABLED; "baz" declares "qux", which carries no
-  // catalog entry at all. Before the fix, the discovery walk's empty
-  // `installedKeys` recursed PAST "baz" and would fail this install over
-  // "qux" -- a plugin nothing asked about, and exactly the already-installed
-  // dependency RESV-05 was built to leave unexplored (RESV-05 precedes
-  // D-03-08 deliberately).
+  // recorded and ENABLED; "baz" declares "qux", which has no catalog entry
+  // at all. RESV-05 precedes D-03-08: the walk stops at the live "baz" and
+  // never reads what it declares.
   const environment = await createHermeticEnvironment(t, "install-cascade-wr11a-stop-at-live-");
   const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo"], {
     preinstalled: ["bar", "baz"],
@@ -2029,12 +2014,8 @@ test("WR-11(a): the discovery walk stops at a live (enabled, installed) dependen
 });
 
 test("WR-11(b): a never-installed dependency reached through a re-enabled member installs like any other cascade member", async (t) => {
-  // arrange: "foo" declares "bar" (disabled, pre-installed); "bar" declares
-  // "qux", which the snapshot has never installed at all. Before the fix,
-  // the discovery walk found "qux" in "bar"'s own sub-closure and silently
-  // dropped it -- neither re-enabled, nor installed, nor reported -- so
-  // "bar" came back up short a live dependency and LOAD-01 held both "bar"
-  // and "foo" down again on the very next pass.
+  // arrange: "foo" declares "bar" (recorded, disabled); "bar" declares
+  // "qux", which the snapshot has never installed.
   const environment = await createHermeticEnvironment(t, "install-cascade-wr11b-never-installed-");
   const state = await seedMarketplace(environment.cwd, ["bar", "foo", "qux"], {
     preinstalled: ["bar"],
@@ -2082,6 +2063,264 @@ test("WR-11(b): a never-installed dependency reached through a re-enabled member
   assert.strictEqual(barMember.reEnabledFromRecord, true);
 });
 
+/**
+ * Disable each named record in place, with the `"dependency"` provenance a
+ * cascade-installed member carries.
+ */
+function disableRecordedDependencies(state: ExtensionState, names: readonly string[]): void {
+  const marketplace = state.marketplaces[MARKETPLACE];
+  assert.ok(marketplace !== undefined, "the fixture records the marketplace");
+  for (const name of names) {
+    const record = marketplace.plugins[name];
+    assert.ok(record !== undefined, `the fixture pre-installs ${name}`);
+    record.enabled = false;
+    record.provenance = "dependency";
+  }
+}
+
+/** Each member outcome's key, how it materialized, and the dependent that reached it. */
+function memberOrigins(
+  members: readonly CascadeMemberOutcome[],
+): readonly Pick<CascadeMemberOutcome, "key" | "reEnabledFromRecord" | "requiredBy">[] {
+  return members.map(({ key, reEnabledFromRecord, requiredBy }) => ({
+    key,
+    reEnabledFromRecord,
+    requiredBy,
+  }));
+}
+
+test("CR-08: a never-installed dependency below a disabled one installs exactly once, before the member that needs it", async (t) => {
+  // arrange: "foo" declares "bar"; "bar" declares "baz" and "qux". "bar" and
+  // "baz" are recorded and disabled; "qux" is never installed.
+  const environment = await createHermeticEnvironment(t, "install-cascade-cr08-once-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo", "qux"], {
+    preinstalled: ["bar", "baz"],
+  });
+  disableRecordedDependencies(state, ["bar", "baz"]);
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar" }],
+      [`bar@${MARKETPLACE}`]: [{ name: "baz" }, { name: "qux" }],
+      [`baz@${MARKETPLACE}`]: [],
+      [`qux@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`, `baz@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert: one outcome per member, in post order, each naming the dependent
+  // that reached it.
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(cascade.kind === "installed" && memberOrigins(cascade.members), [
+    { key: `baz@${MARKETPLACE}`, reEnabledFromRecord: true, requiredBy: `bar@${MARKETPLACE}` },
+    { key: `qux@${MARKETPLACE}`, reEnabledFromRecord: false, requiredBy: `bar@${MARKETPLACE}` },
+    { key: `bar@${MARKETPLACE}`, reEnabledFromRecord: true, requiredBy: `foo@${MARKETPLACE}` },
+    { key: `foo@${MARKETPLACE}`, reEnabledFromRecord: false, requiredBy: undefined },
+  ]);
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.qux?.enabled, true);
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.enabled, true);
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.baz?.enabled, true);
+});
+
+test("CR-08: a never-installed dependency reached from the root and from a disabled dependency installs once", async (t) => {
+  // arrange: "foo" declares "bar" and "qux"; "bar" declares "baz" and "qux".
+  // "bar" and "baz" are recorded and disabled; "qux" is never installed.
+  const environment = await createHermeticEnvironment(t, "install-cascade-cr08-diamond-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo", "qux"], {
+    preinstalled: ["bar", "baz"],
+  });
+  disableRecordedDependencies(state, ["bar", "baz"]);
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar" }, { name: "qux" }],
+      [`bar@${MARKETPLACE}`]: [{ name: "baz" }, { name: "qux" }],
+      [`baz@${MARKETPLACE}`]: [],
+      [`qux@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`, `baz@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(cascade.kind === "installed" && memberOrigins(cascade.members), [
+    { key: `baz@${MARKETPLACE}`, reEnabledFromRecord: true, requiredBy: `bar@${MARKETPLACE}` },
+    { key: `qux@${MARKETPLACE}`, reEnabledFromRecord: false, requiredBy: `bar@${MARKETPLACE}` },
+    { key: `bar@${MARKETPLACE}`, reEnabledFromRecord: true, requiredBy: `foo@${MARKETPLACE}` },
+    { key: `foo@${MARKETPLACE}`, reEnabledFromRecord: false, requiredBy: undefined },
+  ]);
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.qux?.enabled, true);
+});
+
+test("RESV-05 / EDEP-03 a disabled dependency's recorded version answers to a constraint another disabled dependency declares", async (t) => {
+  // arrange: "foo" declares "bar"; "bar" declares "baz" at `^1.0.0`. Both
+  // are recorded and disabled, and "baz" is recorded at `0.0.1`.
+  const environment = await createHermeticEnvironment(t, "install-cascade-transitive-conflict-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo"], {
+    preinstalled: ["bar", "baz"],
+  });
+  disableRecordedDependencies(state, ["bar", "baz"]);
+  const locations = locationsFor("project", environment.cwd);
+  const before = await twoScopeFootprint(environment.cwd, state);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar" }],
+      [`bar@${MARKETPLACE}`]: [{ name: "baz", version: "^1.0.0" }],
+      [`baz@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`, `baz@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.deepStrictEqual(cascade, {
+    kind: "constraint-failed",
+    failure: {
+      kind: "range-conflict",
+      why: "installed-unsatisfied",
+      key: `baz@${MARKETPLACE}`,
+      range: ">=1.0.0 <2.0.0-0",
+      recordedVersion: "0.0.1",
+    },
+  });
+  assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
+});
+
+test("RESV-03 / EDEP-03 contradictory ranges two disabled dependencies declare on one never-installed member fail as a conflict", async (t) => {
+  // arrange: "foo" declares "bar" and "baz", both recorded and disabled;
+  // "bar" declares "qux" at `^1.0.0` and "baz" declares it at `^2.0.0`.
+  // "qux" is never installed.
+  const environment = await createHermeticEnvironment(t, "install-cascade-disabled-diamond-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo", "qux"], {
+    preinstalled: ["bar", "baz"],
+  });
+  disableRecordedDependencies(state, ["bar", "baz"]);
+  const locations = locationsFor("project", environment.cwd);
+  const before = await twoScopeFootprint(environment.cwd, state);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar" }, { name: "baz" }],
+      [`bar@${MARKETPLACE}`]: [{ name: "qux", version: "^1.0.0" }],
+      [`baz@${MARKETPLACE}`]: [{ name: "qux", version: "^2.0.0" }],
+      [`qux@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`, `baz@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.deepStrictEqual(cascade, {
+    kind: "constraint-failed",
+    failure: {
+      kind: "range-conflict",
+      why: "contradictory-declarations",
+      key: `qux@${MARKETPLACE}`,
+      range: "^1.0.0 ^2.0.0",
+      detail: "no version satisfies all 2 declared ranges",
+    },
+  });
+  assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
+});
+
+test("EDEP-03 a disabled dependency declaring a plugin its marketplace does not declare fails the install naming that dependency", async (t) => {
+  // arrange: "foo" declares "bar" (recorded, disabled); "bar" declares
+  // "qux", which has no catalog entry at all.
+  const environment = await createHermeticEnvironment(t, "install-cascade-disabled-not-found-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"], {
+    preinstalled: ["bar"],
+  });
+  disableRecordedDependencies(state, ["bar"]);
+  const locations = locationsFor("project", environment.cwd);
+  const before = await twoScopeFootprint(environment.cwd, state);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar" }],
+      [`bar@${MARKETPLACE}`]: [{ name: "qux" }],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.deepStrictEqual(cascade, {
+    kind: "closure-failed",
+    failure: {
+      ok: false,
+      reason: "not-found",
+      key: `qux@${MARKETPLACE}`,
+      requiredBy: `bar@${MARKETPLACE}`,
+    },
+  });
+  assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
+});
+
+test("a requested plugin that is recorded and disabled is refused by its own ledger, not re-enabled as a member", async (t) => {
+  // arrange: "foo", the requested plugin, is recorded and disabled; it
+  // declares "bar", which is never installed.
+  const environment = await createHermeticEnvironment(t, "install-cascade-disabled-root-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"], { preinstalled: ["foo"] });
+  const foo = state.marketplaces[MARKETPLACE]?.plugins.foo;
+  assert.ok(foo !== undefined, "the fixture pre-installs the requested plugin");
+  foo.enabled = false;
+  const locations = locationsFor("project", environment.cwd);
+  const before = await twoScopeFootprint(environment.cwd, state);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`foo@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert: the dependency this run installed is unwound and the root's
+  // record stays disabled.
+  assert.strictEqual(cascade.kind, "member-failed");
+  assert.strictEqual(cascade.key, `foo@${MARKETPLACE}`);
+  assert.ok(cascade.error instanceof PluginShapeError);
+  assert.deepStrictEqual(cascade.error.shape, {
+    kind: "already-installed",
+    plugin: "foo",
+    marketplace: MARKETPLACE,
+  });
+  assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
+});
+
 test("EDEP-03 a re-enabled dependency keeps its provenance at dependency", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-cascade-reenable-provenance-");
@@ -2093,7 +2332,7 @@ test("EDEP-03 a re-enabled dependency keeps its provenance at dependency", async
     state,
     locations,
     rootKey: `foo@${MARKETPLACE}`,
-    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }] }),
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
     installedKeys: new Set([`bar@${MARKETPLACE}`]),
     knownMarketplaces: new Set([MARKETPLACE]),
@@ -2116,7 +2355,7 @@ test("EDEP-03 re-enabling a dependency writes no entry into either config file",
     state,
     locations,
     rootKey: `foo@${MARKETPLACE}`,
-    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }] }),
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
     installedKeys: new Set([`bar@${MARKETPLACE}`]),
     knownMarketplaces: new Set([MARKETPLACE]),
@@ -2189,7 +2428,7 @@ test("EDEP-03 a re-materialization fault unwinds the whole cascade and leaves th
     state,
     locations,
     rootKey: `foo@${MARKETPLACE}`,
-    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }] }),
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
     installedKeys: new Set([`bar@${MARKETPLACE}`]),
     knownMarketplaces: new Set([MARKETPLACE]),
@@ -2234,7 +2473,7 @@ test("EDEP-03 the root's own ledger fault AFTER a successful re-enable puts the 
     state,
     locations,
     rootKey: `foo@${MARKETPLACE}`,
-    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }] }),
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
     installedKeys: new Set([`bar@${MARKETPLACE}`]),
     knownMarketplaces: new Set([MARKETPLACE]),
@@ -2287,7 +2526,7 @@ test("EDEP-03 an undo whose re-enabled member's record is gone by rollback time 
     state,
     locations,
     rootKey: `foo@${MARKETPLACE}`,
-    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }] }),
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
     installedKeys: new Set([`bar@${MARKETPLACE}`]),
     knownMarketplaces: new Set([MARKETPLACE]),
@@ -2349,7 +2588,7 @@ for (const { label, cause, expected } of [
       state,
       locations,
       rootKey: `foo@${MARKETPLACE}`,
-      lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }] }),
+      lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
       ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
       installedKeys: new Set([`bar@${MARKETPLACE}`]),
       knownMarketplaces: new Set([MARKETPLACE]),
@@ -2393,7 +2632,10 @@ test("EDEP-03 a constraint conflict on a disabled already-installed member fails
     state,
     locations,
     rootKey: `foo@${MARKETPLACE}`,
-    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^2.0.0" }] }),
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^2.0.0" }],
+      [`bar@${MARKETPLACE}`]: [],
+    }),
     ledgerOptionsFor: ledgerOptionsFor(environmentCwd),
     installedKeys: new Set([`bar@${MARKETPLACE}`]),
     knownMarketplaces: new Set([MARKETPLACE]),
@@ -2434,7 +2676,7 @@ test("EDEP-03 the re-enable phase runs before the root's own phase", async (t) =
     state,
     locations,
     rootKey: `foo@${MARKETPLACE}`,
-    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }] }),
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
     ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
     installedKeys: new Set([`bar@${MARKETPLACE}`]),
     knownMarketplaces: new Set([MARKETPLACE]),

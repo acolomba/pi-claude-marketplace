@@ -1023,44 +1023,20 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:421:12"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:434:60",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:471:60",
       "owner": "InstallCascadeResult.failure",
       "key": "ok",
       "category": "type-selection",
       "purpose": "Selects within DependencyClosureResult by ok, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:434:25"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:471:25"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:464:50",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:501:50",
       "owner": "toIntersectionFailure.failed",
       "key": "ok",
       "category": "type-selection",
       "purpose": "Selects within DependencyRangeIntersection by ok, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:464:11"
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:920:40",
-      "owner": "TransitiveReEnableResult",
-      "key": "ok",
-      "category": "type-selection",
-      "purpose": "Selects within DependencyClosureResult by ok, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:920:5"
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1093:55",
-      "owner": "FoldFailure",
-      "key": "ok",
-      "category": "type-selection",
-      "purpose": "Selects within DependencyClosureResult by ok, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1093:20"
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1094:51",
-      "owner": "FoldNotFoundFailure",
-      "key": "reason",
-      "category": "type-selection",
-      "purpose": "Selects within FoldFailure by reason, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1094:28"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:501:11"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:549:36",
@@ -1079,12 +1055,12 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:977:30"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1136:61",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:956:61",
       "owner": "InstalledLedgerResult",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within InstallLedgerResult by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1136:30"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:956:30"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts:74:42",

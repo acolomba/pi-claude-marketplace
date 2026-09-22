@@ -246,9 +246,9 @@ export function composeCascadeMemberRows(args: {
 
   for (const member of args.alreadyInstalled) {
     // RESV-05: every member reaching this loop is left-alone and ENABLED --
-    // `partitionAlreadyInstalled` routes a disabled member to the `installed`
-    // loop above instead (EDEP-03) -- so the skip is uniformly the benign
-    // idempotent one.
+    // the cascade's walk never skips a disabled record, which re-enables as a
+    // member of the `installed` loop above instead (EDEP-03) -- so the skip
+    // is uniformly the benign idempotent one.
     const reasons: ContentReason[] = ["already installed"];
     rows.push({
       status: "skipped",

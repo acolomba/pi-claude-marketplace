@@ -38,6 +38,19 @@
 // keeps a warm install entirely offline. Only a member carrying a REAL range
 // reaches the network, which is the exact read D-03-03 amended NFR-5 for.
 //
+// EDEP-03 changes ONE input of the walk and nothing else: a record the
+// snapshot marks disabled is not in `installedKeys`. The walk therefore reads
+// through a disabled dependency exactly as it reads through a never-installed
+// one -- its declarations are walked, every range declared for it on every
+// branch is merged (D-03-10), and it lands in `closure` in post order with the
+// `requiredBy` of the declaration that first reached it. One walk owns every
+// member's order, ranges and dependent; the phase array only partitions that
+// closure by the snapshot's record, so a disabled member re-enables through
+// its record and every other member installs fresh. A recorded ENABLED
+// dependency stays the wall RESV-05 makes it: the walk stops there before its
+// marketplace is checked (RESV-05 precedes D-03-08), so a declaration below a
+// live dependency is never explored.
+//
 // D-03-04 is accepted here rather than guarded. An already-installed member's
 // RECORDED version goes through `recordedVersionSatisfies`' normalization
 // ladder with no special case for this project's `hash-<12hex>` and
@@ -52,12 +65,13 @@
 // A DEPENDENCY the closure skipped as already-installed and LEFT ALONE never
 // becomes a `Phase`, so the reverse walk over `runPhases`'s own `executed`
 // array cannot reach its record or its artifacts, and no flag can make that
-// safer than it already is. A dependency the closure skipped as
-// already-installed but DISABLED is different (EDEP-03): it is
-// re-materialized through its own record by `buildReEnableMemberPhase`, so it
-// DOES become a `Phase`, and a failure anywhere in the cascade puts it back to
-// disabled rather than leaving it re-enabled with nothing to unwind it. The
-// REQUESTED plugin is different again: it is never skipped, so an install of
+// safer than it already is. A dependency recorded as DISABLED is different
+// (EDEP-03): the walk does not skip it -- `liveInstalledKeys` leaves its key
+// out of `installedKeys` -- so it is a closure member, re-materialized through
+// its own record by `buildReEnableMemberPhase`. It DOES become a `Phase`, and
+// a failure anywhere in the cascade puts it back to disabled rather than
+// leaving it re-enabled with nothing to unwind it. The REQUESTED plugin is
+// different again: it is never skipped, so an install of
 // a plugin that is already recorded reaches its phase and throws from inside
 // `do`. TR-02 then runs that phase's OWN undo, which would unstage the very
 // install the throw was reporting. `Phase.undo`'s contract states the remedy
@@ -261,18 +275,41 @@ export interface ResolvedCascadeMember extends ClosureMember {
   readonly fellBackToCurrentCopy?: true;
 }
 
-/** Every member's constraint resolved, or the first failure one produced. */
+/**
+ * One closure member with its constraint decided and the phase it becomes.
+ *
+ * `re-enable` carries the disabled record the partition read, so the phase
+ * re-materializes under the version and compatibility of the same object the
+ * partition decided on. `install` carries the pin the constraint chose.
+ */
+type CascadePhaseMember =
+  | { readonly kind: "install"; readonly member: ResolvedCascadeMember }
+  | {
+      readonly kind: "re-enable";
+      readonly member: ClosureMember;
+      readonly record: PluginInstallRecord;
+    };
+
+/** Every member decided, in the walk's post order, or the first failure one produced. */
 type MemberConstraintResolution =
-  | { readonly ok: true; readonly members: readonly ResolvedCascadeMember[] }
+  | { readonly ok: true; readonly members: readonly CascadePhaseMember[] }
   | { readonly ok: false; readonly failure: CascadeConstraintFailure };
 
 /** Inputs of one cascade run's constraint resolution. */
 interface MemberConstraintOptions {
   /** The caller's locked snapshot: the recorded versions and the catalog roots. */
   readonly state: ExtensionState;
-  /** The members this run would install, in closure order. */
+  /** `<plugin>@<marketplace>` of the plugin the user asked for. */
+  readonly rootKey: string;
+  /**
+   * Every member the walk returned, in post order. A member the snapshot
+   * records DISABLED re-enables through that record; the rest install fresh.
+   */
   readonly closure: readonly ClosureMember[];
-  /** The members RESV-05 skipped, which are CHECKED and never installed. */
+  /**
+   * The members RESV-05 skipped -- recorded and ENABLED -- which are CHECKED
+   * and never installed.
+   */
   readonly alreadyInstalled: readonly ClosureMember[];
   /**
    * The caller's per-member ledger options.
@@ -358,9 +395,9 @@ export interface CascadeMemberOutcome {
 
 /**
  * One dependency RESV-05 found already present, ENABLED, and left exactly as
- * it was. A disabled already-installed dependency is EDEP-03's own subcase --
- * `partitionAlreadyInstalled` routes it to `buildReEnableMemberPhase` instead,
- * so it never reaches this shape.
+ * it was. A disabled record is never in the walk's `installedKeys`, so the
+ * walk never skips it: it is a closure member `buildReEnableMemberPhase`
+ * re-materializes (EDEP-03), and it never reaches this shape.
  *
  * It never becomes a `Phase`, so it has no ledger summary to project. The two
  * fields here are what a row needs to say so: the key naming it, and the
@@ -674,50 +711,69 @@ function recordedVersionOf(state: ExtensionState, member: ClosureMember): string
 }
 
 /**
- * Whether the snapshot's record for a skipped member says it is disabled.
+ * The record a closure member re-enables through: the snapshot's record for
+ * it when that record is DISABLED (EDEP-03), else `undefined`.
  *
- * A member the snapshot records nothing for reads as not-disabled: there is no
- * record to be disabled, and the version projection beside this one already
- * reports that state as an absent version.
+ * The root is exempt exactly as it is from the walk's guards: its
+ * preconditions belong to the caller's materialization path, so a recorded
+ * root reaches `buildMemberPhase` and its own ledger reports it as already
+ * installed. Every other closure member is either recorded and disabled or
+ * not recorded at all -- a recorded ENABLED key is in `installedKeys`, and the
+ * walk never places one of those in `closure`.
  */
-function recordedDisabled(state: ExtensionState, member: ClosureMember): boolean {
+function disabledRecordOf(
+  state: ExtensionState,
+  rootKey: string,
+  member: ClosureMember,
+): PluginInstallRecord | undefined {
+  if (member.key === rootKey) {
+    return undefined;
+  }
+
   const record = state.marketplaces[member.marketplace]?.plugins[member.name];
-  return record !== undefined && isRecordedButDisabled(record);
+  return record !== undefined && isRecordedButDisabled(record) ? record : undefined;
 }
 
 /**
- * WR-11: every `<plugin>@<marketplace>` key the target scope records as
- * installed AND ENABLED -- the live-dependency set `resolveTransitiveReEnableSet`
- * seeds its own per-member walk with, so that walk stops at a live dependency
- * exactly as the OUTER walk does (RESV-05), instead of recursing past it into
- * declarations RESV-05 was deliberately built to leave unexplored. A DISABLED
- * record is excluded on purpose: the whole point of the walk this seeds is to
- * keep recursing through a disabled dependency to find what IT needs.
+ * The keys the walk stops at: the caller's recorded set minus every record
+ * the snapshot marks DISABLED.
+ *
+ * `walkDependencyEdge` returns without recursing on an `installedKeys` hit
+ * (RESV-05). A disabled record is a dependency this install turns back on
+ * (EDEP-03), and what IT declares has to be live for that to hold, so the
+ * walk reads through it like a never-installed member. A recorded ENABLED
+ * dependency keeps its key here and stays the wall RESV-05 makes it.
  */
-function enabledInstalledKeys(state: ExtensionState): ReadonlySet<string> {
-  const keys = new Set<string>();
+function liveInstalledKeys(
+  state: ExtensionState,
+  installedKeys: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const live = new Set(installedKeys);
   for (const [marketplaceName, record] of Object.entries(state.marketplaces)) {
     for (const [pluginName, pluginRecord] of Object.entries(record.plugins)) {
-      if (!isRecordedButDisabled(pluginRecord)) {
-        keys.add(`${pluginName}@${marketplaceName}`);
+      if (isRecordedButDisabled(pluginRecord)) {
+        live.delete(`${pluginName}@${marketplaceName}`);
       }
     }
   }
 
-  return keys;
+  return live;
 }
 
 /**
  * RESV-05: an already-installed dependency is CHECKED against the effective
  * constraint before anything else touches it.
  *
- * It is not in the closure, so this function itself never re-pins or
- * re-declares it -- whether or not it satisfies the constraint. The only
- * question here is whether what is already on disk is acceptable, which is
- * why no tag is ever queried for one: what COULD be fetched is not the
- * question being asked. `partitionAlreadyInstalled` decides separately, AFTER
- * this check passes, whether a disabled member becomes a `Phase` that
- * re-materializes it (EDEP-03) or stays untouched (RESV-05's general case).
+ * This function never re-pins or re-declares the member -- whether or not
+ * it satisfies the constraint. The only question here is whether what is
+ * already on disk is acceptable, which is why no tag is ever queried for one:
+ * what COULD be fetched is not the question being asked. It runs over the
+ * enabled members the walk skipped and over the disabled members the walk
+ * placed in the closure alike, so a disabled member's recorded version
+ * answers to the same constraint a live one does, however deep in the graph
+ * the declaration that constrains it sits (EDEP-03). Whether a disabled
+ * member then becomes a `Phase` that re-materializes it is
+ * `resolveMemberConstraints`'s partition, AFTER this check passes.
  *
  * A member the snapshot records no version for is left alone. It is not
  * installed in this state after all, so there is nothing for a constraint to
@@ -749,31 +805,57 @@ function checkInstalledMember(
 }
 
 /**
- * Turn every member's accumulated ranges into a pin, or report the first
- * constraint that cannot be satisfied.
+ * RESV-05 over every recorded member -- the enabled ones the walk skipped and
+ * the disabled ones it walked -- none of which needs a query.
+ */
+function checkRecordedMembers(
+  options: MemberConstraintOptions,
+): CascadeConstraintFailure | undefined {
+  const disabled = options.closure.filter(
+    (member) => disabledRecordOf(options.state, options.rootKey, member) !== undefined,
+  );
+  for (const member of [...options.alreadyInstalled, ...disabled]) {
+    const failure = checkInstalledMember(options.state, member);
+    if (failure !== undefined) {
+      return failure;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Decide every member's constraint, or report the first one that cannot be
+ * satisfied.
  *
- * The already-installed members are checked FIRST because that check makes no
- * query at all: a cascade that is going to fail on what is already on disk
- * never reaches a remote for the members it would otherwise have installed.
+ * The recorded members are checked FIRST because that check makes no query at
+ * all: a cascade that is going to fail on what is already on disk never
+ * reaches a remote for the members it would otherwise have installed. The
+ * never-installed members then resolve a pin, and the result keeps the walk's
+ * post order so a member's phase follows the phases of everything it needs.
  */
 async function resolveMemberConstraints(
   options: MemberConstraintOptions,
 ): Promise<MemberConstraintResolution> {
-  for (const member of options.alreadyInstalled) {
-    const failure = checkInstalledMember(options.state, member);
-    if (failure !== undefined) {
-      return { ok: false, failure };
-    }
+  const recordedFailure = checkRecordedMembers(options);
+  if (recordedFailure !== undefined) {
+    return { ok: false, failure: recordedFailure };
   }
 
-  const members: ResolvedCascadeMember[] = [];
+  const members: CascadePhaseMember[] = [];
   for (const member of options.closure) {
+    const record = disabledRecordOf(options.state, options.rootKey, member);
+    if (record !== undefined) {
+      members.push({ kind: "re-enable", member, record });
+      continue;
+    }
+
     const outcome = await resolveOneMember(options, member);
     if (outcome.kind === "failed") {
       return { ok: false, failure: outcome.failure };
     }
 
-    members.push(outcome.member);
+    members.push({ kind: "install", member: outcome.member });
   }
 
   return { ok: true, members };
@@ -871,276 +953,15 @@ function buildMemberPhase(
   };
 }
 
-/**
- * Split RESV-05's already-installed set into the disabled subset EDEP-03
- * re-enables and the rest RESV-05 still leaves alone.
- *
- * Reuses `recordedDisabled` -- the exact-key lookup the constraint check
- * already uses -- rather than re-deriving the predicate.
- */
-function partitionAlreadyInstalled(
-  state: ExtensionState,
-  alreadyInstalled: readonly ClosureMember[],
-): {
-  readonly toReEnable: readonly ClosureMember[];
-  readonly leftAlone: readonly ClosureMember[];
-} {
-  const toReEnable: ClosureMember[] = [];
-  const leftAlone: ClosureMember[] = [];
-  for (const member of alreadyInstalled) {
-    if (recordedDisabled(state, member)) {
-      toReEnable.push(member);
-    } else {
-      leftAlone.push(member);
-    }
-  }
-
-  return { toReEnable, leftAlone };
-}
-
-/**
- * A key no real declaration is expected to collide with: a distinctive
- * plugin/marketplace name pair, both halves passing the ordinary
- * `TOKEN_PATTERN` allowlist (`domain/dependencies.ts`) so `splitKey`
- * resolves it like any other key. Not a reserved namespace -- a scope whose
- * marketplace is literally named `cr04-synthetic-marketplace` would collide
- * with it, which this module accepts as a documented, vanishingly unlikely
- * risk rather than adding a reservation mechanism for one internal walk.
- */
-const TRANSITIVE_REENABLE_SYNTHETIC_ROOT_KEY =
-  "cr04-synthetic-reenable-root@cr04-synthetic-marketplace";
-
-/** `resolveTransitiveReEnableSet`'s outcome: the WR-11(b) never-installed subset travels alongside the re-enable set's own post-order, since both come from the same per-member walk. */
-type TransitiveReEnableResult =
-  | {
-      readonly ok: true;
-      readonly closure: readonly ClosureMember[];
-      readonly neverInstalled: readonly ClosureMember[];
-    }
-  | Extract<DependencyClosureResult, { readonly ok: false }>;
-
-/**
- * CR-04: `toReEnable`'s re-enable arm is not transitive on its own. The
- * closure walk stops at ANY already-installed hit (`collectInstalledKeys`
- * includes disabled records, and `walkDependencyEdge` returns WITHOUT
- * recursing on a hit), so a `toReEnable` member's OWN disabled dependencies
- * are never visited by the closure that found it -- LOAD-01 then holds it
- * back down again on the very next pass.
- *
- * For each `toReEnable` member this resolves its OWN closure, mirroring
- * `enable-disable.ts::resolveEnableCascade`'s identical technique, to
- * discover every transitively reachable member and keep the ones that are
- * themselves installed-and-disabled. WR-11(a): the walk is seeded with
- * `enabledInstalledKeys`, not an empty set -- it stops at a LIVE dependency
- * exactly as the OUTER walk does (RESV-05 precedes D-03-08 deliberately), so
- * a declaration reachable only through an already-enabled, already-installed
- * member is left unexplored here too, instead of failing this install over a
- * plugin nothing asked about. The whole disabled subset discovered this way
- * is then folded into ONE globally post-ordered list through a single further
- * walk from a synthetic root that "declares" every discovered member --
- * reusing the walk's own tested post-order and diamond dedup rather than a
- * hand-rolled merge of several independently-ordered sub-closures. The
- * synthetic root is exempt from the marketplace-known and already-installed
- * guards exactly as every real root is (`domain/dependency-closure.ts`'s
- * `isRoot` exemption), so it needs no entry in `knownMarketplaces` and no
- * state record.
- *
- * WR-11(b): a candidate `sub.closure` hands back that is NOT disabled has no
- * state record at all -- `enabledInstalledKeys` stops the walk at every
- * enabled candidate before it can reach `sub.closure` -- so it is a
- * never-installed member of the requested root's own transitive closure,
- * reached only through a disabled dependency this install is about to turn
- * back on. `outerClosureKeys` excludes one the OUTER walk already found
- * another way (a diamond also reachable through a live path), so the caller
- * can install it exactly once.
- *
- * A failure resolving any member's own closure propagates as the cascade's
- * own closure failure (fail-closed, D-05-07 precedent): a disabled
- * dependency reachable from the plugin being installed is not a fact this
- * install may silently leave unexplored.
- *
- * CR-07: the synthetic root's exemption does not extend to its CHILDREN --
- * a discovered member absent from its own marketplace manifest is tolerated
- * during discovery (walked there as its OWN root) but is a real `not-found`
- * as a child of the synthetic root. The fold below remaps that one case back
- * onto the real dependent that discovered the member.
- */
-/**
- * Classifies one candidate a member's own sub-closure surfaced, mutating
- * whichever accumulator it belongs to. Extracted from
- * `resolveTransitiveReEnableSet`'s discovery loop to keep that function
- * within the project's cognitive-complexity ceiling.
- */
-function classifyReEnableCandidate(args: {
-  readonly state: ExtensionState;
-  readonly member: ClosureMember;
-  readonly candidate: ClosureMember;
-  readonly discovered: Map<string, ClosureMember>;
-  readonly neverInstalled: Map<string, ClosureMember>;
-  readonly outerClosureKeys: ReadonlySet<string>;
-  readonly queue: ClosureMember[];
-}): void {
-  const { state, member, candidate, discovered, neverInstalled, outerClosureKeys, queue } = args;
-  if (candidate.key === member.key || discovered.has(candidate.key)) {
-    return;
-  }
-
-  if (recordedDisabled(state, candidate)) {
-    discovered.set(candidate.key, candidate);
-    queue.push(candidate);
-    return;
-  }
-
-  if (!outerClosureKeys.has(candidate.key) && !neverInstalled.has(candidate.key)) {
-    neverInstalled.set(candidate.key, candidate);
-  }
-}
-
-async function resolveTransitiveReEnableSet(
-  state: ExtensionState,
-  lookup: ClosureLookup,
-  knownMarketplaces: ReadonlySet<string>,
-  toReEnable: readonly ClosureMember[],
-  outerClosureKeys: ReadonlySet<string>,
-): Promise<TransitiveReEnableResult> {
-  if (toReEnable.length === 0) {
-    return { ok: true, closure: [], neverInstalled: [] };
-  }
-
-  const discovered = new Map<string, ClosureMember>(
-    toReEnable.map((member) => [member.key, member]),
-  );
-  const neverInstalled = new Map<string, ClosureMember>();
-  const installedKeys = enabledInstalledKeys(state);
-  const queue: ClosureMember[] = [...toReEnable];
-  for (let member = queue.shift(); member !== undefined; member = queue.shift()) {
-    const sub = await resolveDependencyClosure({
-      rootKey: member.key,
-      lookup,
-      installedKeys,
-      knownMarketplaces,
-    });
-    if (!sub.ok) {
-      return sub;
-    }
-
-    for (const candidate of sub.closure) {
-      classifyReEnableCandidate({
-        state,
-        member,
-        candidate,
-        discovered,
-        neverInstalled,
-        outerClosureKeys,
-        queue,
-      });
-    }
-  }
-
-  if (discovered.size === toReEnable.length) {
-    // No member's own closure surfaced a transitively disabled dependency
-    // beyond the direct set the caller already found in the walk's own
-    // post order -- nothing to re-fold.
-    return { ok: true, closure: toReEnable, neverInstalled: [...neverInstalled.values()] };
-  }
-
-  const folded = await resolveDependencyClosure({
-    rootKey: TRANSITIVE_REENABLE_SYNTHETIC_ROOT_KEY,
-    lookup: (subject) =>
-      subject.key === TRANSITIVE_REENABLE_SYNTHETIC_ROOT_KEY
-        ? Promise.resolve({
-            kind: "found" as const,
-            dependencies: [...discovered.values()].map((member) => ({
-              name: member.name,
-              marketplace: member.marketplace,
-            })),
-          })
-        : lookup(subject),
-    // Matches the discovery loop's own `installedKeys` above: the fold
-    // re-walks each discovered member's declared children through the SAME
-    // `lookup`, so an empty set here would let it recurse PAST a live
-    // dependency the discovery loop deliberately stopped at (WR-11(a)).
-    installedKeys,
-    knownMarketplaces,
-  });
-  if (!folded.ok) {
-    // CR-07: a discovered member is `not-found` here only as a CHILD of the
-    // synthetic root, where the catalog-absent guard is not exempt; the
-    // discovery loop above already walked the same member as its OWN root,
-    // where the guard IS exempt, and returned `ok: true` for it. Every OTHER
-    // failure a fold could produce -- `cycle`, `marketplace-not-added`, or a
-    // `not-found` belonging to a deeper descendant -- is already caught
-    // during that same discovery call, which validates each discovered
-    // member's FULL closure with the IDENTICAL lookup and `installedKeys`
-    // before the fold ever runs. Report the failure against the real
-    // dependent that discovered the member instead of leaking the synthetic
-    // key into a user-visible row.
-    assertFoldedNotFoundFromSyntheticChild(folded);
-    const declarer = discovered.get(folded.key);
-    assertDeclaredBySyntheticRoot(declarer);
-    return { ...folded, requiredBy: declarer.requiredBy };
-  }
-
-  return {
-    ok: true,
-    closure: folded.closure.filter(
-      (member) => member.key !== TRANSITIVE_REENABLE_SYNTHETIC_ROOT_KEY,
-    ),
-    neverInstalled: [...neverInstalled.values()],
-  };
-}
-
-type FoldFailure = Extract<DependencyClosureResult, { readonly ok: false }>;
-type FoldNotFoundFailure = Extract<FoldFailure, { readonly reason: "not-found" }>;
-
-/**
- * `folded` fails only when a DIRECT child of the synthetic root -- one of
- * `discovered.values()` -- is itself absent from its own marketplace
- * manifest: every other failure reason is already excluded by the discovery
- * loop's own validation (see the call site's comment). Evidence-backed type
- * narrowing only; the invariant is established by the caller, not by a
- * runtime check here.
- */
-function assertFoldedNotFoundFromSyntheticChild(
-  _folded: FoldFailure,
-): asserts _folded is FoldNotFoundFailure {
-  // Evidence-backed type narrowing only; the invariant is established by the caller.
-}
-
-/**
- * `folded.key` is a direct child the synthetic root itself declared, and its
- * only declared children are `discovered.values()`, so the key is always a
- * member of `discovered` -- and every member `discovered` holds is a
- * non-root edge somewhere in a real walk, so it always carries a real
- * `requiredBy`. Evidence-backed type narrowing only; the invariant is
- * established by the discovery loop above, not by a runtime check here.
- */
-function assertDeclaredBySyntheticRoot(
-  _declarer: ClosureMember | undefined,
-): asserts _declarer is ClosureMember & { readonly requiredBy: string } {
-  // Evidence-backed type narrowing only; the invariant is established by the caller.
-}
-
-/**
- * `partitionAlreadyInstalled` places a member in `toReEnable` only when
- * `recordedDisabled` has already proved its record exists and is disabled.
- * Evidence-backed type narrowing only; the invariant is established by the
- * caller.
- */
-function assertDisabledRecordExists(
-  _record: PluginInstallRecord | undefined,
-): asserts _record is PluginInstallRecord {
-  // Evidence-backed type narrowing only; the invariant is established by the caller.
-}
-
 type InstalledLedgerResult = Extract<InstallLedgerResult, { readonly kind: "installed" }>;
 
 /**
- * `assertDisabledRecordExists` already proved this member's marketplace slot
- * is present in `options.state` -- the record was read out of it -- and the
- * ledger's sole `marketplace-absent` producer rereads that identical slot
- * synchronously, so this re-enable call path cannot produce the absent arm.
- * Evidence-backed type narrowing only, mirroring `enable-disable.ts`'s
+ * The partition read this member's record out of `options.state.marketplaces`,
+ * so its marketplace slot is present in the snapshot; a member's ledger adds a
+ * slot when it is missing and never removes one, and the ledger's sole
+ * `marketplace-absent` producer reads that same slot first. This re-enable
+ * call path therefore cannot produce the absent arm. Evidence-backed type
+ * narrowing only, mirroring `enable-disable.ts`'s
  * `assertRecordedStateLedgerInstalled`; the invariant is established by the
  * caller, not by a runtime check here.
  */
@@ -1158,9 +979,11 @@ function assertReEnableLedgerInstalled(
  * stays untouched (`buildMemberPhase` is never built for it, and it never
  * becomes a `Phase` at all).
  *
- * `do` calls `seam.runInstallLedger` with the caller's own per-member options
- * builder, overridden with `pinVersionOverride` set to the record's own
- * recorded version and `allowExistingRecord: true` -- the same argument set
+ * `record` is the disabled record the partition read for this member, so
+ * `do` re-materializes under the version and compatibility that decided the
+ * partition. It calls `seam.runInstallLedger` with the caller's own per-member
+ * options builder, overridden with `pinVersionOverride` set to the record's
+ * own recorded version and `allowExistingRecord: true` -- the same argument set
  * `runEnableBranch` and `materializePromotedRecord` already pass, now at
  * another call site. `provenance` is never touched here: the builder's own
  * `"dependency"` value for a non-root member is what the ledger's state phase
@@ -1182,13 +1005,12 @@ function buildReEnableMemberPhase(
   seam: InstallCascadeLedgerSeam,
   transaction: InstallLedgerTransaction,
   member: ClosureMember,
+  record: PluginInstallRecord,
 ): Phase<CascadeRun> {
   return {
     name: member.key,
     do: async (run) => {
       run.attempting = member.key;
-      const record = options.state.marketplaces[member.marketplace]?.plugins[member.name];
-      assertDisabledRecordExists(record);
       const result = await seam.runInstallLedger(
         options.state,
         options.locations,
@@ -1290,52 +1112,29 @@ function toCascadeResult(
 export async function runInstallCascade(
   options: InstallCascadeOptions,
 ): Promise<InstallCascadeResult> {
+  // EDEP-03: a disabled record is not a wall. The walk reads through it,
+  // so its own dependencies -- disabled or never installed -- are members of
+  // this closure with their ranges merged across every declaring branch, and
+  // a declaration it cannot resolve fails this install naming it as the
+  // dependent.
   const closure = await resolveDependencyClosure({
     rootKey: options.rootKey,
     lookup: options.lookup,
-    installedKeys: options.installedKeys,
+    installedKeys: liveInstalledKeys(options.state, options.installedKeys),
     knownMarketplaces: options.knownMarketplaces,
   });
   if (!closure.ok) {
     return { kind: "closure-failed", failure: closure };
   }
 
-  // EDEP-03: the disabled subset of `alreadyInstalled` re-enables through its
-  // own record; the rest stays RESV-05's untouched skip.
-  const { toReEnable, leftAlone } = partitionAlreadyInstalled(
-    options.state,
-    closure.alreadyInstalled,
-  );
-  // CR-04: `toReEnable` alone is not transitive -- fold in every disabled
-  // member reachable FROM those members that the outer walk's
-  // already-installed wall hid. WR-11(b): the same walk also surfaces every
-  // NEVER-installed member reachable only through one of those disabled
-  // dependencies, excluding one the outer walk already found another way
-  // (`outerClosureKeys`).
-  const outerClosureKeys = new Set(
-    [...closure.closure, ...closure.alreadyInstalled].map((member) => member.key),
-  );
-  const transitiveReEnable = await resolveTransitiveReEnableSet(
-    options.state,
-    options.lookup,
-    options.knownMarketplaces,
-    toReEnable,
-    outerClosureKeys,
-  );
-  if (!transitiveReEnable.ok) {
-    return { kind: "closure-failed", failure: transitiveReEnable };
-  }
-
   // RESV-03 / RESV-05: decided here, between the walk and the phase array, so
   // every constraint verdict lands while nothing is materialized. ONE memo is
   // allocated per run and threaded through every member, so a graph whose
-  // dependencies share a repository lists that repository once. WR-11(b): the
-  // never-installed members `resolveTransitiveReEnableSet` discovered join the
-  // outer closure here, so they resolve a pin and install exactly like any
-  // other cascade member.
+  // dependencies share a repository lists that repository once.
   const constraints = await resolveMemberConstraints({
     state: options.state,
-    closure: [...closure.closure, ...transitiveReEnable.neverInstalled],
+    rootKey: options.rootKey,
+    closure: closure.closure,
     alreadyInstalled: closure.alreadyInstalled,
     ledgerOptionsFor: options.ledgerOptionsFor,
     tagProbe: options.tagProbe ?? probeDependencyTags,
@@ -1361,33 +1160,23 @@ export async function runInstallCascade(
     members: [],
     materialized: new Set<string>(),
   };
-  // WR-11(b): a never-installed member discovered THROUGH a disabled
-  // dependency must be live before that dependency's own re-enable phase
-  // runs, so its member phase goes FIRST. The re-enable phases follow, ahead
-  // of the primary closure's own members, so a dependency is live before the
-  // plugin that needs it materializes.
-  const neverInstalledKeys = new Set(transitiveReEnable.neverInstalled.map((member) => member.key));
-  const discoveredMemberPhases = constraints.members
-    .filter((member) => neverInstalledKeys.has(member.key))
-    .map((member) => buildMemberPhase(options, seam, transaction, member));
-  const primaryMemberPhases = constraints.members
-    .filter((member) => !neverInstalledKeys.has(member.key))
-    .map((member) => buildMemberPhase(options, seam, transaction, member));
-  const phases: readonly Phase<CascadeRun>[] = [
-    ...discoveredMemberPhases,
-    ...transitiveReEnable.closure.map((member) =>
-      buildReEnableMemberPhase(options, seam, transaction, member),
-    ),
-    ...primaryMemberPhases,
-  ];
-  // RESV-05 / RESV-06: projected from the walk's own left-alone list, not from
+  // One phase per closure member, in the walk's post order: a dependency is
+  // live -- installed or re-enabled -- before the member that needs it runs.
+  const phases: readonly Phase<CascadeRun>[] = constraints.members.map((entry) =>
+    entry.kind === "re-enable"
+      ? buildReEnableMemberPhase(options, seam, transaction, entry.member, entry.record)
+      : buildMemberPhase(options, seam, transaction, entry.member),
+  );
+  // RESV-05 / RESV-06: projected from the walk's own skipped list, not from
   // the ledger -- these members never reach a phase, so the run has nothing to
   // record about them. They are carried out of the cascade so the block can
   // report them as left alone rather than omitting them entirely.
-  const alreadyInstalled: readonly CascadeSkippedMember[] = leftAlone.map((member) => ({
-    key: member.key,
-    version: recordedVersionOf(options.state, member),
-  }));
+  const alreadyInstalled: readonly CascadeSkippedMember[] = closure.alreadyInstalled.map(
+    (member) => ({
+      key: member.key,
+      version: recordedVersionOf(options.state, member),
+    }),
+  );
 
   return toCascadeResult(options, await transaction.runPhases(phases, run), run, alreadyInstalled);
 }
