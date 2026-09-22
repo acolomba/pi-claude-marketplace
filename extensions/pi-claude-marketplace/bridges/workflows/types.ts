@@ -154,7 +154,11 @@ export type PreparedWorkflowsStaging = PreparedWorkflowsNoop | PreparedWorkflows
 /** Short-circuit branch: nothing admitted, no previous names. Commit is a no-op. */
 export interface PreparedWorkflowsNoop {
   readonly kind: "noop";
-  readonly result: StageWorkflowsCommitResult;
+  /** Stages nothing, so the two name lists are the empty tuple; warnings still flow through. */
+  readonly result: StageWorkflowsCommitResult & {
+    readonly stagedNames: readonly [];
+    readonly unownedNames: readonly [];
+  };
 }
 
 /** Staged branch: per-workflow envelopes written under `stagingRoot`, awaiting commit. */

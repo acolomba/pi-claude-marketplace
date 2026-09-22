@@ -96,9 +96,10 @@ const WORKFLOWS_STAGING_MAX_AGE_MS =
  *      `<name>: <message>` leaks and never throws; the next pass retries.
  *
  * Nothing here throws past a single entry (WR-02 aside from the initial
- * `readdir`). Both call sites wrap the sweep in a bare `catch {}` per D-19-01,
- * so an entry-level throw would have silently ended the pass for every
- * remaining aged tree -- the exact accumulation this sweeper exists to stop.
+ * `readdir`). Both call sites debug-log the outcome and never surface it to
+ * the user (D-19-01), so an entry-level throw would have silently ended the
+ * pass for every remaining aged tree -- the exact accumulation this sweeper
+ * exists to stop.
  */
 export async function garbageCollectWorkflowsStaging(
   locations: Pick<ScopedLocations, "workflowsStagingDir" | "workflowsHomeDir">,

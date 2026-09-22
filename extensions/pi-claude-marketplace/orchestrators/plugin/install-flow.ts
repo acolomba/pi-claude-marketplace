@@ -317,13 +317,20 @@ async function collectPostCommitWarnings(
 
   // WLIF-01: sweep workflow staging trees a previous run abandoned. Installing
   // is what creates them, so the install side has to sweep or a machine that
-  // never uninstalls never would. Silent by design (D-19-01): the leak strings
-  // are discarded and no row is pushed, because a cleanup the user did not ask
-  // for does not narrate itself.
+  // never uninstalls never would. Debug-logged only (D-19-01): no row is
+  // pushed, because a cleanup the user did not ask for does not narrate itself.
   try {
-    await garbageCollectWorkflowsStaging(installCtx.locations);
-  } catch {
+    const leaks = await garbageCollectWorkflowsStaging(installCtx.locations);
+    if (leaks.length > 0) {
+      hookDebugLog(
+        `install: workflows staging GC left ${leaks.length.toString()} tree(s) for ${plugin}@${marketplace}: ${leaks.join("; ")}`,
+      );
+    }
+  } catch (err) {
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+    hookDebugLog(
+      `install: workflows staging GC failed for ${plugin}@${marketplace}: ${errorMessage(err)}`,
+    );
   }
 
   return warnings;

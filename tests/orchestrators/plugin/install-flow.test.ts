@@ -59,6 +59,7 @@ import { withLockedStateTransaction } from "../../../extensions/pi-claude-market
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
@@ -10434,12 +10435,12 @@ test("PI-14: a containment refusal from the workflows undo propagates verbatim",
 // WLIF-01: the install-side staging sweep.
 //
 // Installing is what CREATES an orphaned staging tree, so the install side has
-// to sweep or a machine that never uninstalls never would. The sweep is silent
-// and its failure is swallowed, so both cases assert on disk state and on the
-// notification staying exactly what it would have been.
-// ---------------------------------------------------------------------------
+// to sweep or a machine that never uninstalls never would. The sweep is never
+// user-facing and its failure is swallowed, but it is debug-logged, so cases
+// assert on disk state, on the notification staying exactly what it would
+// have been, and on what `hookDebugLog` recorded.
 
-test("WLIF-01: installing removes an abandoned staging tree and spares a live one", async () => {
+test("WLIF-01: installing removes an abandoned staging tree and spares a live one", async (t) => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-staging-sweep-"));
     try {
@@ -10459,6 +10460,7 @@ test("WLIF-01: installing removes an abandoned staging tree and spares a live on
       await utimes(abandoned, backdated, backdated);
       await mkdir(path.join(locations.workflowsStagingDir, "in-flight"), { recursive: true });
       const { ctx, pi } = makeCtx();
+      const logged = captureDebugLog(t);
 
       // act
       const outcome = await installPlugin({
@@ -10473,13 +10475,14 @@ test("WLIF-01: installing removes an abandoned staging tree and spares a live on
       // assert
       assert.equal(outcome.status, "installed");
       assert.deepStrictEqual(await entriesOf(locations.workflowsStagingDir), ["in-flight"]);
+      assert.deepStrictEqual(logged, [], "a clean sweep with no leaks logs nothing");
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
-test("WLIF-01: an install succeeds unchanged when the staging sweep throws", async () => {
+test("WLIF-01: an install succeeds unchanged when the staging sweep throws", async (t) => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-staging-sweep-throws-"));
     try {
@@ -10496,6 +10499,7 @@ test("WLIF-01: an install succeeds unchanged when the staging sweep throws", asy
       await mkdir(locations.workflowsHomeDir, { recursive: true });
       await writeFile(locations.workflowsStagingDir, "not a directory");
       const { ctx, pi, notifications } = makeCtx();
+      const logged = captureDebugLog(t);
 
       // act
       const outcome = await installPlugin({
@@ -10507,7 +10511,8 @@ test("WLIF-01: an install succeeds unchanged when the staging sweep throws", asy
         plugin: "hello",
       });
 
-      // assert -- the swallow is the point: the sweep failure is invisible.
+      // assert -- the swallow is the point: the sweep failure is invisible to
+      // the user, though it is debug-logged.
       assert.equal(outcome.status, "installed");
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
@@ -10516,6 +10521,61 @@ test("WLIF-01: an install succeeds unchanged when the staging sweep throws", asy
         "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
       );
       assert.equal(await readFile(locations.workflowsStagingDir, "utf8"), "not a directory");
+      assert.deepStrictEqual(logged, [
+        `[hooks] install: workflows staging GC failed for hello@mp: ENOTDIR: not a directory, scandir '${locations.workflowsStagingDir}'`,
+      ]);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-01: install debug-logs a leak when the staging sweep cannot remove an abandoned tree", async (t) => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-staging-sweep-leak-"));
+    try {
+      // arrange -- the abandoned tree itself is otherwise perfectly sweepable;
+      // making its PARENT read-only denies the `rm()` the write permission it
+      // needs to unlink the entry, so the sweep records a leak instead of
+      // throwing (mirrors the clone-GC rm-leak case).
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hello",
+      });
+      const abandoned = path.join(locations.workflowsStagingDir, "abandoned");
+      await mkdir(abandoned, { recursive: true });
+      await writeFile(path.join(abandoned, "hello_greet.json"), "{}\n");
+      const backdated = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+      await utimes(abandoned, backdated, backdated);
+      await chmod(locations.workflowsStagingDir, 0o500);
+      const { ctx, pi, notifications } = makeCtx();
+      const logged = captureDebugLog(t);
+
+      // act
+      let outcome;
+      try {
+        outcome = await installPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+        });
+      } finally {
+        await chmod(locations.workflowsStagingDir, 0o700);
+      }
+
+      // assert -- the leak never reaches the user-facing notification.
+      assert.equal(outcome.status, "installed");
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, undefined);
+      assert.deepStrictEqual(logged, [
+        `[hooks] install: workflows staging GC left 1 tree(s) for hello@mp: abandoned: EACCES: permission denied, rmdir '${abandoned}'`,
+      ]);
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }

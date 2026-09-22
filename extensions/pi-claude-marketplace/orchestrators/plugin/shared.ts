@@ -1474,8 +1474,8 @@ export function surfaceDiscoveryWarnings(
  * set and not in the second.
  *
  * A name present in BOTH sets retires nothing; that is the ordinary re-place.
- * An empty difference stamps nothing, which is what keeps an unaffected row's
- * bytes identical to what it rendered before this token existed.
+ * An empty difference stamps nothing, which is what keeps an unaffected row
+ * byte-identical (NREG-01).
  *
  * One boolean, not the names: the row states that a command lingers and names
  * the remedy; which command it was is not something the operator can act on

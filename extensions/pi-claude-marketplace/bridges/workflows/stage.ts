@@ -152,9 +152,10 @@ async function foreignOccupiedTargets(
  * Per-file rename to the saved directory is deferred to
  * `commitPreparedWorkflows`.
  *
- * The five-step ordering is the contract, matching the commands analog:
- * discover, collision assert, materialization gate, staging root, per-file
- * write.
+ * The five-step ordering is the contract: discover, collision assert,
+ * materialization gate, staging root, per-file write. The collision assert is
+ * where this bridge parts from the commands analog (`discover.ts` lists the
+ * divergences); the other steps match it.
  *
  * The collision assert runs over the FULL verdict array of every discovered
  * record, before anything is deduped or filtered. `assertNoWorkflowNameCollisions`
@@ -196,9 +197,9 @@ export async function prepareStageWorkflows(
     return {
       kind: "noop",
       result: {
-        stagedNames: Object.freeze<string[]>([]),
+        stagedNames: Object.freeze([] as const),
         warnings: Object.freeze([...discoverWarnings]),
-        unownedNames: Object.freeze<string[]>([]),
+        unownedNames: Object.freeze([] as const),
       },
     };
   }

@@ -530,36 +530,36 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts:41:36"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:974:38",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:982:38",
       "owner": "UninstallPluginOperation.opts",
       "key": "notifications",
       "category": "type-refinement",
       "purpose": "Narrows notifications at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:974:11"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:982:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:974:55",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:982:55",
       "owner": "UninstallPluginOperation.opts.notifications",
       "key": "mode",
       "category": "type-refinement",
       "purpose": "Narrows mode at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:974:11"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:982:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:985:38",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:993:38",
       "owner": "configuredUninstallPlugin.opts",
       "key": "notifications",
       "category": "type-refinement",
       "purpose": "Narrows notifications at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:985:11"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:993:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:985:55",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:993:55",
       "owner": "configuredUninstallPlugin.opts.notifications",
       "key": "mode",
       "category": "type-refinement",
       "purpose": "Narrows mode at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:985:11"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:993:11"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:833:42",

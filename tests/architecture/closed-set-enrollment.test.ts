@@ -111,7 +111,7 @@ test("SCN-F025: Dependency is the closed 3-member set softDepMarkers branches on
   assert.deepStrictEqual(
     UNENROLLED_DEPENDENCIES,
     [],
-    "SCN-F025: a Dependency member outside the enrolled pair is a compile failure at UNENROLLED_DEPENDENCIES, not a value this array could ever hold.",
+    "SCN-F025: a Dependency member outside the enrolled triple is a compile failure at UNENROLLED_DEPENDENCIES, not a value this array could ever hold.",
   );
   assert.strictEqual(
     parameterCount,
@@ -120,7 +120,7 @@ test("SCN-F025: Dependency is the closed 3-member set softDepMarkers branches on
   );
 });
 
-test("SCN-F025: softDepMarkers emits both markers in canonical agents-before-mcp order", () => {
+test("SCN-F025: softDepMarkers emits the agents and mcp markers in canonical agents-before-mcp order", () => {
   // arrange
   const probe = {
     piSubagentsLoaded: false,

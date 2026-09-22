@@ -169,6 +169,17 @@ const unstageWorkflowFailureWithoutReason: UnstageWorkflowFailure = {
 };
 void unstageWorkflowFailureWithoutReason;
 
+const preparedWorkflowsNoopWithStagedNames: PreparedWorkflowsNoop = {
+  kind: "noop",
+  result: {
+    // @ts-expect-error a noop preparation's result reports the empty tuple, not a staged name
+    stagedNames: ["acme:greet"],
+    warnings: [],
+    unownedNames: [],
+  },
+};
+void preparedWorkflowsNoopWithStagedNames;
+
 // @ts-expect-error a staged preparation always carries its staging root
 const preparedWorkflowsStagedWithoutRoot: PreparedWorkflowsStaged = {
   kind: "staged",

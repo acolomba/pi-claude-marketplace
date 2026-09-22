@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -44,6 +45,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
@@ -4852,11 +4854,11 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
 //
 // Workflow staging trees live under the home directory rather than under any
 // scope root, so nothing else in the post-uninstall cleanup reaches them. The
-// sweep is silent and its failure is swallowed, so both cases assert on disk
-// state and on the notification staying exactly what it would have been.
-// ---------------------------------------------------------------------------
+// sweep is never user-facing: a failure or a leak is only debug-logged, so
+// cases assert on disk state, on the notification staying exactly what it
+// would have been, and on what `hookDebugLog` recorded.
 
-test("WLIF-01: uninstalling removes an abandoned staging tree and spares a live one", async () => {
+test("WLIF-01: uninstalling removes an abandoned staging tree and spares a live one", async (t) => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-staging-sweep-"));
     try {
@@ -4871,6 +4873,7 @@ test("WLIF-01: uninstalling removes an abandoned staging tree and spares a live 
       await utimes(abandoned, backdated, backdated);
       await mkdir(path.join(locations.workflowsStagingDir, "in-flight"), { recursive: true });
       const { ctx, pi } = makeCtx();
+      const logged = captureDebugLog(t);
 
       // act
       await uninstallWithFreshOwner({
@@ -4884,13 +4887,14 @@ test("WLIF-01: uninstalling removes an abandoned staging tree and spares a live 
 
       // assert
       assert.deepStrictEqual((await readdir(locations.workflowsStagingDir)).sort(), ["in-flight"]);
+      assert.deepStrictEqual(logged, [], "a clean sweep with no leaks logs nothing");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 });
 
-test("WLIF-01: an uninstall succeeds unchanged when the staging sweep throws", async () => {
+test("WLIF-01: an uninstall succeeds unchanged when the staging sweep throws", async (t) => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-staging-sweep-throws-"));
     try {
@@ -4903,6 +4907,7 @@ test("WLIF-01: an uninstall succeeds unchanged when the staging sweep throws", a
       await mkdir(locations.workflowsHomeDir, { recursive: true });
       await writeFile(locations.workflowsStagingDir, "not a directory");
       const { ctx, pi, notifications } = makeCtx();
+      const logged = captureDebugLog(t);
 
       // act
       await uninstallWithFreshOwner({
@@ -4914,7 +4919,8 @@ test("WLIF-01: an uninstall succeeds unchanged when the staging sweep throws", a
         plugin: "hello",
       });
 
-      // assert -- the swallow is the point: the sweep failure is invisible.
+      // assert -- the swallow is the point: the sweep failure is invisible to
+      // the user, though it is debug-logged.
       assert.equal(await pathExists(seeded.workflowEnvelope), false, "envelope removed");
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "warning");
@@ -4923,6 +4929,54 @@ test("WLIF-01: an uninstall succeeds unchanged when the staging sweep throws", a
         "A plugin operation needs attention.\n\n● mp [project]\n  ○ hello v0.0.1 (uninstalled) {stale workflow command}\n\n/reload to pick up changes",
       );
       assert.equal(await readFile(locations.workflowsStagingDir, "utf8"), "not a directory");
+      assert.deepStrictEqual(logged, [
+        `[hooks] uninstall: workflows staging GC failed for hello@mp: ENOTDIR: not a directory, scandir '${locations.workflowsStagingDir}'`,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-01: uninstall debug-logs a leak when the staging sweep cannot remove an abandoned tree", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-staging-sweep-leak-"));
+    try {
+      // arrange -- the abandoned tree itself is otherwise perfectly sweepable;
+      // making its PARENT read-only denies the `rm()` the write permission it
+      // needs to unlink the entry, so the sweep records a leak instead of
+      // throwing (mirrors the clone-GC rm-leak case).
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const abandoned = path.join(locations.workflowsStagingDir, "abandoned");
+      await mkdir(abandoned, { recursive: true });
+      await writeFile(path.join(abandoned, "hello_greet.json"), "{}\n");
+      const backdated = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+      await utimes(abandoned, backdated, backdated);
+      await chmod(locations.workflowsStagingDir, 0o500);
+      const { ctx, pi, notifications } = makeCtx();
+      const logged = captureDebugLog(t);
+
+      // act
+      try {
+        await uninstallWithFreshOwner({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+        });
+      } finally {
+        await chmod(locations.workflowsStagingDir, 0o700);
+      }
+
+      // assert -- the leak never reaches the user-facing notification.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "warning");
+      assert.deepStrictEqual(logged, [
+        `[hooks] uninstall: workflows staging GC left 1 tree(s) for hello@mp: abandoned: EACCES: permission denied, rmdir '${abandoned}'`,
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
