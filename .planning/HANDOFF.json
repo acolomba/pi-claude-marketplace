@@ -1,0 +1,115 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-09-22T21:59:00.183Z",
+  "phase": "117",
+  "phase_name": "Measured `agent()` failure evidence (milestone workflows-replay, archived)",
+  "phase_dir": ".planning/workstreams/workflows",
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": 1,
+      "name": "Load the host workflow engine in scripts/pi.sh",
+      "status": "done",
+      "commit": "d467c09e"
+    },
+    {
+      "id": 2,
+      "name": "Live UAT of code-modernization workflows against a scoped legacy/demo slice",
+      "status": "done",
+      "commit": null
+    },
+    {
+      "id": 3,
+      "name": "Record broken-window ledger entries 83 (agentType) and 84 (unproven output)",
+      "status": "done",
+      "commit": "c940bffc"
+    },
+    {
+      "id": 4,
+      "name": "Fix the agentType gap: declaredAgentName + aliases, 52 test pins, compat doc",
+      "status": "done",
+      "commit": "c940bffc"
+    },
+    {
+      "id": 5,
+      "name": "Merge main (PR #210 + 0.19.0) and follow workflows into the component lists",
+      "status": "done",
+      "commit": "b795979f"
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 6,
+      "name": "Close ledger 84: add a second provider to tmp/pi-uat/agent and re-run one workflow",
+      "status": "not_started"
+    },
+    {
+      "id": 7,
+      "name": "Decide the version question: main released 0.19.0 and this branch was already 0.19.0",
+      "status": "not_started"
+    },
+    {
+      "id": 8,
+      "name": "Open the PR for features/workflow",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [
+    {
+      "description": "Workflow engine subagents are offered NO tools (not even structured_output), so workflow OUTPUT quality is unproven. Ledger entry 84. Main-session tool calls work fine on the same provider, so it is the engine<->pi child-session boundary.",
+      "type": "external",
+      "workaround": "None. Five candidate causes already ruled out by experiment (tool-search deferral, model choice, the agentType allowlist, customTools API drift, our bridge). Needs a second provider to isolate."
+    }
+  ],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {
+      "action": "Add an Anthropic API key to tmp/pi-uat/agent (auth.json currently holds openai-codex only)",
+      "context": "The only way left to isolate ledger 84: if child sessions get tools under a second provider it is codex-specific, if not it is an engine<->pi bug to file upstream.",
+      "blocking": false
+    },
+    {
+      "action": "Decide whether features/workflow needs a version bump before the PR",
+      "context": "main released 0.19.0 while this branch was already at 0.19.0, so package.json / EXTENSION_VERSION / sonar auto-merged with no conflict and the unreleased workflows work now sits under a released number. Nothing flagged it.",
+      "blocking": false
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "Split the agent identity in two: the file keeps its pi-claude-marketplace- basename, a new declaredAgentName() supplies the frontmatter name as <plugin>:<agent>",
+      "rationale": "One value was serving both the AG-5 ownership marker (filename) and the name both consumers resolve (frontmatter). Only the latter had to change, so the ownership marker and the AGENT-01 migration seam stay untouched.",
+      "phase": "117"
+    },
+    {
+      "decision": "Use a literal ':' rather than commandNamespaceSeparator()",
+      "rationale": "That helper spells a dot on Windows because command and skill names become filenames. The declared agent name never reaches the filesystem, and a Windows dot would miss the agentType a workflow script names exactly as the old flat form did.",
+      "phase": "117"
+    },
+    {
+      "decision": "Carry the old flat name as an `aliases` frontmatter entry",
+      "rationale": "pi-subagents resolves aliases (agents.ts:1525), so the rename is non-breaking for existing references. The engine ignores aliases, which is correct: nothing ever addressed the flat name as an agentType.",
+      "phase": "117"
+    },
+    {
+      "decision": "Update the 52 merge/rename test pins per-site rather than by sweep",
+      "rationale": "The flat-name occurrences are not interchangeable. Emitter-output fixtures must move; legacy oldBytes/previousBytes fixtures, index entries and targetPaths must stay flat. A regex would have rewritten the migration tests' own inputs to match their expectations.",
+      "phase": "117"
+    },
+    {
+      "decision": "Give the WR-06 advisory test a row instead of deleting the tally from its expectation",
+      "rationale": "main's #209 suppresses the success line on an empty result. With no tally the test would no longer prove the ordering its name claims ('folds advisory lines before the tally').",
+      "phase": "117"
+    }
+  ],
+  "uncommitted_files": [
+    " M .claude/settings.json",
+    " M .codex/config.toml",
+    "?? .mcp.json",
+    "?? .planning/workstreams/workflows/.verification-ledger.json"
+  ],
+  "next_action": "Decide the version question and open the PR for features/workflow; ledger 84 can close later and does not gate the PR.",
+  "context_notes": "The milestone is archived and all nine phases are complete; this session was PR-prep, not phase execution. Three commits sit on top of the archived milestone: d467c09e (pi.sh loads the engine), c940bffc (the agentType fix), b795979f (merge of main). npm run check was green immediately before the merge commit. The uncommitted files are deliberate: the codegraph wiring is per-machine and never staged. IMPORTANT on verification: report a gate's result from CHECK_EXIT written into the log, never from a tool-reported exit code -- that misread npm run check twice this session, in opposite directions."
+}
