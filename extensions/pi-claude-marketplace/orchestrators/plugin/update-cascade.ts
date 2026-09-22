@@ -61,8 +61,7 @@ function cascadeSkipSeverity(
   return skipSeverity(reasons);
 }
 
-// fallow-ignore-next-line unused-export -- production reaches this through `outcomeToCascadePluginMessage`'s `skipped` arm in the same module; exported so the doc-agreement gate drives the held-row token through the REAL composer rather than a copied literal.
-export function projectSkippedOutcome(
+function projectSkippedOutcome(
   target: UpdateCascadeTarget,
   outcome: PluginUpdateSkippedOutcome,
   cardinality: "single" | "plural",

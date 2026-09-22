@@ -20,6 +20,10 @@
 // `CascadeConstraintFailure` without a fixture here is a build failure rather
 // than a silently narrower sweep.
 //
+// UPDT-02: the held-update case drives `preparePluginUpdate` itself with a
+// held gate verdict, so the tokens it compares against the document are the
+// ones the production arm stamps.
+//
 // DIVG-01: the second half of this gate guards the same claim for
 // `docs/dependency-resolution.md`'s prose, not just its failure table. The
 // document told readers for one milestone that a path-source dependency could
@@ -31,15 +35,19 @@
 // prose, or the reason token it must name, fails here rather than silently.
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   composeCascadeFailureMessage,
   composeCascadeMemberRows,
 } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts";
-import { projectSkippedOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-cascade.ts";
+import { preparePluginUpdate } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import { REPO_ROOT } from "./source-scan.ts";
 
@@ -47,8 +55,6 @@ import type { DependencyClosureResult } from "../../extensions/pi-claude-marketp
 import type { CascadeMsg } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts";
 import type { CascadeConstraintFailure } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts";
 import type { InstallMsg } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
-import type { UpdateCascadeTarget } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-cascade.ts";
-import type { PluginUpdateSkippedOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { Reason } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 const DOC_REL = "docs/dependency-resolution.md";
@@ -372,35 +378,73 @@ test("DIVG-01 the resolution section carries the exact fallback subsection headi
   );
 });
 
-test("UPDT-02: the document names the token the held update row stamps", async () => {
-  // arrange: a held update outcome, driven through the REAL composer -- the
-  // token under test comes from `projectSkippedOutcome`'s returned message,
-  // never as a literal copied into this test body.
-  const target: UpdateCascadeTarget = { marketplace: "mp", scope: "user" };
-  const outcome: PluginUpdateSkippedOutcome = {
-    partition: "skipped",
-    name: "shared-lib",
-    fromVersion: "1.0.0",
-    notes: ['the declared ranges admit no version in common -- required by "alpha@mp"'],
-    reasons: ["dependents constrain"],
-    declaresAgents: false,
-    declaresMcp: false,
-  };
+test("UPDT-02: the document names every token the held update row stamps", async (t) => {
+  // arrange: the REAL preflight, held by a gate verdict, so the tokens under
+  // test are the ones `preparePluginUpdate` stamps on its held arm -- never
+  // literals this test body supplies and reads back.
+  const cwd = await mkdtemp(path.join(tmpdir(), "doc-agreement-held-update-"));
+  t.after(() => rm(cwd, { force: true, recursive: true }));
+  const marketplaceRoot = path.join(cwd, "marketplace");
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({ name: "mp", plugins: [{ name: "shared-lib", source: "./plugins/shared-lib" }] }),
+  );
+  const locations = locationsFor("project", cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 2,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "project",
+        source: pathSource("./marketplace"),
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins: {
+          "shared-lib": {
+            version: "1.0.0",
+            resolvedSource: path.join(marketplaceRoot, "plugins", "shared-lib"),
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            enabled: true,
+            provenance: "explicit",
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  });
 
   // act
-  const message = projectSkippedOutcome(target, outcome, "single");
+  const outcome = await preparePluginUpdate({
+    plugin: "shared-lib",
+    marketplace: "mp",
+    scope: "project",
+    locations,
+    cleanupClones: async () => {},
+    constraintGate: () =>
+      Promise.resolve({
+        kind: "held",
+        cause: 'the declared ranges admit no version in common -- required by "alpha@mp"',
+      }),
+  });
   const section = await readDocSection(
     "## What happens when an update is constrained by other plugins",
   );
 
   // assert
-  assert.strictEqual(message.status, "skipped");
-  const token = message.status === "skipped" ? message.reasons[0] : undefined;
-  assert.ok(token !== undefined, "the composed message carries at least one reason");
-  assert.ok(
-    section.includes(`{${token}}`),
-    `${DOC_REL}: the document never names the token the held update row stamps ({${token ?? "none"}})`,
-  );
+  assert.ok("partition" in outcome && outcome.partition === "skipped");
+  assert.ok(outcome.reasons.length > 0, "the held preflight arm stamps at least one reason");
+  for (const token of outcome.reasons) {
+    assert.ok(
+      section.includes(`{${token}}`),
+      `${DOC_REL}: the document never names {${token}}, a token the held update row stamps`,
+    );
+  }
 });
 
 test("DIVG-01 the plugin-declares section names the sha divergence from upstream", async () => {
