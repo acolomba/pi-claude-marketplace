@@ -112,8 +112,19 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       // throw NEVER blocks Pi load -- it surfaces as a single last-ditch
       // notify (inside its own try/catch so a UI failure can't propagate
       // either) and aggregateDiscoveredResources still runs.
+      //
+      // D-09-13: `event.reason` is threaded straight through -- only an
+      // explicit `/reload` runs the dependency-install step; a session
+      // start stays offline even with a missing dependency.
       try {
-        await applyReconcile({ ctx, pi, cwd: event.cwd, hooksRouting, completionCache });
+        await applyReconcile({
+          ctx,
+          pi,
+          cwd: event.cwd,
+          hooksRouting,
+          completionCache,
+          reason: event.reason,
+        });
       } catch (err) {
         try {
           // AUTH-01 / IL-2 escape: makeRawNotifyFn is the sanctioned raw-text

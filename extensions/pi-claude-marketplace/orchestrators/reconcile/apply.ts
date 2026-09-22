@@ -17,16 +17,28 @@
 //     state.json bytes + mtime stay untouched.
 //   - Per-scope APPLY PASS with NO outer lock (CR-01 lesson preserved): for
 //     each scope's plan (skip when invalid-config aborted the read pass),
-//     drive the five orchestrators (uninstallPlugin, removeMarketplace,
-//     addMarketplace, installPlugin, setPluginEnabled) in fixed order so
-//     each step's precondition is established by the previous step:
+//     drive the orchestrators (uninstallPlugin, removeMarketplace,
+//     addMarketplace, installPlugin, the reload-only missing-dependency
+//     install, setPluginEnabled) in fixed order so each step's precondition
+//     is established by the previous step:
 //
-//        uninstall -> remove -> add -> install -> enable -> disable
+//        uninstall -> remove -> add -> install -> install missing deps (reload only)
+//                  -> [D-09-07 re-plan when something landed] -> enable -> disable
 //                  -> dependency-disable (LOAD-01)
 //                  -> source-mismatch (report-only)
 //
+//     MISS-01 / D-09-06: `applyDependencyInstalls` runs only when
+//     `opts.reason === "reload"` (D-09-13) and drives the SAME cascade
+//     `installPlugin` drives, rooted at each missing dependency instead of at
+//     a user-typed plugin. When it materialized or found already-recorded at
+//     least one key, D-09-07's `refreshTogglePlan` re-runs the read pass for
+//     this scope and substitutes ONLY the fresh plan's `pluginsToEnable`,
+//     `pluginsToDisable` and `pluginsToDependencyDisable` before the toggle
+//     steps run -- the round-1 plan's uninstall / remove / add / install
+//     buckets and its source-mismatch rows are never re-driven.
+//
 //     Each driven orchestrator call passes `notifications: { mode:
-//     "orchestrated" }`. Every one of the five loops wraps its call in a
+//     "orchestrated" }`. Every one of the loops wraps its call in a
 //     try/catch so an unexpected throw becomes a typed `failed` outcome
 //     (RECON-03 soft-fail) instead of aborting the whole cascade: the removal
 //     and uninstall loops need it because both entrypoints resolve their
@@ -65,6 +77,7 @@ import { withLockedStateTransaction, withStateGuard } from "../../transaction/wi
 import { addMarketplace } from "../marketplace/add.ts";
 import { removeMarketplace } from "../marketplace/remove.ts";
 import {
+  createDependencyInstallOperation,
   createEnableOperation,
   createInstallOperation,
   createUninstallOperation,
@@ -656,6 +669,140 @@ async function applyPluginInstalls(
   }
 }
 
+/**
+ * MISS-01 / MISS-02 / D-09-06: drive the reload-only missing-dependency
+ * install for every entry the read pass's `pluginsToDependencyInstall`
+ * bucket planned. Returns `false` at once when `opts.reason !== "reload"`
+ * (D-09-13) -- the gate lives here, in one `if`, not in `applyPlan`.
+ *
+ * D-09-09: on `installed`, one `plugin-installed` outcome is pushed PER
+ * cascade member -- every materialized member gets a row under its own
+ * marketplace block, keyed by that member's OWN name and marketplace, not
+ * the bucket entry's. `postCommitWarnings` rides only the member whose key
+ * equals the entry's root key; `alreadyInstalled` members are not carried by
+ * the outcome at all and get no row (D-09-11). On `failed`, ONE
+ * `plugin-install-failed` outcome is pushed keyed by the DEPENDENCY's own
+ * `op.marketplace` / `op.plugin`, reusing `classifyOrchestratorThrow` and
+ * `redactedDependencyCascadeError` verbatim -- the same reused path
+ * `applyPluginInstalls`'s failure arm already uses (D-09-10).
+ *
+ * Returns whether ANY entry was installed or skipped: both mean the
+ * read-pass toggle verdict predates this step and is stale for that key
+ * (D-09-07).
+ */
+async function applyDependencyInstalls(
+  opts: ApplyReconcileOptions,
+  plan: ReconcilePlan,
+  outcomes: PerEntryOutcome[],
+): Promise<boolean> {
+  if (opts.reason !== "reload") {
+    return false;
+  }
+
+  const installMissingDependency = createDependencyInstallOperation(
+    opts.hooksRouting,
+    opts.completionCache,
+  );
+  let satisfied = false;
+  for (const op of plan.pluginsToDependencyInstall) {
+    const rootKey = `${op.plugin}@${op.marketplace}`;
+    const result = await installMissingDependency({
+      ctx: opts.ctx,
+      pi: opts.pi,
+      scope: op.scope,
+      cwd: opts.cwd,
+      marketplace: op.marketplace,
+      plugin: op.plugin,
+      ranges: op.ranges,
+      requiredBy: op.requiredBy,
+    });
+
+    if (result.status === "skipped") {
+      satisfied = true;
+      continue;
+    }
+
+    if (result.status === "installed") {
+      satisfied = true;
+      for (const member of result.members) {
+        outcomes.push({
+          kind: "plugin-installed",
+          scope: op.scope,
+          marketplace: member.marketplace,
+          plugin: member.name,
+          version: member.version,
+          dependencies: dependenciesFromInstall(member),
+          dependencyInstalled: true,
+          ...(member.key === rootKey &&
+            result.postCommitWarnings !== undefined &&
+            result.postCommitWarnings.length > 0 && {
+              postCommitWarnings: result.postCommitWarnings,
+            }),
+        });
+      }
+
+      continue;
+    }
+
+    outcomes.push({
+      kind: "plugin-install-failed",
+      scope: op.scope,
+      marketplace: op.marketplace,
+      plugin: op.plugin,
+      reason: classifyOrchestratorThrow(result.error),
+      ...(result.error instanceof DependencyCascadeError && {
+        cause: redactedDependencyCascadeError(result.error),
+      }),
+    });
+  }
+
+  return satisfied;
+}
+
+/**
+ * D-09-07: after `applyDependencyInstalls` materialized or found already
+ * present at least one key, the round-1 read pass's toggle buckets predate
+ * that change -- its `pluginsToDependencyDisable` still holds a dependent this
+ * step just satisfied and its `pluginsToEnable` still excludes it (D-06-03).
+ * Re-running `readPassForScope` for this scope and taking ONLY
+ * `pluginsToEnable`, `pluginsToDisable` and `pluginsToDependencyDisable` from
+ * the fresh plan is what lets a marker-held dependent come back up in the
+ * SAME reload. The uninstall / remove / add / install buckets of the fresh
+ * plan are NEVER re-driven (a round-1 failure would be retried and
+ * double-reported), and source-mismatch rows stay round-1's.
+ *
+ * `readPassForScope` acquires and releases its own lock; the apply region
+ * holds none, and `applyDependencyInstalls`'s entry point released its own
+ * lock before returning, so this second read never re-enters
+ * `proper-lockfile`. A throw (or a config that turned invalid between passes)
+ * is coerced by `runScopeIsolated` into the `state.json` row the other
+ * isolated apply steps produce, and this function returns the round-1 plan
+ * untouched -- there is no third arm: `readPassForScope` cannot answer with
+ * neither a plan nor an invalid-config row for a scope this step just wrote
+ * to.
+ */
+async function refreshTogglePlan(
+  reader: ReconcileStateReader,
+  opts: ApplyReconcileOptions,
+  plan: ReconcilePlan,
+  outcomes: PerEntryOutcome[],
+): Promise<ReconcilePlan> {
+  let fresh: ScopeReadResult = { plan: undefined, invalidOutcomes: [], stateExisted: true };
+  await runScopeIsolated(plan.scope, outcomes, async () => {
+    fresh = await readPassForScope(reader, plan.scope, opts.cwd);
+  });
+
+  outcomes.push(...fresh.invalidOutcomes);
+  return fresh.plan === undefined
+    ? plan
+    : {
+        ...plan,
+        pluginsToEnable: fresh.plan.pluginsToEnable,
+        pluginsToDisable: fresh.plan.pluginsToDisable,
+        pluginsToDependencyDisable: fresh.plan.pluginsToDependencyDisable,
+      };
+}
+
 interface PluginToggleAxes {
   readonly enable: boolean;
   readonly buildSuccess: (info: {
@@ -936,44 +1083,18 @@ function applySourceMismatches(plan: ReconcilePlan, outcomes: PerEntryOutcome[])
 }
 
 /**
- * Per-scope apply pass. Drives the orchestrators in the documented order
- * so each step's precondition is established by the previous step. NO
- * outer lock -- each orchestrator owns its per-scope critical section
- * (CR-01).
- *
- * Order rationale (data dependency):
- *   1. uninstall plugins whose marketplace is staying. The planner's
- *      `buildUninstallBucket` (`plan.ts::buildUninstallBucket`) deliberately
- *      EXCLUDES plugins under a to-be-removed marketplace (the
- *      removeMarketplace cascade unstages those whole-cloth, as WR-02 at
- *      `foldRemoveOutcome` reiterates) -- so this step targets only the
- *      "plugin declaration dropped, marketplace kept" axis. Running it
- *      first leaves the marketplace-remove step in step 2 with the
- *      smallest possible cascade footprint.
- *   2. remove marketplaces declared dropped (cascade-unstages any
- *      remaining plugins under them as a single transaction).
- *   3. add new marketplaces BEFORE installing into them.
- *   4. install new plugins under the marketplaces from step 3.
- *   5. enable plugins newly declared enabled.
- *   6. disable plugins newly declared disabled.
- *   7. disable plugins the load-time check holds down (LOAD-01). It runs
- *      AFTER both toggle steps so a record the config already disabled in
- *      step 6 answers this step idempotently and is left unstamped
- *      (D-06-02). WR-05: a plugin INSTALLED by step 4 is not held down on
- *      this pass. The bucket is built in the read pass from a verdict
- *      computed over the pre-install snapshot, where that plugin has no
- *      record and is therefore no declarer; the next pass holds it down.
- *   8. source-mismatch / dangling rows (report-only) folded last.
+ * The two `applyPluginToggles` calls and the LOAD-01 dependency-disable step,
+ * extracted out of `applyPlan` so it can run this once against round 1's plan
+ * (nothing satisfied by step 5) or once against `refreshTogglePlan`'s D-09-07
+ * replacement plan (something was). Unchanged otherwise: WR-02-style
+ * isolation still wraps the dependency-disable step's own stamp write, whose
+ * throw would otherwise discard every outcome accumulated for both scopes.
  */
-async function applyPlan(
+async function applyToggleSteps(
   opts: ApplyReconcileOptions,
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
-  await applyPluginUninstalls(opts, plan, outcomes);
-  await applyMarketplaceRemoves(opts, plan, outcomes);
-  await applyMarketplaceAdds(opts, plan, outcomes);
-  await applyPluginInstalls(opts, plan, outcomes);
   await applyPluginToggles(opts, plan.pluginsToEnable, outcomes, {
     enable: true,
     // The signals ride `PluginEnabledOutcome` FLAT (it extends
@@ -997,10 +1118,66 @@ async function applyPlan(
     }),
     buildFailed: (info) => ({ kind: "plugin-disable-failed", ...info }),
   });
-  // WR-02-style isolation: the step's own stamp write can throw a transient
-  // `StateLockHeldError` or an EACCES, and a throw out of the apply pass would
-  // discard every outcome accumulated for both scopes.
   await runScopeIsolated(plan.scope, outcomes, () => applyDependencyDisables(opts, plan, outcomes));
+}
+
+/**
+ * Per-scope apply pass. Drives the orchestrators in the documented order
+ * so each step's precondition is established by the previous step. NO
+ * outer lock -- each orchestrator owns its per-scope critical section
+ * (CR-01).
+ *
+ * Order rationale (data dependency):
+ *   1. uninstall plugins whose marketplace is staying. The planner's
+ *      `buildUninstallBucket` (`plan.ts::buildUninstallBucket`) deliberately
+ *      EXCLUDES plugins under a to-be-removed marketplace (the
+ *      removeMarketplace cascade unstages those whole-cloth, as WR-02 at
+ *      `foldRemoveOutcome` reiterates) -- so this step targets only the
+ *      "plugin declaration dropped, marketplace kept" axis. Running it
+ *      first leaves the marketplace-remove step in step 2 with the
+ *      smallest possible cascade footprint.
+ *   2. remove marketplaces declared dropped (cascade-unstages any
+ *      remaining plugins under them as a single transaction).
+ *   3. add new marketplaces BEFORE installing into them.
+ *   4. install new plugins under the marketplaces from step 3.
+ *   5. MISS-01 / D-09-06: install every missing declared dependency of an
+ *      eligible dependent, ROOTED AT THE DEPENDENCY -- reload only (D-09-13).
+ *      A config-declared install from step 4 that already claimed this key
+ *      answers idempotently (D-09-06).
+ *   5a. D-09-07: when step 5 materialized or found already-present at least
+ *      one key, re-run the read pass for this scope and take ONLY
+ *      `pluginsToEnable`, `pluginsToDisable` and `pluginsToDependencyDisable`
+ *      from the fresh plan -- the round-1 plan's own uninstall / remove / add
+ *      / install buckets and its source-mismatch rows are never re-driven.
+ *      This is what lets a dependent step 5 just satisfied stay up (or come
+ *      back up) in the SAME reload instead of the next one; step 5 finding
+ *      nothing to do leaves the round-1 plan standing and costs nothing extra.
+ *   6. enable plugins newly declared enabled (round-1 or 5a's replacement).
+ *   7. disable plugins newly declared disabled (round-1 or 5a's replacement).
+ *   8. disable plugins the load-time check holds down (LOAD-01, round-1 or
+ *      5a's replacement). It runs AFTER both toggle steps so a record the
+ *      config already disabled in step 7 answers this step idempotently and
+ *      is left unstamped (D-06-02). WR-05: a plugin INSTALLED by step 4 is
+ *      not held down on this pass. The bucket is built in the read pass from
+ *      a verdict computed over the pre-install snapshot, where that plugin
+ *      has no record and is therefore no declarer; step 5a's re-plan (when it
+ *      ran) or the next pass holds it down.
+ *   9. source-mismatch / dangling rows (report-only), ALWAYS from the
+ *      round-1 plan (D-09-07) -- folded last.
+ */
+async function applyPlan(
+  reader: ReconcileStateReader,
+  opts: ApplyReconcileOptions,
+  plan: ReconcilePlan,
+  outcomes: PerEntryOutcome[],
+): Promise<void> {
+  await applyPluginUninstalls(opts, plan, outcomes);
+  await applyMarketplaceRemoves(opts, plan, outcomes);
+  await applyMarketplaceAdds(opts, plan, outcomes);
+  await applyPluginInstalls(opts, plan, outcomes);
+  const satisfied = await applyDependencyInstalls(opts, plan, outcomes);
+  const toggles = satisfied ? await refreshTogglePlan(reader, opts, plan, outcomes) : plan;
+  await applyToggleSteps(opts, toggles, outcomes);
   applySourceMismatches(plan, outcomes);
 }
 
@@ -1123,7 +1300,7 @@ async function applyReconcileWithReader(
     }
 
     if (readResult.plan !== undefined) {
-      await applyPlan(opts, readResult.plan, outcomes);
+      await applyPlan(reader, opts, readResult.plan, outcomes);
     }
 
     reportUnreadableDeclarer(scope, readResult, outcomes);

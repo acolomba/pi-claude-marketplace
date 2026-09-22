@@ -274,8 +274,24 @@ export interface InstallTransaction {
  * `deriveInstallVersion`, so copying the caller's own onto every member would
  * record every dependency under the requesting plugin's version string.
  */
+/**
+ * The fields `buildInstallLedgerOptions` reads off its caller's options,
+ * narrowed so `installMissingDependencyWithTransaction` can share the builder
+ * without carrying every `InstallPluginOptions` field (D-09-05).
+ */
+type InstallLedgerCallerOptions = Pick<
+  InstallPluginOptions,
+  | "ctx"
+  | "mapModel"
+  | "partial"
+  | "cloneCacheSeam"
+  | "credentialOps"
+  | "deviceFlowHttp"
+  | "authMemo"
+>;
+
 function buildInstallLedgerOptions(
-  opts: InstallPluginOptions,
+  opts: InstallLedgerCallerOptions,
   core: {
     scope: Scope;
     cwd: string;
@@ -1946,4 +1962,236 @@ export function createInstallPlugin(
   completionCache: CompletionCache,
 ): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
   return (opts) => installPluginWithTransaction(transaction, hooksRouting, completionCache, opts);
+}
+
+/**
+ * MISS-01 / D-09-05: what a reload's missing-dependency step needs to install
+ * one dependency and its own closure. No `notifications` field -- the entry
+ * point never notifies (RECON-04's single `notify()` belongs to
+ * `applyReconcile`) -- and no `applyDefaultEnabled`, `local`, `mapModel`,
+ * `partial` or `pinVersionOverride`: none of DFEN-04's landed-disabled arm,
+ * D-04-02's config write, or a caller-supplied version pin applies on this
+ * path.
+ */
+export interface InstallMissingDependencyOptions {
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
+  readonly scope: Scope;
+  /** Project-scope cwd (ignored for user scope; see locationsFor). */
+  readonly cwd: string;
+  readonly marketplace: string;
+  readonly plugin: string;
+  /**
+   * D-09-05: the raw range texts every eligible declarer accumulated for this
+   * key, folded once at the cascade's own fold site (`effectiveRanges`).
+   */
+  readonly ranges: readonly string[];
+  /**
+   * The dependent whose declaration first named this key (`plan.ts`'s
+   * `requiredBy`), carried onto a marketplace-absent failure's subject.
+   */
+  readonly requiredBy: string;
+  readonly tagProbe?: CascadeTagProbe;
+  readonly marketplaceTagProbe?: CascadeMarketplaceTagProbe;
+  readonly cloneCacheSeam?: InstallCloneCacheSeam;
+  readonly credentialOps?: CredentialOps;
+  readonly deviceFlowHttp?: DeviceFlowHttp;
+  readonly authMemo?: Map<string, AuthAttemptResult>;
+}
+
+/** MISS-01 / MISS-02: the outcome of installing one missing dependency and its closure. */
+export type InstallMissingDependencyOutcome =
+  | {
+      readonly status: "installed";
+      readonly members: readonly CascadeMemberOutcome[];
+      readonly postCommitWarnings?: readonly string[];
+    }
+  | { readonly status: "skipped" }
+  | { readonly status: "failed"; readonly error: Error; readonly cause: string };
+
+/** Outcome of the locked closure inside `installMissingDependencyWithTransaction`. */
+type InstallMissingDependencyTransactionOutcome =
+  | { readonly kind: "already-recorded" }
+  | {
+      readonly kind: "installed";
+      readonly root: InstallLedgerSummary;
+      readonly members: readonly CascadeMemberOutcome[];
+    };
+
+/**
+ * Evidence-backed type narrowing only, on the file's own
+ * `assertPromotedLedgerInstalled` precedent: `handleCascadeThrow` and
+ * `handleInstallThrow` both answer the failed arm when called with
+ * `orchestrated: true`, so the "installed" arm of `InstallPluginOutcome` is
+ * unreachable at this call site.
+ */
+function assertOrchestratedFailedOutcome(
+  _outcome: InstallPluginOutcome,
+): asserts _outcome is Extract<InstallPluginOutcome, { readonly status: "failed" }> {
+  // Evidence-backed type narrowing only; the invariant is established by the caller.
+}
+
+/**
+ * MISS-01 / D-09-05: the orchestrated-only entry point beside `installPlugin`
+ * for a reload's missing-dependency step. It runs the SAME locked transaction,
+ * catalog lookup, marketplace resolution and hooks hydration `installPlugin`
+ * runs for a plugin's own cascade, minus every arm that names a config file or
+ * a disabled landing: there is no `selectDeclaringConfigWriteTarget`, no
+ * `promoteDependencyRecord`, no `resolveInstallDeclaredEnabled`, no disable
+ * cascade, no `writeAdoptingConfigEntries` and no
+ * `writeOrchestratedDeclarations` (D-04-02, D-04-07, DFEN-04). A
+ * dependency-provenance record is declared in neither config file and lands
+ * enabled whatever its own `defaultEnabled` says, because it exists to
+ * satisfy a declaration (ENBL-DEP-01). It never notifies and never re-throws,
+ * the same contract `installPlugin` documents, so `apply.ts` reads its
+ * outcome without a guard.
+ */
+async function installMissingDependencyWithTransaction(
+  transaction: InstallTransaction,
+  hooksRouting: InstallHooksRouting,
+  completionCache: CompletionCache,
+  opts: InstallMissingDependencyOptions,
+): Promise<InstallMissingDependencyOutcome> {
+  const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
+  const locations = locationsFor(scope, cwd);
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  // RESV-06 precedent: where the cascade leaves a failing dependency for the
+  // catch block, so a nested closure/constraint failure names it rather than
+  // the root this entry point was asked to install.
+  const cascadeFailure: CascadeFailureSink = {};
+  const rootKey = `${plugin}@${marketplace}`;
+
+  let outcome: InstallMissingDependencyTransactionOutcome;
+  try {
+    outcome = await transaction.withLockedStateTransaction(
+      locations,
+      async (tx): Promise<InstallMissingDependencyTransactionOutcome> => {
+        const state = tx.state;
+        // D-09-06 / D-09-04: a config install's cascade earlier in the same
+        // pass may already have materialized this key, or it is a disabled
+        // record this path leaves alone. Either way the key is already
+        // recorded, so this arm saves nothing and installs nothing.
+        if (state.marketplaces[marketplace]?.plugins[plugin] !== undefined) {
+          return { kind: "already-recorded" };
+        }
+
+        const cascade = await runInstallCascade({
+          state,
+          locations,
+          rootKey,
+          // D-09-05: the declarers' folded ranges pin the root exactly as a
+          // constrained member is pinned.
+          rootRanges: opts.ranges,
+          // D-09-04: a disabled recorded dependency is a wall on this path,
+          // never a read-through member.
+          treatDisabledAsWall: true,
+          lookup: (subject) => lookupCascadeDependencies(state, { scope, cwd, locations }, subject),
+          marketplaceRecordFor: async (marketplaceName) =>
+            (
+              await resolveInstallMarketplaceSource({
+                targetScope: scope,
+                cwd,
+                marketplace: marketplaceName,
+                targetState: state,
+              })
+            )?.sourceRecord,
+          ledgerOptionsFor: (member) =>
+            buildInstallLedgerOptions(opts, {
+              scope,
+              cwd,
+              marketplace: member.marketplace,
+              plugin: member.name,
+              ...(member.pin !== undefined && { sourcePin: member.pin.oid }),
+              ...(member.pin?.version !== undefined && { pinVersion: member.pin.version }),
+              // D-04-01: the caller decides provenance; every member of this
+              // cascade, root included, exists to satisfy a declaration.
+              provenance: "dependency",
+            }),
+          installedKeys: collectInstalledKeys(state),
+          knownMarketplaces: await collectInstallReachableMarketplaces({
+            targetScope: scope,
+            cwd,
+            targetState: state,
+          }),
+          capture,
+          transaction,
+          ...(opts.tagProbe !== undefined && { tagProbe: opts.tagProbe }),
+          ...(opts.marketplaceTagProbe !== undefined && {
+            marketplaceTagProbe: opts.marketplaceTagProbe,
+          }),
+        });
+        const installed = unwrapCascade(cascade, capture, rootKey, cascadeFailure);
+        if (installed === undefined) {
+          // D-03-08: on this path the root IS a dependency, so a marketplace
+          // absent in both scopes is the walk's own not-added failure --
+          // nothing here adds or clones a marketplace to satisfy a
+          // declaration.
+          cascadeFailure.subject = {
+            kind: "closure",
+            failure: {
+              ok: false,
+              reason: "marketplace-not-added",
+              key: rootKey,
+              marketplace,
+              requiredBy: opts.requiredBy,
+            },
+          };
+          throw cascadeFailureCause(cascadeFailure.subject, rootKey);
+        }
+
+        await tx.save();
+        // No `landedDisabled` filter -- nothing lands disabled here.
+        await hydrateInstalledHooks({ hooksRouting, scope, cwd, members: installed.members });
+        return { kind: "installed", root: installed.root, members: installed.members };
+      },
+    );
+  } catch (err) {
+    const subject = cascadeFailure.subject;
+    const failed =
+      subject !== undefined
+        ? handleCascadeThrow({
+            ctx,
+            pi,
+            marketplace,
+            scope,
+            plugin,
+            rootKey,
+            subject,
+            orchestrated: true,
+          })
+        : handleInstallThrow({
+            err,
+            ctx,
+            pi,
+            marketplace,
+            scope,
+            plugin,
+            capture,
+            orchestrated: true,
+          });
+    assertOrchestratedFailedOutcome(failed);
+    return failed;
+  }
+
+  if (outcome.kind === "already-recorded") {
+    return { status: "skipped" };
+  }
+
+  // D-03-INV: drops the root marketplace's completion cache, same as install.
+  const warnings = await collectPostCommitWarnings(outcome.root, completionCache, scope, true);
+  return {
+    status: "installed",
+    members: outcome.members,
+    ...(warnings.length > 0 && { postCommitWarnings: warnings }),
+  };
+}
+
+/** Bind the missing-dependency install to one required semantic transaction owner. */
+export function createInstallMissingDependency(
+  transaction: InstallTransaction,
+  hooksRouting: InstallHooksRouting,
+  completionCache: CompletionCache,
+): (opts: InstallMissingDependencyOptions) => Promise<InstallMissingDependencyOutcome> {
+  return (opts) =>
+    installMissingDependencyWithTransaction(transaction, hooksRouting, completionCache, opts);
 }

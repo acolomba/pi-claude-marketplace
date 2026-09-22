@@ -69,10 +69,14 @@ The planner and the apply path coordinate via one structural sentinel, plus two 
 
    ```text
    uninstall plugins -> remove marketplaces -> add marketplaces
-                     -> install plugins -> enable plugins -> disable plugins
+                     -> install plugins -> install missing dependencies (reload only, MISS-01)
+                     -> [D-09-07 re-plan when something landed]
+                     -> enable plugins -> disable plugins
                      -> dependency-disable plugins (LOAD-01)
-                     -> source-mismatch rows (report-only)
+                     -> source-mismatch rows (report-only, always round-1)
    ```
+
+   `applyDependencyInstalls` (D-09-06) runs the SAME install cascade `installPlugin` runs, rooted at each missing dependency instead of a user-typed plugin, and only when `opts.reason === "reload"` (D-09-13) -- a startup reconcile plans the bucket but installs nothing. When it materialized or found already-present at least one key, `refreshTogglePlan` (D-09-07) re-runs the read pass for this scope and substitutes ONLY `pluginsToEnable`, `pluginsToDisable` and `pluginsToDependencyDisable` from the fresh plan before the toggle steps run -- the uninstall / remove / add / install buckets and the source-mismatch rows always come from round 1, so a round-1 failure is never retried and double-reported. This is what lets a dependent the install just satisfied stay up (or come back up) in the SAME reload.
 
    The dependency-disable step runs after both toggle steps, so a record the config already disabled answers it idempotently and keeps its marker off (D-06-02). Its own marker write is wrapped in `runScopeIsolated`, so a transient lock or permission failure becomes one `state.json` row instead of discarding the cascade for both scopes.
 

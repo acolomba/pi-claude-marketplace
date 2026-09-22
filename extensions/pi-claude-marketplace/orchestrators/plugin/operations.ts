@@ -29,7 +29,7 @@ import { createSetPluginEnabled } from "./enable-disable.ts";
 import { createFetchPlugins } from "./fetch.ts";
 import { makePresenceProbe, probeManifestEntry } from "./git-source-probe.ts";
 import { createGetPluginInfo } from "./info.ts";
-import { createInstallPlugin } from "./install-flow.ts";
+import { createInstallMissingDependency, createInstallPlugin } from "./install-flow.ts";
 import { runInstallLedger } from "./install-outcome.ts";
 import { createReinstallPlugin } from "./reinstall-flow.ts";
 import { REAL_REINSTALL_TRANSACTION } from "./reinstall-replace.ts";
@@ -44,7 +44,11 @@ import type {
 import type { FetchStatus } from "./fetch.ts";
 import type { PluginInfoReader } from "./info.ts";
 import type { InstallHooksRouting } from "./install-disable-cascade.ts";
-import type { InstallTransaction } from "./install-flow.ts";
+import type {
+  InstallMissingDependencyOptions,
+  InstallMissingDependencyOutcome,
+  InstallTransaction,
+} from "./install-flow.ts";
 import type { ReinstallHooksRouting, ReinstallPluginFn } from "./reinstall-flow.ts";
 import type { UninstallHooksRouting, UninstallPluginOperation } from "./uninstall.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -84,6 +88,19 @@ export function createInstallOperation(
   completionCache: CompletionCache,
 ): ReturnType<typeof createInstallPlugin> {
   return createInstallPlugin(INSTALL_TRANSACTION, hooksRouting, completionCache);
+}
+
+/**
+ * MISS-01: composes the reload-driven missing-dependency install operation
+ * from the SAME production transaction owner `createInstallOperation` binds,
+ * on that function's own pattern. Constructing the operation runs no work of
+ * its own -- only invoking the returned operation does.
+ */
+export function createDependencyInstallOperation(
+  hooksRouting: InstallHooksRouting,
+  completionCache: CompletionCache,
+): (opts: InstallMissingDependencyOptions) => Promise<InstallMissingDependencyOutcome> {
+  return createInstallMissingDependency(INSTALL_TRANSACTION, hooksRouting, completionCache);
 }
 
 /**
