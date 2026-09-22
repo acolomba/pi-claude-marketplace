@@ -2,10 +2,10 @@
 gsd_state_version: "1.0"
 milestone: test-backlog
 status: "test-backlog milestone shipped — PR #202"
-stopped_at: PR #202 green at 100% Sonar coverage (2026-09-20)
-last_updated: "2026-09-20T23:12:43.440Z"
-last_activity: 2026-09-20
-last_activity_desc: quick task 260920-qx0 removed the no-op --local from marketplace info/list/update
+stopped_at: PR #209 opened after all local gates passed (2026-09-22)
+last_updated: "2026-09-22T10:01:37.092Z"
+last_activity: 2026-09-22
+last_activity_desc: quick task 260921-t5t shipped in PR #209
 state_head: a0015aa3a2991a143e9dd3ed9dcfa25df91c35f4
 milestone_name: test-backlog
 progress:
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 Phase: Milestone test-backlog complete
 Plan: —
 Status: test-backlog milestone shipped — PR #202
-Last activity: 2026-09-21 — Completed quick task 260921-t5t: suppress success-count lines for empty cascades and non-bulk operations
+Last activity: 2026-09-22 — Shipped quick task 260921-t5t in PR #209
 
 ### test-backlog closeout: `override_closeout`
 
@@ -126,20 +126,21 @@ hit the same wall; convert it rather than re-disclosing it.
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
 | 260920-qx0 | Reject `--local` on the merged-read marketplace verbs (info, list, update) | 2026-09-20 | f2fbd402 | complete | [260920-qx0-remove-local-from-marketplace-info](./quick/260920-qx0-remove-local-from-marketplace-info/) |
-| 260921-t5t | Suppress success-count lines for empty cascades and non-bulk operations | 2026-09-21 | ffdecc5f | complete | [260921-t5t-when-a-command-returns-an-empty-result-a](./quick/260921-t5t-when-a-command-returns-an-empty-result-a/) |
+| 260921-t5t | Suppress success-count lines for empty cascades and non-bulk operations | 2026-09-21 | ffdecc5f | shipped in PR #209 | [260921-t5t-when-a-command-returns-an-empty-result-a](./quick/260921-t5t-when-a-command-returns-an-empty-result-a/) |
 
 ## Session Continuity
 
-**Last session:** 2026-09-20
-**Stopped at:** PR #202 green at 100% Sonar coverage (2026-09-20)
+**Last session:** 2026-09-22
+**Stopped at:** PR #209 opened after all local gates passed (2026-09-22)
 **Resume file:** None
 
-**Current work:** none. test-backlog shipped 2026-09-18 on `features/test-backlog`;
-PR #202 is pushed with every check green, so the next steps are the merge and
+**Current work:** PR #209 is open from `features/suppress-empty-success-count`.
+The next steps are review, merge after its checks pass, and
 `/gsd-new-milestone`.
 Earlier milestone continuity is preserved in
 `inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 
 ## Operator Next Steps
 
+- Review PR #209 and merge it after its checks pass
 - Start the next milestone with /gsd-new-milestone

@@ -4,7 +4,7 @@
 
 ## [0.19.0] - 2026-09-22
 
-- Empty bulk command results now show the empty-state message without a redundant `0 successes` line. Populated bulk results keep their totals.
+- Empty bulk command results now show the empty-state message without a redundant `0 successes` line. Populated bulk results keep their totals. (#209)
 - Internal: upgraded fallow to 3.27, promoted its warn-default dependency and suppression rules to errors, moved the stdio ban into a rule pack, and wired its agent surfaces through `scripts/init.sh`. (#204)
 - Every `/claude:plugin` verb now rejects an unknown flag or an extra argument before it does any work. (#202)
   - `--local` is accepted only by the verbs that write configuration. Marketplace `info`, `list`, and `update` read both configuration files and write neither, so they now reject it.
