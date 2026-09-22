@@ -416,11 +416,21 @@ Plans:
 2. When such a dependency cannot be installed, the reload completes, the failure is reported on its own row with its cause, and the dependent is disabled by Phase 6's check with the install remedy; nothing is half-materialized (NFR-1/NFR-3). (MISS-02)
 3. A reload with nothing missing installs nothing and stays offline (NFR-5); the new reconcile bucket is exercised by `tests/integration/reconcile-plan-convergence.test.ts` alongside the existing ones.
 
-**Plans**: 0 plans
+**Plans**: 4 plans
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (run /gsd-plan-phase 9 to break down)
+- [ ] 09-01-PLAN.md — the planner's ninth bucket from the verdict's missing arm, the provenance-independent lift, the `{dependency installed}` token on every pin, and the convergence proof (MISS-01, D-09-01/02/05/08/09/16)
+- [ ] 09-02-PLAN.md — the install cascade's root-range input and disabled-as-wall option (MISS-01, D-09-04/05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 09-03-PLAN.md — the orchestrated entry point, the reload-only apply step with its re-plan, and `event.reason` threaded from `index.ts`; every failure on the dependency's own row (MISS-01, MISS-02, D-09-03/06/07/10/11/13/14)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 09-04-PLAN.md — the two-row failure catalog state, the docs, the changelog, the backlog carriers, the type-member pin remap and the full gate (MISS-02)
 
 **Notes.** `orchestrators/reconcile/plan.ts` buckets declared-vs-recorded today; this adds a bucket derived from the declaration index rather than the config, so D-04-02 holds (the config still names only what the user asked for). Upstream also runs this on `marketplace add` and autoupdate; whether Pi's `bootstrap.ts` composer and `marketplace/autoupdate.ts` reach the same reconcile is a planning question, not a requirement.
 
