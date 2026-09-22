@@ -250,6 +250,22 @@ export interface InstallTransaction {
 }
 
 /**
+ * The fields `buildInstallLedgerOptions` reads off its caller's options,
+ * narrowed so `installMissingDependencyWithTransaction` can share the builder
+ * without carrying every `InstallPluginOptions` field (D-09-05).
+ */
+type InstallLedgerCallerOptions = Pick<
+  InstallPluginOptions,
+  | "ctx"
+  | "mapModel"
+  | "partial"
+  | "cloneCacheSeam"
+  | "credentialOps"
+  | "deviceFlowHttp"
+  | "authMemo"
+>;
+
+/**
  * Assemble the `InstallLedgerOptions` for ONE cascade member from the
  * entrypoint options, spreading each optional field only when defined
  * (exactOptionalPropertyTypes). Extracted from `installPlugin`'s guard closure
@@ -274,22 +290,6 @@ export interface InstallTransaction {
  * `deriveInstallVersion`, so copying the caller's own onto every member would
  * record every dependency under the requesting plugin's version string.
  */
-/**
- * The fields `buildInstallLedgerOptions` reads off its caller's options,
- * narrowed so `installMissingDependencyWithTransaction` can share the builder
- * without carrying every `InstallPluginOptions` field (D-09-05).
- */
-type InstallLedgerCallerOptions = Pick<
-  InstallPluginOptions,
-  | "ctx"
-  | "mapModel"
-  | "partial"
-  | "cloneCacheSeam"
-  | "credentialOps"
-  | "deviceFlowHttp"
-  | "authMemo"
->;
-
 function buildInstallLedgerOptions(
   opts: InstallLedgerCallerOptions,
   core: {
