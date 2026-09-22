@@ -1031,10 +1031,11 @@ against the 2.1.267 binary at the operator's "follow upstream" instruction),
 research, plan (4 plans / 3 waves), sequential execution on this checkout,
 three-iteration review, verification 12/12. It stops here at the phase
 boundary on context budget; resume with `/gsd-autonomous --from 10`. Nothing
-was skipped; the `verify:post` `secure-phase` step hook has not run for Phase
-9 (no `09-SECURITY.md`), and the leaked-fixture sweep (TEST-TMPLEAK-01) and the
-operator's local `.planning/config.json` formatting drift are the two
-environment debts.
+was skipped except the `verify:post` `validate-phase` (Nyquist) step hook for
+Phase 9 (`09-VALIDATION.md` stays `status: draft`; run `/gsd-validate-phase 9`
+if wanted); `09-SECURITY.md` is secured (19/19 closed). Environment debts: the
+leaked-fixture sweep (TEST-TMPLEAK-01) and the operator's local
+`.planning/config.json` formatting drift (never staged).
 
 Previous session: 2026-09-22T07:50:41.553Z
 Resumed from `HANDOFF.json` (paused 2026-09-20 at 08-01 Task 1, a
