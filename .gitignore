@@ -15,6 +15,7 @@
 
 # gsd
 /.gsd
+/.gsd-capabilities.json
 /.planning/research/.cache/
 
 # claude

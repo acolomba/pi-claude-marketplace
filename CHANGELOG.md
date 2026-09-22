@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Internal: the GSD discuss phase now loads a Claude Code compatibility research skill before it generates questions, so phase decisions cite verified upstream behavior instead of assumption. `AGENTS.md` and `PROJECT.md` now state the upstream-parity rule and the two things that license a divergence, and both record the hook bridge that their component list had been omitting. (#210)
+
 ## [0.19.0] - 2026-09-22
 
 - Empty bulk command results now show the empty-state message without a redundant `0 successes` line. Populated bulk results keep their totals. (#209)
