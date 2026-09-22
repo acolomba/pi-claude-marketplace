@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
@@ -194,25 +193,10 @@ async function createProjectScope(
   t: TestContext,
   label: string,
 ): Promise<{ readonly cwd: string; readonly locations: ScopedLocations }> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `marketplace-shared-${label}-`));
   // WPTH-04: `workflowsSavedDir` is rooted at `os.homedir()` and honors no
   // override, so a cascade that unlinks a recorded envelope would reach the
-  // real user's saved workflows unless HOME is relocated first. The bundle is
-  // built AFTER the assignment because the root is resolved at construction.
-  const home = await mkdtemp(path.join(tmpdir(), `marketplace-shared-${label}-home-`));
-  const homeExisted = Object.hasOwn(process.env, "HOME");
-  const previousHome = process.env.HOME;
-  t.after(async () => {
-    if (homeExisted) {
-      process.env.HOME = previousHome;
-    } else {
-      delete process.env.HOME;
-    }
-
-    await rm(cwd, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
-  });
-  process.env.HOME = home;
+  // real user's saved workflows unless HOME is relocated first.
+  const { cwd } = await createHermeticEnvironment(t, `marketplace-shared-${label}-`);
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
   return { cwd, locations };
@@ -310,10 +294,10 @@ async function seedAgent(
 }
 
 /**
- * One saved workflow envelope, in the three-key shape the workflows bridge
- * writes. The path is composed with `path.join` rather than the asynchronous
- * `locations.workflowArtifactPath`, because a forgotten `await` on the latter
- * yields a leaf named after a promise instead of throwing.
+ * Seeds one saved workflow envelope, in the three-key shape the workflows
+ * bridge writes. Composes the path with `path.join` rather than the
+ * asynchronous `locations.workflowArtifactPath`, because a forgotten `await`
+ * on the latter yields a leaf named after a promise instead of throwing.
  */
 async function seedWorkflowEnvelope(
   locations: ScopedLocations,

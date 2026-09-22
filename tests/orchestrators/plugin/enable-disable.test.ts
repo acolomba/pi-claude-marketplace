@@ -932,7 +932,7 @@ test("ENBL-02 / ENBL-18: disable preserves the version pin and the record's reso
                 agents: string[];
                 mcpServers: string[];
                 hooks: string[];
-                workflows: [];
+                workflows: string[];
               };
               compatibility: { installable: boolean };
               installedAt: string;
@@ -1031,7 +1031,7 @@ test("ENBL-13 / ENBL-18: disable of a hooks-only plugin removes hooks.json but r
                 agents: string[];
                 mcpServers: string[];
                 hooks: string[];
-                workflows: [];
+                workflows: string[];
               };
               compatibility: { installable: boolean };
             }
@@ -2250,7 +2250,7 @@ test("ENBL-07 / D-97-01: enable on a manifest-absent disabled PARTIAL fails clea
                 agents: string[];
                 mcpServers: string[];
                 hooks: string[];
-                workflows: [];
+                workflows: string[];
               };
             }
           >;

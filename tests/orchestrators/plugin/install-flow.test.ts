@@ -84,8 +84,9 @@ import type { TestContext } from "node:test";
 
 type InstallOperation = ReturnType<typeof createInstallPlugin>;
 
-const require = createRequire(import.meta.url);
-const filesystemPromises = require("node:fs/promises") as typeof import("node:fs/promises");
+const filesystemPromises = createRequire(import.meta.url)(
+  "node:fs/promises",
+) as typeof import("node:fs/promises");
 
 const REAL_INSTALL_TRANSACTION: InstallTransaction = {
   runPhases: (...args) => runPhases(...args),

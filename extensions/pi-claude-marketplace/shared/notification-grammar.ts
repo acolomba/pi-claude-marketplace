@@ -1295,7 +1295,7 @@ type ComponentKind = keyof PluginInfoComponentsResolved["components"];
 // member that is not a kind at all. Annotating the tuple with `ComponentKind`
 // slots instead would erase the literals and make the proof vacuous -- every
 // slot would report the whole union and `Exclude` would always answer `never`.
-const COMPONENT_KINDS = [
+const COMPONENT_KIND_NAMES = [
   "agents",
   "commands",
   "hooks",
@@ -1305,9 +1305,17 @@ const COMPONENT_KINDS = [
 ] as const satisfies readonly ComponentKind[];
 
 type _AssertNever<T extends never> = T;
-type _UncoveredComponentKind = Exclude<ComponentKind, (typeof COMPONENT_KINDS)[number]>;
-// fallow-ignore-next-line unused-type, private-type-leak -- INFO-02 / WFLW-04 completeness proof; a non-never result is a TS2344 build failure naming the uncovered kind, and the export is what keeps `noUnusedLocals` quiet. `_AssertNever` / `_UncoveredComponentKind` are the proof's own internals, meaningless to a caller.
-export type _ComponentKindsCoverageProof = _AssertNever<_UncoveredComponentKind>;
+type _UncoveredComponentKind = Exclude<ComponentKind, (typeof COMPONENT_KIND_NAMES)[number]>;
+type _ComponentKindsCoverageProof = _AssertNever<_UncoveredComponentKind>;
+
+// INFO-02 / WFLW-04 completeness proof: a non-never `_ComponentKindsCoverageProof`
+// is a TS2344 build failure naming the uncovered kind. The proof is consumed
+// here, by the tuple it guards, rather than exported for a caller who has no
+// use for it.
+const COMPONENT_KINDS = COMPONENT_KIND_NAMES satisfies readonly Exclude<
+  ComponentKind,
+  _ComponentKindsCoverageProof
+>[];
 
 /**
  * Append the per-kind component lines + optional dependencies line

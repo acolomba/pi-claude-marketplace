@@ -31,7 +31,7 @@ import assert from "node:assert/strict";
 import { createHook } from "node:async_hooks";
 import * as fs from "node:fs";
 import { mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
-import { syncBuiltinESMExports } from "node:module";
+import { createRequire, syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import test from "node:test";
 
@@ -7580,7 +7580,7 @@ test("NFR-9: an advisory naming the walked directory renders it reduced to its b
   });
 });
 
-test("WR-09: the workflow names and the advisories come from one discovery pass", async () => {
+test("WR-09: the workflow names and the advisories come from one discovery pass", async (t) => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange -- one admitted script and one refused script in the SAME
     // directory. A second pass would have to re-read both bodies, so faulting
@@ -7594,30 +7594,30 @@ test("WR-09: the workflow names and the advisories come from one discovery pass"
     });
     let zetaReads = 0;
     const zetaPath = path.join(mpRoot, "foo", "workflows", "zeta.js");
-    const descriptor = Object.getOwnPropertyDescriptor(fs.promises, "readFile");
-    assert.ok(descriptor !== undefined);
-    const originalReadFile = fs.promises.readFile;
-    Object.defineProperty(fs.promises, "readFile", {
-      ...descriptor,
-      value: async (...args: unknown[]) => {
+    const filesystemPromises = createRequire(import.meta.url)(
+      "node:fs/promises",
+    ) as typeof import("node:fs/promises");
+    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
+    t.mock.method(
+      filesystemPromises,
+      "readFile",
+      async (...args: Parameters<typeof originalReadFile>) => {
         if (args[0] === zetaPath) {
           zetaReads += 1;
         }
 
-        const result: unknown = await Reflect.apply(originalReadFile, fs.promises, args);
-        return result;
+        return originalReadFile(...args);
       },
-    });
+    );
     syncBuiltinESMExports();
+    t.after(() => {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+    });
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    try {
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
-    } finally {
-      Object.defineProperty(fs.promises, "readFile", descriptor);
-      syncBuiltinESMExports();
-    }
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
 
     // assert
     assert.equal(zetaReads, 1, "the admitted script's body is read exactly once");

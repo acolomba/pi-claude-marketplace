@@ -2001,23 +2001,23 @@ describe("surfaceDiscoveryWarnings", () => {
   });
 });
 
-describe("retiresWorkflowCommand", () => {
-  test("WLIF-06: reports a retirement when a previous name is missing from the placed set", () => {
+for (const { previousNames, placedNames, expected } of [
+  { previousNames: ["alpha:greet"], placedNames: [], expected: true },
+  { previousNames: ["alpha:greet", "alpha:wave"], placedNames: ["alpha:greet"], expected: true },
+  { previousNames: [], placedNames: [], expected: false },
+  { previousNames: ["alpha:greet"], placedNames: ["alpha:greet"], expected: false },
+  {
+    previousNames: ["alpha:greet"],
+    placedNames: ["alpha:greet", "alpha:wave"],
+    expected: false,
+  },
+] satisfies readonly {
+  previousNames: readonly string[];
+  placedNames: readonly string[];
+  expected: boolean;
+}[]) {
+  test(`WLIF-06: retiresWorkflowCommand(${JSON.stringify(previousNames)}, ${JSON.stringify(placedNames)}) is ${expected}`, () => {
     // act & assert
-    assert.strictEqual(retiresWorkflowCommand(["alpha:greet"], []), true);
-    assert.strictEqual(
-      retiresWorkflowCommand(["alpha:greet", "alpha:wave"], ["alpha:greet"]),
-      true,
-    );
+    assert.strictEqual(retiresWorkflowCommand(previousNames, placedNames), expected);
   });
-
-  test("WLIF-06: reports no retirement when every previous name is still placed", () => {
-    // act & assert
-    assert.strictEqual(retiresWorkflowCommand([], []), false);
-    assert.strictEqual(retiresWorkflowCommand(["alpha:greet"], ["alpha:greet"]), false);
-    assert.strictEqual(
-      retiresWorkflowCommand(["alpha:greet"], ["alpha:greet", "alpha:wave"]),
-      false,
-    );
-  });
-});
+}

@@ -707,11 +707,13 @@ export interface PluginInfoCascadeMessage {
 /** Empty reconcile-pending advisory. */
 export interface ReconcilePendingEmptyMessage {
   readonly kind: "reconcile-pending-empty";
-  // WR-06: the same free-text advisory body lines the cascade arm declares, on
-  // the same terms -- caller-ordered, rendered verbatim, no token, no row. The
-  // steady-state user is the one most likely to be carrying a retained staging
-  // tree, so an advisory the cascade arm alone could carry would miss exactly
-  // the reader it exists for.
+  /**
+   * WR-06: the same free-text advisory body lines the cascade arm declares, on
+   * the same terms -- caller-ordered, rendered verbatim, no token, no row. The
+   * steady-state user is the one most likely to be carrying a retained staging
+   * tree, so an advisory the cascade arm alone could carry would miss exactly
+   * the reader it exists for.
+   */
   readonly advisories?: readonly string[];
 }
 

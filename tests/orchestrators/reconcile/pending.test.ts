@@ -758,7 +758,7 @@ test("NFR-5: naming retained trees never creates the workflows staging directory
 
 test("WR-06: a staging directory that cannot be read leaves the command's own output unchanged", async (t) => {
   // arrange
-  // A plain file where the staging directory belongs: the read fails with a
+  // A plain file where the staging directory belongs: the read fails with an
   // errno the scan cannot interpret, and the command the user actually asked
   // for still renders exactly what it renders with no retained tree at all.
   const { cwd, user } = await createHermeticScopes(t, "retained-unreadable");

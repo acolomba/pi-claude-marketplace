@@ -8518,8 +8518,9 @@ test("retry proof: reinstall: a bulk cascade keeps the earlier committed target 
   });
 });
 
-const retryRequire = createRequire(import.meta.url);
-const retryFs = retryRequire("node:fs/promises") as typeof import("node:fs/promises");
+const retryFs = createRequire(import.meta.url)(
+  "node:fs/promises",
+) as typeof import("node:fs/promises");
 
 // ──────────────────────────────────────────────────────────────────────────
 // WLIF-01: the workflows handle -- reinstall's fifth prepare and its abort arm.

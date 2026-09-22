@@ -252,7 +252,6 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   // `workflowsStagingDir` and `workflowsHomeDir` are scope-INDEPENDENT, so the
   // scope handed to `locationsFor` is immaterial and a call inside the loop
   // would render the identical advisory twice whenever no scope was given.
-  //
   const advisories = await retainedWorkflowsAdvisories(opts.cwd);
 
   // DIFF-01 SC #2 empty-steady-state: no invalid-config rows AND every plan

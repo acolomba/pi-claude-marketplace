@@ -1740,8 +1740,8 @@ test("WR-06: notify folds caller-supplied advisory lines between the body and th
   notify(ctx as never, pi, msg);
 
   // assert
-  assert.equal(ctx.ui.notify.mock.calls.length, 1);
-  assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+  assert.strictEqual(ctx.ui.notify.mock.calls.length, 1);
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     "(no marketplaces)\n\nfirst advisory\nsecond advisory",
   ]);
 });
@@ -5262,7 +5262,7 @@ for (const { name, message, expected } of [
 
     // assert
     assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, expected);
-    assert.equal(renderRow.mock.callCount(), 0);
+    assert.strictEqual(renderRow.mock.callCount(), 0);
   });
 }
 

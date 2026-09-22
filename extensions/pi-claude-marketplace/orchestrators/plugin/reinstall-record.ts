@@ -170,10 +170,10 @@ function recordReinstalledOutcome(
   };
 
   // WR-06: `[]` stated HERE rather than defaulted, because the reasoning that
-  // makes it safe is local to this site: this projection feeds the rendered
-  // row and reads only its `agents` / `mcpServers` / `workflows` members, and
-  // no state write happens on this path -- so an empty workflow inventory is
-  // never persisted.
+  // makes it safe is local to this site: this projection feeds only
+  // `stagedAgentNames`, `stagedMcpServerNames`, `declaresAgents`,
+  // `declaresMcp`, and `resourcesChanged`, none of which reads `workflows`,
+  // so an empty workflow inventory here is inert.
   const outcomeResources = resourcesFromHandles(input.handles, []);
   const degradedKinds = Array.from(
     new Set<DegradeKind>([
