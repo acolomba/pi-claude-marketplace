@@ -186,10 +186,10 @@ function disabledRow(name: string): PluginDisabledMessage {
   return { status: "disabled", name, severity: "info", needsReload: false };
 }
 
-test("an empty plural cascade retains its zero-success tally", (t) => {
+test("an empty plural cascade emits only its sentinel", (t) => {
   // arrange
   const harness = createHarness({
-    message: "(no marketplaces)\n\nPlugin inspect: 0 successes",
+    message: "(no marketplaces)",
   });
   const controlled = createControlledContext(t, "Plugin inspect");
 

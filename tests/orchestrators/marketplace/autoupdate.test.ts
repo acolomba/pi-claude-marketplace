@@ -389,7 +389,7 @@ test("reports an empty implicit two-scope inventory without creating files", asy
     const projectLocations = locationsFor("project", cwd);
     const userLocations = locationsFor("user", cwd);
     const boundary = notificationBoundary({
-      message: "(no marketplaces)\n\nMarketplace autoupdate: 0 successes",
+      message: "(no marketplaces)",
     });
 
     // act
