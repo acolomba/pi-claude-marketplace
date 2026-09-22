@@ -1212,6 +1212,20 @@ test("PDEF-01: update preview detects an agent conflict from a later resolved di
         },
         installedVersions: { hello: "1.0.0" },
       });
+      // D-10-05: the update constraint gate walks every installed record's
+      // declarations, fail-closed, before candidate resolution. `other-mp`
+      // needs a real, loadable manifest listing `world` so the walk
+      // establishes it declares nothing and the update reaches the
+      // agent-conflict path this test is about.
+      await mkdir(path.join(cwd, "other-mp"), { recursive: true });
+      await writeFile(
+        path.join(cwd, "other-mp", "marketplace.json"),
+        JSON.stringify({
+          name: "other-mp",
+          plugins: [{ name: "world", source: "./plugins/world", version: "1.0.0" }],
+        }),
+      );
+
       const state = await loadState(locations.extensionRoot);
       state.marketplaces["other-mp"] = {
         name: "other-mp",
@@ -7275,7 +7289,11 @@ test("D-10-18: one bulk run resolves two path-source siblings from the same mark
         await mkdir(path.join(root, ".claude-plugin"), { recursive: true });
         await writeFile(
           path.join(root, ".claude-plugin", "plugin.json"),
-          JSON.stringify({ name, version: "1.0.0", ...(deps !== undefined && { dependencies: deps }) }),
+          JSON.stringify({
+            name,
+            version: "1.0.0",
+            ...(deps !== undefined && { dependencies: deps }),
+          }),
         );
       }
 

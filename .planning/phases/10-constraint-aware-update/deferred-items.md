@@ -3,20 +3,17 @@
 Out-of-scope discoveries logged during plan execution (per gsd-executor SCOPE BOUNDARY rule).
 Not fixed here; tracked for a future, unrelated pass.
 
-## 10-02: Pre-existing PDEF-01 test failure (unrelated to UPDT-01)
+## 10-02: PDEF-01 test failure was a phase-10 fixture regression, not pre-existing
 
-- **Test:** `tests/orchestrators/plugin/update-flow.test.ts` — "PDEF-01: update preview detects
-  an agent conflict from a later resolved directory"
-- **Symptom:** asserts severity `'error'`, actual `'warning'`.
-- **Scope check:** the test itself is untouched by any 10-02 diff (`git diff HEAD -- tests/orchestrators/plugin/update-flow.test.ts`
-  shows no hunk touching this test), and it was introduced in commit `553513a5`, long before this
-  plan's work. `PDEF-01` is a requirement ID from the unrelated, already-archived `refine-unit-tests`
-  milestone (see `.planning/milestones/refine-unit-tests-REQUIREMENTS.md`), not a phase-10
-  requirement — the shared prefix is coincidental.
-- **Effect on this plan's verification:** causes `npm run test:coverage:direct:commit` to report a
-  non-zero exit (the `(update-flow.ts, update-flow.test.ts)` pair's focused test run fails), even
-  though phase 10-02's own added/changed code is 100% covered by its own tests. All 4 target test
-  files (`update-constraint-gate.test.ts`, `update-preflight.test.ts`, `update-flow.test.ts`,
-  `update-swap.test.ts`) pass except this one pre-existing case.
-- **Action:** not fixed — out of scope per SCOPE BOUNDARY (only auto-fix issues directly caused by
-  the current task's changes). Left for a dedicated defect-repair pass.
+The entry previously logged here claimed this failure predated 10-02 and was out of scope. That
+claim was wrong: the test passes at the phase-10 start commit (`07f797e2`, 155/155) and only starts
+failing once `15530b66` adds the update constraint gate. The gate's fail-closed declaration walk
+(D-10-05) reaches an unrelated hand-built `other-mp` state record whose `marketplace.json` the test
+never created on disk, so the walk refuses closed and the update is skipped (`warning`) before it
+ever reaches the agent-conflict path (`error`) the test is about.
+
+Found and fixed in-phase, in this commit: `tests/orchestrators/plugin/update-flow.test.ts` now
+seeds a real, loadable `other-mp/marketplace.json` so the declaration walk establishes `world`
+declares nothing, letting the update proceed to the conflict it exists to prove.
+
+No items remain deferred from this phase.
