@@ -5,16 +5,16 @@ milestone_name: transitive-dependencies
 current_phase: 09
 current_phase_name: Reload installs missing declared dependencies
 status: executing
-stopped_at: Phase 8 complete, ready to plan Phase 09
-last_updated: "2026-09-22T03:27:41.340Z"
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-09-22T04:40:17.561Z"
 last_activity: 2026-09-21
-last_activity_desc: Phase 8 complete, transitioned to Phase 09
-state_head: 5d8bd9781366973f9c8cd4115f3db4c9b6550ac1
+last_activity_desc: Phase 09 execution started
+state_head: 036b1e7c15b29d7bd53855506105f8e2944ca627
 progress:
   total_phases: 12
   completed_phases: 8
   total_plans: 36
-  completed_plans: 32
+  completed_plans: 33
   percent: 67
 ---
 
@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-09-21 after Phase 8 enablement parity 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 09 — Reload installs missing declared dependencies,
+**Current focus:** Phase 09 — Reload installs missing declared dependencies
 the next of the seven phases (6-12) that align the shipped dependency feature
 with the Claude Code dependency docs. Phases 6-8 are complete.
 44 requirements across 12 phases (25 shipped in Phases 1-5 as PR #198, 19
@@ -36,8 +36,8 @@ under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 09 (Reload installs missing declared dependencies) — READY TO EXECUTE
-Plan: Not started
+Phase: 09 (Reload installs missing declared dependencies) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
 
 **Phase 8 closed 2026-09-21**, verified 13/13 must-haves with no human items;
@@ -365,7 +365,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-21 — Phase 8 complete, transitioned to Phase 09
+Last activity: 2026-09-21 — Phase 09 execution started
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 5 of 5 phases complete (100%).
@@ -558,6 +558,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 06 P02 | 165min | 3 tasks | 24 files |
 | Phase 06 P03 | 45min | 3 tasks | 20 files |
 | Phase 06 P04 | 20min | 2 tasks | 4 files |
+| Phase 09 P01 | 195 min | 3 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -825,6 +826,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: D-06-23: docs/dependency-resolution.md was re-triaged against 06-03's edit, not rewritten; only the new section and one cross-reference are this plan's
 - [Phase 06]: D-06-24: PRUNE-GUARD-MR-01 keeps its heading while its body records the guard is retired, because three historical records address it by that heading
 - [Phase 06]: D-06-25: the pending-preview gap got a BACKLOG carrier (PENDING-VERDICT-01) rather than a fourth summary note
+- [Phase 09]: D-09-01/02/05/06: pluginsToDependencyInstall (ninth bucket) filters the verdict's missing arm through a three-armed eligibility predicate, dedupes per dependency key, carries raw unfolded ranges
+- [Phase 09]: D-09-08: the LOAD-02 lift becomes provenance-independent via a record-walk sibling of buildUninstallBucket, recovering a marker-held dependency-provenance record whether or not config names it
+- [Phase 09]: D-09-09: dependency installed lands as the 61st closed-set reason on every pinning surface in one commit, rendering {dependency installed} first on a materialized reload row with no cause line
 
 ### Pending Todos
 
@@ -957,13 +961,13 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 8 complete, ready to plan Phase 09
+**Stopped at:** Completed 09-01-PLAN.md
 
-**Resume file:** .planning/phases/08-enablement-parity-for-dependencies/08-03-PLAN.md
+**Resume file:** None
 
 **Read beside it:** `.planning/phases/08-enablement-parity-for-dependencies/08-CONTEXT.md`
 
-Last session: 2026-09-21
+Last session: 2026-09-22T04:40:17.297Z
 Resumed from `HANDOFF.json` (paused 2026-09-20 at 08-01 Task 1, a
 `checkpoint:decision`). Did the handoff's prerequisite first: ported main's
 `InstallTransactionOutcome` union onto `installPluginWithTransaction` as its
