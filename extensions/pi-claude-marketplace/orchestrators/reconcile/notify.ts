@@ -39,6 +39,12 @@
 //                            caller that passes no satisfaction verdict, which
 //                            is every caller today (PENDING-VERDICT-01 /
 //                            D-06-25).
+//   pluginsToDependencyInstall
+//                         -> child row { status: "will install" }, folded into
+//                            the pluginsToInstall loop (MISS-01, D-09-12). The
+//                            bucket is empty for a caller that passes no
+//                            satisfaction verdict, which is every caller today
+//                            (PENDING-VERDICT-01).
 //
 // The empty-plan case is handled by the orchestrator (`pending.ts`) which
 // switches on `plans.every(isPlanEmpty)` and emits a free-form advisory line
@@ -373,6 +379,14 @@ export async function resolvePendingForceInstalls(
  *                              bucket is empty for a caller that passes no
  *                              satisfaction verdict, which is every caller
  *                              today (PENDING-VERDICT-01 / D-06-25).
+ *   - pluginsToDependencyInstall
+ *                           -> child row { status: "will install" }, folded
+ *                              into the pluginsToInstall loop (MISS-01,
+ *                              D-09-12). A bucket entry never matches a force-
+ *                              install key, so its row is the bare token. The
+ *                              bucket is empty for a caller that passes no
+ *                              satisfaction verdict, which is every caller
+ *                              today (PENDING-VERDICT-01).
  *
  * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
  * case-insensitive, project-before-user secondary). Plugin rows within a
@@ -403,7 +417,12 @@ export function buildReconcilePendingNotification(
       );
     }
 
-    for (const o of plan.pluginsToInstall) {
+    // MISS-01 / D-09-12: the dependency-install bucket previews the same
+    // action the config-driven install bucket does, so both feed one loop
+    // and one token. A bucket entry never matches a force-install key
+    // (force-install candidates come from `pluginsToInstall` resolution
+    // alone), so its row is always the bare token.
+    for (const o of [...plan.pluginsToInstall, ...plan.pluginsToDependencyInstall]) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
       // FSTAT-06 / D-66-04: stamp the partial modifier when the planned install
       // candidate resolved `partially-available` (no-network resolveStrict, computed
@@ -487,6 +506,10 @@ export function buildReconcilePendingNotification(
  * satisfaction verdict, so counting it changes nothing today -- and it stops a
  * scope whose only pending change is a load-time disable from reporting
  * "0 actions" once a caller starts populating it.
+ *
+ * MISS-01 / D-09-12: `pluginsToDependencyInstall` is counted the same way, so
+ * a scope whose only pending change is a missing declared dependency does not
+ * report "0 actions" once a caller starts populating it.
  */
 export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boolean {
   return plans.every(
@@ -497,6 +520,7 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
       p.pluginsToEnable.length === 0 &&
       p.pluginsToDisable.length === 0 &&
       p.pluginsToDependencyDisable.length === 0 &&
+      p.pluginsToDependencyInstall.length === 0 &&
       p.sourceMismatches.length === 0,
   );
 }

@@ -127,6 +127,7 @@ function pendingPlan(): ReconcilePlan {
     ],
     marketplacesToRemove: [],
     pluginsToDependencyDisable: [],
+    pluginsToDependencyInstall: [],
     pluginsToDisable: [{ marketplace: "pending-mp", plugin: "sleepable-plugin", scope: "user" }],
     pluginsToEnable: [{ marketplace: "pending-mp", plugin: "wakeable-plugin", scope: "user" }],
     pluginsToInstall: [

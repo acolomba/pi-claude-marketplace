@@ -54,6 +54,7 @@ import { emptyReconcilePlan } from "./types.ts";
 import type { ScopeSatisfactionVerdict } from "./dependency-verdict.ts";
 import type {
   PlannedDependencyDisable,
+  PlannedDependencyInstall,
   PlannedMarketplaceAdd,
   PlannedMarketplaceRemove,
   PlannedPluginDisable,
@@ -377,6 +378,7 @@ interface PluginDiff {
   readonly enable: readonly PlannedPluginEnable[];
   readonly disable: readonly PlannedPluginDisable[];
   readonly dependencyDisable: readonly PlannedDependencyDisable[];
+  readonly dependencyInstall: readonly PlannedDependencyInstall[];
   readonly dangling: readonly PlannedSourceMismatch[];
 }
 
@@ -397,6 +399,13 @@ interface DeclaredPluginAccumulator {
   readonly disable: PlannedPluginDisable[];
   readonly dangling: PlannedSourceMismatch[];
   readonly declaredKeys: Set<string>;
+  /**
+   * D-09-02: declared keys whose config entry is NOT `enabledExplicitFalse`,
+   * filled alongside `declaredKeys` so `buildDependencyInstallBucket` answers
+   * "declared disabled" (`declaredKeys.has(key) && !declaredEnabledKeys.has(key)`)
+   * and "declared enabled" without a second config walk.
+   */
+  readonly declaredEnabledKeys: Set<string>;
 }
 
 /** The loop-invariant half of the classification, built once per diff pass. */
@@ -479,6 +488,10 @@ function classifyDeclaredPlugin(
   // D-04 consume-time default via S7's `isDeclaredEnabled`: an absent
   // `enabled` field includes; only an explicit `false` excludes.
   const enabledExplicitFalse = !isDeclaredEnabled(declared.entry);
+  if (!enabledExplicitFalse) {
+    acc.declaredEnabledKeys.add(recordKey);
+  }
+
   const recorded = recordedKeys.has(recordKey);
 
   if (enabledExplicitFalse) {
@@ -693,6 +706,192 @@ function buildDependencyDisableBucket(
   return planned;
 }
 
+/** Inputs `buildDependencyInstallBucket`'s D-09-02 predicate reads per candidate. */
+interface DependencyInstallExclusions {
+  /** D-09-02: a dependent another bucket claims this pass is never fetched for. */
+  readonly claimed: ReadonlySet<string>;
+  readonly declaredKeys: ReadonlySet<string>;
+  readonly declaredEnabledKeys: ReadonlySet<string>;
+  /** D-09-06: a dependency key this pass already installs from the config. */
+  readonly installKeys: ReadonlySet<string>;
+}
+
+/**
+ * D-09-02: whether a dependent's missing declaration counts -- its record
+ * will be enabled once this pass applies.
+ *
+ * Admits a dependent that is: not claimed by uninstall, config-disable or
+ * marketplace-removal; recorded in the scope; not declared `enabled: false`
+ * by the merged config; and at least one of currently enabled, held only by
+ * the load-time check's own marker (D-06-02), or declared enabled by the
+ * merged config while recorded disabled (the enable bucket revives it this
+ * pass).
+ */
+function isEligibleDependencyInstallDependent(
+  dependentKey: string,
+  state: ExtensionState,
+  exclusions: DependencyInstallExclusions,
+): boolean {
+  if (exclusions.claimed.has(dependentKey)) {
+    return false;
+  }
+
+  const parsed = parsePluginKey(dependentKey);
+  const record =
+    parsed === undefined
+      ? undefined
+      : state.marketplaces[parsed.marketplace]?.plugins[parsed.plugin];
+  if (record === undefined) {
+    return false;
+  }
+
+  const declaredDisabled =
+    exclusions.declaredKeys.has(dependentKey) && !exclusions.declaredEnabledKeys.has(dependentKey);
+  if (declaredDisabled) {
+    return false;
+  }
+
+  return (
+    !isRecordedButDisabled(record) ||
+    record.dependencyDisabled === true ||
+    exclusions.declaredEnabledKeys.has(dependentKey)
+  );
+}
+
+/**
+ * MISS-01, D-09-01, D-09-05: turns the precomputed verdict's `missing` arm
+ * into the dependency-install bucket, one entry per missing dependency key,
+ * deduplicated across every eligible declarer.
+ *
+ * A fold-failure floor is not this function's job: it carries every eligible
+ * declarer's raw `ranges` unfolded (D-09-05 discretion, T-06-10), and the
+ * install cascade's existing fold site folds them once at cascade build time.
+ * A verdict the declaration walk could not complete plans nothing (D-05-07).
+ */
+function buildDependencyInstallBucket(
+  state: ExtensionState,
+  scope: Scope,
+  verdict: ScopeSatisfactionVerdict,
+  exclusions: DependencyInstallExclusions,
+): PlannedDependencyInstall[] {
+  if (!verdict.ok) {
+    return [];
+  }
+
+  const grouped = new Map<string, { ranges: string[]; requiredBy: string }>();
+  for (const entry of verdict.unsatisfied) {
+    if (entry.kind !== "missing") {
+      continue;
+    }
+
+    if (
+      !isEligibleDependencyInstallDependent(entry.dependent, state, exclusions) ||
+      exclusions.installKeys.has(entry.dependency)
+    ) {
+      continue;
+    }
+
+    const group = grouped.get(entry.dependency);
+    if (group === undefined) {
+      grouped.set(entry.dependency, {
+        ranges: [...(entry.ranges ?? [])],
+        requiredBy: entry.dependent,
+      });
+      continue;
+    }
+
+    group.ranges.push(...(entry.ranges ?? []));
+  }
+
+  const planned: PlannedDependencyInstall[] = [];
+  const sorted = [...grouped.entries()].sort((left, right) => left[0].localeCompare(right[0]));
+  for (const [key, group] of sorted) {
+    const parsed = parsePluginKey(key);
+    // A verdict names dependency keys built from AddressedDependency parsing,
+    // which admits the same forms this parser rejects only for a hand-built
+    // verdict literal (tests state verdicts as literals, so this arm is
+    // reachable there); the honest answer is to plan nothing for it.
+    if (parsed === undefined) {
+      continue;
+    }
+
+    planned.push({
+      scope,
+      plugin: parsed.plugin,
+      marketplace: parsed.marketplace,
+      ranges: group.ranges,
+      requiredBy: group.requiredBy,
+    });
+  }
+
+  return planned;
+}
+
+/** Inputs `buildDependencyDisabledLift`'s D-09-08 predicate reads per candidate. */
+interface DependencyDisabledLiftExclusions {
+  readonly claimed: ReadonlySet<string>;
+  readonly declaredKeys: ReadonlySet<string>;
+  readonly declaredEnabledKeys: ReadonlySet<string>;
+  /** Keys `classifyDeclaredPlugin`'s config-declared lift already produced. */
+  readonly alreadyEnabled: ReadonlySet<string>;
+  readonly conflictedRecorded: ReadonlySet<string>;
+}
+
+/**
+ * D-09-08: the lift becomes provenance-independent.
+ *
+ * `classifyDeclaredPlugin`'s enable branch only iterates CONFIG-declared
+ * entries, and a `provenance: "dependency"` record is never in config
+ * (D-04-02), so without this walk a dependency the check held down could
+ * never recover through reload. This walk iterates every recorded plugin
+ * instead: a record carrying the check's own marker (`isAlreadyDependencyDisabled`)
+ * that the LIVE verdict no longer holds is pushed onto the enable bucket
+ * whether or not the config names it. It never overturns a user's own
+ * disable (no marker) or a config-declared `enabled: false` record, and
+ * skips a record another bucket already claims or the config-declared lift
+ * already produced. Skip the walk when `!verdict.ok` (an incomplete verdict
+ * lifts nothing, D-05-07).
+ *
+ * The apply side needs no change: the enable step re-runs the ledger's state
+ * phase, which rebuilds the record without the marker.
+ */
+function buildDependencyDisabledLift(
+  state: ExtensionState,
+  scope: Scope,
+  verdict: ScopeSatisfactionVerdict,
+  exclusions: DependencyDisabledLiftExclusions,
+): PlannedPluginEnable[] {
+  if (!verdict.ok) {
+    return [];
+  }
+
+  const lifted: PlannedPluginEnable[] = [];
+  for (const [mpName, mpRecord] of Object.entries(state.marketplaces)) {
+    if (exclusions.conflictedRecorded.has(mpName)) {
+      continue;
+    }
+
+    for (const [pluginName, record] of Object.entries(mpRecord.plugins)) {
+      const key = `${pluginName}@${mpName}`;
+      const declaredDisabled =
+        exclusions.declaredKeys.has(key) && !exclusions.declaredEnabledKeys.has(key);
+      if (
+        !isAlreadyDependencyDisabled(record) ||
+        isHeldByUnsatisfiedDependency(key, verdict) ||
+        exclusions.claimed.has(key) ||
+        exclusions.alreadyEnabled.has(key) ||
+        declaredDisabled
+      ) {
+        continue;
+      }
+
+      lifted.push({ scope, plugin: pluginName, marketplace: mpName });
+    }
+  }
+
+  return lifted;
+}
+
 function diffPlugins(
   merged: MergedConfig,
   state: ExtensionState,
@@ -706,6 +905,7 @@ function diffPlugins(
     disable: [],
     dangling: [],
     declaredKeys: new Set<string>(),
+    declaredEnabledKeys: new Set<string>(),
   };
   const recordedKeys = buildRecordedKeys(state);
   const inputs: DeclaredPluginInputs = {
@@ -723,13 +923,34 @@ function diffPlugins(
 
   const uninstall = buildUninstallBucket(state, scope, marketplaceDiff, acc.declaredKeys);
   const claimed = claimedPluginKeys(marketplaceDiff, uninstall, acc.disable);
+  const dependencyInstallExclusions: DependencyInstallExclusions = {
+    claimed,
+    declaredKeys: acc.declaredKeys,
+    declaredEnabledKeys: acc.declaredEnabledKeys,
+    installKeys: new Set(acc.install.map((entry) => `${entry.plugin}@${entry.marketplace}`)),
+  };
+  const dependencyDisabledLift = buildDependencyDisabledLift(state, scope, verdict, {
+    claimed,
+    declaredKeys: acc.declaredKeys,
+    declaredEnabledKeys: acc.declaredEnabledKeys,
+    alreadyEnabled: new Set(acc.enable.map((entry) => `${entry.plugin}@${entry.marketplace}`)),
+    conflictedRecorded: marketplaceDiff.conflictedRecorded,
+  });
 
   return {
     install: acc.install,
     uninstall,
-    enable: acc.enable,
+    // D-09-08: config-declared entries first, lifted records after, in
+    // `state.marketplaces` iteration order.
+    enable: [...acc.enable, ...dependencyDisabledLift],
     disable: acc.disable,
     dependencyDisable: buildDependencyDisableBucket(state, scope, verdict, claimed),
+    dependencyInstall: buildDependencyInstallBucket(
+      state,
+      scope,
+      verdict,
+      dependencyInstallExclusions,
+    ),
     dangling: acc.dangling,
   };
 }
@@ -778,6 +999,7 @@ export function planReconcile(
   const totalEnables = pluginDiff.enable.length;
   const totalDisables = pluginDiff.disable.length;
   const totalDependencyDisables = pluginDiff.dependencyDisable.length;
+  const totalDependencyInstalls = pluginDiff.dependencyInstall.length;
   const totalMismatches = marketplaceDiff.mismatches.length + pluginDiff.dangling.length;
 
   if (
@@ -788,6 +1010,7 @@ export function planReconcile(
     totalEnables === 0 &&
     totalDisables === 0 &&
     totalDependencyDisables === 0 &&
+    totalDependencyInstalls === 0 &&
     totalMismatches === 0
   ) {
     return emptyReconcilePlan(scope);
@@ -802,6 +1025,7 @@ export function planReconcile(
     pluginsToEnable: pluginDiff.enable,
     pluginsToDisable: pluginDiff.disable,
     pluginsToDependencyDisable: pluginDiff.dependencyDisable,
+    pluginsToDependencyInstall: pluginDiff.dependencyInstall,
     sourceMismatches: [...marketplaceDiff.mismatches, ...pluginDiff.dangling],
   };
 }

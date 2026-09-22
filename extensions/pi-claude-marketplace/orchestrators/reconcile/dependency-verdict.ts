@@ -86,6 +86,12 @@ export interface UnsatisfiedDeclaration {
   readonly kind: UnsatisfiedKind;
   /** The declared range, present only on the out-of-range kind. */
   readonly range?: string;
+  /**
+   * Raw per-declarer range texts of the missing kind, so the reconcile
+   * planner can hand every declarer's constraint to the install cascade
+   * unfolded (D-09-05). Absent when the declaration named no constraint.
+   */
+  readonly ranges?: readonly string[];
 }
 
 /**
@@ -229,7 +235,12 @@ function unsatisfiedEntries(
   for (const [key, ranges] of constraintsByKey(declared)) {
     const record = recorded.get(key);
     if (record === undefined) {
-      entries.push({ dependent, dependency: key, kind: "missing" });
+      entries.push({
+        dependent,
+        dependency: key,
+        kind: "missing",
+        ...(ranges.length > 0 && { ranges }),
+      });
       continue;
     }
 

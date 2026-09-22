@@ -14,6 +14,7 @@ import {
   type ApplyReconcileOptions,
   type DependencyDisableStamp,
   type PlannedDependencyDisable,
+  type PlannedDependencyInstall,
   type PlannedMarketplaceAdd,
   type PlannedMarketplaceRemove,
   type PlannedPluginDisable,
@@ -94,6 +95,13 @@ const plannedDependencyDisable = {
   dependency: "secrets-vault@official",
   kind: "missing",
 } satisfies PlannedDependencyDisable;
+const plannedDependencyInstall = {
+  scope: "project",
+  plugin: "secrets-vault",
+  marketplace: "official",
+  ranges: ["^2.0.0"],
+  requiredBy: "deploy-kit@official",
+} satisfies PlannedDependencyInstall;
 const sourceMismatch = {
   scope: "project",
   cause: "source-mismatch",
@@ -134,6 +142,7 @@ void ({
   pluginsToEnable: [plannedPluginEnable],
   pluginsToDisable: [plannedPluginDisable],
   pluginsToDependencyDisable: [plannedDependencyDisable],
+  pluginsToDependencyInstall: [plannedDependencyInstall],
   sourceMismatches: [sourceMismatch, unknownStoredSource, danglingReference, malformedPluginKey],
 } satisfies ReconcilePlan);
 
@@ -332,6 +341,7 @@ void ({
   pluginsToEnable: [],
   pluginsToDisable: [],
   pluginsToDependencyDisable: [],
+  pluginsToDependencyInstall: [],
   // @ts-expect-error reconcile plans always expose their mismatch bucket
 } satisfies ReconcilePlan);
 void ({
@@ -467,6 +477,7 @@ describe("emptyReconcilePlan", () => {
       pluginsToEnable: [],
       pluginsToDisable: [],
       pluginsToDependencyDisable: [],
+      pluginsToDependencyInstall: [],
       sourceMismatches: [],
     });
     assert.deepStrictEqual(Object.keys(plan), [
@@ -478,6 +489,7 @@ describe("emptyReconcilePlan", () => {
       "pluginsToEnable",
       "pluginsToDisable",
       "pluginsToDependencyDisable",
+      "pluginsToDependencyInstall",
       "sourceMismatches",
     ]);
   });
@@ -499,6 +511,7 @@ describe("emptyReconcilePlan", () => {
       pluginsToEnable: [],
       pluginsToDisable: [],
       pluginsToDependencyDisable: [],
+      pluginsToDependencyInstall: [],
       sourceMismatches: [],
     });
   });
@@ -521,6 +534,7 @@ describe("emptyReconcilePlan", () => {
       pluginsToEnable: [],
       pluginsToDisable: [],
       pluginsToDependencyDisable: [],
+      pluginsToDependencyInstall: [],
       sourceMismatches: [],
     });
     assert.deepStrictEqual(secondPlan, {
@@ -532,6 +546,7 @@ describe("emptyReconcilePlan", () => {
       pluginsToEnable: [],
       pluginsToDisable: [],
       pluginsToDependencyDisable: [],
+      pluginsToDependencyInstall: [],
       sourceMismatches: [],
     });
     assert.notStrictEqual(firstPlan, secondPlan);

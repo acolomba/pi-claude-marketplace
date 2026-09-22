@@ -2,8 +2,8 @@
 //
 // DIFF-01 -- pure type surface for the reconcile planner.
 //
-// `ReconcilePlan` is the structured result of the bidirectional 8-bucket
-// diff that `planReconcile(merged, state, scope, verdict)` produces. The eight
+// `ReconcilePlan` is the structured result of the bidirectional 9-bucket
+// diff that `planReconcile(merged, state, scope, verdict)` produces. The nine
 // buckets partition the union of declared marketplaces + plugins (from
 // `MergedConfig`) and recorded marketplaces + plugins (from `ExtensionState`)
 // into the actions the apply path takes:
@@ -26,7 +26,13 @@
 //                                down because a declared dependency is not
 //                                satisfied in the same scope (LOAD-01); the
 //                                verdict arrives precomputed (D-06-04)
-//   8. `sourceMismatches`     -- four per-cause planner diagnostics
+//   8. `pluginsToDependencyInstall`
+//                             -- missing declared dependencies of an eligible
+//                                dependent, one entry per dependency key,
+//                                deduplicated across declarers (MISS-01,
+//                                D-09-01, D-09-02, D-09-05); the verdict
+//                                arrives precomputed (D-06-04)
+//   9. `sourceMismatches`     -- four per-cause planner diagnostics
 //                                (`source-mismatch`, `unknown-stored`,
 //                                `dangling-reference`, `malformed-plugin-key`);
 //                                each variant carries only the fields its
@@ -162,6 +168,25 @@ export interface PlannedDependencyDisable {
 }
 
 /**
+ * MISS-01, D-09-01, D-09-05: a missing declared dependency of an eligible
+ * dependent, deduplicated across every declarer that names it.
+ *
+ * `ranges` carries the raw per-declarer range texts, in verdict order, every
+ * eligible declarer's, empty when no declarer constrained it -- the fold is
+ * the install cascade's, not the planner's (T-06-10: a fold that fails is
+ * unsatisfiable, never no-constraint, and one fold site is what keeps that
+ * true). `requiredBy` is the first eligible declarer in verdict order, the
+ * key a closure failure on this root names as its dependent.
+ */
+export interface PlannedDependencyInstall {
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly ranges: readonly string[];
+  readonly requiredBy: string;
+}
+
+/**
  * Recorded source diverges from declared source -- four per-cause variants
  * surface distinct planner diagnostics on a single bucket. Each cause
  * carries only the fields its diagnostic actually renders; the prior fused
@@ -245,7 +270,7 @@ export function plannedSourceMismatchSubject(mismatch: PlannedSourceMismatch): s
 }
 
 /**
- * DIFF-01 result -- the structured output of `planReconcile`. The eight
+ * DIFF-01 result -- the structured output of `planReconcile`. The nine
  * action buckets are mutually exclusive at the (scope, marketplace,
  * plugin?) tuple level (a single entity is in at most one bucket).
  */
@@ -258,6 +283,7 @@ export interface ReconcilePlan {
   readonly pluginsToEnable: readonly PlannedPluginEnable[];
   readonly pluginsToDisable: readonly PlannedPluginDisable[];
   readonly pluginsToDependencyDisable: readonly PlannedDependencyDisable[];
+  readonly pluginsToDependencyInstall: readonly PlannedDependencyInstall[];
   readonly sourceMismatches: readonly PlannedSourceMismatch[];
 }
 
@@ -275,6 +301,7 @@ export function emptyReconcilePlan(scope: Scope): ReconcilePlan {
     pluginsToEnable: [],
     pluginsToDisable: [],
     pluginsToDependencyDisable: [],
+    pluginsToDependencyInstall: [],
     sourceMismatches: [],
   };
 }

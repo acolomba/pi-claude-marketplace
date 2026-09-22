@@ -147,6 +147,29 @@ test("reports a declared dependency with no record in the scope as missing", asy
   ]);
 });
 
+test("D-09-05: carries the declarer's raw range text on the missing arm", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", { app: {} });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: { dependencies: [{ name: "vault", version: "^1.0.0" }] },
+    }),
+  });
+
+  // act
+  const verdict = await buildScopeSatisfactionVerdict({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), [
+    { dependent: "app@mp", dependency: "vault@mp", kind: "missing", ranges: ["^1.0.0"] },
+  ]);
+});
+
 test("reports nothing when every declared dependency is recorded in the same scope", async () => {
   // arrange
   const mp = marketplaceRecord("mp", { app: {}, vault: {} });

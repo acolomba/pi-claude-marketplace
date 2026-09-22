@@ -42,6 +42,7 @@ function reconcilePlan(scope: Scope, actions: PlannedActions = {}): ReconcilePla
     pluginsToEnable: [...(actions.pluginsToEnable ?? [])],
     pluginsToDisable: [...(actions.pluginsToDisable ?? [])],
     pluginsToDependencyDisable: [...(actions.pluginsToDependencyDisable ?? [])],
+    pluginsToDependencyInstall: [...(actions.pluginsToDependencyInstall ?? [])],
     sourceMismatches: [...(actions.sourceMismatches ?? [])],
   };
 }
@@ -1647,6 +1648,24 @@ describe("buildReconcilePendingNotification", () => {
       },
       expectedRow: { status: "will disable", name: "cr" },
     },
+    {
+      // D-09-12: the dependency-install bucket previews the same action the
+      // config-driven install bucket does, so the projection gives it the
+      // same token rather than a new one.
+      bucket: "pluginsToDependencyInstall",
+      actions: {
+        pluginsToDependencyInstall: [
+          {
+            scope: "project",
+            plugin: "cr",
+            marketplace: "mp",
+            ranges: [],
+            requiredBy: "dependent@mp",
+          },
+        ],
+      },
+      expectedRow: { status: "will install", name: "cr" },
+    },
   ] satisfies readonly {
     bucket: string;
     actions: PlannedActions;
@@ -1665,6 +1684,38 @@ describe("buildReconcilePendingNotification", () => {
       });
     });
   }
+
+  test("D-09-12: previews a dependency install as a bare will-install row", () => {
+    // arrange -- a bucket entry never matches a force-install key, so the
+    // row carries no `partial` modifier.
+    const plans = [
+      reconcilePlan("project", {
+        pluginsToDependencyInstall: [
+          {
+            scope: "project",
+            plugin: "secrets-vault",
+            marketplace: "mp",
+            ranges: ["^2.0.0"],
+            requiredBy: "deploy-kit@mp",
+          },
+        ],
+      }),
+    ];
+
+    // act
+    const pending = buildReconcilePendingNotification(plans);
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [{ status: "will install", name: "secrets-vault" }],
+        },
+      ],
+    });
+  });
 
   for (const { cause, mismatch, subject, reasons, children } of [
     {
@@ -2038,6 +2089,23 @@ describe("isReconcilePlanListEmpty", () => {
             marketplace: "mp",
             dependency: "dep@mp",
             kind: "missing",
+          },
+        ],
+      },
+    },
+    {
+      // MISS-01 / D-09-12: the dependency-install bucket is an action the
+      // next reload performs, so a scope carrying only this bucket must not
+      // report as a steady state.
+      bucket: "a planned dependency install",
+      actions: {
+        pluginsToDependencyInstall: [
+          {
+            scope: "project",
+            plugin: "cr",
+            marketplace: "mp",
+            ranges: [],
+            requiredBy: "dependent@mp",
           },
         ],
       },
