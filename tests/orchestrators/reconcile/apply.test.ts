@@ -4621,7 +4621,7 @@ describe("applyReconcile", () => {
     // act
     await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
 
-    // assert -- WR-01: the root's own WARN-01 signals ride the cascade row
+    // assert -- WARN-01: the root's own degradation signals ride the cascade row
     // (`{dependency installed, malformed skill}` at `warning`), same as a
     // config-driven install's malformed-skill row, plus the sanctioned second
     // post-commit diagnostic (RECON-04's one exception) naming the degrade's
@@ -4638,7 +4638,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("WR-01: an orphan-rewake hook on the missing dependency carries the token onto the root's row", async (t) => {
+  test("SURF-05: an orphan-rewake hook on the missing dependency carries the token onto the root's row", async (t) => {
     // arrange -- same shape as the malformed-skill case, but the degradation
     // signal is SURF-05's orphan rewake rather than WARN-01's malformed
     // frontmatter. Unlike a malformed component, the orphan token moves no
@@ -4694,7 +4694,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("WR-02: a missing dependency that falls back to its current copy carries the token onto its row", async (t) => {
+  test("TAGS-02: a missing dependency that falls back to its current copy carries the token onto its row", async (t) => {
     // arrange -- deploy-kit declares secrets-vault with a REAL version
     // constraint (not the bare-token default, which is unconstrained and
     // never reaches the tag probe). secrets-vault's marketplace root carries

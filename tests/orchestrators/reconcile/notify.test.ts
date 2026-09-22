@@ -873,7 +873,7 @@ describe("buildReconcileAppliedCascade", () => {
     });
   });
 
-  test("WR-02: names a dependency that fell back to its current copy on its install row", () => {
+  test("TAGS-02: names a dependency that fell back to its current copy on its install row", () => {
     // arrange
     const outcomes: readonly PerEntryOutcome[] = [
       {

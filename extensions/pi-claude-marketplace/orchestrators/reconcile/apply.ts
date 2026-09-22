@@ -732,7 +732,7 @@ async function applyDependencyInstalls(
           // `InstallMissingDependencyOutcome` carries them only for the root's
           // own ledger run, never per member.
           ...(member.key === rootKey && installedRowDegradation(result)),
-          // WR-02: `fellBackToCurrentCopy` is a REQUIRED member fact
+          // TAGS-02: `fellBackToCurrentCopy` is a REQUIRED member fact
           // (`CascadeMemberOutcome`); every member, not only the root, can
           // have fallen back to its current copy.
           ...(member.fellBackToCurrentCopy && { dependencyCurrentCopy: true }),

@@ -575,7 +575,7 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
  * precedent -- the why-this-row marker leads and the ledger signals follow.
  * The token moves no severity channel.
  *
- * WR-02: `dependencyCurrentCopy` pushes `{dependency current copy}` right
+ * TAGS-02: `dependencyCurrentCopy` pushes `{dependency current copy}` right
  * after `dependency installed`, the same relative position the standalone
  * cascade's `composeCascadeMemberRows` gives it. The token moves no severity
  * channel.

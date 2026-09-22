@@ -121,7 +121,7 @@ export interface PluginInstalledOutcome
    */
   readonly dependencyInstalled?: true;
   /**
-   * WR-02 / TAGS-02: present only when this row's member fell back to its
+   * TAGS-02: present only when this row's member fell back to its
    * current copy (`CascadeMemberOutcome.fellBackToCurrentCopy`) because no
    * release tag satisfied the closure's constraints; omitted otherwise
    * (NREG-01). Mirrors the standalone cascade's own `{dependency current

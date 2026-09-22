@@ -11835,7 +11835,7 @@ test("D-09-05: a malformed skill degrades the missing dependency and surfaces a 
   });
 });
 
-test("WR-01: an orphan-rewake hook on the missing dependency carries orphanRewake on the outcome", async () => {
+test("SURF-05: an orphan-rewake hook on the missing dependency carries orphanRewake on the outcome", async () => {
   await withHermeticHome(async ({ installMissingDependency }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-orphan-rewake-"));
     try {
