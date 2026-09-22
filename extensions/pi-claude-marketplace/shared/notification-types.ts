@@ -466,17 +466,24 @@ export interface PluginSkippedMessage extends MessageBase {
   readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly scope?: Scope;
-  /**
-   * UPDT-02 / D-10-11: the held-update remedy, naming the constraining
-   * plugins and marking which of them are currently disabled. It is the ONE
-   * thing this field carries: every other `skipped` producer omits it and
-   * stays byte-frozen.
-   *
-   * It rides the cause chain because the sentence interpolates plugin
-   * identifiers, and the cause chain is the only channel in this grammar
-   * that legally interpolates one -- every frozen trailer constant
-   * interpolates nothing by contract.
-   */
+}
+
+/**
+ * The one `skipped` row that carries a cause trailer: update's.
+ *
+ * UPDT-02 / D-10-11: the held-update remedy names the constraining plugins
+ * and marks which of them are currently disabled, and D-10-13's ceiling
+ * disclosure names the range and its holders. Both interpolate plugin
+ * identifiers, and the cause chain is the only channel in this grammar that
+ * legally interpolates one -- every frozen trailer constant interpolates
+ * nothing by contract.
+ *
+ * The slot lives on this variant rather than on `PluginSkippedMessage` so
+ * the roughly a dozen other `skipped` producers cannot grow one: a row
+ * literal typed as the base that sets `cause` is an excess-property error.
+ * Only `UpdateMsg` and `UpdateRowMsg` name this type.
+ */
+export interface PluginUpdateSkippedMessage extends PluginSkippedMessage {
   readonly cause?: Error;
 }
 
@@ -532,6 +539,7 @@ export type PluginNotificationMessage =
   | PluginUpgradableMessage
   | PluginFailedMessage
   | PluginSkippedMessage
+  | PluginUpdateSkippedMessage
   | PluginManualRecoveryMessage
   | PluginWillInstallMessage
   | PluginWillUninstallMessage

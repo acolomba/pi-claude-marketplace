@@ -26,7 +26,7 @@ import {
   type ContentReason,
   type PluginFailedMessage,
   type PluginPartiallyInstalledMessage,
-  type PluginSkippedMessage,
+  type PluginUpdateSkippedMessage,
   type PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
@@ -52,7 +52,7 @@ type UpdateRowStatus = "updated" | "partially-installed" | "skipped" | "failed";
 export type UpdateRowMsg =
   | PluginUpdatedMessage
   | PluginPartiallyInstalledMessage
-  | PluginSkippedMessage
+  | PluginUpdateSkippedMessage
   | PluginFailedMessage;
 
 /**

@@ -739,12 +739,12 @@
       "filter": "extensions/pi-claude-marketplace/shared/notification-summary.ts:41:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-types.ts:573:48",
+      "id": "extensions/pi-claude-marketplace/shared/notification-types.ts:581:48",
       "owner": "isScopeBearingListRow",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-types.ts:573:11"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-types.ts:581:11"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:271:52",
@@ -1078,12 +1078,12 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:243:28"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts:488:46",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts:504:46",
       "owner": "admitResolvedVersion.admits",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within UpdateConstraintVerdict by kind, so this position accepts only the admits arm the caller already produced.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts:488:11"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts:504:11"
     }
   ]
 }

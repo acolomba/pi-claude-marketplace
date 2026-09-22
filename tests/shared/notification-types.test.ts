@@ -12,6 +12,7 @@ import {
   type PluginInstalledMessage,
   type PluginNotificationMessage,
   type PluginSkippedMessage,
+  type PluginUpdateSkippedMessage,
   type PluginStatus,
   type Reason,
   type Severity,
@@ -253,6 +254,25 @@ void ({
   status: "skipped",
   name: "alpha",
   // @ts-expect-error skipped messages require reasons
+} satisfies PluginSkippedMessage);
+
+// UPDT-02 / D-10-11: the cause trailer is update's alone. The base skipped
+// row has no slot for one, so no other producer can grow a trailer on a
+// byte-frozen row.
+const updateSkippedMessage = {
+  status: "skipped",
+  name: "alpha",
+  reasons: ["dependents constrain"],
+  cause: new Error('the declared ranges admit no version in common -- required by "beta@mp"'),
+} satisfies PluginUpdateSkippedMessage;
+void updateSkippedMessage;
+
+void ({
+  status: "skipped",
+  name: "alpha",
+  reasons: ["up-to-date"],
+  // @ts-expect-error a base skipped row structurally excludes a failure cause
+  cause: new Error("boom"),
 } satisfies PluginSkippedMessage);
 
 // @ts-expect-error structural marketplace absence is not a content reason

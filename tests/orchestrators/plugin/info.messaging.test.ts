@@ -13,14 +13,22 @@ void ({ status: "skipped", name: "alpha", reasons: [] } satisfies PluginInfoCasc
 // @ts-expect-error plugin-info cascade rows require explicit reasons
 void ({ status: "skipped", name: "alpha" } satisfies PluginInfoCascadeMsg);
 
-// UPDT-02: `cause` is now structurally permitted on every `skipped` row --
-// the shared `PluginSkippedMessage` type this command's cascade message
-// reuses -- because the update-held remedy needs it. `info`'s own producer
-// never sets it, so its rows stay byte-frozen regardless.
 void ({
   status: "skipped",
   name: "alpha",
   reasons: ["up-to-date"],
+} satisfies PluginInfoCascadeMsg);
+
+// UPDT-02: the held-update cause trailer lives on
+// `PluginUpdateSkippedMessage`, not on the shared `PluginSkippedMessage`
+// this command's cascade message reuses, so `info`'s rows cannot grow one
+// and stay byte-frozen.
+void ({
+  status: "skipped",
+  name: "alpha",
+  reasons: ["up-to-date"],
+  // @ts-expect-error a plugin-info cascade row structurally excludes a failure cause
+  cause: new Error("boom"),
 } satisfies PluginInfoCascadeMsg);
 
 test("exports the complete plugin-info cascade context", () => {
