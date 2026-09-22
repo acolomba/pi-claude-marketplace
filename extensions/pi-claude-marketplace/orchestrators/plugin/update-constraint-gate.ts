@@ -187,11 +187,9 @@ function nameHolder(holder: ConstraintHolder): string {
  * (never bounded -- a resolved version is never attacker-controlled length
  * the way a declared range is) ahead of the arm clause.
  */
-// fallow-ignore-next-line unused-export -- production reaches this through the "held" arm below in the same module; exported so the paired test drives it directly, and later arms extend it rather than writing a second composer.
-export function describeConstraint(
+function describeConstraint(
   detail: string,
   holders: readonly ConstraintHolder[],
-  // fallow-ignore-next-line private-type-leak -- ConstraintArm enumerates the closed set of situations this composer renders a clause for; callers pass the string literals the fold and the tag probes already emit.
   arm: ConstraintArm,
   version?: string,
 ): string {
@@ -495,8 +493,14 @@ export function admitResolvedVersion(
   const rejecting = admits.holders.filter(
     (holder) => holder.range !== undefined && !recordedVersionSatisfies(toVersion, holder.range),
   );
+  // A version outside the fold is outside at least one DECLARED range, so a
+  // holder set that produced the fold always has a rejecting member. A
+  // holder set whose members all declared no range has none -- name the
+  // whole set then, rather than end the line on "required by" with nobody
+  // behind it, which is a row the user cannot act on.
+  const named = rejecting.length > 0 ? rejecting : admits.holders;
   return {
     kind: "held",
-    cause: describeConstraint(admits.range, rejecting, "out-of-range", toVersion),
+    cause: describeConstraint(admits.range, named, "out-of-range", toVersion),
   };
 }

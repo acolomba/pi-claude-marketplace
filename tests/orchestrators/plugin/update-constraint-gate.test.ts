@@ -6,7 +6,6 @@ import { probeDependencyTags } from "../../../extensions/pi-claude-marketplace/o
 import { probeMarketplaceTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import {
   admitResolvedVersion,
-  describeConstraint,
   evaluateUpdateConstraint,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -941,29 +940,6 @@ describe("evaluateUpdateConstraint", () => {
   });
 });
 
-describe("describeConstraint", () => {
-  test("composes a fixed arm clause, the bounded detail, and disabled-marked holders", () => {
-    // arrange
-    const holders: readonly ConstraintHolder[] = [
-      { key: "alpha@mp", range: "^1.0.0", disabled: false },
-      { key: "beta@mp", range: "^2.0.0", disabled: true },
-    ];
-
-    // act
-    const cause = describeConstraint(
-      "no version satisfies all 2 declared ranges",
-      holders,
-      "disjoint",
-    );
-
-    // assert
-    assert.strictEqual(
-      cause,
-      'the declared ranges admit no version in common (no version satisfies all 2 declared ranges) -- required by "alpha@mp", "beta@mp" (currently disabled)',
-    );
-  });
-});
-
 describe("admitResolvedVersion", () => {
   /** An `admits` verdict fixture; `disclosure` is unused by stage two. */
   function admits(
@@ -997,8 +973,10 @@ describe("admitResolvedVersion", () => {
 
     // assert
     assert.ok(result.kind === "held");
-    assert.match(result.cause, /"a@mp"/);
-    assert.doesNotMatch(result.cause, /"b@mp"/);
+    assert.strictEqual(
+      result.cause,
+      'version 1.6.0 falls outside what the combined range admits (<=1.5.0) -- required by "a@mp"',
+    );
   });
 
   test("UPDT-02: an inclusive upper bound admits the boundary version", () => {
@@ -1029,8 +1007,10 @@ describe("admitResolvedVersion", () => {
     assert.strictEqual(result.kind, "held");
   });
 
-  test("a holder with no declared range never rejects", () => {
-    // arrange
+  test("UPDT-02: a holder set that declared no range is still named on the held line", () => {
+    // arrange -- no holder here has a range to reject the version with, so
+    // the per-holder filter finds nobody; the line names the whole set
+    // rather than ending on "required by" with no subject.
     const holders: readonly ConstraintHolder[] = [{ key: "a@mp", disabled: false }];
     const verdict = admits("^1.0.0", holders);
 
@@ -1039,6 +1019,9 @@ describe("admitResolvedVersion", () => {
 
     // assert
     assert.ok(result.kind === "held");
-    assert.doesNotMatch(result.cause, /a@mp/);
+    assert.strictEqual(
+      result.cause,
+      'version 5.0.0 falls outside what the combined range admits (^1.0.0) -- required by "a@mp"',
+    );
   });
 });
