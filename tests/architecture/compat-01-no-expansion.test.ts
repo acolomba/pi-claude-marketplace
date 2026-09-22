@@ -308,6 +308,12 @@ const EXPECTED_REASONS = [
   // row -- the command was NOT carried out, unlike its `dependents
   // unsatisfied` neighbour, whose subject is a removal that went through.
   "dependents remain",
+  // MISS-01 / D-09-09: the reload dependency-install step's marker for a
+  // missing declared dependency it materialized. It rides an `installed`
+  // row alone -- an undeclared plugin appearing with no stated reason is
+  // the row a user cannot explain, and it is neither idempotent nor a
+  // failure reason.
+  "dependency installed",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

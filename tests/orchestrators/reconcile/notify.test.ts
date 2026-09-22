@@ -833,6 +833,126 @@ describe("buildReconcileAppliedCascade", () => {
     });
   });
 
+  test("D-09-09: names a reload-installed dependency on its install row", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-installed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        version: "1.0.0",
+        dependencies: [],
+        dependencyInstalled: true,
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert -- no cause key: the register's success rows carry none.
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "installed",
+              name: "secrets-vault",
+              version: "1.0.0",
+              dependencies: [],
+              reasons: ["dependency installed"],
+              severity: "info",
+              needsReload: true,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("D-09-09: an outcome without the flag renders byte-identically to today", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-installed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "cr",
+        version: "1.0.0",
+        dependencies: [],
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert -- no reasons brace (NREG-01).
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "installed",
+              name: "cr",
+              version: "1.0.0",
+              dependencies: [],
+              severity: "info",
+              needsReload: true,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("D-09-09: orders dependency installed before orphan rewake, then degraded kinds", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-installed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        version: "1.0.0",
+        dependencies: [],
+        dependencyInstalled: true,
+        orphanRewake: true,
+        degradedKinds: ["skill"],
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "installed",
+              name: "secrets-vault",
+              version: "1.0.0",
+              dependencies: [],
+              reasons: ["dependency installed", "orphan rewake", "malformed skill"],
+              severity: "warning",
+              needsReload: true,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("projects a re-enable that dropped component kinds as a partially-installed row", () => {
     // arrange
     const outcomes: readonly PerEntryOutcome[] = [

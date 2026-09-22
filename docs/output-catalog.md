@@ -60,7 +60,7 @@ This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ct
 
 ### Reasons rendering
 
-Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 60-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only block is the dependency-cascade vocabulary -- `{no matching version}`, `{version conflict}`, `{constraint too complex}`, `{invalid version constraint}`, `{dependency marketplace not added}`, `{dependency cycle}`, `{dependency failed}`, `{dependency promoted}`, `{dependency pruned}`, `{dependency unsatisfied}`, `{dependency version unsatisfied}`, `{dependents unsatisfied}`, `{dependency current copy}`, `{dependency enabled}` and `{dependents remain}` -- which sits after uninstall's data-disposition marker `{data kept}`. `{dependency disabled}` is RETIRED (EDEP-03): `{dependency enabled}` replaces the skip it used to name.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 61-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only block is the dependency-cascade vocabulary -- `{no matching version}`, `{version conflict}`, `{constraint too complex}`, `{invalid version constraint}`, `{dependency marketplace not added}`, `{dependency cycle}`, `{dependency failed}`, `{dependency promoted}`, `{dependency pruned}`, `{dependency unsatisfied}`, `{dependency version unsatisfied}`, `{dependents unsatisfied}`, `{dependency current copy}`, `{dependency enabled}`, `{dependents remain}` and `{dependency installed}` -- which sits after uninstall's data-disposition marker `{data kept}`. `{dependency disabled}` is RETIRED (EDEP-03): `{dependency enabled}` replaces the skip it used to name.
 
 Structural `unavailable` rows derive reasons from resolver notes through `narrowResolverNotes`. Partial rows derive typed unsupported kinds through `narrowUnsupportedKinds`. The typed `workflows` kind uses the second path.
 
@@ -2794,6 +2794,20 @@ A plugin operation has failed.
     cause: Dependency "missing@mp" is not declared by its marketplace.
 
 Reconcile: 1 failure
+```
+
+### Reload installed a missing declared dependency (MISS-01)
+
+An explicit `/reload` (never session start, D-09-13) installs a declared dependency the scope lacks through the install cascade, with provenance `dependency`. One `(installed) {dependency installed}` row renders per materialized member, under the member's own marketplace block, with its bare name -- the block header carries the marketplace half of the key, so a cross-marketplace member files under its own marketplace (D-09-09). No cause line rides the row, and `info` answers who declares it: the reload, on the dependent's behalf. The dependent the install satisfied comes back up in the same reload as an ordinary `(installed)` row (D-09-07). Nothing is written to `claude-plugins.json` (D-04-02). A member the cascade found already installed renders no row (D-09-11).
+
+<!-- catalog-state: reconcile-dependency-installed -->
+
+```text
+● mp [project]
+  ● secrets-vault v1.0.0 (installed) {dependency installed}
+  ● deploy-kit v1.0.0 (installed)
+
+Reconcile: 2 successes
 ```
 
 ______________________________________________________________________

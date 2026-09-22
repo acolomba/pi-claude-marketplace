@@ -168,7 +168,13 @@ export type Reason =
   // removal that WENT THROUGH on a SUCCESS row, and this one's subject is an
   // operation that was NOT carried out. The dependent keys ride the row's
   // cause line, on the `dependency cycle` precedent, never the token.
-  | "dependents remain";
+  | "dependents remain"
+  // MISS-01 / D-09-09: the reload's dependency-install step materialized a
+  // plugin the user never named, to satisfy a declaration. It rides an
+  // `installed` row alone, because a bare `(installed)` for an undeclared
+  // plugin is the row a user cannot explain, and it is neither idempotent
+  // nor a failure.
+  | "dependency installed";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<

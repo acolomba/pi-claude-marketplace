@@ -417,5 +417,43 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // MISS-01 / D-09-09: `/reload` installed a missing declared dependency
+    // through the install cascade. The materialized member's row carries
+    // `{dependency installed}`; the dependent that declared it comes back up
+    // in the same reload as an ordinary `(installed)` row (D-09-07).
+    "reconcile-dependency-installed": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "installed",
+                name: "secrets-vault",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["dependency installed"],
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "installed",
+                name: "deploy-kit",
+                version: "1.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };

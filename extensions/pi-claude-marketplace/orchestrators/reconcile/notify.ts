@@ -569,10 +569,16 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
  * use -- `{orphan rewake}` first, then the per-kind malformed tokens. The
  * orphan token moves no severity channel: the malformed rule alone decides
  * `warning` versus `info`.
+ *
+ * MISS-01 / D-09-09: `dependencyInstalled` pushes `{dependency installed}`
+ * FIRST, ahead of `orphan rewake`, on the `{dependency pruned, data kept}`
+ * precedent -- the why-this-row marker leads and the ledger signals follow.
+ * The token moves no severity channel.
  */
 function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstalledMessage {
   const degradedReasons = malformedReasonsForKinds(outcome.degradedKinds);
   const reasons: ContentReason[] = [
+    ...(outcome.dependencyInstalled === true ? (["dependency installed"] as const) : []),
     ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
     ...degradedReasons,
   ];

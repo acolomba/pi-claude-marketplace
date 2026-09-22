@@ -112,8 +112,12 @@ const EXPECTED_SECTION_COUNT = 20;
 // through its own record instead of leaving it inert. One state out, one
 // state in, so the count holds at 220; the byte count moves because the
 // replacement state's fenced block differs from the one it replaced.
-const EXPECTED_STATE_COUNT = 220;
-const EXPECTED_UTF8_BYTES = 30_068;
+// MISS-01 / D-09-09: +1 state for the reload dependency-install step --
+// `reconcile-dependency-installed`, the two-row `{dependency installed}` /
+// bare `(installed)` block a materialized missing dependency and its
+// satisfied dependent render together (220 -> 221).
+const EXPECTED_STATE_COUNT = 221;
+const EXPECTED_UTF8_BYTES = 30_206;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -402,7 +406,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 220 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 221 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

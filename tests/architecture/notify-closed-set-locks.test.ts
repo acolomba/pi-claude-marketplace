@@ -96,6 +96,7 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "dependency current copy": true,
   "dependency enabled": true,
   "dependents remain": true,
+  "dependency installed": true,
 };
 
 const STATUS_TOKEN_ENROLLMENT: Record<StatusToken, true> = {
@@ -157,7 +158,7 @@ const MARKETPLACE_STATUS_ENROLLMENT: Record<MarketplaceStatus, true> = {
   skipped: true,
 };
 
-test("OUT-08: Reason is the closed 60-entry reason set", () => {
+test("OUT-08: Reason is the closed 61-entry reason set", () => {
   // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
   // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
   // MCPR-03 / D-02: +1 for the malformed mcp failure-class member (34 -> 35).
@@ -240,7 +241,12 @@ test("OUT-08: Reason is the closed 60-entry reason set", () => {
   // dependency enabled}` replaces `{already installed, dependency disabled}`.
   // The running arithmetic above is renumbered rather than annotated, so a
   // reader adding the next member does not inherit a gap (61 -> 60).
-  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 60);
+  // MISS-01 / D-09-09: +1 for `dependency installed` -- the reload
+  // dependency-install step's marker for a missing declared dependency it
+  // materialized. The row's plugin was never named by the user, so a bare
+  // `(installed)` would be unexplained; the install succeeded, so it is
+  // neither idempotent nor a failure reason (60 -> 61).
+  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 61);
 });
 
 test("SNM-02: StatusToken is the closed 24-entry token set", () => {

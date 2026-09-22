@@ -113,6 +113,14 @@ export interface PluginInstalledOutcome
   readonly version?: string;
   readonly dependencies: readonly Dependency[];
   /**
+   * MISS-01 / D-09-09: present only when the reload's dependency-install step
+   * materialized this row's plugin to satisfy a declaration (`provenance:
+   * "dependency"`); omitted otherwise (NREG-01). The reconcile projection
+   * reads it to push the `dependency installed` token -- `notify.ts` composes
+   * no vocabulary of its own.
+   */
+  readonly dependencyInstalled?: true;
+  /**
    * S2 / PR #51: orchestrated-mode `InstallPluginOutcome.postCommitWarnings`
    * propagated through to the reconcile cascade caller. Mirrors the
    * `import/execute.ts::installOnePlannedPlugin` pattern -- post-commit hygiene warnings

@@ -5,13 +5,13 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). `notification-types.ts` declares `Reason` as the SINGLE
- * source of catalog truth (OUT-08: the 60-entry membership AND order must stay
+ * source of catalog truth (OUT-08: the 61-entry membership AND order must stay
  * byte-identical for catalog stability); this module reorganizes that closed set
  * into shared topic-grouped unions + a structural completeness proof WITHOUT
  * restating the vocabulary's order. The topic groups below are typed views over
  * the same closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 60-entry set.
+ * 61-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
@@ -74,7 +74,13 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * added earlier in this paragraph -- because install and enable now turn a
  * disabled already-installed dependency back on through its own record
  * instead of leaving it inert: `{already installed, dependency enabled}`
- * replaces `{already installed, dependency disabled}` (61 to 60). The
+ * replaces `{already installed, dependency disabled}` (61 to 60). MISS-01 /
+ * D-09-09 added `dependency installed`, the reload dependency-install
+ * step's marker for a missing declared dependency it materialized -- an
+ * undeclared plugin appearing with no stated reason is the row a user
+ * cannot explain, so it rides an `installed` row alone; it is neither
+ * idempotent (a record was materialized) nor a failure (the install
+ * succeeded), so it joins the command-private reasons (60 to 61). The
  * arithmetic above is renumbered rather than annotated with the gap, so the
  * next member to join does not inherit one.
  *
@@ -411,4 +417,10 @@ type CommandPrivateReason =
   // It is the one member of this group that rides a `failed` row -- the
   // command was NOT carried out, unlike its `dependents unsatisfied`
   // neighbour above.
-  | "dependents remain";
+  | "dependents remain"
+  // MISS-01 / D-09-09: reload's marker for a missing declared dependency the
+  // dependency-install step materialized, owned by
+  // `orchestrators/reconcile/notify.ts`. The row's plugin was never named by
+  // the user; it exists to satisfy a declaration. NOT idempotent: a record
+  // was materialized, and it is not a failure -- the install succeeded.
+  | "dependency installed";
