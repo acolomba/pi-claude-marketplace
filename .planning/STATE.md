@@ -4,16 +4,16 @@ milestone: v1.20
 milestone_name: transitive-dependencies
 current_phase: 09
 current_phase_name: Reload installs missing declared dependencies
-status: planning
+status: executing
 stopped_at: Phase 8 complete, ready to plan Phase 09
-last_updated: "2026-09-22T01:47:10.674Z"
+last_updated: "2026-09-22T03:27:41.340Z"
 last_activity: 2026-09-21
 last_activity_desc: Phase 8 complete, transitioned to Phase 09
-state_head: c2596178eae111b54912cda68907b702e435fa01
+state_head: 5d8bd9781366973f9c8cd4115f3db4c9b6550ac1
 progress:
   total_phases: 12
   completed_phases: 8
-  total_plans: 32
+  total_plans: 36
   completed_plans: 32
   percent: 67
 ---
@@ -36,9 +36,9 @@ under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 09 — Reload installs missing declared dependencies
+Phase: 09 (Reload installs missing declared dependencies) — READY TO EXECUTE
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 
 **Phase 8 closed 2026-09-21**, verified 13/13 must-haves with no human items;
 full `npm run check` green on the final tree (7423 unit + 36 integration,
