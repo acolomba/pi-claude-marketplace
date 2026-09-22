@@ -28,6 +28,10 @@ npx --yes skills@latest add AminBlg/SimpleEnglish -a universal claude-code -y
 
 # gsd
 npx --yes @opengsd/gsd-core@latest --install --local --claude --codex --force-statusline
+node .codex/gsd-core/bin/gsd-tools.cjs capability install \
+    ./gsd-capabilities/discuss-agent-skills \
+    --scope project \
+    --yes
 
 # codegraph
 if ! command -v codegraph >/dev/null 2>&1; then

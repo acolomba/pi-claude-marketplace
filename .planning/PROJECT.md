@@ -4,7 +4,7 @@
 
 ## What This Is
 
-`pi-claude-marketplace` is a Pi extension that gives Pi users access to Claude plugin marketplaces through a `/claude:plugin` command surface intentionally aligned with Claude Code's upstream `/plugin`. It translates Claude plugin artifacts (skills, commands, agents, MCP servers) into the equivalent Pi-native artifacts (Pi skills, Pi prompt templates, pi-subagents agents, pi-mcp-adapter MCP entries) and manages their lifecycle (install, update, uninstall, reinstall, marketplace add/remove/list, import).
+`pi-claude-marketplace` is a Pi extension that gives Pi users access to Claude plugin marketplaces through a `/claude:plugin` command surface intentionally aligned with Claude Code's upstream `/plugin`. It translates Claude plugin artifacts (skills, commands, agents, hooks, MCP servers, workflows) into the equivalent Pi-native artifacts (Pi skills, Pi prompt templates, pi-subagents agents, staged Pi hook registrations, pi-mcp-adapter MCP entries, saved workflow-engine scripts) and manages their lifecycle (install, update, uninstall, reinstall, marketplace add/remove/list, import).
 
 ## Core Value
 
@@ -597,6 +597,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 
 ## Constraints
 
+- **Upstream parity:** Claude Code's behavior is the default for every user-visible decision, because this extension installs real Claude plugins and anything it does differently is something a user already learned upstream and must unlearn. Exactly two things license a divergence: a recorded project decision carried here with an ID (SC-1, for instance), or a Pi capability gap that makes parity unavailable. Neither "upstream looks wrong" nor "our way is simpler" qualifies -- those go to the user as a question. Research the upstream contract with `skills/claude-code-compat-research`.
 - **Runtime:** Node >= 20.19.0 (NFR-4)
 - **Tech stack:** TypeScript strict; the resolver MUST expose discriminated `installable: true | false` so consumers cannot read `pluginRoot` from a non-installable plugin (NFR-7)
 - **Pi API:** `@earendil-works/pi-coding-agent` peer dependency, pinned to `>=0.80.5` (dev `^0.84.2`); the NFR-11 floor-pinning SHOULD is now satisfied

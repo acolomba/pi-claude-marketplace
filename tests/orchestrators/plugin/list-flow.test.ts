@@ -360,9 +360,7 @@ test("CMC-10: exact zero-row notification ignores an ambient Pi agent directory"
     // act
     await listPlugins({ ctx, pi, cwd });
     // assert
-    assert.deepStrictEqual(notifications, [
-      { message: "(no marketplaces)\n\nPlugin list: 0 successes" },
-    ]);
+    assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)" }]);
 
     verify(ctx);
     verify(pi);

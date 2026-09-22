@@ -186,10 +186,10 @@ function disabledRow(name: string): PluginDisabledMessage {
   return { status: "disabled", name, severity: "info", needsReload: false };
 }
 
-test("an empty plural cascade retains its zero-success tally", (t) => {
+test("an empty plural cascade emits only its sentinel", (t) => {
   // arrange
   const harness = createHarness({
-    message: "(no marketplaces)\n\nPlugin inspect: 0 successes",
+    message: "(no marketplaces)",
   });
   const controlled = createControlledContext(t, "Plugin inspect");
 
@@ -205,19 +205,32 @@ test("an empty plural cascade retains its zero-success tally", (t) => {
 
 test("WR-06: folds caller-supplied advisory lines before the tally", (t) => {
   // arrange
+  // One row, so a tally actually renders: an empty result suppresses the
+  // success line entirely (#209), which would leave nothing to fold before.
   const harness = createHarness({
-    message: "(no marketplaces)\n\nfirst advisory\nsecond advisory\n\nPlugin inspect: 0 successes",
+    message:
+      "● official [user]\n  controlled available alpha [user]\n\nfirst advisory\nsecond advisory\n\nPlugin inspect: 1 success",
   });
   const controlled = createControlledContext(t, "Plugin inspect");
+  const rows: readonly MarketplaceRows<ControlledMessage>[] = [
+    { name: "official", scope: "user", plugins: [availableRow("alpha")] },
+  ];
 
   // act
-  notifyWithContext(harness.ctx, harness.pi, controlled.context, [], undefined, "plural", [
+  notifyWithContext(harness.ctx, harness.pi, controlled.context, rows, undefined, "plural", [
     "first advisory",
     "second advisory",
   ]);
 
   // assert
-  assert.deepStrictEqual(controlled.calls, []);
+  assert.deepStrictEqual(controlled.calls, [
+    {
+      status: "available",
+      name: "alpha",
+      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false },
+      scope: "user",
+    },
+  ]);
   verify(harness.ctx);
   verify(harness.pi);
   verify(harness.ui);

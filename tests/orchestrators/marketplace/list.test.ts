@@ -142,7 +142,7 @@ async function withHermeticHome<T>(
   return withHermeticEnvironment("mp-list-", fn);
 }
 
-test("bare list emits the exact zero-row notification without creating scope data", async () => {
+test("bare list emits only the empty-state sentinel without creating scope data", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const boundary = notificationBoundary("empty list", true);
@@ -157,9 +157,7 @@ test("bare list emits the exact zero-row notification without creating scope dat
     await listMarketplaces(options);
 
     // assert
-    assert.deepStrictEqual(boundary.notifications, [
-      { message: "(no marketplaces)\n\nMarketplace list: 0 successes" },
-    ]);
+    assert.deepStrictEqual(boundary.notifications, [{ message: "(no marketplaces)" }]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
     verify(boundary.pi);

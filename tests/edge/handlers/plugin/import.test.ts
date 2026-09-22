@@ -90,7 +90,7 @@ const INVALID_SCOPE_MESSAGE =
   'Invalid --scope value: "bad". Must be "user" or "project".\n\nUsage: /claude:plugin import [--scope user|project]';
 
 /** The whole cascade an import over a tree with no Claude settings renders. */
-const EMPTY_CASCADE_MESSAGE = "(no marketplaces)\n\nImport: 0 successes";
+const EMPTY_CASCADE_MESSAGE = "(no marketplaces)";
 
 interface HermeticScope {
   readonly cwd: string;
