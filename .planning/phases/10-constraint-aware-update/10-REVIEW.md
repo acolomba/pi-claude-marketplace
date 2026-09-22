@@ -147,6 +147,44 @@ function constraintTagSource(entry: PluginEntry): ConstraintTagSource {
 
 If the override IS intended, it needs a decision ID, a `docs/dependency-resolution.md` sentence, and a paired test asserting that a `sha`-pinned constrained entry moves to the tag oid.
 
+**ORCHESTRATOR DISPOSITION (2026-09-22): the override IS intended — do NOT apply the guard above.**
+
+The reviewer correctly identified that nothing in this project's records authorises the
+override, and correctly declined to assume. The missing authority is upstream, and it is
+decisive. In the Claude Code 2.1.267 binary, `updatePluginOp` rewrites the entry source as:
+
+```
+F = H && (u.source==="github" || u.source==="url" || u.source==="git-subdir")
+      ? { ...u, ref: H.ref, sha: H.sha }
+      : u
+```
+
+where `H` is the constraint-selected tag. There is **no test on `u.sha`** anywhere on that
+path — the only `.sha` comparison in the surrounding region is the up-to-date short-circuit
+(`Z.version === y.resolvedVersion && Z.sha === y.gitCommitSha`), which compares the SELECTED
+tag against the INSTALLED record, not against the entry's declared pin. Upstream therefore
+moves a `sha`-pinned entry to the constraint-selected tag, exactly as this implementation
+does, and this milestone's posture is upstream parity (see the HANDOFF's row 3 and every
+D-10-* decision in CONTEXT.md).
+
+The reasoning also holds on its own terms: a `sha`-pinned entry whose commit falls outside a
+dependent's declared range is precisely the conflict this feature exists to resolve, and
+resolving it in favour of the dependents is what UPDT-01 asks for.
+
+**So the work owed by CR-02 is the third option the reviewer named, not the first:**
+
+1. Record it as a new decision (next free id, `D-10-20`) in `10-CONTEXT.md`, stating the
+   upstream evidence above and that an entry-declared `sha` does not exempt a plugin from
+   its dependents' constraints.
+2. Add a `docs/dependency-resolution.md` sentence to the constraint section saying a
+   version-pinned marketplace entry still moves when its dependents' ranges require it.
+3. Add the paired test the reviewer asked for: a `sha`-pinned constrained entry resolves to
+   the tag oid and records the tag's version.
+
+Severity is therefore **not** a blocker on the code; it is a documentation-and-test debt of
+warning weight. The `constraintTagSource` guard in the Fix block above must NOT be applied.
+
+
 ## Warnings
 
 ### WR-01: `admitResolvedVersion` can emit a held cause with a dangling `required by`
