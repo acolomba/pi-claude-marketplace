@@ -1973,6 +1973,88 @@ test("EDEP-03 a disabled already-installed dependency's record ends enabled, mat
   assert.strictEqual(bar.fellBackToCurrentCopy, false);
 });
 
+test("D-09-04: a disabled record is a wall when the caller says so", async (t) => {
+  // arrange: `bar` is disabled and pre-installed; `foo` declares it. `bar`
+  // itself declares `baz`, which the catalog would answer if the walk ever
+  // reached it.
+  const environment = await createHermeticEnvironment(t, "install-cascade-wall-");
+  const { state, disabledUpdatedAt } = await seedOneDisabledDependency(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  const queried: string[] = [];
+  const baseLookup = catalog({
+    [`foo@${MARKETPLACE}`]: [{ name: "bar" }],
+    [`bar@${MARKETPLACE}`]: [{ name: "baz" }],
+  });
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: (subject) => {
+      queried.push(subject.key);
+      return baseLookup(subject);
+    },
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    treatDisabledAsWall: true,
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.enabled, false);
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.updatedAt, disabledUpdatedAt);
+  assert.deepStrictEqual(
+    cascade.kind === "installed" && cascade.members.map((member) => member.key),
+    [`foo@${MARKETPLACE}`],
+  );
+  assert.deepStrictEqual(cascade.kind === "installed" && cascade.alreadyInstalled, [
+    { key: `bar@${MARKETPLACE}`, version: "0.0.1" },
+  ]);
+  assert.ok(
+    !queried.includes(`bar@${MARKETPLACE}`),
+    "bar's own declarations are never read -- the wall stops the walk at its key",
+  );
+});
+
+test("D-09-04 / RESV-05: a walled disabled record still answers to the root's constraint", async (t) => {
+  // arrange: `foo` declares `bar` at `^2.0.0`; `bar` is disabled and recorded
+  // at `0.0.1`.
+  const environment = await createHermeticEnvironment(t, "install-cascade-wall-constraint-");
+  const { state } = await seedOneDisabledDependency(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  const before = await twoScopeFootprint(environment.cwd, state);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^2.0.0" }],
+      [`bar@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    treatDisabledAsWall: true,
+  });
+
+  // assert
+  assert.deepStrictEqual(cascade, {
+    kind: "constraint-failed",
+    failure: {
+      kind: "range-conflict",
+      why: "installed-unsatisfied",
+      key: `bar@${MARKETPLACE}`,
+      range: ">=2.0.0 <3.0.0-0",
+      recordedVersion: "0.0.1",
+    },
+  });
+  assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
+});
+
 test("CR-04: a depth-2 disabled dependency chain re-enables transitively", async (t) => {
   // arrange: `foo` declares `bar`; `bar` declares `baz`. Both `bar` and
   // `baz` are recorded and disabled.

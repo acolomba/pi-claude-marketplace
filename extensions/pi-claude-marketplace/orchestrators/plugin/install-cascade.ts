@@ -49,7 +49,10 @@
 // its record and every other member installs fresh. A recorded ENABLED
 // dependency stays the wall RESV-05 makes it: the walk stops there before its
 // marketplace is checked (RESV-05 precedes D-03-08), so a declaration below a
-// live dependency is never explored.
+// live dependency is never explored. D-09-04's `treatDisabledAsWall` reverses
+// this for the reload path: a disabled record stays in `installedKeys`, so the
+// walk stops there like a live dependency and its own declarations are never
+// read.
 //
 // D-03-04 is accepted here rather than guarded. An already-installed member's
 // RECORDED version goes through `recordedVersionSatisfies`' normalization
@@ -447,6 +450,14 @@ export interface InstallCascadeOptions {
    */
   readonly ledgerOptionsFor: (member: ResolvedCascadeMember) => InstallLedgerOptions;
   readonly installedKeys: ReadonlySet<string>;
+  /**
+   * Keep a recorded DISABLED key in `installedKeys` instead of reading through
+   * it (D-09-04): the walk stops there like a live dependency, produces no
+   * `re-enable` phase, and its own declarations are never walked. The reload
+   * path sets this; the standalone install and enable cascades omit it and
+   * keep EDEP-03's read-through.
+   */
+  readonly treatDisabledAsWall?: true;
   readonly knownMarketplaces: ReadonlySet<string>;
   /**
    * The caller's failure capture, threaded to every member's ledger so a
@@ -1154,15 +1165,20 @@ function toCascadeResult(
 export async function runInstallCascade(
   options: InstallCascadeOptions,
 ): Promise<InstallCascadeResult> {
-  // EDEP-03: a disabled record is not a wall. The walk reads through it,
-  // so its own dependencies -- disabled or never installed -- are members of
-  // this closure with their ranges merged across every declaring branch, and
-  // a declaration it cannot resolve fails this install naming it as the
-  // dependent.
+  // EDEP-03: a disabled record is not a wall by default. The walk reads
+  // through it, so its own dependencies -- disabled or never installed -- are
+  // members of this closure with their ranges merged across every declaring
+  // branch, and a declaration it cannot resolve fails this install naming it
+  // as the dependent. D-09-04's `treatDisabledAsWall` is the one input that
+  // reverses this: the walk stops at a disabled key exactly as it stops at a
+  // live one.
   const closure = await resolveDependencyClosure({
     rootKey: options.rootKey,
     lookup: options.lookup,
-    installedKeys: liveInstalledKeys(options.state, options.installedKeys),
+    installedKeys:
+      options.treatDisabledAsWall === true
+        ? options.installedKeys
+        : liveInstalledKeys(options.state, options.installedKeys),
     knownMarketplaces: options.knownMarketplaces,
   });
   if (!closure.ok) {
