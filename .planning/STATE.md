@@ -2,43 +2,89 @@
 gsd_state_version: "1.0"
 milestone: v1.20
 milestone_name: transitive-dependencies
-current_phase: 09
-current_phase_name: Reload installs missing declared dependencies
-status: verifying
-stopped_at: Completed 09-04-PLAN.md
-last_updated: "2026-09-22T07:50:41.821Z"
-last_activity: 2026-09-21
-last_activity_desc: Phase 09 execution started
-state_head: 1f1a9f800e0bc7490066ef0e7192784f78972106
+current_phase: 10
+current_phase_name: Constraint-aware update
+status: planning
+stopped_at: Phase 09 complete, ready to plan Phase 10
+last_updated: "2026-09-22T10:45:56.315Z"
+last_activity: 2026-09-22
+last_activity_desc: Phase 09 complete, transitioned to Phase 10
+state_head: bc89db9aa3c6ff7c4b81f59295e436858ca9c760
 progress:
   total_phases: 12
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 36
   completed_plans: 36
-  percent: 67
+  percent: 75
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-21 after Phase 8 enablement parity for dependencies)
+See: `.planning/PROJECT.md` (updated 2026-09-22 after Phase 9 reload installs missing declared dependencies)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 09 — Reload installs missing declared dependencies
-the next of the seven phases (6-12) that align the shipped dependency feature
-with the Claude Code dependency docs. Phases 6-8 are complete.
+**Current focus:** Phase 10 — Constraint-aware update, the next of the seven
+phases (6-12) that align the shipped dependency feature with the Claude Code
+dependency docs. Phases 6-9 are complete.
 44 requirements across 12 phases (25 shipped in Phases 1-5 as PR #198, 19
 added 2026-09-18). v1.19 Unit Test Refactor closed 2026-09-04 and is archived
 under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 09 (Reload installs missing declared dependencies) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
+Phase: 10 — Constraint-aware update
+Plan: Not started
+Status: Ready to plan
+
+**Phase 9 closed 2026-09-22**, verified 12/12 must-haves with no human items;
+regression gate on the final tree: 7489/7489 unit, 38/38 integration; `npm run
+lint`, `typecheck`, `lint:type-members` green. Four plans ran in three
+sequential waves on this checkout (worktree isolation degraded per #683). An
+explicit `/reload` (`resources_discover` `reason === "reload"`, never startup)
+now installs every declared dependency an installed plugin lacks: the planner
+derives a ninth bucket, `pluginsToDependencyInstall`, from the LOAD-01
+verdict's `missing` arm (D-09-01/02, deduped by key, raw ranges carried);
+`createInstallMissingDependency` roots the install cascade at the missing key
+with `rootRanges` folded once and `treatDisabledAsWall` (D-09-04/05), every
+member `provenance: "dependency"`, no config write, no promotion;
+`applyDependencyInstalls` runs after `install plugins` and, when at least one
+dependency landed, re-runs the read pass and drives only the three toggle
+buckets from the fresh plan (D-09-06/07), which is what lets a marker-held
+dependent come back up in the same reload; the LOAD-02 lift is now
+provenance-independent (D-09-08). Rows: one `(installed) {dependency
+installed}` per materialized member (61st reason, catalog 220 -> 222
+states), a failing dependency's own `(failed) {dependency failed}` with the
+cause line plus Phase 6's disable row (D-09-09/10, research R1); a missing
+dependency is retried on every `/reload` (D-09-14). Upstream parity was
+checked against the 2.1.267 binary for every decision (`resolveMissingDependencies`
+installs only `not-found`, never re-enables, and does not run at session
+start). MISS-01 and MISS-02 are complete in `REQUIREMENTS.md`; BACKLOG gained
+`MISS-MPADD-01` (`marketplace add` wiring, upstream does it) and
+`RECON-REPLAN-01` (always re-plan after any mutating bucket).
+
+**The code review took three iterations** (`09-REVIEW.md`, `09-REVIEW-FIX.md`):
+0 critical / 3 warning / 7 info, all warnings fixed (the reload row dropped
+the root's degradation signals and `fellBackToCurrentCopy`; an orphaned
+JSDoc), then the iteration-2 warning that the fix had DUPLICATED the signal
+derivation was closed by one restructure pass (`ledgerDegradationSignals` in
+`install-outcome.ts` feeds both projections); converged `clean` with 12 Info
+left open by ruling (IN-11: `enable-disable.ts` still hand-copies the same
+derivation; IN-13: the picked signal pair literal at six sites wants a named
+alias). Orchestrator-side gate fixes: retired `force-install` prose and 12
+shifted contracts pins after wave 1 (`4854f0b3`), a `require-await` fixture
+after wave 3 (`14ff68e3`, WINDOWS #60 fixed).
+
+**Environment debt surfaced this phase:** `/tmp` reached 100% inodes from
+~29.8k leaked `clone-cache*` fixture directories -- `tests/orchestrators/plugin/clone-cache.test.ts`
+`mkdtemp`s and never removes them, across every `npm test` run on this
+machine; the orchestrator swept the ones older than two hours. The leak is a
+pre-existing test-hygiene bug, not Phase 9's, and is not yet in BACKLOG. The
+pre-existing local `.planning/config.json` formatting drift still fails
+`format:check`; it is the operator's uncommitted edit and was never staged.
 
 **Phase 8 closed 2026-09-21**, verified 13/13 must-haves with no human items;
 full `npm run check` green on the final tree (7423 unit + 36 integration,
@@ -365,7 +411,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-21 — Phase 09 execution started
+Last activity: 2026-09-22 — Phase 09 complete, transitioned to Phase 10
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 5 of 5 phases complete (100%).
@@ -392,7 +438,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 
 **Velocity:**
 
-- Total plans completed: 183
+- Total plans completed: 187
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -414,6 +460,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | 06 | 4 | - | - |
 | 07 | 3 | - | - |
 | 8 | 3 | - | - |
+| 09 | 4 | - | - |
 
 **Recent Trend:** 35 Phase 113 plans completed with all direct owner, review, validation, verification, security, and clean-repository gates green.
 **Per-Plan Metrics:**
@@ -971,13 +1018,25 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 09-04-PLAN.md
+**Stopped at:** Phase 09 complete, ready to plan Phase 10
 
 **Resume file:** None
 
-**Read beside it:** `.planning/phases/08-enablement-parity-for-dependencies/08-CONTEXT.md`
+**Read beside it:** `.planning/phases/09-reload-installs-missing-dependencies/09-CONTEXT.md`
 
-Last session: 2026-09-22T07:50:41.553Z
+Last session: 2026-09-22T10:50:00.000Z
+Autonomous run (`/gsd-autonomous --from 9`) took Phase 9 from discuss through
+transition in one session: smart discuss (four areas, every decision checked
+against the 2.1.267 binary at the operator's "follow upstream" instruction),
+research, plan (4 plans / 3 waves), sequential execution on this checkout,
+three-iteration review, verification 12/12. It stops here at the phase
+boundary on context budget; resume with `/gsd-autonomous --from 10`. Nothing
+was skipped; the `verify:post` `secure-phase` step hook has not run for Phase
+9 (no `09-SECURITY.md`), and the leaked-fixture sweep (TEST-TMPLEAK-01) and the
+operator's local `.planning/config.json` formatting drift are the two
+environment debts.
+
+Previous session: 2026-09-22T07:50:41.553Z
 Resumed from `HANDOFF.json` (paused 2026-09-20 at 08-01 Task 1, a
 `checkpoint:decision`). Did the handoff's prerequisite first: ported main's
 `InstallTransactionOutcome` union onto `installPluginWithTransaction` as its

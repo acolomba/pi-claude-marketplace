@@ -3264,3 +3264,19 @@ the dependent it should hold down is only caught one reload late.
 Scope when picked up: re-plan the toggle buckets after any mutating bucket,
 not only the dependency-install step, and measure the added read-pass cost on
 a steady-state reload before shipping it.
+
+## TEST-TMPLEAK-01: clone-cache tests leak their mkdtemp fixtures into /tmp
+
+Surfaced during Phase 9's code review (2026-09-22): the host `/tmp` tmpfs hit
+100% inodes with ~29.8k `clone-cache*`, `clone-cache-marketplace-*` and
+`clone-cache-nongit-*` directories dated across several days of `npm test`
+runs. `tests/orchestrators/plugin/clone-cache.test.ts` creates them with
+`mkdtemp(path.join(tmpdir(), ...))` and never removes them; every run of the
+suite on this machine leaves hundreds behind. The orchestrator removed the
+ones older than two hours to unblock the run.
+
+Scope when picked up: add the `rm(dir, { recursive: true, force: true })`
+teardown the sibling fixtures already use (a `finally` per case or a
+`t.after`), then grep the tree for other `mkdtemp` sites with no matching
+removal.
+

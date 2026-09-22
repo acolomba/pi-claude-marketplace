@@ -72,6 +72,27 @@ PRUNE-05's refusal); a constrained path-source dependency resolves against the
 marketplace repository's `{name}--v{version}` tags offline (Phase 7). Detail:
 `06-VERIFICATION.md`, `07-VERIFICATION.md`.
 
+**Delivered 2026-09-22 (Phase 9, verified 12/12):** an explicit `/reload`
+installs every declared dependency an installed plugin lacks. The planner
+derives a ninth bucket, `pluginsToDependencyInstall`, from the load-time
+verdict's `missing` arm -- never from the config, so D-04-02 holds -- for
+every dependent that will be enabled once the pass applies; the install
+cascade is rooted at the missing key with the declarers' ranges folded once
+(`rootRanges`) and disabled records treated as walls (`treatDisabledAsWall`),
+every member recorded `provenance: "dependency"`, no promotion, no config
+write; the apply pass runs the step after `install plugins`, only when
+`resources_discover` says `reload` (never at session start), and re-plans the
+three toggle buckets from a fresh read pass when a dependency landed, so a
+marker-held dependent comes back up in the same reload; the LOAD-02 lift no
+longer needs a config entry (MISS-01). A dependency that cannot be installed
+renders its own `(failed) {dependency failed}` row with the cause line and
+the dependent falls to Phase 6's check; nothing is half-materialized, and the
+attempt repeats on every `/reload` (MISS-02). Every decision was checked
+against the Claude Code 2.1.267 binary's `resolveMissingDependencies` at the
+operator's instruction to follow upstream. New closed-set reason
+`{dependency installed}` (61); catalog 220 -> 222 states. BACKLOG gained
+`MISS-MPADD-01` and `RECON-REPLAN-01`.
+
 **Delivered 2026-09-21 (Phase 8, verified 13/13):** `enable` and `disable`
 understand dependencies. `enable <plugin>` resolves the declared closure
 transitively in the same scope and reports one row per member, re-materializing
@@ -446,6 +467,14 @@ All prior validated requirements below remain historical completed work.
   TAGS-02, TAGS-03, DIVG-01), verified 2026-09-19. Code review found and
   fixed 3 critical + 15 warning findings across three fix iterations
   (0 critical/0 warning remain); see D-07-04 and D-07-03 in Key Decisions.
+- ✓ `/reload` installs every declared dependency an installed plugin lacks,
+  through the install cascade with provenance `dependency`, only on an explicit
+  reload; a dependency that cannot be installed is reported on its own row and
+  the dependent falls to the load-time check, retried every reload — v1.20
+  Phase 9 (MISS-01, MISS-02), verified 2026-09-22, 12/12 with no human items.
+  Code review converged over three iterations (0 critical, 3 warning in the
+  first; one restructure pass removed a duplicated signal derivation); see
+  D-09-01..16 in Key Decisions.
 - ✓ `enable` and `disable` understand dependencies: `enable <plugin>` resolves
   the declared closure transitively in the same scope, reports one row per
   member and re-materializes a disabled member through its own record as
@@ -803,6 +832,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-07-04 (v1.20 Phase 7, 2026-09-19): a tag-pinned path-source plugin materializes by copying the marketplace's `.git` into a fresh staging dir, then checking the tag out there — not by pointing isomorphic-git's `checkout` at a shared `dir`/`gitdir` pair against the marketplace clone's own `.git`.** Code review verified against the installed isomorphic-git source that the shared-gitdir construction (D-07-01's literal wording) writes `${gitdir}/index` regardless of `noUpdateHead`, silently desyncing the marketplace clone's own index. | The marketplace clone must never be mutated by materializing a dependency's pin. Copy-then-checkout is the same construction `clone-cache.ts::seedOnePluginMirror` already uses for the identical problem, so it invents no second mechanism, at the cost of one full `.git` copy per distinct pinned tag oid. | -- Locked |
 | **D-07-03 (v1.20 Phase 7, 2026-09-19): the TAGS-02 fallback row (no tag satisfies → marketplace's current copy installs) stays a quiet `info`-level note, not a warning — a deliberate divergence from upstream, which surfaces the analogous fallback as a warning.** A mid-review-cycle fix accidentally reversed this to `warning` (matching upstream); the regression was caught and reverted the same cycle. | The install itself always succeeds here; Phase 6's load-time check is what actually flags and disables a dependent if the fallback version is genuinely out of range, so nothing is wrong yet at install time. | -- Locked |
 | **D-08-01/02/03 + review rulings (v1.20 Phase 8, 2026-09-21):** the disable refusal is a plain-English instruction naming dependents in order, not a chained command (`disable` takes one target); the cascade-enable token is `{dependency enabled}` and `{dependents remain}` returns for the disable refusal (B1), while `{dependency disabled}` is retired; the enable cascade reports the full closure. Review rulings: a re-enabled member's EXISTING `enabled: false` config entry is overwritten to `true` and a member with no entry never gets one (D-04-02); the enable cascade and the disable guard are standalone-only, the install-cascade re-enable runs on every install; a `{not installed}` member stamps `warning` and does not refuse; one walk owns the install cascade's re-enable closure (`liveInstalledKeys`), after a discovery/fold split regressed three review passes running. |
+| **D-09-01..16 + review rulings (v1.20 Phase 9, 2026-09-22):** the reload's missing-dependency bucket derives from the verdict's `missing` arm for dependents that will be enabled once the pass applies (enabled, marker-held, or config-declared enabled; never a user-disabled record the config leaves alone, never one the plan uninstalls/disables); a disabled installed dependency is left alone (upstream installs only `not-found`); one cascade per missing key rooted at the dependency with the declarers' ranges folded once and every member `provenance: "dependency"`; the step runs after `install plugins`, only on an explicit `/reload` (upstream's session start never installs), and re-plans only the three toggle buckets when at least one dependency landed; the LOAD-02 lift is provenance-independent; rows are one `(installed) {dependency installed}` per materialized member, a cascade-wrapped failure renders `{dependency failed}` with the cause line (no per-kind classifier), an already-present member is silent, preview keeps the empty verdict default (PENDING-VERDICT-01 stays open); a failed install is retried on every reload; `marketplace add`/autoupdate are not wired (MISS-MPADD-01). Review rulings: the reload row carries the root's degradation signals and `{dependency current copy}` through one `ledgerDegradationSignals` derivation shared by both install projections. |
 
 ## Evolution
 
@@ -911,6 +941,8 @@ _Earlier updates (pre-v1.3-close): see git history. Phase 1 (2026-05-09), Phase 
 ---
 
 _Last updated: 2026-09-19 after v1.20 Phase 7 (marketplace-repo tag resolution)_
+
+_Last updated: 2026-09-22 after Phase 9 (reload installs missing declared dependencies) of v1.20; Phases 6-9 of the seven-phase parity extension are complete, three remain (constraint-aware update, cross-marketplace allowlist, standalone prune)._
 
 _Last updated: 2026-09-18 after the test-backlog milestone closed. Eight phases, 65 plans, 18/18 requirements; two new mandatory gates (unused type members, CRAP 30 from a validated Istanbul map), fallow in production dead-code mode, the agent-collision and argument-validation contracts settled, and every gate measured green at the final HEAD with aggregate unit production coverage at exactly 100%. Audit `tech_debt`, no blockers. Prior updates follow._
 
