@@ -778,7 +778,7 @@ describe("evaluateUpdateConstraint", () => {
     });
   });
 
-  test("D-10-18: one bulk run lists the same repository's tags once", async () => {
+  test("D-10-18: one bulk run lists each repository's tags once", async () => {
     // arrange
     const declarations = new Map<string, readonly AddressedDependency[]>([
       ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
