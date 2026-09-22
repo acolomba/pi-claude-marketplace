@@ -11729,7 +11729,7 @@ test("D-09-05: a satisfiable root range reaches the marketplace tag probe throug
         plugin: "secrets-vault",
         ranges: ["^1.0.0"],
         requiredBy: "deploy-kit@mp",
-        marketplaceTagProbe: async () => ({ kind: "no-matching-tag", range: "^1.0.0" }),
+        marketplaceTagProbe: () => Promise.resolve({ kind: "no-matching-tag", range: "^1.0.0" }),
       });
 
       // assert
