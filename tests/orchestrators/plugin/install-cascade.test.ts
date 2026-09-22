@@ -1077,6 +1077,161 @@ test("RESV-03 a satisfiable range pins the member and the pin reaches its ledger
   );
 });
 
+test("D-09-05: a root range pins the root through the tag probe like a constrained member", async (t) => {
+  // arrange: `bar` is the ROOT itself, git-sourced and declaring nothing --
+  // the caller's `rootRanges` is the only constraint on it.
+  const environment = await createHermeticEnvironment(t, "install-cascade-root-pin-");
+  const state = await seedMarketplace(environment.cwd, ["bar"], { gitSourced: ["bar"] });
+  const locations = locationsFor("project", environment.cwd);
+  const materialized: InstallLedgerOptions[] = [];
+  const seen: DependencyTagProbeOptions[] = [];
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `bar@${MARKETPLACE}`,
+    rootRanges: ["^1.0.0"],
+    lookup: catalog({ [`bar@${MARKETPLACE}`]: [] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, materialized),
+    tagProbe: tagProbeAnswering(
+      { kind: "pinned", tag: "bar--v1.4.0", oid: PINNED_OID, version: "1.4.0" },
+      seen,
+    ),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(
+    seen.map((query) => ({ pluginName: query.pluginName, source: query.source.kind })),
+    [{ pluginName: "bar", source: "url" }],
+    "the root is queried through the tag probe like a constrained member",
+  );
+  assert.deepStrictEqual(
+    materialized.map((options) => [
+      options.plugin,
+      options.sourcePinOverride,
+      options.pinVersionOverride,
+    ]),
+    [["bar", PINNED_OID, "1.4.0"]],
+    "the root installs the selected commit and records the tag's own version",
+  );
+});
+
+test("D-09-05: a root range on a path-source root reaches the marketplace tag probe", async (t) => {
+  // arrange: `bar` is the ROOT, path-sourced and declaring nothing.
+  const environment = await createHermeticEnvironment(t, "install-cascade-root-path-pin-");
+  const state = await seedMarketplace(environment.cwd, ["bar"]);
+  const locations = locationsFor("project", environment.cwd);
+  const seen: MarketplaceTagProbeOptions[] = [];
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `bar@${MARKETPLACE}`,
+    rootRanges: ["^2.0.0"],
+    lookup: catalog({ [`bar@${MARKETPLACE}`]: [] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    marketplaceTagProbe: marketplaceTagProbeAnswering(
+      { kind: "no-matching-tag", range: "unreachable" },
+      seen,
+    ),
+  });
+
+  // assert: TAGS-02 -- no satisfying tag, so the root falls back to the
+  // marketplace's current copy rather than failing.
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(
+    seen.map((query) => query.pluginName),
+    ["bar"],
+    "the marketplace tag probe is queried once for the root",
+  );
+  assert.deepStrictEqual(
+    cascade.kind === "installed" &&
+      cascade.members.find((member) => member.key === `bar@${MARKETPLACE}`)?.fellBackToCurrentCopy,
+    true,
+  );
+});
+
+test("D-09-05: a wildcard root range makes no query", async (t) => {
+  // arrange: `bar` is the ROOT, git-sourced. Both probe kinds are wired so
+  // either one firing would fail this case.
+  const environment = await createHermeticEnvironment(t, "install-cascade-root-wildcard-");
+  const state = await seedMarketplace(environment.cwd, ["bar"], { gitSourced: ["bar"] });
+  const locations = locationsFor("project", environment.cwd);
+  const seen: DependencyTagProbeOptions[] = [];
+  const seenPath: MarketplaceTagProbeOptions[] = [];
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `bar@${MARKETPLACE}`,
+    rootRanges: ["*"],
+    lookup: catalog({ [`bar@${MARKETPLACE}`]: [] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, []),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, seen),
+    marketplaceTagProbe: marketplaceTagProbeAnswering(
+      { kind: "no-matching-tag", range: "unreachable" },
+      seenPath,
+    ),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(seen, [], "no git tag query");
+  assert.deepStrictEqual(seenPath, [], "no marketplace tag query");
+});
+
+test("D-09-05 / T-06-10: contradictory root ranges fail the cascade as a range conflict before anything materializes", async (t) => {
+  // arrange: `bar` is the ROOT; the caller's own accumulated ranges conflict.
+  const environment = await createHermeticEnvironment(t, "install-cascade-root-conflict-");
+  const state = await seedMarketplace(environment.cwd, ["bar"], { gitSourced: ["bar"] });
+  const locations = locationsFor("project", environment.cwd);
+  const before = await twoScopeFootprint(environment.cwd, state);
+  const seen: DependencyTagProbeOptions[] = [];
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `bar@${MARKETPLACE}`,
+    rootRanges: [">=2.0.0", "<1.0.0"],
+    lookup: catalog({ [`bar@${MARKETPLACE}`]: [] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, seen),
+  });
+
+  // assert
+  assert.deepStrictEqual(cascade, {
+    kind: "constraint-failed",
+    failure: {
+      kind: "range-conflict",
+      why: "contradictory-declarations",
+      key: `bar@${MARKETPLACE}`,
+      range: ">=2.0.0 <1.0.0",
+      detail: "no version satisfies all 2 declared ranges",
+    },
+  });
+  assert.deepStrictEqual(seen, [], "the fold fails before any query is made");
+  assert.deepStrictEqual(
+    await twoScopeFootprint(environment.cwd, state),
+    before,
+    "the verdict precedes the phase array, so there is nothing to roll back",
+  );
+});
+
 /** Creates lightweight tags at the fixture marketplace's own current HEAD. */
 async function tagMarketplaceRoot(state: ExtensionState, ...tagNames: string[]): Promise<string> {
   const marketplaceRoot = state.marketplaces[MARKETPLACE]?.marketplaceRoot;

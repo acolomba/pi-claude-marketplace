@@ -78,6 +78,13 @@
 // -- an undo cannot assume its `do` ran to completion and must gate on a
 // context-set sentinel -- so each phase records itself in `materialized` after
 // its ledger returns, and `undo` acts only on what it finds there.
+//
+// MISS-01 / D-09-05: the root may carry caller-supplied ranges, so a missing
+// dependency installed through the reload path is pinned by every declarer's
+// constraint exactly as a constrained member is. `InstallCascadeOptions.rootRanges`
+// folds into the root member's own (empty) range list at `effectiveRanges`,
+// the same site every member's ranges are folded before the intersection
+// (RESV-03).
 
 import { resolveDependencyClosure } from "../../domain/dependency-closure.ts";
 import {
@@ -302,6 +309,12 @@ interface MemberConstraintOptions {
   /** `<plugin>@<marketplace>` of the plugin the user asked for. */
   readonly rootKey: string;
   /**
+   * The raw range texts the caller accumulated for the ROOT key, folded once
+   * with the root member's own (empty) range list at `effectiveRanges` --
+   * the same site every member's ranges are folded (D-09-05, MISS-01).
+   */
+  readonly rootRanges?: readonly string[];
+  /**
    * Every member the walk returned, in post order. A member the snapshot
    * records DISABLED re-enables through that record; the rest install fresh.
    */
@@ -417,6 +430,14 @@ export interface InstallCascadeOptions {
   readonly locations: ScopedLocations;
   /** `<plugin>@<marketplace>` of the plugin the user asked for. */
   readonly rootKey: string;
+  /**
+   * The raw range texts the caller accumulated for the ROOT key, folded once
+   * with the root member's own (empty) range list at the same site every
+   * member's ranges are folded (D-09-05). The reload path passes every
+   * eligible declarer's texts; the standalone `install` passes nothing
+   * because the user typed the root.
+   */
+  readonly rootRanges?: readonly string[];
   readonly lookup: ClosureLookup;
   /**
    * Per-member ledger options; the caller owns scope, cwd and the auth bundle.
@@ -494,14 +515,16 @@ interface CascadeRun {
  * The DECLARED ranges are what the row reports here, because an intersection
  * that failed produced no combined range to report instead. Each of them
  * already passed the declared-version allowlist, and the join is bounded
- * exactly like any other rendered range.
+ * exactly like any other rendered range. `ranges` is the member's effective
+ * list, so a fold that failed on the root's caller-supplied texts (D-09-05)
+ * names those texts too.
  */
 function toIntersectionFailure(
-  member: ClosureMember,
+  key: string,
+  ranges: readonly string[],
   failed: Extract<DependencyRangeIntersection, { readonly ok: false }>,
 ): CascadeConstraintFailure {
-  const key = member.key;
-  const range = renderConstraintRange(member.ranges.join(" "));
+  const range = renderConstraintRange(ranges.join(" "));
   if (failed.reason === "disjoint") {
     return {
       kind: "range-conflict",
@@ -679,6 +702,24 @@ async function probeMemberPin(
 }
 
 /**
+ * A member's effective range list: its own declared ranges, plus the caller's
+ * root ranges when the member IS the root (D-09-05).
+ *
+ * The closure walk seeds the root with an empty range list and only a
+ * declaring edge ever appends to a member's list (`recordEdge`,
+ * `domain/dependency-closure.ts`), so nothing inside the walk ever points a
+ * range AT the root. `options.rootRanges` is the only way one reaches it.
+ */
+function effectiveRanges(
+  options: MemberConstraintOptions,
+  member: ClosureMember,
+): readonly string[] {
+  return member.key === options.rootKey && options.rootRanges !== undefined
+    ? [...options.rootRanges, ...member.ranges]
+    : member.ranges;
+}
+
+/**
  * Resolve one member this run would install.
  *
  * The wildcard arm returns the member untouched and makes NO query: an empty
@@ -689,9 +730,10 @@ async function resolveOneMember(
   options: MemberConstraintOptions,
   member: ClosureMember,
 ): Promise<MemberConstraintOutcome> {
-  const intersected = intersectDependencyRanges(member.ranges);
+  const ranges = effectiveRanges(options, member);
+  const intersected = intersectDependencyRanges(ranges);
   if (!intersected.ok) {
-    return { kind: "failed", failure: toIntersectionFailure(member, intersected) };
+    return { kind: "failed", failure: toIntersectionFailure(member.key, ranges, intersected) };
   }
 
   return isUnconstrainedRange(intersected.range)
@@ -785,7 +827,7 @@ function checkInstalledMember(
 ): CascadeConstraintFailure | undefined {
   const intersected = intersectDependencyRanges(member.ranges);
   if (!intersected.ok) {
-    return toIntersectionFailure(member, intersected);
+    return toIntersectionFailure(member.key, member.ranges, intersected);
   }
 
   const recorded = recordedVersionOf(state, member);
@@ -1140,6 +1182,7 @@ export async function runInstallCascade(
     tagProbe: options.tagProbe ?? probeDependencyTags,
     tagMemo: new Map<string, readonly RemoteTag[]>(),
     marketplaceTagMemo: new Map<string, readonly ReleaseTagCandidate[]>(),
+    ...(options.rootRanges !== undefined && { rootRanges: options.rootRanges }),
     ...(options.marketplaceTagProbe !== undefined && {
       marketplaceTagProbe: options.marketplaceTagProbe,
     }),
