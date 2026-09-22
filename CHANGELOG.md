@@ -10,6 +10,7 @@
   - A bare `<pluginRoot>/plugin.json` is now read, and a plugin that declares `"./skills/"` next to a `skills/` directory no longer warns about duplicate skills.
   - `info` lists every declared dependency, including object-shaped entries with a version constraint, and does so on a git-source plugin that is not yet fetched.
   - `/reload` now installs a declared dependency an installed plugin lacks, and enables the plugin that needed it. A dependency that cannot be installed gets its own row naming the reason.
+  - `update` and `autoupdate` now keep a plugin inside the version ranges its dependents declare. Each picks the highest version those ranges allow, and holds the update with a row naming the holders when none exists.
 - Every `/claude:plugin` verb now rejects an unknown flag or an extra argument before it does any work. (#202)
   - `--local` is accepted only by the verbs that write configuration. Marketplace `info`, `list`, and `update` read both configuration files and write neither, so they now reject it.
   - Agent names now keep the complete source name. Update and reinstall migrate agents that an earlier version named with a shortened form.

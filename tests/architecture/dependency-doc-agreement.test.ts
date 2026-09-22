@@ -39,6 +39,7 @@ import {
   composeCascadeFailureMessage,
   composeCascadeMemberRows,
 } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts";
+import { projectSkippedOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-cascade.ts";
 
 import { REPO_ROOT } from "./source-scan.ts";
 
@@ -46,6 +47,8 @@ import type { DependencyClosureResult } from "../../extensions/pi-claude-marketp
 import type { CascadeMsg } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts";
 import type { CascadeConstraintFailure } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts";
 import type { InstallMsg } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
+import type { UpdateCascadeTarget } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-cascade.ts";
+import type { PluginUpdateSkippedOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { Reason } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 const DOC_REL = "docs/dependency-resolution.md";
@@ -366,6 +369,37 @@ test("DIVG-01 the resolution section carries the exact fallback subsection headi
     heading,
     "### When no tag satisfies the constraint",
     `${DOC_REL}: the fallback subsection heading has drifted from what DIVG-01 pins`,
+  );
+});
+
+test("UPDT-02: the document names the token the held update row stamps", async () => {
+  // arrange: a held update outcome, driven through the REAL composer -- the
+  // token under test comes from `projectSkippedOutcome`'s returned message,
+  // never as a literal copied into this test body.
+  const target: UpdateCascadeTarget = { marketplace: "mp", scope: "user" };
+  const outcome: PluginUpdateSkippedOutcome = {
+    partition: "skipped",
+    name: "shared-lib",
+    fromVersion: "1.0.0",
+    notes: ['the declared ranges admit no version in common -- required by "alpha@mp"'],
+    reasons: ["dependents constrain"],
+    declaresAgents: false,
+    declaresMcp: false,
+  };
+
+  // act
+  const message = projectSkippedOutcome(target, outcome, "single");
+  const section = await readDocSection(
+    "## What happens when an update is constrained by other plugins",
+  );
+
+  // assert
+  assert.strictEqual(message.status, "skipped");
+  const token = message.status === "skipped" ? message.reasons[0] : undefined;
+  assert.ok(token !== undefined, "the composed message carries at least one reason");
+  assert.ok(
+    section.includes(`{${token}}`),
+    `${DOC_REL}: the document never names the token the held update row stamps ({${token ?? "none"}})`,
   );
 });
 

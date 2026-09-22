@@ -123,11 +123,29 @@ The same rule protects the dependency's marketplace. A dependency can come from 
 
 ## Installing a dependency by name
 
-A plugin you install by name is recorded as one you asked for, even if another plugin also needs it. A later install of a plugin that needs it does not change that record. The move only goes the other way: when you install a dependency by name later, its record changes to say that you asked for it, and the row reads `{already installed, dependency promoted}`. This is a promotion. It changes nothing else about the record, and it writes the plugin's key into the configuration file, as a fresh install by name does. If the dependency was disabled, the same command enables it, because a plugin you ask for by name is enabled. `reinstall` and `update` never promote: they replace files and versions and leave the record's origin as it is.
+A plugin you install by name is recorded as one you asked for, even if another plugin also needs it. A later install of a plugin that needs it does not change that record. The move only goes the other way: when you install a dependency by name later, its record changes to say that you asked for it, and the row reads `{already installed, dependency promoted}`. This is a promotion. It changes nothing else about the record, and it writes the plugin's key into the configuration file, as a fresh install by name does. If the dependency was disabled, the same command enables it, because a plugin you ask for by name is enabled. `reinstall` and `update` never promote: they replace files and versions and leave the record's origin as it is, and an update's version choice is now bounded by what depends on the plugin.
 
-`install` takes no version, so a promotion never changes the dependency's version. To move a dependency to another version, run `update` or `reinstall`.
+`install` takes no version, so a promotion never changes the dependency's version. To move a dependency to another version, run `update` or `reinstall`, within the ranges its dependents allow.
 
 A dependency that was installed partially, with some of its component kinds unsupported, needs `--partial` again. This is the same consent every partial install needs. Without the flag the command refuses with `{already installed}`. With it the record changes only its provenance and keeps its partial shape. On a fully supported dependency `--partial` changes nothing. `--map-model` has no effect on this command: it changes how generated agents are written, and this command generates none.
+
+## What happens when an update is constrained by other plugins
+
+An update never moves a plugin outside the range the installed plugins that declare it hold it to. When those ranges leave room, the update takes the highest version inside their intersection. When they leave none, that plugin's update is skipped and its row names who is holding it, and every other plugin in the same run updates as before. This applies to `update <plugin>`, `update <marketplace>`, a bare `update`, and to the background `autoupdate` cascade -- all four reach the same check.
+
+Every installed plugin in the same scope constrains, enabled or disabled. A disabled plugin keeps its declarations exactly as it keeps its files, so a plugin briefly turned off still holds the things it needs. Constraints are scope-local: a project-scope update reads project-scope declarations, and a bare `update` across both scopes evaluates each independently.
+
+To choose a version, this extension first searches the plugin's release tags for the highest one inside the combined range -- the source repository's tags for a git-source plugin, the marketplace repository's own `<name>--v<version>` tags for a plugin whose entry is a relative path. When a tag is found, the update takes it, and the record stores the version that tag names. When no tag is found -- including a repository with no release tags at all, and a marketplace whose tag list cannot be read -- the update resolves as it otherwise would, and the version that comes out is then measured against the same range. In range it proceeds; out of range it is skipped.
+
+A skipped update's row reads `{dependents constrain}`, and the `cause:` line says which of three situations it is -- the declared ranges admit nothing in common, no release tag satisfies them, or the version that resolved falls outside them -- and names the plugins holding it, marking any that are currently disabled. On the last of these, only the plugins whose own range rejects that version are named; a plugin whose range the version satisfies never appears on the line.
+
+A plugin whose entry is a relative path and whose marketplace has no satisfying tag falls back to the marketplace's current copy, and that copy is then measured like any other version. When it is in range the update goes through and the row reads `{dependency current copy}` -- the same phrase an install uses for the same fact. When it is out of range the update is skipped. This differs from the install side, on purpose: on an install the alternative is having nothing, while on an update the alternative is keeping a copy that is already in range, so an update never knowingly moves an in-range plugin out of it.
+
+When the plugin is already at the highest version its dependents admit, the row still reads `{up-to-date}`, and the `cause:` line names the range and its holders, so you can tell "nothing newer exists" from "nothing newer is allowed."
+
+When some other installed plugin's declarations cannot be established, this plugin's update is skipped and the `cause:` line names that plugin and says why -- the same fail-closed rule [the uninstall refusal](#removing-a-plugin-other-plugins-need) already follows, differing only in that an update is skipped rather than refused.
+
+The skipped row is reported as a warning on every surface, including a background autoupdate, because the condition persists until a declaration changes.
 
 ## Removing a plugin other plugins need
 
