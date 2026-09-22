@@ -455,5 +455,47 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // MISS-02 / D-09-10: `/reload` could not install a missing declared
+    // dependency. The dependency's own `(failed)` row reuses the standalone
+    // cascade's `{dependency failed}` token and cause line; the dependent
+    // stays held by the LOAD-01 `{dependency unsatisfied}` row with the
+    // install remedy.
+    "reconcile-dependency-install-failed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "secrets-vault",
+                reasons: ["dependency failed"],
+                cause: new Error(
+                  'Dependency "crypto-core@mp" is not declared by its marketplace.',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "disabled",
+                name: "deploy-kit",
+                version: "1.0.0",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error('Install "secrets-vault@mp" or uninstall "deploy-kit@mp"'),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };

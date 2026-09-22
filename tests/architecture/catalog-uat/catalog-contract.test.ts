@@ -116,8 +116,12 @@ const EXPECTED_SECTION_COUNT = 20;
 // `reconcile-dependency-installed`, the two-row `{dependency installed}` /
 // bare `(installed)` block a materialized missing dependency and its
 // satisfied dependent render together (220 -> 221).
-const EXPECTED_STATE_COUNT = 221;
-const EXPECTED_UTF8_BYTES = 30_206;
+// MISS-02 / D-09-10: +1 state for the reload dependency-install failure --
+// `reconcile-dependency-install-failed`, the two-row `{dependency failed}` /
+// `{dependency unsatisfied}` block the failing dependency and its held
+// dependent render together (221 -> 222).
+const EXPECTED_STATE_COUNT = 222;
+const EXPECTED_UTF8_BYTES = 30_538;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -406,7 +410,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 221 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 222 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

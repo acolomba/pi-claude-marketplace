@@ -2810,6 +2810,24 @@ An explicit `/reload` (never session start, D-09-13) installs a declared depende
 Reconcile: 2 successes
 ```
 
+### Reload could not install a missing declared dependency (MISS-02)
+
+The install cascade for a missing declared dependency fails, so the failing dependency reports on its OWN row through the same `plugin-install-failed` outcome and `classifyOrchestratorThrow` path the config-install row uses (D-09-10): a closure or constraint failure the cascade wraps as `DependencyCascadeError` renders `{dependency failed}` with the redacted specific reason on the cause line (`is not declared by its marketplace`, `requires marketplace "mp", which is not added`, `has no release tag satisfying`, ...), and only a failure of the dependency's own ledger keeps its specific token (`{not in manifest}`, `{network unreachable}`, ...). No marketplace is added or cloned to satisfy a declaration (D-03-08). The dependent gets the LOAD-01 `(disabled) {dependency unsatisfied}` row with the install remedy from the re-derived check, or no row at all when it was already down. Nothing is half-materialized (D-03-07, NFR-3); the reload completes; and the install is retried on the next `/reload` while the declaration stays unsatisfied, each attempt reporting the failure row alone once the dependent is down (D-09-14). Severity: `error`; the trailing tally counts one failure and one warning; no reload-hint.
+
+<!-- catalog-state: reconcile-dependency-install-failed -->
+
+```text
+A plugin operation has failed.
+
+● mp [project]
+  ⊘ secrets-vault (failed) {dependency failed}
+    cause: Dependency "crypto-core@mp" is not declared by its marketplace.
+  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}
+    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"
+
+Reconcile: 1 failure, 1 warning
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace remove <name>`
