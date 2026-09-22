@@ -18,6 +18,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
+import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type {
   AuthAttemptResult,
   CredentialOps,
@@ -751,6 +752,54 @@ test("UPDT-01: a tag-pinned update records the tag's version, not a sha", async 
   assert.strictEqual(prepared.resolvedSha, pinnedSha);
   assert.strictEqual(prepared.toVersion, "1.2.0");
   assert.doesNotMatch(prepared.toVersion, /^sha-/);
+});
+
+test("D-10-20: a constraint pin overrides the entry's own declared sha", async (t) => {
+  // arrange -- the manifest entry names commit X; the gate selects a tag at
+  // a different commit. Upstream's `updatePluginOp` rewrites the entry
+  // source with the selected tag for `url` / `git-subdir` / `github` without
+  // reading the entry's own `sha`, so the dependents' ranges outrank it.
+  const entrySha = "7777777777777777777777777777777777777777";
+  const tagOid = "8888888888888888888888888888888888888888";
+  const seed = await seedUpdate({
+    installed: pluginRecord("1.0.0"),
+    source: { source: "url", url: "https://example.com/tagged", sha: entrySha },
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const resolvedSources: GitBackedSource[] = [];
+  const cloneCacheSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: ({ source }) => {
+      resolvedSources.push(source);
+      return Promise.resolve({
+        cloneUrl: "https://example.com/tagged",
+        pin: source.sha ?? "unpinned",
+      });
+    },
+    materializePluginClone: () => Promise.resolve(seed.pluginRoot),
+    materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+  };
+  const constraintGate: PreparePluginUpdateOptions["constraintGate"] = () =>
+    Promise.resolve({
+      kind: "admits",
+      range: "^1.0.0",
+      holders: [],
+      pin: { oid: tagOid, version: "1.2.0" },
+      fellBackToCurrentCopy: false,
+      disclosure: "already the highest version the combined range admits",
+    });
+
+  // act
+  const prepared = await prepare(seed, { cloneCacheSeam, constraintGate });
+
+  // assert -- the resolver saw the TAG's commit, not the entry's, and the
+  // record moves to the tag's own version.
+  assert.deepStrictEqual(
+    resolvedSources.map((source) => source.sha),
+    [tagOid],
+  );
+  assert.ok(!("partition" in prepared));
+  assert.strictEqual(prepared.resolvedSha, tagOid);
+  assert.strictEqual(prepared.toVersion, "1.2.0");
 });
 
 test("UPDT-01: a second update of a tag-pinned plugin is unchanged", async (t) => {

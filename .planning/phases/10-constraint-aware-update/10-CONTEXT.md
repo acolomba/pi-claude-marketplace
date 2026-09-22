@@ -216,6 +216,27 @@ the cross-marketplace allowlist (Phase 11).
   `update-flow.ts` / `update-preflight.ts` remain the only git consumers per
   `tests/architecture/no-orchestrator-network.test.ts`.
 
+- **D-10-20:** *(recorded 2026-09-22 at the code-review gate, CR-02)* **An
+  entry-declared `sha` does not exempt a plugin from its dependents'
+  constraints.** `constraintTagSource` routes a `url` / `git-subdir` /
+  `github` entry to the tag probe without reading the entry's own `sha`, and
+  a satisfying tag's oid then replaces it, so a commit-pinned entry moves to
+  the tag the dependents' ranges select. This is upstream's shape: in the
+  Claude Code 2.1.267 binary, `updatePluginOp` rewrites the entry source as
+  `{ ...u, ref: H.ref, sha: H.sha }` for exactly those three source kinds
+  whenever the constraint selected a tag `H`, and tests `u.sha` nowhere on
+  that path -- the only `.sha` comparison in the region is the up-to-date
+  short-circuit, which compares the SELECTED tag against the INSTALLED
+  record, never against the entry's declared pin. It also holds on its own
+  terms: a `sha`-pinned entry whose commit falls outside a dependent's
+  declared range is precisely the conflict UPDT-01 exists to resolve, and
+  UPDT-01 resolves it in the dependents' favour. `docs/dependency-resolution.md`
+  states this in the update-constraint section, and
+  `update-preflight.test.ts` pins it.
+  -- **Reversibility:** cheap -- guarding on `parsed.sha` in
+  `constraintTagSource` would restore the pre-gate behaviour, at the cost of
+  upstream parity.
+
 ### Claude's Discretion
 
 - The exact wording of the new reason token (two or three lowercase words,
