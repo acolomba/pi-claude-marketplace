@@ -64,6 +64,28 @@ scope to a fixpoint and removes only `provenance: "dependency"` records no
 remaining plugin declares, each reported as `{dependency pruned}`, and the
 uninstall flag surface is pinned at exactly `--keep-data` and `--prune`.
 
+**Delivered 2026-09-19 (Phases 6-7):** reconcile now checks every installed
+plugin's declarations against the scope's records and disables an unsatisfied
+dependent as a recorded consequence it lifts once the dependency is satisfied,
+and `uninstall` no longer refuses a still-needed plugin (Phase 6, retiring
+PRUNE-05's refusal); a constrained path-source dependency resolves against the
+marketplace repository's `{name}--v{version}` tags offline (Phase 7). Detail:
+`06-VERIFICATION.md`, `07-VERIFICATION.md`.
+
+**Delivered 2026-09-21 (Phase 8, verified 13/13):** `enable` and `disable`
+understand dependencies. `enable <plugin>` resolves the declared closure
+transitively in the same scope and reports one row per member, re-materializing
+a disabled member through its own record as `{dependency enabled}` (EDEP-01,
+EDEP-03); `disable <plugin>` refuses while an enabled dependent still declares
+it -- `(failed) {dependents remain}` with a plain-English instruction naming the
+dependents in order, since `disable` takes one target and no chained form
+exists (EDEP-02, D-08-01); and the install cascade re-enables a disabled
+already-installed dependency transitively, installing anything it declares that
+was never installed, retiring the `{already installed, dependency disabled}`
+skip with a documented supersession (EDEP-03). Both cascades overwrite an
+existing `enabled: false` config entry for a re-enabled member and never add one
+(D-04-02). BACKLOG `ENBL-DEP-01` is closed; `DEPS-STATUS-01` stays open.
+
 ## Previous Milestone: test-backlog -- Test Backlog (branch: features/test-backlog, shipped 2026-09-18, no npm release)
 
 **Goal:** Resolve the authorized test and quality backlog with measured controls,
@@ -424,6 +446,20 @@ All prior validated requirements below remain historical completed work.
   TAGS-02, TAGS-03, DIVG-01), verified 2026-09-19. Code review found and
   fixed 3 critical + 15 warning findings across three fix iterations
   (0 critical/0 warning remain); see D-07-04 and D-07-03 in Key Decisions.
+- ✓ `enable` and `disable` understand dependencies: `enable <plugin>` resolves
+  the declared closure transitively in the same scope, reports one row per
+  member and re-materializes a disabled member through its own record as
+  `{dependency enabled}`; `disable <plugin>` refuses while an enabled dependent
+  still declares it with a plain-English instruction naming the dependents in
+  order; the install cascade re-enables a disabled already-installed dependency
+  transitively and `{already installed, dependency disabled}` is retired with a
+  documented supersession; an existing `enabled: false` config entry for a
+  re-enabled member is overwritten to `true`, never added (D-04-02) — v1.20
+  Phase 8 (EDEP-01, EDEP-02, EDEP-03), verified 2026-09-21, 13/13 with no
+  human items. Code review converged over four iterations (5 critical +
+  7 warning in the first; the install cascade's transitive re-enable regressed
+  three passes running until one walk owned it); see D-08-01/02/03 in Key
+  Decisions.
 
 <!-- Shipped and confirmed valuable via this GSD project. -->
 
@@ -766,6 +802,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-05-01/02/07/14 + review fix (v1.20 Phase 5, 2026-09-16):** `--prune` is a whole-scope fixpoint sweep run once after the primary is removed, inside the one locked transaction, over `provenance: "dependency"` records only; `uninstall X` refuses while any installed record in the scope declares X (disabled declarers hold; an unreadable declarer fails closed and renders `{unreadable}`); reconcile never prunes. The CR-01 fix re-checks each pruned member with `isHeldBy` against the keys that actually left, so a failed member keeps the dependencies only it declared. | A removal that leaves a declared dependency unsatisfied is the state the guard exists to forbid; running the sweep on the same declaration index the guard reads keeps the two rules consistent, and the single-save contract keeps a partial sweep from ghosting a record. D-05-07 (fail closed) is rated reversible; the two-stale-records mutual block was reviewed by the operator and accepted with `marketplace remove` as the exit. | -- Locked |
 | **D-07-04 (v1.20 Phase 7, 2026-09-19): a tag-pinned path-source plugin materializes by copying the marketplace's `.git` into a fresh staging dir, then checking the tag out there — not by pointing isomorphic-git's `checkout` at a shared `dir`/`gitdir` pair against the marketplace clone's own `.git`.** Code review verified against the installed isomorphic-git source that the shared-gitdir construction (D-07-01's literal wording) writes `${gitdir}/index` regardless of `noUpdateHead`, silently desyncing the marketplace clone's own index. | The marketplace clone must never be mutated by materializing a dependency's pin. Copy-then-checkout is the same construction `clone-cache.ts::seedOnePluginMirror` already uses for the identical problem, so it invents no second mechanism, at the cost of one full `.git` copy per distinct pinned tag oid. | -- Locked |
 | **D-07-03 (v1.20 Phase 7, 2026-09-19): the TAGS-02 fallback row (no tag satisfies → marketplace's current copy installs) stays a quiet `info`-level note, not a warning — a deliberate divergence from upstream, which surfaces the analogous fallback as a warning.** A mid-review-cycle fix accidentally reversed this to `warning` (matching upstream); the regression was caught and reverted the same cycle. | The install itself always succeeds here; Phase 6's load-time check is what actually flags and disables a dependent if the fallback version is genuinely out of range, so nothing is wrong yet at install time. | -- Locked |
+| **D-08-01/02/03 + review rulings (v1.20 Phase 8, 2026-09-21):** the disable refusal is a plain-English instruction naming dependents in order, not a chained command (`disable` takes one target); the cascade-enable token is `{dependency enabled}` and `{dependents remain}` returns for the disable refusal (B1), while `{dependency disabled}` is retired; the enable cascade reports the full closure. Review rulings: a re-enabled member's EXISTING `enabled: false` config entry is overwritten to `true` and a member with no entry never gets one (D-04-02); the enable cascade and the disable guard are standalone-only, the install-cascade re-enable runs on every install; a `{not installed}` member stamps `warning` and does not refuse; one walk owns the install cascade's re-enable closure (`liveInstalledKeys`), after a discovery/fold split regressed three review passes running. |
 
 ## Evolution
 
@@ -787,6 +824,8 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-09-21 after Phase 8 enablement-parity-for-dependencies verified 13/13 (no human items). Phases 6-8 of the 2026-09-18 extension are complete: the load-time dependency check, marketplace-repository tag resolution, and enable/disable/install-cascade parity. EDEP-01..03 read Complete. Phase 9 (reload installs missing declared dependencies) is next. Prior updates follow._
 
 _Last updated: 2026-09-17 after Phase 5 prune-on-uninstall verified (human items accepted). All five v1.20 phases are complete: bare `plugin.json` read fidelity, `--keep-data`, dependency resolution under one outer ledger, install provenance at schemaVersion 3, and the dependents guard plus `uninstall --prune`. Requirements PRUNE-01..05 and FLAG-01 read Complete. Milestone audit/close is next. Prior updates follow._
 
