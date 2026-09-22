@@ -4159,7 +4159,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("LOAD-02: a second reload over an unchanged unsatisfied tree re-plans nothing and is silent", async (t) => {
+  test("LOAD-02: a second reload over an unchanged unsatisfied tree plans the retry bucket and stays silent", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-converges");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -4204,9 +4204,25 @@ describe("applyReconcile", () => {
 
     // assert -- the plan is compared against the FACTORY, so a bucket added
     // later cannot slip past this case by being absent from a hand-written
-    // literal.
+    // literal. D-09-14: the dependency stays missing (mp never declared
+    // secrets-vault), so the retry bucket re-plans the same entry every
+    // pass -- a deliberate non-fixpoint. This reconcile never opted into
+    // `reason: "reload"`, so the apply step drives nothing off it and the
+    // second pass is still silent (the LOAD-02 silence contract holds at
+    // startup, D-09-13).
     assert.equal(first.notifications.length, 1);
-    assert.deepStrictEqual(replanned, emptyReconcilePlan("project"));
+    assert.deepStrictEqual(replanned, {
+      ...emptyReconcilePlan("project"),
+      pluginsToDependencyInstall: [
+        {
+          scope: "project",
+          plugin: "secrets-vault",
+          marketplace: "mp",
+          ranges: [],
+          requiredBy: "deploy-kit@mp",
+        },
+      ],
+    });
     assert.deepStrictEqual(second.notifications, []);
     assert.equal(await readFile(project.stateJsonPath, "utf8"), settledBytes);
     assert.equal((await stat(project.stateJsonPath)).mtimeMs, settledModifiedAt);
@@ -4279,7 +4295,20 @@ describe("applyReconcile", () => {
       { alfa: alfa?.enabled, bravo: bravo?.enabled },
       { alfa: false, bravo: false },
     );
-    assert.deepStrictEqual(await replanFromDisk(project), emptyReconcilePlan("project"));
+    // D-09-14: charlie stays missing (mp never declared it), so the retry
+    // bucket re-plans the same entry -- a deliberate non-fixpoint.
+    assert.deepStrictEqual(await replanFromDisk(project), {
+      ...emptyReconcilePlan("project"),
+      pluginsToDependencyInstall: [
+        {
+          scope: "project",
+          plugin: "charlie",
+          marketplace: "mp",
+          ranges: [],
+          requiredBy: "bravo@mp",
+        },
+      ],
+    });
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
@@ -4479,5 +4508,1159 @@ describe("applyReconcile", () => {
     assert.equal(Object.hasOwn(record ?? {}, "dependencyDisabled"), false);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
+  });
+
+  // ───────────────────────────────────────────────────────────────────────
+  // MISS-01 / MISS-02 / D-09-04 .. D-09-14: the reload-only dependency-install
+  // step (`applyDependencyInstalls`) and its D-09-07 re-plan
+  // (`refreshTogglePlan`). Every case here passes `reason: "reload"` unless
+  // it is deliberately proving the startup/omitted posture.
+  // ───────────────────────────────────────────────────────────────────────
+
+  test("MISS-01: a reload installs a missing declared dependency and the dependent stays up", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "dependency-reload-install");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    const declaration = await readFile(project.configJsonPath, "utf8");
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● secrets-vault v1.0.0 (installed) {dependency installed}\n" +
+          "\n" +
+          "Reconcile: 1 success",
+      },
+    ]);
+    const secretsVault = await recordFor(project, "mp", "secrets-vault");
+    assert.equal(secretsVault?.provenance, "dependency");
+    assert.equal(secretsVault?.enabled, true);
+    const deployKit = await recordFor(project, "mp", "deploy-kit");
+    assert.equal(deployKit?.enabled, true);
+    assert.equal(Object.hasOwn(deployKit ?? {}, "dependencyDisabled"), false);
+    assert.equal(await readFile(project.configJsonPath, "utf8"), declaration);
+    assert.equal(await pathExists(project.configLocalJsonPath), false);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-09-09: a malformed skill on the missing dependency surfaces a post-install warning", async (t) => {
+    // arrange -- secrets-vault's own skill has unparseable frontmatter, which
+    // degrades but does not fail the install (WARN-01), and the collected
+    // hygiene warning rides the entry point's postCommitWarnings, gated on the
+    // member whose key equals the bucket entry's own root key.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-reload-malformed-skill");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "malformed" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert -- the cascade row (CascadeMemberOutcome carries no per-member
+    // degradedKinds, so the row itself stays the plain {dependency installed}
+    // token) plus the sanctioned second post-commit diagnostic (RECON-04's
+    // one exception) naming the degrade's free-text detail.
+    assert.equal(notifications.length, 2);
+    const [cascade, diagnostic] = notifications;
+    assert.match(
+      cascade?.message ?? "",
+      /secrets-vault v1\.0\.0 \(installed\) \{dependency installed\}/,
+    );
+    assert.match(diagnostic?.message ?? "", /post-install warning/);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-09-13: a startup reconcile plans the bucket but installs nothing and stays offline", async (t) => {
+    // arrange -- same fixture as the reload case above (secrets-vault is
+    // genuinely installable), but the host says `startup`.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-startup-noop");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "startup" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
+          "\n" +
+          "Reconcile: 1 warning",
+        severity: "warning",
+      },
+    ]);
+    assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-09-13: an omitted reason plans the bucket but installs nothing and stays offline", async (t) => {
+    // arrange -- identical fixture; `reason` left out of the call entirely.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-omitted-reason-noop");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act -- `reason` omitted entirely.
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
+          "\n" +
+          "Reconcile: 1 warning",
+        severity: "warning",
+      },
+    ]);
+    assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-09-07: a marker-held dependent comes back up in the same reload", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "dependency-reload-lift");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              enabled: false,
+              dependencyDisabled: true,
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert -- the install row first (step 5), then the record-walk lift
+    // (step 5a's fresh pluginsToEnable).
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● secrets-vault v1.0.0 (installed) {dependency installed}\n" +
+          "  ● deploy-kit v1.0.0 (installed)\n" +
+          "\n" +
+          "Reconcile: 2 successes",
+      },
+    ]);
+    const deployKit = await recordFor(project, "mp", "deploy-kit");
+    assert.equal(deployKit?.enabled, true);
+    assert.equal(Object.hasOwn(deployKit ?? {}, "dependencyDisabled"), false);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-09-08: a provenance-independent dependent comes back up in the same reload", async (t) => {
+    // arrange -- app (explicit, config-declared) declares lib; lib
+    // (provenance: "dependency", never named by config) declares core; core
+    // is missing. Installing core lifts lib, and lib's own lift brings app
+    // back up with it -- D-09-08's lift is provenance-independent and
+    // classifyDeclaredPlugin's config-declared branch alone could never
+    // reach lib.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-reload-provenance-lift");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      app: { dependencies: ["lib"], skill: "clean" },
+      lib: { dependencies: ["core"], skill: "clean" },
+      core: { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "app@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            app: pluginRecord({
+              enabled: false,
+              dependencyDisabled: true,
+              pluginRoot: path.join(marketplaceRoot, "plugins", "app"),
+            }),
+            lib: {
+              ...pluginRecord({
+                enabled: false,
+                dependencyDisabled: true,
+                pluginRoot: path.join(marketplaceRoot, "plugins", "lib"),
+              }),
+              provenance: "dependency",
+            },
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert -- both app and lib reach pluginsToEnable through the D-09-08
+    // record-walk lift (the fresh verdict still holds app down too, since
+    // lib's record is not yet flipped inside the same verdict snapshot), in
+    // state.marketplaces iteration order: app was seeded before lib.
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● core v1.0.0 (installed) {dependency installed}\n" +
+          "  ● app v1.0.0 (installed)\n" +
+          "  ● lib v1.0.0 (installed)\n" +
+          "\n" +
+          "Reconcile: 3 successes",
+      },
+    ]);
+    const app = await recordFor(project, "mp", "app");
+    const lib = await recordFor(project, "mp", "lib");
+    assert.deepStrictEqual(
+      {
+        appEnabled: app?.enabled,
+        appMarked: Object.hasOwn(app ?? {}, "dependencyDisabled"),
+        libEnabled: lib?.enabled,
+        libMarked: Object.hasOwn(lib ?? {}, "dependencyDisabled"),
+      },
+      { appEnabled: true, appMarked: false, libEnabled: true, libMarked: false },
+    );
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("MISS-02: a dependency whose closure fails reports on its own row and the dependent is held down", async (t) => {
+    // arrange -- secrets-vault declares crypto-core, which mp does not declare.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-reload-closure-fail");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { dependencies: ["crypto-core"], skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ secrets-vault (failed) {dependency failed}\n" +
+          '    cause: Dependency "crypto-core@mp" is not declared by its marketplace.\n' +
+          "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
+          "\n" +
+          "Reconcile: 1 failure, 1 warning",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
+    const deployKit = await recordFor(project, "mp", "deploy-kit");
+    assert.equal(deployKit?.dependencyDisabled, true);
+    const [notification] = notifications;
+    assert.ok(!(notification?.message ?? "").includes("/"));
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("MISS-02 / D-03-08: a dependency whose marketplace is not added fails with the cause naming the marketplace", async (t) => {
+    // arrange -- deploy-kit declares { name: "secrets-vault", marketplace:
+    // "other" }, and "other" is not added in either scope.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-reload-mp-not-added");
+    const { marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { skill: "clean" },
+    });
+    await writeUnder(
+      path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+      JSON.stringify({
+        name: "mp",
+        plugins: [
+          {
+            name: "deploy-kit",
+            version: "1.0.0",
+            source: "./plugins/deploy-kit",
+            dependencies: [{ name: "secrets-vault", marketplace: "other", version: "*" }],
+          },
+        ],
+      }),
+    );
+    await writeUnder(
+      path.join(marketplaceRoot, "plugins", "deploy-kit", ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "deploy-kit",
+        version: "1.0.0",
+        dependencies: [{ name: "secrets-vault", marketplace: "other", version: "*" }],
+      }),
+    );
+    const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const beforeMarketplaces = Object.keys((await loadState(project.extensionRoot)).marketplaces);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    const [notification] = notifications;
+    assert.equal(notifications.length, 1);
+    assert.match(notification?.message ?? "", /requires marketplace "other", which is not added/);
+    assert.deepStrictEqual(
+      Object.keys((await loadState(project.extensionRoot)).marketplaces),
+      beforeMarketplaces,
+    );
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("MISS-02: a dependency its marketplace does not declare keeps its own ledger's token", async (t) => {
+    // arrange -- reuses the LOAD-01 fixture's shape: deploy-kit declares
+    // secrets-vault, and mp's manifest does not list it at all.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-reload-not-in-manifest");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert -- the root's own ledger failure passes through unwrapped, no
+    // cause line.
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ secrets-vault (failed) {not in manifest}\n" +
+          "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
+          "\n" +
+          "Reconcile: 1 failure, 1 warning",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-09-14: a failed dependency install is retried on the next reload and the dependent's row is silent once down", async (t) => {
+    // arrange -- the not-in-manifest fixture, reloaded twice.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-reload-retry");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const first = createNotificationBoundary(1, 2);
+    const second = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({
+      ctx: first.ctx,
+      pi: first.pi,
+      cwd,
+      scope: "project",
+      gitOps,
+      reason: "reload",
+    });
+    await applyReconcile({
+      ctx: second.ctx,
+      pi: second.pi,
+      cwd,
+      scope: "project",
+      gitOps,
+      reason: "reload",
+    });
+
+    // assert -- the second reload carries the same failure row; the disable
+    // row is silent because deploy-kit is already down (idempotent).
+    assert.equal(first.notifications.length, 1);
+    assert.deepStrictEqual(second.notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ secrets-vault (failed) {not in manifest}\n" +
+          "\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    first.verifyBoundary();
+    second.verifyBoundary();
+  });
+
+  test("D-09-04: a disabled recorded dependency is left alone by the reload", async (t) => {
+    // arrange -- secrets-vault is recorded and disabled by the USER (no
+    // marker); deploy-kit is enabled.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-reload-disabled-left-alone");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {}, "secrets-vault@mp": { enabled: false } },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+            "secrets-vault": pluginRecord({
+              enabled: false,
+              pluginRoot: path.join(marketplaceRoot, "plugins", "secrets-vault"),
+            }),
+          },
+        }),
+      },
+    });
+    const before = await recordFor(project, "mp", "secrets-vault");
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert -- no plugin-installed row (nothing was attempted); the LOAD-01
+    // row carries the Enable remedy.
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Enable "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
+          "\n" +
+          "Reconcile: 1 warning",
+        severity: "warning",
+      },
+    ]);
+    const after = await recordFor(project, "mp", "secrets-vault");
+    assert.deepStrictEqual(after, before);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-09-06: a key the same pass installs from the config is found present and not installed twice", async (t) => {
+    // arrange -- app (config-declared, not yet recorded) declares helper;
+    // deploy-kit (recorded, enabled) also declares helper. app's own
+    // cascade materializes helper first; the dependency step must find it
+    // already recorded and skip it silently.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-reload-already-present");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      app: { dependencies: ["helper"], skill: "clean" },
+      helper: { skill: "clean" },
+      "deploy-kit": { dependencies: ["helper"], skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "app@mp": {}, "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert -- app's own cascade row is the only row (the standard install
+    // path carries no version for a config-declared install); helper is
+    // materialized once, and deploy-kit is left untouched.
+    assert.deepStrictEqual(notifications, [
+      {
+        message: "● mp [project]\n" + "  ● app (installed)\n" + "\n" + "Reconcile: 1 success",
+      },
+    ]);
+    const helper = await recordFor(project, "mp", "helper");
+    assert.equal(helper?.provenance, "dependency");
+    const deployKit = await recordFor(project, "mp", "deploy-kit");
+    assert.equal(deployKit?.enabled, true);
+    assert.equal(Object.hasOwn(deployKit ?? {}, "dependencyDisabled"), false);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-09-07: a read pass that fails after an install keeps the round-1 toggles and reports state.json", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "dependency-reload-reread-fallback");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    let calls = 0;
+    const applyWithFailingReread = createApplyReconcile({
+      async loadState(extensionRoot: string): Promise<ExtensionState> {
+        if (extensionRoot === project.extensionRoot) {
+          calls += 1;
+          if (calls === 2) {
+            throw new Error("second read failed");
+          }
+        }
+
+        return loadState(extensionRoot);
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyWithFailingReread({
+      ctx,
+      pi,
+      cwd,
+      scope: "project",
+      gitOps,
+      reason: "reload",
+      completionCache: createCompletionCache(),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    });
+
+    // assert -- the install row still renders, plus a synthesized state.json
+    // row for the failed re-read, and deploy-kit ends stamped down by
+    // round-1's toggle plan (the refresh never applied).
+    assert.equal(notifications.length, 1);
+    const message = notifications[0]?.message ?? "";
+    assert.ok(message.includes("secrets-vault v1.0.0 (installed) {dependency installed}"));
+    assert.ok(message.includes("state.json (failed)"));
+    const secretsVault = await recordFor(project, "mp", "secrets-vault");
+    assert.equal(secretsVault?.provenance, "dependency");
+    const deployKit = await recordFor(project, "mp", "deploy-kit");
+    assert.equal(deployKit?.dependencyDisabled, true);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-09-07: source-mismatch rows come from the round-1 plan", async (t) => {
+    // arrange -- a dangling reference beside the reload's install row.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-reload-dangling");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {}, "ghost@nowhere": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    const message = notifications[0]?.message ?? "";
+    assert.ok(message.includes("secrets-vault v1.0.0 (installed) {dependency installed}"));
+    assert.ok(message.includes("nowhere [project] (failed) {dangling reference}"));
+    assert.ok(message.includes("⊘ ghost (failed) {dangling reference}"));
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-09-09: a cross-marketplace member renders under its own marketplace block", async (t) => {
+    // arrange -- deploy-kit@mp declares { name: "shared-lib", marketplace:
+    // "tools" }, with tools added and declaring shared-lib.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-reload-cross-marketplace");
+    const mp = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { skill: "clean" },
+    });
+    const tools = await writeMarketplaceSource(cwd, "tools-src", "tools", {
+      "shared-lib": { skill: "clean" },
+    });
+    await writeUnder(
+      mp.manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: [
+          {
+            name: "deploy-kit",
+            version: "1.0.0",
+            source: "./plugins/deploy-kit",
+            dependencies: [{ name: "shared-lib", marketplace: "tools", version: "*" }],
+          },
+        ],
+      }),
+    );
+    await writeUnder(
+      path.join(mp.marketplaceRoot, "plugins", "deploy-kit", ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "deploy-kit",
+        version: "1.0.0",
+        dependencies: [{ name: "shared-lib", marketplace: "tools", version: "*" }],
+      }),
+    );
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: {
+          mp: { source: mp.marketplaceRoot },
+          tools: { source: tools.marketplaceRoot },
+        },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: mp.marketplaceRoot,
+          manifestPath: mp.manifestPath,
+          marketplaceRoot: mp.marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(mp.marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+        tools: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "tools",
+          rawSource: tools.marketplaceRoot,
+          manifestPath: tools.manifestPath,
+          marketplaceRoot: tools.marketplaceRoot,
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● tools [project]\n" +
+          "  ● shared-lib v1.0.0 (installed) {dependency installed}\n" +
+          "\n" +
+          "Reconcile: 1 success",
+      },
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-09-11: a member the cascade found already installed renders nothing", async (t) => {
+    // arrange -- secrets-vault declares common, which is already recorded
+    // and enabled.
+    const { cwd, project } = await createHermeticScopes(
+      t,
+      "dependency-reload-already-installed-member",
+    );
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { dependencies: ["common"], skill: "clean" },
+      common: { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {}, "common@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+            common: pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "common"),
+            }),
+          },
+        }),
+      },
+    });
+    const before = await recordFor(project, "mp", "common");
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● secrets-vault v1.0.0 (installed) {dependency installed}\n" +
+          "\n" +
+          "Reconcile: 1 success",
+      },
+    ]);
+    const after = await recordFor(project, "mp", "common");
+    assert.deepStrictEqual(after, before);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("NFR-5: a reload with nothing missing installs nothing and reads the scope once", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "dependency-reload-nothing-missing");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {}, "secrets-vault@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+            "secrets-vault": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "secrets-vault"),
+            }),
+          },
+        }),
+      },
+    });
+    const settledBytes = await readFile(project.stateJsonPath, "utf8");
+    const settledModifiedAt = (await stat(project.stateJsonPath)).mtimeMs;
+
+    let startupCalls = 0;
+    const withCounter = (onCall: () => void) =>
+      createApplyReconcile({
+        async loadState(extensionRoot: string): Promise<ExtensionState> {
+          if (extensionRoot === project.extensionRoot) {
+            onCall();
+          }
+
+          return loadState(extensionRoot);
+        },
+      });
+
+    const startup = createNotificationBoundary(0, 0);
+    await withCounter(() => {
+      startupCalls += 1;
+    })({
+      ctx: startup.ctx,
+      pi: startup.pi,
+      cwd,
+      scope: "project",
+      completionCache: createCompletionCache(),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      gitOps: createOfflineGitOps().gitOps,
+    });
+
+    let reloadCalls = 0;
+    const reload = createNotificationBoundary(0, 0);
+    await withCounter(() => {
+      reloadCalls += 1;
+    })({
+      ctx: reload.ctx,
+      pi: reload.pi,
+      cwd,
+      scope: "project",
+      completionCache: createCompletionCache(),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      gitOps: createOfflineGitOps().gitOps,
+      reason: "reload",
+    });
+
+    // assert
+    assert.deepStrictEqual(startup.notifications, []);
+    assert.deepStrictEqual(reload.notifications, []);
+    assert.equal(reloadCalls, startupCalls);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), settledBytes);
+    assert.equal((await stat(project.stateJsonPath)).mtimeMs, settledModifiedAt);
+    startup.verifyBoundary();
+    reload.verifyBoundary();
   });
 });

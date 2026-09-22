@@ -14,6 +14,7 @@ import {
 import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
+  createDependencyInstallOperation,
   createEnableOperation,
   createInstallOperation,
   createReinstallOperation,
@@ -268,6 +269,30 @@ test("constructs the install operation without using its owners or starting asyn
 // operation against the real phase ledger and the real state lock, so the
 // production bindings this module holds are the ones under test.
 // ─────────────────────────────────────────────────────────────────────────────
+
+test("constructs the dependency-install operation without using its owners or starting asynchronous work", (t) => {
+  // arrange
+  const hooksRouting = mock<InstallHooksRouting>({ exactParams: true, name: "hooks routing" });
+  const completionCache = mock<CompletionCache>({ exactParams: true, name: "completion cache" });
+  const startedResourceTypes: string[] = [];
+  const resources = createHook({
+    init: (_asyncId, type) => {
+      startedResourceTypes.push(type);
+    },
+  });
+  t.after(() => resources.disable());
+
+  // act
+  resources.enable();
+  const installMissingDependency = createDependencyInstallOperation(hooksRouting, completionCache);
+  resources.disable();
+
+  // assert
+  assert.strictEqual(typeof installMissingDependency, "function");
+  assert.deepStrictEqual(startedResourceTypes, []);
+  verify(hooksRouting);
+  verify(completionCache);
+});
 
 test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing table without /reload", async (t) => {
   // arrange

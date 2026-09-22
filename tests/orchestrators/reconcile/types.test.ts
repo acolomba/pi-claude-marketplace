@@ -178,6 +178,32 @@ void ({
   hooksRouting,
   stampDependencyDisabled: dependencyDisableStamp,
 } satisfies ApplyReconcileOptions);
+// D-09-13: the host's resources_discover reason.
+void ({
+  ctx: extensionContext,
+  pi: extensionApi,
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
+  reason: "reload",
+} satisfies ApplyReconcileOptions);
+void ({
+  ctx: extensionContext,
+  pi: extensionApi,
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
+  reason: "startup",
+} satisfies ApplyReconcileOptions);
+void ({
+  ctx: extensionContext,
+  pi: extensionApi,
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
+  // @ts-expect-error reason is closed to the host's own "startup" | "reload" set
+  reason: "manual",
+} satisfies ApplyReconcileOptions);
 
 const extensionState = {
   schemaVersion: 2,
