@@ -16,7 +16,7 @@
       "mechanism": "A partition?: never refusal marker. LedgerDegradationSignals declares no partition and the Pick<...> left operand declares none either, so there is no slot to narrow and every restatement ADDS a key; the type-refinement prover refuses it by construction rather than by coordinate, so no contract entry can reach it. Its documented job (WR-01) is to refuse PluginUpdateUpdatedOutcome, which declares the same two optional facts and would otherwise match structurally and silently return an empty dependency list for every update. Weakening the refusal to clear this row reintroduces exactly that bug."
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/types.ts:155:3",
+      "id": "extensions/pi-claude-marketplace/orchestrators/types.ts:174:3",
       "owner": "UpdatePhaseFailure",
       "key": "msg",
       "decision": "Orchestrators repair: reclassified from the inherited disposition and recorded rather than deleted.",
