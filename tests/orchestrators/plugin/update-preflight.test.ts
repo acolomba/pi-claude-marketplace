@@ -20,7 +20,10 @@ import type {
   CredentialOps,
   DeviceFlowHttp,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
-import type { UpdateCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
+import type {
+  PreparePluginUpdateOptions,
+  UpdateCloneCacheSeam,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
@@ -109,6 +112,7 @@ async function prepare(
   options: {
     readonly partial?: boolean;
     readonly cloneCacheSeam?: UpdateCloneCacheSeam;
+    readonly constraintGate?: PreparePluginUpdateOptions["constraintGate"];
     readonly cleanupClones?: () => Promise<void>;
     readonly ctx?: NotificationContext;
     readonly credentialOps?: CredentialOps;
@@ -124,6 +128,7 @@ async function prepare(
     cleanupClones: options.cleanupClones ?? (async () => {}),
     ...(options.partial === true && { partial: true }),
     ...(options.cloneCacheSeam !== undefined && { cloneCacheSeam: options.cloneCacheSeam }),
+    ...(options.constraintGate !== undefined && { constraintGate: options.constraintGate }),
     ...(options.ctx !== undefined && { ctx: options.ctx }),
     ...(options.credentialOps !== undefined && { credentialOps: options.credentialOps }),
     ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
@@ -248,6 +253,61 @@ test("returns the complete prepared candidate for a version transition", async (
   assert.strictEqual(prepared.resolvedSha, undefined);
 });
 
+test("D-10-03: the gate runs after triage and before candidate resolution", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const throwingCloneSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: () => {
+      throw new Error("clone seam must not be reached");
+    },
+    materializePluginClone: () => {
+      throw new Error("clone seam must not be reached");
+    },
+    materializeOrRefreshPluginMirror: () => {
+      throw new Error("clone seam must not be reached");
+    },
+  };
+  const heldCause = 'the declared ranges admit no version in common -- required by "other@mp"';
+
+  // act
+  const outcome = await prepare(seed, {
+    cloneCacheSeam: throwingCloneSeam,
+    constraintGate: () => Promise.resolve({ kind: "held", cause: heldCause }),
+  });
+
+  // assert -- the throwing seam was never reached: the gate's held verdict
+  // returns before `makeUpdateCloneProbe` is even composed.
+  assert.deepStrictEqual(outcome, {
+    partition: "skipped",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: [heldCause],
+    reasons: ["dependents constrain"],
+    declaresAgents: false,
+    declaresMcp: false,
+  });
+});
+
+test("UPDT-02: a held update writes nothing and repeats byte-identically", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const heldCause = 'the declared ranges admit no version in common -- required by "other@mp"';
+  const heldGate: PreparePluginUpdateOptions["constraintGate"] = () =>
+    Promise.resolve({ kind: "held", cause: heldCause });
+  const before = await loadState(seed.locations.extensionRoot);
+
+  // act
+  const first = await prepare(seed, { constraintGate: heldGate });
+  const second = await prepare(seed, { constraintGate: heldGate });
+  const after = await loadState(seed.locations.extensionRoot);
+
+  // assert
+  assert.deepStrictEqual(first, second);
+  assert.deepStrictEqual(after, before);
+});
+
 test("reads a partitioned preflight answer as a finished outcome", async (t) => {
   // arrange
   const seed = await seedUpdate({ installed: pluginRecord("2.0.0") });
@@ -322,10 +382,17 @@ test("keeps an unexpected resolve failure skipped as no-longer-installable, carr
   // keeps its identity. Exercises `resolveUpdateCandidate`'s unclassified
   // fallback (still "no longer installable" to the caller, but logged for
   // diagnosis rather than silently folded into the typed shape).
+  //
+  // UPDT-02: the SAME unreadable file also trips the constraint gate's own
+  // fail-closed declaration walk (D-10-05), which now runs first -- an
+  // unconstrained double bypasses it so this case still exercises
+  // `resolveUpdateCandidate`'s fallback, the behavior under test here.
   await chmod(manifestPath, 0o000);
 
   // act
-  const outcome = await prepare(seed);
+  const outcome = await prepare(seed, {
+    constraintGate: () => Promise.resolve({ kind: "unconstrained" }),
+  });
 
   // assert
   assert.ok("partition" in outcome);

@@ -23,6 +23,7 @@ import {
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { resolvePluginVersion } from "./shared.ts";
+import { evaluateUpdateConstraint } from "./update-constraint-gate.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver-types.ts";
@@ -90,6 +91,13 @@ export interface PreparePluginUpdateOptions {
   readonly partial?: boolean;
   readonly ctx?: NotificationContext;
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
+  /**
+   * D-10-02 / D-10-19: the constraint gate is composed through this field,
+   * defaulted to the real `evaluateUpdateConstraint`. The field name is not
+   * one `tests/architecture/gate-targets.ts`'s network-free gate matches, and
+   * production omits it.
+   */
+  readonly constraintGate?: typeof evaluateUpdateConstraint;
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -562,6 +570,42 @@ export async function preparePluginUpdate(
     return triaged;
   }
 
+  // AUTH-09: ONE credential composition in this function, shared by the
+  // constraint gate and the clone probe below.
+  const auth = {
+    ...(options.ctx !== undefined && { ctx: options.ctx }),
+    credentialOps: options.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
+    ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
+    ...(options.authMemo !== undefined && { authMemo: options.authMemo }),
+  };
+
+  // D-10-03: the gate runs after triage (there must be a record and a
+  // manifest entry to constrain) and before candidate resolution (a held
+  // verdict must never reach the clone probe). Every other constraint branch
+  // stays inside the leaf -- `preparePluginUpdate` is already close to
+  // ESLint's cognitive-complexity cap.
+  const constraintGate = options.constraintGate ?? evaluateUpdateConstraint;
+  const verdict = await constraintGate({
+    plugin: options.plugin,
+    marketplace: options.marketplace,
+    entry: triaged.entry,
+    marketplaceRoot: marketplace.marketplaceRoot,
+    state,
+    locations: options.locations,
+    auth,
+  });
+  if (verdict.kind === "held") {
+    return skippedCandidate(
+      { plugin: options.plugin, fromVersion: triaged.record.version },
+      [verdict.cause],
+      ["dependents constrain"],
+    );
+  }
+
+  // `verdict` stays bound here for plans 10-02 / 10-03 to consume its
+  // `admits` / `unconstrained` arms; neither changes anything downstream in
+  // this plan.
+
   const clone = makeUpdateCloneProbe(
     options.cloneCacheSeam ?? {
       resolvePluginPin,
@@ -569,12 +613,7 @@ export async function preparePluginUpdate(
       materializeOrRefreshPluginMirror,
     },
     options.locations,
-    {
-      ...(options.ctx !== undefined && { ctx: options.ctx }),
-      credentialOps: options.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
-      ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
-      ...(options.authMemo !== undefined && { authMemo: options.authMemo }),
-    },
+    auth,
   );
   const candidate = await resolveUpdateCandidate(
     triaged.entry,

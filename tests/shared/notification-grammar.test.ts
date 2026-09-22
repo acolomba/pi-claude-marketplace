@@ -372,6 +372,46 @@ test("renders no trailer on a disabled row that carries no cause", () => {
   assert.deepStrictEqual(lines, ["  ◍ alpha (disabled)"]);
 });
 
+test("renders the held-update cause trailer on a skipped row that carries one", () => {
+  // arrange
+  const plugin = {
+    status: "skipped",
+    name: "alpha",
+    reasons: ["dependents constrain"],
+    cause: new Error('the declared ranges admit no version in common -- required by "beta@mp"'),
+  };
+
+  // act
+  const lines = composePluginLinesWith(
+    plugin as never,
+    bothLoadedProbe(),
+    "user",
+    () => "⊘ alpha (skipped) {dependents constrain}",
+  );
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "  ⊘ alpha (skipped) {dependents constrain}",
+    '    cause: the declared ranges admit no version in common -- required by "beta@mp"',
+  ]);
+});
+
+test("composes exactly one line for a skipped row with no cause", () => {
+  // arrange
+  const plugin = { status: "skipped", name: "alpha", reasons: ["up-to-date"] };
+
+  // act
+  const lines = composePluginLinesWith(
+    plugin as never,
+    bothLoadedProbe(),
+    "user",
+    () => "⊘ alpha (skipped) {up-to-date}",
+  );
+
+  // assert
+  assert.deepStrictEqual(lines, ["  ⊘ alpha (skipped) {up-to-date}"]);
+});
+
 for (const { plugin, trailer } of [
   {
     plugin: { status: "partially-available", name: "alpha", partialHint: true },

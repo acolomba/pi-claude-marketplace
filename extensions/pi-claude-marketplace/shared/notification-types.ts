@@ -174,7 +174,18 @@ export type Reason =
   // `installed` row alone, because a bare `(installed)` for an undeclared
   // plugin is the row a user cannot explain, and it is neither idempotent
   // nor a failure.
-  | "dependency installed";
+  | "dependency installed"
+  // UPDT-02 / D-10-09 / D-10-10: the update-preflight constraint gate held
+  // this plugin to versions its installed dependents jointly admit, and none
+  // exists. Three situations fold onto this one token -- disjoint declared
+  // ranges, no tag satisfying the intersection, and a fetched version
+  // outside it -- and the cause line says which one applies and names the
+  // constraining plugins. `version conflict` cannot carry it: nothing here
+  // contradicts anything. `no matching version` cannot carry it either: that
+  // token claims the source advertised no tag in range, which is false on
+  // the arm where a version WAS found and simply falls outside what the
+  // dependents allow.
+  | "dependents constrain";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<
@@ -455,6 +466,18 @@ export interface PluginSkippedMessage extends MessageBase {
   readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly scope?: Scope;
+  /**
+   * UPDT-02 / D-10-11: the held-update remedy, naming the constraining
+   * plugins and marking which of them are currently disabled. It is the ONE
+   * thing this field carries: every other `skipped` producer omits it and
+   * stays byte-frozen.
+   *
+   * It rides the cause chain because the sentence interpolates plugin
+   * identifiers, and the cause chain is the only channel in this grammar
+   * that legally interpolates one -- every frozen trailer constant
+   * interpolates nothing by contract.
+   */
+  readonly cause?: Error;
 }
 
 /** Manual-recovery plugin row. */

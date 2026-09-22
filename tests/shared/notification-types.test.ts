@@ -95,6 +95,7 @@ const EXPECTED_REASONS = [
   "dependency enabled",
   "dependents remain",
   "dependency installed",
+  "dependents constrain",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

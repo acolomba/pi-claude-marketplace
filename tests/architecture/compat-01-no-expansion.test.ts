@@ -314,6 +314,9 @@ const EXPECTED_REASONS = [
   // the row a user cannot explain, and it is neither idempotent nor a
   // failure reason.
   "dependency installed",
+  // UPDT-02 / D-10-09: the update-preflight constraint gate's marker for a
+  // plugin held to versions its installed dependents jointly admit.
+  "dependents constrain",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

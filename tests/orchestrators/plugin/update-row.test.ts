@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { updatedRowFromOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts";
+import {
+  constraintCauseFor,
+  updatedRowFromOutcome,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts";
+
+import type { PluginUpdateSkippedOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 
 test("composes agent and MCP dependencies in declared display order", () => {
   // arrange
@@ -323,4 +328,56 @@ test("reports orphan rewake without overriding clean base severity", () => {
     status: "updated",
     to: "10.1.0",
   });
+});
+
+function skippedOutcome(overrides: Partial<PluginUpdateSkippedOutcome> = {}): PluginUpdateSkippedOutcome {
+  return {
+    partition: "skipped",
+    name: "hello",
+    notes: [],
+    reasons: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    ...overrides,
+  };
+}
+
+test("UPDT-02: constraintCauseFor composes an Error from a held outcome's joined notes", () => {
+  // arrange
+  const outcome = skippedOutcome({
+    reasons: ["dependents constrain"],
+    notes: ['the declared ranges admit no version in common -- required by "alpha@mp"'],
+  });
+
+  // act
+  const cause = constraintCauseFor(outcome);
+
+  // assert
+  assert.ok(cause instanceof Error);
+  assert.strictEqual(
+    cause.message,
+    'the declared ranges admit no version in common -- required by "alpha@mp"',
+  );
+});
+
+test("constraintCauseFor returns undefined for an outcome not held by the constraint gate", () => {
+  // arrange
+  const outcome = skippedOutcome({ reasons: ["up-to-date"], notes: [] });
+
+  // act
+  const cause = constraintCauseFor(outcome);
+
+  // assert
+  assert.strictEqual(cause, undefined);
+});
+
+test("constraintCauseFor returns undefined for a held reason carrying no notes", () => {
+  // arrange
+  const outcome = skippedOutcome({ reasons: ["dependents constrain"], notes: [] });
+
+  // act
+  const cause = constraintCauseFor(outcome);
+
+  // assert
+  assert.strictEqual(cause, undefined);
 });

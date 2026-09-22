@@ -1635,11 +1635,18 @@ export function composePluginLinesWith(
   // identifiers, so it takes the same channel. Every other `uninstalled`
   // producer -- the plain removal, the `--prune` member rows, the
   // reconcile-driven removal -- omits `cause` and keeps its byte-frozen row.
+  //
+  // UPDT-02 / D-10-11: `skipped` joins them here too, the first `skipped`
+  // partition to interpolate. A held update's row names the constraining
+  // plugins and marks which of them are currently disabled -- the same
+  // remedy shape as the `disabled` / `uninstalled` cause lines above. Every
+  // other `skipped` producer omits `cause` and keeps its byte-frozen row.
   if (
     p.status === "failed" ||
     p.status === "manual recovery" ||
     p.status === "disabled" ||
-    p.status === "uninstalled"
+    p.status === "uninstalled" ||
+    p.status === "skipped"
   ) {
     const trailer = renderIndentedCauseChain(p.cause, "    ");
     if (trailer !== "") {

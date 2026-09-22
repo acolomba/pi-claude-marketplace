@@ -90,6 +90,77 @@ test("keeps an unchanged targeted result exact without a tally or reload hint", 
   boundary.verifyBoundary();
 });
 
+test("UPDT-02: projects a held constraint outcome as a warning row with its notes as the cause", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1, 4);
+  const outcomes: readonly UpdateCascadeOutcome[] = [
+    {
+      target: { marketplace: "mp", scope: "project" },
+      outcome: {
+        partition: "skipped",
+        name: "hello",
+        fromVersion: "1.0.0",
+        notes: [
+          'the declared ranges admit no version in common (no version satisfies all 2 declared ranges) -- required by "alpha@mp", "beta@mp"',
+        ],
+        reasons: ["dependents constrain"],
+        declaresAgents: false,
+        declaresMcp: false,
+      },
+    },
+  ];
+  const expectedMessage = [
+    "A plugin operation needs attention.",
+    "",
+    "● mp [project]",
+    "  ⊘ hello v1.0.0 (skipped) {dependents constrain}",
+    '    cause: the declared ranges admit no version in common (no version satisfies all 2 declared ranges) -- required by "alpha@mp", "beta@mp"',
+  ].join("\n");
+
+  // act
+  composeUpdateCascade(boundary.ctx, boundary.pi, outcomes, "single");
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [
+    { message: expectedMessage, severity: "warning" },
+  ]);
+  boundary.verifyBoundary();
+});
+
+test("keeps an ordinary skipped outcome cause-free", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1, 4);
+  const outcomes: readonly UpdateCascadeOutcome[] = [
+    {
+      target: { marketplace: "mp", scope: "project" },
+      outcome: {
+        partition: "skipped",
+        name: "hello",
+        fromVersion: "1.0.0",
+        notes: ["hello is not in the refreshed manifest"],
+        reasons: ["not in manifest"],
+        declaresAgents: false,
+        declaresMcp: false,
+      },
+    },
+  ];
+  const expectedMessage = [
+    "A plugin operation needs attention.",
+    "",
+    "● mp [project]",
+    "  ⊘ hello v1.0.0 (skipped) {not in manifest}",
+  ].join("\n");
+
+  // act
+  composeUpdateCascade(boundary.ctx, boundary.pi, outcomes, "single");
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [
+    { message: expectedMessage, severity: "warning" },
+  ]);
+  boundary.verifyBoundary();
+});
+
 test("renders a partial bulk decline before the exact no-op headline", () => {
   // arrange
   const boundary = createNotificationBoundary(1, 4);

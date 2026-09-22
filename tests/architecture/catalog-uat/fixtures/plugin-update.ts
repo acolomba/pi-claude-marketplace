@@ -510,6 +510,38 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
       },
     },
 
+    // UPDT-02 / D-10-09 / D-10-11: the update-preflight constraint gate held
+    // this plugin to versions its installed dependents jointly admit --
+    // disjoint declared ranges, so nothing satisfies both. The cause line
+    // names both declarers in key order and marks the disabled one.
+    "update-held-by-dependents": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                severity: "warning",
+                needsReload: false,
+                name: "shared-lib",
+                version: "1.0.0",
+                reasons: ["dependents constrain"],
+                cause: new Error(
+                  'the declared ranges admit no version in common (no version satisfies all 2 declared ranges) -- required by "alpha@mp", "beta@mp" (currently disabled)',
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // ATTR-02 / SCOPE-01 / M10 / M11: marketplace not added in the requested
     // explicit scope (or present only in the other scope) -> standalone
     // `marketplace-not-added` variant carrying the requested-scope bracket,

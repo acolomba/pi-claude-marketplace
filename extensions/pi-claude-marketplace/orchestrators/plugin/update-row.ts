@@ -1,8 +1,10 @@
 // orchestrators/plugin/update-row.ts
 //
-// The `(updated)` partition's row composer, and nothing else. A LEAF module:
-// it imports the outcome type from `../types.ts` plus the shared notify
-// vocabulary, and nothing from either update ledger.
+// The shared row-fact leaf for BOTH update cascades: the `(updated)`
+// partition's row composer, and the constraint cause-line carrier the
+// `skipped` row reads (UPDT-02). A LEAF module: it imports the outcome type
+// from `../types.ts` plus the shared notify vocabulary, and nothing from
+// either update ledger.
 //
 // D-05 / D-06 / D-11: the composer is shared by `plugin/update-cascade.ts` (the
 // manual update cascade) and `marketplace/update.ts` (the autoupdate cascade),
@@ -11,7 +13,10 @@
 // module graph the injected `pluginUpdate` seam exists to keep it out of, and
 // the `orchestrators/marketplace` -> `orchestrators/plugin` direction
 // `../types.ts` was created to avoid. A leaf with no back-edges cannot close
-// that cycle whatever either ledger grows into next.
+// that cycle whatever either ledger grows into next -- which is exactly why
+// the constraint cause-line carrier lives here rather than in the constraint
+// gate leaf: the autoupdate cascade must not gain a static edge onto a
+// module that imports the declaration index and the tag probes.
 
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
@@ -23,7 +28,7 @@ import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { PluginUpdateUpdatedOutcome } from "../types.ts";
+import type { PluginUpdateSkippedOutcome, PluginUpdateUpdatedOutcome } from "../types.ts";
 
 /**
  * The caller's own success-severity policy for the `updated` partition, one
@@ -144,4 +149,18 @@ function outcomeDependencies(declaresAgents: boolean, declaresMcp: boolean): rea
     ...(declaresAgents ? (["agents"] as const) : []),
     ...(declaresMcp ? (["mcp"] as const) : []),
   ];
+}
+
+/**
+ * UPDT-02 / D-10-11: the held-update cause line, carried on the `skipped`
+ * outcome's `notes` by the constraint gate. `undefined` for every other
+ * skipped outcome, so its row stays byte-frozen (no other producer sets
+ * `notes` under this reason).
+ */
+export function constraintCauseFor(outcome: PluginUpdateSkippedOutcome): Error | undefined {
+  if (!outcome.reasons.includes("dependents constrain") || outcome.notes.length === 0) {
+    return undefined;
+  }
+
+  return new Error(outcome.notes.join(" "));
 }

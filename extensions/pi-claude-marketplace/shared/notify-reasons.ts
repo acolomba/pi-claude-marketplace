@@ -80,9 +80,12 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * undeclared plugin appearing with no stated reason is the row a user
  * cannot explain, so it rides only an `installed` row; it is neither
  * idempotent (a record was materialized) nor a failure (the install
- * succeeded), so it joins the command-private reasons (60 to 61). The
- * arithmetic above is renumbered rather than annotated with the gap, so the
- * next member to join does not inherit one.
+ * succeeded), so it joins the command-private reasons (60 to 61). UPDT-02 /
+ * D-10-09 added `dependents constrain`, the update-preflight constraint
+ * gate's marker for a plugin held to versions its installed dependents
+ * jointly admit -- not idempotent, because the update the user asked for was
+ * not carried out (61 to 62). The arithmetic above is renumbered rather than
+ * annotated with the gap, so the next member to join does not inherit one.
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -423,4 +426,8 @@ type CommandPrivateReason =
   // `orchestrators/reconcile/notify.ts`. The row's plugin was never named by
   // the user; it exists to satisfy a declaration. NOT idempotent: a record
   // was materialized, and it is not a failure -- the install succeeded.
-  | "dependency installed";
+  | "dependency installed"
+  // UPDT-02 / D-10-09: the update-preflight constraint gate's marker for a
+  // plugin held to versions its installed dependents jointly admit. NOT
+  // idempotent: the update the user asked for was not carried out.
+  | "dependents constrain";
