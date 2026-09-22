@@ -2,20 +2,33 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { probeDependencyTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts";
+import { probeMarketplaceTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import {
   describeConstraint,
   evaluateUpdateConstraint,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-import type { CredentialOps } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
+import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import type {
+  CredentialOps,
+  DeviceFlowHttp,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type { AddressedDependency } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts";
+import type {
+  DependencyTagListingSeam,
+  DependencyTagProbeOptions,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts";
+import type { MarketplaceTagListingSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import type {
   ConstraintHolder,
   UpdateConstraintOptions,
   UpdateConstraintSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { RemoteTag } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
+import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 type PluginStateRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 
@@ -65,18 +78,50 @@ function credentialOps(): CredentialOps {
   };
 }
 
+/** A no-op ui context, for the git-arm cases whose auth threading needs one. */
+function silentCtx(): NotificationContext {
+  return { ui: { notify: () => undefined } };
+}
+
+/** The target's own git source repository, for the git-arm cases below. */
+function gitSource(): GitBackedSource {
+  return { kind: "url", raw: "https://example.com/target", url: "https://example.com/target" };
+}
+
+/**
+ * Probe doubles that answer `no-matching-tag` for whatever range they were
+ * asked about -- the default `seamReturning` / `seamFailingWith` probe
+ * members, so every pre-existing case's "admits, no pin" expectation holds
+ * unchanged once stage one's probe call sits on that path.
+ */
+function noMatchingGitTag(
+  probeOptions: DependencyTagProbeOptions,
+): ReturnType<UpdateConstraintSeam["probeDependencyTags"]> {
+  return Promise.resolve({ kind: "no-matching-tag", range: probeOptions.range });
+}
+
+function noMatchingMarketplaceTag(
+  probeOptions: Parameters<UpdateConstraintSeam["probeMarketplaceTags"]>[0],
+): ReturnType<UpdateConstraintSeam["probeMarketplaceTags"]> {
+  return Promise.resolve({ kind: "no-matching-tag", range: probeOptions.range });
+}
+
 /** A seam whose `buildScopeDeclarationDetail` returns a canned result. */
 function seamReturning(
   declarations: ReadonlyMap<string, readonly AddressedDependency[]>,
 ): UpdateConstraintSeam {
   return {
     buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+    probeDependencyTags: noMatchingGitTag,
+    probeMarketplaceTags: noMatchingMarketplaceTag,
   };
 }
 
 function seamFailingWith(declarer: string, cause: Error): UpdateConstraintSeam {
   return {
     buildScopeDeclarationDetail: () => Promise.resolve({ ok: false, declarer, cause }),
+    probeDependencyTags: noMatchingGitTag,
+    probeMarketplaceTags: noMatchingMarketplaceTag,
   };
 }
 
@@ -177,14 +222,19 @@ describe("evaluateUpdateConstraint", () => {
         calls += 1;
         return Promise.resolve({ ok: true, declarations: new Map() });
       },
+      probeDependencyTags: () => {
+        throw new Error("not expected: no holder means no constrained range to probe");
+      },
+      probeMarketplaceTags: () => {
+        throw new Error("not expected: no holder means no constrained range to probe");
+      },
     };
 
     // act
     const verdict = await evaluateUpdateConstraint(options({ seam }));
 
-    // assert -- this plan's seam carries no tag-listing member at all, so
-    // "no tag listing queried" holds by construction; only the declaration
-    // walk itself is called, exactly once.
+    // assert -- an unconstrained fold returns before either probe is ever
+    // reached; only the declaration walk itself is called, exactly once.
     assert.deepStrictEqual(verdict, { kind: "unconstrained" });
     assert.strictEqual(calls, 1);
   });
@@ -397,6 +447,450 @@ describe("evaluateUpdateConstraint", () => {
       assert.ok(verdict.cause.startsWith(expectedClause));
     });
   }
+
+  test("UPDT-01: the highest git tag satisfying the intersection is pinned", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+    const source = gitSource();
+    const calls: DependencyTagProbeOptions[] = [];
+    const ctx: NotificationContext = { ui: { notify: () => undefined } };
+    const credOps = credentialOps();
+    const seam: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: (probeOptions) => {
+        calls.push(probeOptions);
+        return Promise.resolve({
+          kind: "pinned",
+          tag: "target--v1.4.0",
+          oid: "oid-git",
+          version: "1.4.0",
+        });
+      },
+      probeMarketplaceTags: () => {
+        throw new Error("not expected on a git-backed entry source");
+      },
+    };
+
+    // act
+    const verdict = await evaluateUpdateConstraint(
+      options({
+        state,
+        entry: { name: "target", source },
+        seam,
+        auth: { ctx, credentialOps: credOps },
+      }),
+    );
+
+    // assert -- the pin is the probe double's own oid/version, sorted,
+    // filtered or re-derived nothing.
+    assert.deepStrictEqual(verdict, {
+      kind: "admits",
+      range: ">=1.0.0 <2.0.0-0",
+      holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
+      pin: { oid: "oid-git", version: "1.4.0" },
+      fellBackToCurrentCopy: false,
+    });
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0]?.pluginName, "target");
+    assert.deepStrictEqual(calls[0]?.source, source);
+    assert.strictEqual(calls[0]?.range, ">=1.0.0 <2.0.0-0");
+    assert.deepStrictEqual(calls[0]?.auth, { ctx, credentialOps: credOps });
+  });
+
+  test("UPDT-01: the git arm threads the caller's auth bundle untouched", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+    const source = gitSource();
+    const ctx: NotificationContext = { ui: { notify: () => undefined } };
+    const credOps = credentialOps();
+    const deviceFlowHttp: DeviceFlowHttp = {
+      requestCode: () => Promise.reject(new Error("not used")),
+      pollToken: () => Promise.reject(new Error("not used")),
+    };
+    const authMemo = new Map<string, never>();
+    const calls: DependencyTagProbeOptions[] = [];
+    const seam: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: (probeOptions) => {
+        calls.push(probeOptions);
+        return Promise.resolve({ kind: "no-matching-tag", range: probeOptions.range });
+      },
+      probeMarketplaceTags: () => {
+        throw new Error("not expected on a git-backed entry source");
+      },
+    };
+
+    // act
+    await evaluateUpdateConstraint(
+      options({
+        state,
+        entry: { name: "target", source },
+        seam,
+        auth: { ctx, credentialOps: credOps, deviceFlowHttp, authMemo },
+      }),
+    );
+
+    // assert -- credentialOps/deviceFlowHttp/authMemo reach the probe as the
+    // SAME objects the caller supplied, composing no second credential
+    // acquisition path (AUTH-09).
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0]?.auth.ctx, ctx);
+    assert.strictEqual(calls[0]?.auth.credentialOps, credOps);
+    assert.strictEqual(calls[0]?.auth.deviceFlowHttp, deviceFlowHttp);
+    assert.strictEqual(calls[0]?.auth.authMemo, authMemo);
+  });
+
+  test("UPDT-01: the git arm skips the tag query when no ui context was threaded", async () => {
+    // arrange -- `options()` defaults `auth` to no `ctx` at all.
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+    const source = gitSource();
+    const seam: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: () => {
+        throw new Error("not expected: no ui context to authenticate the query with");
+      },
+      probeMarketplaceTags: () => {
+        throw new Error("not expected on a git-backed entry source");
+      },
+    };
+
+    // act
+    const verdict = await evaluateUpdateConstraint(
+      options({ state, entry: { name: "target", source }, seam }),
+    );
+
+    // assert -- defers to a later stage instead of failing outright.
+    assert.deepStrictEqual(verdict, {
+      kind: "admits",
+      range: ">=1.0.0 <2.0.0-0",
+      holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
+      fellBackToCurrentCopy: false,
+    });
+  });
+
+  test("UPDT-01: the highest marketplace tag satisfying the intersection is pinned", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+    const calls: Parameters<UpdateConstraintSeam["probeMarketplaceTags"]>[0][] = [];
+    const seam: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: () => {
+        throw new Error("not expected on a path entry source");
+      },
+      probeMarketplaceTags: (probeOptions) => {
+        calls.push(probeOptions);
+        return Promise.resolve({
+          kind: "pinned",
+          tag: "target--v1.4.0",
+          oid: "oid-path",
+          version: "1.4.0",
+        });
+      },
+    };
+
+    // act -- `options()` defaults `entry.source` to a `path` source.
+    const verdict = await evaluateUpdateConstraint(options({ state, seam }));
+
+    // assert
+    assert.deepStrictEqual(verdict, {
+      kind: "admits",
+      range: ">=1.0.0 <2.0.0-0",
+      holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
+      pin: { oid: "oid-path", version: "1.4.0" },
+      fellBackToCurrentCopy: false,
+    });
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0]?.pluginName, "target");
+    assert.strictEqual(calls[0]?.marketplaceRoot, "/cwd/mp");
+    assert.strictEqual(calls[0]?.range, ">=1.0.0 <2.0.0-0");
+  });
+
+  test("UPDT-01: a caret range whose boundary equals an available tag pins that tag", async () => {
+    // arrange -- drives the REAL `selectHighestSatisfyingTag` through an
+    // injected local listing seam, one level below the gate's own seam.
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.2.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+    const listingSeam: MarketplaceTagListingSeam = {
+      listTags: () => Promise.resolve(["target--v1.2.0", "target--v0.9.0"]),
+      resolveTagOid: (opts) =>
+        Promise.resolve(opts.name === "target--v1.2.0" ? "oid-1.2.0" : "oid-0.9.0"),
+    };
+    const seam: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: () => {
+        throw new Error("not expected on a path entry source");
+      },
+      probeMarketplaceTags: (probeOptions) =>
+        probeMarketplaceTags({ ...probeOptions, seam: listingSeam }),
+    };
+
+    // act
+    const verdict = await evaluateUpdateConstraint(options({ state, seam }));
+
+    // assert
+    assert.ok(verdict.kind === "admits");
+    assert.deepStrictEqual(verdict.pin, { oid: "oid-1.2.0", version: "1.2.0" });
+  });
+
+  test("UPDT-01: an exclusive upper bound does not admit the boundary tag", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "<2.0.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+    const source = gitSource();
+    const listingSeam: DependencyTagListingSeam = {
+      listRemoteTags: () => Promise.resolve([{ name: "target--v2.0.0", oid: "oid-2.0.0" }]),
+    };
+    const seam: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: (probeOptions) =>
+        probeDependencyTags({ ...probeOptions, seam: listingSeam }),
+      probeMarketplaceTags: () => {
+        throw new Error("not expected on a git-backed entry source");
+      },
+    };
+
+    // act
+    const verdict = await evaluateUpdateConstraint(
+      options({
+        state,
+        entry: { name: "target", source },
+        seam,
+        auth: { ctx: silentCtx(), credentialOps: credentialOps() },
+      }),
+    );
+
+    // assert -- the no-satisfying-tag arm leaves the outcome open (no pin,
+    // still `admits`), rather than holding the update outright.
+    assert.ok(verdict.kind === "admits");
+    assert.strictEqual(verdict.pin, undefined);
+    assert.strictEqual(verdict.fellBackToCurrentCopy, false);
+  });
+
+  test("D-10-16: an unreadable local tag listing reads as no satisfying tag", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+    const unreadable: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: () => {
+        throw new Error("not expected on a path entry source");
+      },
+      probeMarketplaceTags: () =>
+        Promise.resolve({ kind: "tag-listing-failed", cause: new Error("cannot read tags") }),
+    };
+    const empty: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: () => {
+        throw new Error("not expected on a path entry source");
+      },
+      probeMarketplaceTags: noMatchingMarketplaceTag,
+    };
+
+    // act
+    const unreadableVerdict = await evaluateUpdateConstraint(options({ state, seam: unreadable }));
+    const emptyVerdict = await evaluateUpdateConstraint(options({ state, seam: empty }));
+
+    // assert -- the two are one user-visible fact.
+    assert.deepStrictEqual(unreadableVerdict, emptyVerdict);
+  });
+
+  test("UPDT-01: an unreachable git tag listing holds the update, naming the transport classification", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+    const source = gitSource();
+    const seam: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: () =>
+        Promise.resolve({
+          kind: "tag-listing-failed",
+          cause: new Error("boom"),
+          classification: "network unreachable",
+        }),
+      probeMarketplaceTags: () => {
+        throw new Error("not expected on a git-backed entry source");
+      },
+    };
+
+    // act
+    const verdict = await evaluateUpdateConstraint(
+      options({
+        state,
+        entry: { name: "target", source },
+        seam,
+        auth: { ctx: silentCtx(), credentialOps: credentialOps() },
+      }),
+    );
+
+    // assert -- a repository that could not be reached has not told us
+    // anything, unlike the path arm's fallback above.
+    assert.ok(verdict.kind === "held");
+    assert.match(verdict.cause, /network unreachable/);
+  });
+
+  test("UPDT-01: an entry source with no tag listing queries no probe", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+    const seam: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: () => {
+        throw new Error("not expected: the entry source has no tag listing either probe reads");
+      },
+      probeMarketplaceTags: () => {
+        throw new Error("not expected: the entry source has no tag listing either probe reads");
+      },
+    };
+
+    // act
+    const verdict = await evaluateUpdateConstraint(
+      options({ state, entry: { name: "target", source: "not-a-valid-source" }, seam }),
+    );
+
+    // assert
+    assert.deepStrictEqual(verdict, {
+      kind: "admits",
+      range: ">=1.0.0 <2.0.0-0",
+      holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
+      fellBackToCurrentCopy: false,
+    });
+  });
+
+  test("D-10-18: one bulk run lists the same repository's tags once", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+    const source = gitSource();
+    const queried: string[] = [];
+    const listingSeam: DependencyTagListingSeam = {
+      listRemoteTags: (opts) => {
+        queried.push(opts.url);
+        return Promise.resolve([{ name: "target--v1.0.0", oid: "oid-1.0.0" }]);
+      },
+    };
+    const seam: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: (probeOptions) =>
+        probeDependencyTags({ ...probeOptions, seam: listingSeam }),
+      probeMarketplaceTags: () => {
+        throw new Error("not expected on a git-backed entry source");
+      },
+    };
+    const tagMemo = new Map<string, readonly RemoteTag[]>();
+    const auth = { ctx: silentCtx(), credentialOps: credentialOps() };
+
+    // act
+    await evaluateUpdateConstraint(
+      options({ state, entry: { name: "target", source }, seam, tagMemo, auth }),
+    );
+    await evaluateUpdateConstraint(
+      options({ state, entry: { name: "target", source }, seam, tagMemo, auth }),
+    );
+
+    // assert
+    assert.strictEqual(queried.length, 1);
+  });
+
+  test("D-10-18: one bulk run lists the same marketplace clone's tags once", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+    const listTagsCalls: { dir: string }[] = [];
+    const listingSeam: MarketplaceTagListingSeam = {
+      listTags: (opts) => {
+        listTagsCalls.push(opts);
+        return Promise.resolve(["target--v1.0.0"]);
+      },
+      resolveTagOid: () => Promise.resolve("oid-1.0.0"),
+    };
+    const seam: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: () => {
+        throw new Error("not expected on a path entry source");
+      },
+      probeMarketplaceTags: (probeOptions) =>
+        probeMarketplaceTags({ ...probeOptions, seam: listingSeam }),
+    };
+    const marketplaceTagMemo: Required<UpdateConstraintOptions>["marketplaceTagMemo"] = new Map();
+
+    // act
+    await evaluateUpdateConstraint(options({ state, seam, marketplaceTagMemo }));
+    await evaluateUpdateConstraint(options({ state, seam, marketplaceTagMemo }));
+
+    // assert
+    assert.strictEqual(listTagsCalls.length, 1);
+  });
+
+  test("D-10-18: a failed listing is re-queried on the next evaluation in the same run", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+    const source = gitSource();
+    let calls = 0;
+    const listingSeam: DependencyTagListingSeam = {
+      listRemoteTags: () => {
+        calls += 1;
+        if (calls === 1) {
+          return Promise.reject(new Error("transient"));
+        }
+
+        return Promise.resolve([{ name: "target--v1.0.0", oid: "oid-1.0.0" }]);
+      },
+    };
+    const seam: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: (probeOptions) =>
+        probeDependencyTags({ ...probeOptions, seam: listingSeam }),
+      probeMarketplaceTags: () => {
+        throw new Error("not expected on a git-backed entry source");
+      },
+    };
+    const tagMemo = new Map<string, readonly RemoteTag[]>();
+    const auth = { ctx: silentCtx(), credentialOps: credentialOps() };
+
+    // act
+    const first = await evaluateUpdateConstraint(
+      options({ state, entry: { name: "target", source }, seam, tagMemo, auth }),
+    );
+    const second = await evaluateUpdateConstraint(
+      options({ state, entry: { name: "target", source }, seam, tagMemo, auth }),
+    );
+
+    // assert -- the failed attempt wrote no memo entry, so the second
+    // evaluation re-queries and succeeds.
+    assert.strictEqual(calls, 2);
+    assert.ok(first.kind === "held");
+    assert.ok(second.kind === "admits");
+    assert.deepStrictEqual(second.pin, { oid: "oid-1.0.0", version: "1.0.0" });
+  });
 });
 
 describe("describeConstraint", () => {
