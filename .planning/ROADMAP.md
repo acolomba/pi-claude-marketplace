@@ -448,11 +448,14 @@ Plans:
 2. When no available version satisfies the intersection, that plugin's update is skipped and reported on its row with a reason naming the constraining plugin(s); the rest of the update proceeds. (UPDT-02)
 3. An unconstrained plugin updates exactly as before; the update family stays inside its network policy (warm cache offline; `update-flow.ts` / `update-preflight.ts` remain the only git consumers per `no-orchestrator-network.test.ts`).
 
-**Plans**: 0 plans
+**Plans**: 4 plans
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 10 to break down)
+- [ ] 10-01-PLAN.md — the held row end to end: the constraint gate leaf, its call site in the preflight, the new closed-set token, the `skipped` row's cause channel, and the catalog state (UPDT-02)
+- [ ] 10-02-PLAN.md — stage one: probe the plugin's release tags on both source kinds, pin the highest satisfying one through the resolver's own callbacks, record the version the tag names, and bound tag listings to one per repository per run (UPDT-01)
+- [ ] 10-03-PLAN.md — stage two: re-check the version that actually landed, hold naming only the rejecting dependents, report the current-copy fallback and the ceiling case, and give the autoupdate cascade the same row (UPDT-01, UPDT-02)
+- [ ] 10-04-PLAN.md — amend the dependency documentation and hold it to the code, prove the unconstrained path and the network policy unchanged, and close on a green whole-tree gate (UPDT-01, UPDT-02)
 
 **Notes.** Owners: `orchestrators/plugin/update-flow.ts`, `update-preflight.ts`, `update-swap.ts`, `update-row.ts`, `update.messaging.ts`, `orchestrators/marketplace/autoupdate.ts`. `update-preflight.ts` is the natural place to compute the intersection from the declaration index before the swap decides a target. A version-pinned record already refuses promotion (D-04-07); a pinned record's update is out of scope here as before.
 
