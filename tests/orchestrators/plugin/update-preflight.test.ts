@@ -308,6 +308,27 @@ test("UPDT-02: a held update writes nothing and repeats byte-identically", async
   assert.deepStrictEqual(after, before);
 });
 
+test("success criterion 3: an unconstrained plugin's outcome is identical with and without a real gate", async (t) => {
+  // arrange -- one seed, called twice: the run under test genuinely executes
+  // candidate resolution both times (this scenario resolves a fresh
+  // `PreparedPluginUpdate`, not a persisted `unchanged` short-circuit), so
+  // this is not a value compared to itself.
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+
+  // act -- the first run omits `constraintGate` entirely (production
+  // default: the real `evaluateUpdateConstraint`, walking a state that
+  // declares no dependent for "hello"); the second injects a double that
+  // always answers `unconstrained` without walking anything.
+  const withRealGate = await prepare(seed);
+  const withDoubledGate = await prepare(seed, {
+    constraintGate: () => Promise.resolve({ kind: "unconstrained" }),
+  });
+
+  // assert
+  assert.deepStrictEqual(withRealGate, withDoubledGate);
+});
+
 test("reads a partitioned preflight answer as a finished outcome", async (t) => {
   // arrange
   const seed = await seedUpdate({ installed: pluginRecord("2.0.0") });

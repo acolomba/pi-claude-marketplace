@@ -210,13 +210,17 @@ export async function evaluateUpdateConstraint(
     // D-10-05: the walk's own message IS the rendered cause line -- it is
     // already path-redacted and built without `{ cause }` chaining, so the
     // renderer's cause-chain walk cannot print a raw path behind it.
-    // Re-wrapping it here would reintroduce exactly that.
+    // Re-wrapping it here would reintroduce exactly that. This is the same
+    // fail-closed model the uninstall refusal uses on an unreadable
+    // declarer, and differs from it only in outcome: an update is SKIPPED
+    // here, never refused.
     return { kind: "held", cause: walked.cause.message };
   }
 
   const holders = collectHolders(walked.declarations, options.state, target);
-  // A holder with no declared version contributes nothing to the fold, but
-  // still holds the key -- it stays in `holders` for the cause line alone.
+  // A declaration HOLDS the key whatever it names, but only a declared RANGE
+  // constrains a version: a holder with no `range` stays in `holders` for
+  // the cause line and is left out of the fold below.
   const ranges = holders.flatMap((holder) => (holder.range === undefined ? [] : [holder.range]));
   const fold = intersectDependencyRanges(ranges);
   if (fold.ok) {

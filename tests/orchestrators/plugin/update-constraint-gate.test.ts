@@ -329,6 +329,70 @@ describe("evaluateUpdateConstraint", () => {
     // assert
     assert.deepStrictEqual(verdict, { kind: "unconstrained" });
   });
+
+  for (const { title, cause } of [
+    {
+      title: "D-05-07: a marketplace manifest load failure",
+      cause: new Error("cannot read the dependencies of app@mp: ENOENT: open 'mp'"),
+    },
+    {
+      title: "D-05-07: a declarer its marketplace does not list",
+      cause: new Error("cannot read the dependencies of helper@mp: not declared by its marketplace"),
+    },
+    {
+      title: "D-05-07: a declarer's own manifest present but unusable",
+      cause: new Error(
+        "cannot read the dependencies of helper@mp: its own manifest is present but cannot be read",
+      ),
+    },
+    {
+      title: "D-05-07: a declaration that parses as unusable",
+      cause: new Error("cannot read the dependencies of helper@mp: dependencies.0: Invalid input"),
+    },
+  ] as const) {
+    test(`UPDT-02: ${title} holds the update and names itself, verbatim`, async () => {
+      // arrange
+      const seam = seamFailingWith("helper@mp", cause);
+
+      // act
+      const verdict = await evaluateUpdateConstraint(options({ seam }));
+
+      // assert -- a refusal short-circuits before any fold: the seam returns
+      // no declarations at all, so `intersectDependencyRanges` is never
+      // reached for this verdict. `verdict.cause` is the double's own
+      // message string, passed through unchanged.
+      assert.deepStrictEqual(verdict, { kind: "held", cause: cause.message });
+      assert.doesNotMatch(cause.message, /(^|\s)\//u);
+    });
+  }
+
+  for (const { title, holder, expectedClause } of [
+    {
+      title: "invalid",
+      holder: dependency({ name: "target", version: "not-a-valid-range" }),
+      expectedClause: "a declared range could not be read",
+    },
+    {
+      title: "too-complex",
+      holder: dependency({ name: "target", version: "^1.0.0".repeat(700) }),
+      expectedClause: "the declared ranges are too complex to combine",
+    },
+  ] as const) {
+    test(`UPDT-01: a ${title} declared range holds the update with a distinct arm clause`, async () => {
+      // arrange
+      const declarations = new Map<string, readonly AddressedDependency[]>([["alpha@mp", [holder]]]);
+      const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+
+      // act
+      const verdict = await evaluateUpdateConstraint(
+        options({ state, seam: seamReturning(declarations) }),
+      );
+
+      // assert
+      assert.ok(verdict.kind === "held");
+      assert.ok(verdict.cause.startsWith(expectedClause));
+    });
+  }
 });
 
 describe("describeConstraint", () => {
