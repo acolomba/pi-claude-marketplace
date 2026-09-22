@@ -1,82 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { rm } from "node:fs/promises";
 import test from "node:test";
 
-import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   composeUpdateCascade,
   type UpdateCascadeOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-cascade.ts";
-import { evaluateUpdateConstraint } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts";
-import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { preparePluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 
-import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-
-type PluginStateRecord = ExtensionState["marketplaces"][string]["plugins"][string];
-
-function sc3PluginRecord(): PluginStateRecord {
-  return {
-    version: "1.0.0",
-    resolvedSource: "/plugins/x",
-    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
-    enabled: true,
-    provenance: "explicit",
-    installedAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-01T00:00:00.000Z",
-  };
-}
-
-/**
- * SC3: a real, on-disk marketplace with a second installed plugin ("beta")
- * that declares something else entirely ("gamma"), so
- * `evaluateUpdateConstraint`'s declaration walk genuinely runs and returns an
- * empty holder set for "alpha" -- the gate itself decides "alpha" is
- * unconstrained, rather than a canned verdict standing in for it.
- */
-async function seedUnconstrainedTarget(): Promise<{
-  readonly cwd: string;
-  readonly state: ExtensionState;
-  readonly locations: ScopedLocations;
-}> {
-  const cwd = await mkdtemp(path.join(tmpdir(), "sc3-update-cascade-"));
-  const marketplaceRoot = path.join(cwd, "mp");
-  await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
-  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
-  await writeFile(
-    manifestPath,
-    JSON.stringify({
-      name: "mp",
-      plugins: [
-        { name: "alpha", source: "./plugins/alpha" },
-        { name: "beta", source: "./plugins/beta", dependencies: ["gamma"] },
-      ],
-    }),
-  );
-
-  return {
-    cwd,
-    state: {
-      schemaVersion: 2,
-      marketplaces: {
-        mp: {
-          name: "mp",
-          scope: "project",
-          source: pathSource("./mp"),
-          addedFromCwd: cwd,
-          manifestPath,
-          marketplaceRoot,
-          plugins: { alpha: sc3PluginRecord(), beta: sc3PluginRecord() },
-        },
-      },
-    },
-    locations: locationsFor("project", cwd),
-  };
-}
+import { seedUnconstrainedTarget } from "./seed-unconstrained-target.ts";
 
 function updated(
   marketplace: string,
@@ -618,40 +551,35 @@ test("UPDT-02: a bulk run holds one plugin and updates the rest", () => {
 });
 
 test("SC3: an unconstrained plugin renders the same manual cascade rows as before", async (t) => {
-  // arrange: a real declaration walk over a real on-disk marketplace, with a
+  // arrange: the REAL preflight over a real on-disk marketplace, with a
   // second installed plugin ("beta") declaring something else entirely --
-  // the gate itself, not a stub, decides "alpha" is unconstrained.
-  const seed = await seedUnconstrainedTarget();
+  // the gate itself, not a stub, decides "alpha" is unconstrained, and
+  // `constraintFromVerdict` -- the production step that turns that verdict
+  // into the outcome's disclosure slot -- is what fills `constraint` below.
+  const seed = await seedUnconstrainedTarget("sc3-update-cascade-");
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
-  const verdict = await evaluateUpdateConstraint({
+  const prepared = await preparePluginUpdate({
     plugin: "alpha",
     marketplace: "mp",
-    entry: { name: "alpha", source: "./plugins/alpha" },
-    marketplaceRoot: seed.state.marketplaces.mp?.marketplaceRoot ?? "",
-    state: seed.state,
+    scope: "project",
     locations: seed.locations,
-    auth: {
-      credentialOps: {
-        approve: () => Promise.resolve(),
-        fill: () => Promise.resolve(null),
-        reject: () => Promise.resolve(),
-      },
-    },
+    cleanupClones: async () => {},
   });
-  assert.deepStrictEqual(verdict, { kind: "unconstrained" });
+  assert.ok(!("partition" in prepared));
+  assert.strictEqual(prepared.constraint, undefined);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
       outcome: {
         partition: "updated",
         name: "alpha",
-        fromVersion: "1.0.0",
-        toVersion: "1.1.0",
+        fromVersion: prepared.fromVersion,
+        toVersion: prepared.toVersion,
         stagedAgentNames: [],
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
-        constraint: undefined,
+        constraint: prepared.constraint,
       },
     },
   ];
@@ -666,10 +594,9 @@ test("SC3: an unconstrained plugin renders the same manual cascade rows as befor
   // act
   composeUpdateCascade(boundary.ctx, boundary.pi, outcomes, "single");
 
-  // assert: the gate ran, found no holder, and the rendered row is
-  // byte-identical to the pre-constraint-gate rendering (NREG-01) -- the
-  // gate's presence in the preflight path changes nothing for a plugin
-  // nothing constrains.
+  // assert: the gate ran, found no holder, the preflight projected no
+  // disclosure, and the rendered row is byte-identical to the
+  // pre-constraint-gate rendering (NREG-01).
   assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
   boundary.verifyBoundary();
 });
