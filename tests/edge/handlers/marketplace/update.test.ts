@@ -15,6 +15,13 @@
 // git port is `createGitOpsFake`. Both recordings are only possible if the
 // identical port objects the handler was constructed with reached the workflow.
 //
+// D-10-18 adds a second promise to the shim: the handler IS the autoupdate
+// cascade's run boundary, so it calls `deps.beginPluginUpdateRun()` once per
+// command and never while the handler is being built. One case counts those
+// calls; the rest inject a factory whose return value is fixed, so only the
+// counting case can see the difference between a per-command allocation and a
+// registration-time one.
+//
 // Every seeded marketplace is a url source pinned to `main`, which is the shape
 // that puts the git port on the refresh path at all: a path source never reaches
 // git. The project-scope `alpha` is the only marketplace with autoupdate on and
@@ -310,6 +317,54 @@ for (const { args, label, arity } of [
     verify(pluginUpdate);
   });
 }
+
+test("D-10-18: begins one cascade run per command and none when the handler is built", async (t) => {
+  // arrange -- every other case injects a factory that returns the same
+  // function however often it is called, so those cases are invariant to WHEN
+  // the handler calls it. Counting the calls is what pins the run boundary to
+  // the command: a factory call moved into `makeMarketplaceUpdateHandler`'s
+  // body scores 1 here before either command runs, and 1 after both.
+  const { cwd, networkCallCount } = await createHermeticScope(t, "run-boundary");
+  const clones = await seedThreeMarketplaces(cwd);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 4, {
+    value: cwd,
+    reads: 2,
+  });
+  const git = createGitOpsFake({ boundary: "memory" });
+  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+  when(() => pluginUpdate("hello", "alpha", "project"))
+    .thenResolve(unchangedHello())
+    .times(2);
+  let runs = 0;
+  const marketplaceUpdateHandler = makeMarketplaceUpdateHandler(pi, {
+    completionCache: createCompletionCache(),
+    gitOps: git.gitOps,
+    beginPluginUpdateRun: () => {
+      runs += 1;
+      return pluginUpdate;
+    },
+  });
+  const atBuild = runs;
+
+  // act
+  await marketplaceUpdateHandler("alpha", ctx);
+  const afterFirstCommand = runs;
+  await marketplaceUpdateHandler("alpha", ctx);
+
+  // assert
+  assert.deepStrictEqual([atBuild, afterFirstCommand, runs], [0, 1, 2]);
+  assert.deepStrictEqual(notifications, [
+    { message: PROJECT_ALPHA_ROW },
+    { message: PROJECT_ALPHA_ROW },
+  ]);
+  assert.deepStrictEqual(git.state.calls.fetch, [
+    fetchOf(clones.projectAlpha),
+    fetchOf(clones.projectAlpha),
+  ]);
+  assert.strictEqual(networkCallCount(), 0);
+  verifyBoundary();
+  verify(pluginUpdate);
+});
 
 for (const { emissions, probes, rows, scope, touched } of [
   {
