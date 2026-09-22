@@ -5,16 +5,16 @@ milestone_name: transitive-dependencies
 current_phase: 10
 current_phase_name: Constraint-aware update
 status: executing
-stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-09-22T14:31:17.390Z"
+stopped_at: Completed 10-02-PLAN.md
+last_updated: "2026-09-22T17:10:51.788Z"
 last_activity: 2026-09-22
 last_activity_desc: Phase 10 execution started
-state_head: 7289c7c9750408b6f2cf5ae68b8bb06dc75f074a
+state_head: e9805c213c34d1d386d173aac349a2d4daa75a8f
 progress:
   total_phases: 12
   completed_phases: 9
   total_plans: 40
-  completed_plans: 37
+  completed_plans: 38
   percent: 75
 ---
 
@@ -37,7 +37,7 @@ under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 10 (Constraint-aware update) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 
 **Phase 9 closed 2026-09-22**, verified 12/12 must-haves with no human items;
@@ -610,6 +610,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 09 P03 | 275min | 2 tasks | 11 files |
 | Phase 09 P04 | 80 min | 3 tasks | 10 files |
 | Phase 10 P01 | 62min | 3 tasks | 24 files |
+| Phase 10 P02 | 1h53m | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -889,6 +890,10 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 10]: D-10-09 checkpoint: operator selected proceed-as-recommended -- the new closed-set reason token is 'dependents constrain', spelled on all nine pinning surfaces (62-member Reason set).
 - [Phase 10]: describeConstraint's detail parameter carries intersectDependencyRanges' own diagnostic text (position/count-only), not a raw declared range or the folded range -- keeps the arm parameter genuinely used under noUnusedParameters without leaking declared-range content.
 - [Phase 10]: ConstraintHolder.range is optional, not the plan artifacts' plain range: string -- a range-less declarer still holds the key for the cause line but is filtered out of the intersectDependencyRanges fold.
+- [Phase 10]: Ctx-undefined git probe path defers to admitsRange rather than an uncoverable notification-context fallback
+- [Phase 10]: UpdateTagPin promoted to a shared exported type so the type-member analyzer credits its .version field as runtime-observed
+- [Phase 10]: update-swap.ts derives memo field types from PreparePluginUpdateOptions instead of importing platform/git.ts, to stay off the network-free gate's import surface
+- [Phase 10]: Path-arm tag-listing-once behavior verified functionally (real local git marketplace fixture) rather than by call-count mocking, since isomorphic-git's package exports are non-configurable
 
 ### Pending Todos
 
@@ -1022,13 +1027,13 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 10-01-PLAN.md
+**Stopped at:** Completed 10-02-PLAN.md
 
 **Resume file:** None
 
 **Read beside it:** `.planning/phases/09-reload-installs-missing-dependencies/09-CONTEXT.md`
 
-Last session: 2026-09-22T14:31:17.086Z
+Last session: 2026-09-22T17:10:51.498Z
 Autonomous run (`/gsd-autonomous --from 9`) took Phase 9 from discuss through
 transition in one session: smart discuss (four areas, every decision checked
 against the 2.1.267 binary at the operator's "follow upstream" instruction),
