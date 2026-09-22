@@ -30,7 +30,7 @@ import {
   type PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
-import { updatedRowFromOutcome } from "../plugin/update-row.ts";
+import { constraintCauseFor, updatedRowFromOutcome } from "../plugin/update-row.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -174,7 +174,12 @@ export function outcomeToCascadePluginMessage(
       });
     }
 
-    case "unchanged":
+    case "unchanged": {
+      // D-10-13: the ceiling disclosure, read through the SAME carrier the
+      // manual cascade's skipped row reads; `undefined` for an unconstrained
+      // up-to-date plugin, so its row stays byte-identical.
+      const cause = constraintCauseFor(outcome);
+
       return {
         status: "skipped",
         name: outcome.name,
@@ -183,18 +188,30 @@ export function outcomeToCascadePluginMessage(
         // D-03/D-06: an `up-to-date` no-op is benign -> info, no reload.
         severity: "info",
         needsReload: false,
+        ...(cause !== undefined && { cause }),
       };
+    }
+
     case "skipped": {
       const reasons = [narrowSkipReason(outcome)];
+      const cause = constraintCauseFor(outcome);
       return {
         status: "skipped",
         name: outcome.name,
         scope,
         reasons,
         // D-03/D-06: benign idempotent skip -> info, actionable skip -> warning;
-        // never reloads.
+        // never reloads. D-10-12: the held-update token relies on THIS
+        // default to reach `warning` on the autoupdate surface too, with no
+        // bespoke branch -- a deliberate departure from the `(updated)`
+        // partition's info-for-autoupdate split (WR-01), because a
+        // constraint hold persists across every future run until the user
+        // changes a declaration, unlike an absent soft-dep companion the
+        // user is not present to act on. The token must never be added to
+        // `IDEMPOTENT_REASONS`.
         severity: skipSeverity(reasons),
         needsReload: false,
+        ...(cause !== undefined && { cause }),
       };
     }
 

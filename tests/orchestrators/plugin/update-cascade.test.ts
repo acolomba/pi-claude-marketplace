@@ -28,6 +28,31 @@ function updated(
   };
 }
 
+/**
+ * D-10-12: one held-update outcome, shared by the manual cascade's own
+ * severity case and the identical literal `update.messaging.test.ts` drives
+ * through the autoupdate mapper -- both cascades must agree on `warning` for
+ * the SAME outcome.
+ */
+function heldOutcome(
+  marketplace: string,
+  scope: "project" | "user",
+  name: string,
+): UpdateCascadeOutcome {
+  return {
+    target: { marketplace, scope },
+    outcome: {
+      partition: "skipped",
+      name,
+      fromVersion: "1.0.0",
+      notes: ['the declared ranges admit no version in common -- required by "alpha@mp"'],
+      reasons: ["dependents constrain"],
+      declaresAgents: false,
+      declaresMcp: false,
+    },
+  };
+}
+
 test("renders an empty bulk cascade as the exact no-op headline", () => {
   // arrange
   const boundary = createNotificationBoundary(1, 4);
@@ -189,6 +214,21 @@ test("UPDT-02: projects a held constraint outcome as a warning row with its note
   assert.deepStrictEqual(boundary.notifications, [
     { message: expectedMessage, severity: "warning" },
   ]);
+  boundary.verifyBoundary();
+});
+
+test("D-10-12: the held row is warning on the manual cascade", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1, 4);
+  const outcomes = [heldOutcome("mp", "project", "shared-lib")];
+
+  // act
+  composeUpdateCascade(boundary.ctx, boundary.pi, outcomes, "single");
+
+  // assert
+  const notification = boundary.notifications[0];
+  assert.ok(notification !== undefined);
+  assert.strictEqual(notification.severity, "warning");
   boundary.verifyBoundary();
 });
 
@@ -470,5 +510,38 @@ test("preserves caller order for rows in one marketplace", () => {
 
   // assert
   assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
+  boundary.verifyBoundary();
+});
+
+test("UPDT-02: a bulk run holds one plugin and updates the rest", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1, 4);
+  const outcomes = [
+    heldOutcome("mp", "project", "charlie"),
+    updated("mp", "project", "alpha"),
+    updated("mp", "project", "beta"),
+  ];
+  const expectedMessage = [
+    "A plugin operation needs attention.",
+    "",
+    "● mp [project]",
+    "  ⊘ charlie v1.0.0 (skipped) {dependents constrain}",
+    '    cause: the declared ranges admit no version in common -- required by "alpha@mp"',
+    "  ● alpha v1.0.0 → v1.1.0 (updated)",
+    "  ● beta v1.0.0 → v1.1.0 (updated)",
+    "",
+    "Plugin update: 1 warning, 2 updated",
+    "",
+    "/reload to pick up changes",
+  ].join("\n");
+
+  // act
+  composeUpdateCascade(boundary.ctx, boundary.pi, outcomes, "plural");
+
+  // assert -- one held row (warning) beside two updated rows (info); the
+  // stage-two hold on one plugin leaves the other two rows unchanged.
+  assert.deepStrictEqual(boundary.notifications, [
+    { message: expectedMessage, severity: "warning" },
+  ]);
   boundary.verifyBoundary();
 });

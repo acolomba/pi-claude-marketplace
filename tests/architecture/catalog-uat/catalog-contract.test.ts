@@ -132,8 +132,10 @@ const EXPECTED_SECTION_COUNT = 20;
 // alone (224 -> 225).
 // D-10-13: +1 state for the ceiling disclosure -- an `{up-to-date}` row
 // whose cause line names the effective range and its holders (225 -> 226).
-const EXPECTED_STATE_COUNT = 226;
-const EXPECTED_UTF8_BYTES = 31_284;
+// D-10-12: +1 state for the autoupdate cascade's held row -- the same token,
+// cause line and `warning` severity the manual cascade renders (226 -> 227).
+const EXPECTED_STATE_COUNT = 227;
+const EXPECTED_UTF8_BYTES = 31_539;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -422,7 +424,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 226 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 227 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

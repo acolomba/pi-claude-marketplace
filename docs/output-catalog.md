@@ -3039,6 +3039,20 @@ A plugin operation needs attention.
 
 LIFE-06 / D-98-13: the refreshed `marketplace.json` no longer lists an installed record's entry, so the shared update preflight stamps `partition: "skipped"` with `reasons: ["not in manifest"]` and `cascadeAutoupdates` passes that outcome through untouched (only a THROW is caught and converted). The cascade row carries NO version token, and the omission is deliberate: `outcomeToCascadePluginMessage`'s `skipped` arm forwards name, scope and reasons only, while the single-plugin `update` surface renders the SAME skip as `⊘ hello v1.0.0 (skipped) {not in manifest}`. Both forms are byte-pinned -- the cascade one in `tests/orchestrators/marketplace/update.test.ts`, the version-carrying one in `tests/orchestrators/plugin/update-flow.test.ts` -- so adding a version here would move a locked contract rather than correct a rendering bug. `not in manifest` is failure-class and not idempotent, so `skipSeverity` stamps the row `warning` and the cascade prepends the `A plugin operation needs attention.` summary line. The marketplace header keeps `(updated)`: a `skipped` outcome is not `unchanged`, so it leaves the all-unchanged no-op gate (UXG-05) exactly as the disabled re-pin above does. The record is left untouched -- a skipped plugin is a fixed point for the cascade, so a repeated `marketplace update` renders byte-identically. No reload-hint: a `skipped` plugin row materialized nothing (SNM-33 / D-22-01).
 
+### Autoupdate-on cascade -- a plugin held by its dependents' declared range (D-10-12)
+
+<!-- catalog-state: autoupdate-held-by-dependents -->
+
+```text
+A plugin operation needs attention.
+
+● auto-mp [user] (updated)
+  ⊘ shared-lib (skipped) {dependents constrain}
+    cause: the declared ranges admit no version in common (no version satisfies all 2 declared ranges) -- required by "alpha@mp", "beta@mp"
+```
+
+A background autoupdate reaches the same constraint gate a manual `update` does, so a held plugin renders the SAME token and the SAME cause line through the shared `constraintCauseFor` carrier -- `orchestrators/marketplace/update.messaging.ts` reads it off `../plugin/update-row.ts`, the leaf with no back-edges both cascades already share, never importing the constraint gate itself. Severity is `warning` here too (D-10-12): a deliberate departure from the `(updated)` partition's info-for-autoupdate split (WR-01), because an absent soft-dep companion is something the user could not act on anyway, while a constraint hold persists across every future run until the user changes a declaration -- a background run that reported it at `info` would hide the one fact that explains why the plugin never moves. Both severity sites reach `warning` through `skipSeverity`'s default alone, with no bespoke branch, and the held token must never join `IDEMPOTENT_REASONS`. No reload-hint (nothing changed on disk).
+
 ### Autoupdate-off manifest refresh -- changed
 
 <!-- catalog-state: manifest-refresh-changed -->

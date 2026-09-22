@@ -157,6 +157,11 @@ const skipSeverityCases = [
     reasons: ["installs disabled"],
     expectedSeverity: "warning",
   },
+  {
+    title: "D-10-12: classifies the held-update token as an actionable skip, never idempotent",
+    reasons: ["dependents constrain"],
+    expectedSeverity: "warning",
+  },
 ] as const;
 
 for (const { title, reasons, expectedSeverity } of skipSeverityCases) {

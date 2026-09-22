@@ -114,6 +114,38 @@ export const MARKETPLACE_UPDATE_FIXTURES: FixtureMap = {
       },
     },
 
+    // D-10-12: the autoupdate cascade's held row carries the SAME token,
+    // cause line and `warning` severity the manual cascade renders -- no
+    // bespoke branch, through `skipSeverity`'s default alone.
+    "autoupdate-held-by-dependents": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        label: "Marketplace update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "auto-mp",
+            scope: "user",
+            status: "updated",
+            plugins: [
+              {
+                status: "skipped",
+                name: "shared-lib",
+                scope: "user",
+                reasons: ["dependents constrain"],
+                severity: "warning",
+                needsReload: false,
+                cause: new Error(
+                  'the declared ranges admit no version in common (no version satisfies all 2 declared ranges) -- required by "alpha@mp", "beta@mp"',
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "manifest-refresh-changed": {
       pi: piWithBothLoaded(),
       message: {

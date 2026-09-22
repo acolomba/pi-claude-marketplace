@@ -429,6 +429,40 @@ test("projects an unchanged outcome as a complete benign skipped message", () =>
     needsReload: false,
   });
   assert.equal(Object.hasOwn(message, "version"), false);
+  assert.equal(Object.hasOwn(message, "cause"), false);
+});
+
+test("D-10-13: an unchanged outcome with a constraint discloses its range and holders", () => {
+  // arrange
+  const outcome = {
+    partition: "unchanged",
+    name: "shared-lib",
+    fromVersion: "1.5.0",
+    toVersion: "1.5.0",
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: {
+      disclosure:
+        'already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"',
+      fellBackToCurrentCopy: false,
+    },
+  } satisfies PluginUpdateOutcome;
+
+  // act
+  const message = outcomeToCascadePluginMessage(outcome, "user");
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "skipped",
+    name: "shared-lib",
+    scope: "user",
+    reasons: ["up-to-date"],
+    severity: "info",
+    needsReload: false,
+    cause: new Error(
+      'already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"',
+    ),
+  });
 });
 
 test("prefers a typed benign skip reason over contradictory notes", () => {
@@ -480,6 +514,34 @@ test("prefers a typed actionable skip reason over unclassified notes", () => {
     reasons: ["not installed"],
     severity: "warning",
     needsReload: false,
+  });
+});
+
+test("D-10-12: the held row is warning on the autoupdate cascade", () => {
+  // arrange -- the SAME held outcome `update-cascade.test.ts`'s manual-
+  // cascade case drives, so both surfaces are proven against one literal.
+  const outcome = {
+    partition: "skipped",
+    name: "shared-lib",
+    fromVersion: "1.0.0",
+    notes: ['the declared ranges admit no version in common -- required by "alpha@mp"'],
+    reasons: ["dependents constrain"],
+    declaresAgents: false,
+    declaresMcp: false,
+  } as const satisfies PluginUpdateOutcome;
+
+  // act
+  const message = outcomeToCascadePluginMessage(outcome, "user");
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "skipped",
+    name: "shared-lib",
+    scope: "user",
+    reasons: ["dependents constrain"],
+    severity: "warning",
+    needsReload: false,
+    cause: new Error('the declared ranges admit no version in common -- required by "alpha@mp"'),
   });
 });
 
