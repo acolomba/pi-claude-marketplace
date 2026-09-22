@@ -453,9 +453,9 @@ async function writeOrchestratedDeclarations(args: {
 
 /**
  * RESV-05: every `<plugin>@<marketplace>` key the target scope already records.
- * A dependency in this set is skipped by the closure walk and therefore never
- * becomes a cascade phase, so nothing can reinstall it and no rollback can
- * reach it.
+ * The cascade keeps a recorded ENABLED key as a walk wall -- it never becomes
+ * a phase and no rollback reaches it -- and strips a recorded DISABLED key so
+ * the walk re-enables it as a member (EDEP-03, `liveInstalledKeys`).
  */
 function collectInstalledKeys(state: ExtensionState): ReadonlySet<string> {
   const keys = new Set<string>();

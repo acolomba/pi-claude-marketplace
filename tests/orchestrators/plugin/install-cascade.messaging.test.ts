@@ -225,9 +225,8 @@ describe("composeCascadeMemberRows", () => {
 
   test("EDEP-03 a left-alone member stays the bare idempotent skip", () => {
     // arrange: `linter` is already installed and ENABLED -- the control for
-    // the re-enabled case above. `partitionAlreadyInstalled` never routes an
-    // enabled member here through the `installed` loop, so the skip stays the
-    // single benign token it always was.
+    // the re-enabled case above. An enabled record is a walk wall, so it
+    // reaches only this loop and the skip stays the single benign token.
     const rows = composeCascadeMemberRows({
       scope: "user",
       rootKey: ROOT_KEY,
