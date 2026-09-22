@@ -829,8 +829,7 @@ export async function writeAdoptingConfigEntries(opts: {
  * config names only what the user asked for by name).
  *
  * Shared by the enable cascade's EDEP-01 arm and the install cascade's
- * EDEP-03 re-enable arm, which duplicated this write verbatim before this
- * helper existed.
+ * EDEP-03 re-enable arm.
  */
 export async function overwriteDisabledMemberEntries(args: {
   readonly locations: ScopedLocations;

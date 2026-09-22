@@ -880,11 +880,10 @@ function buildEnableCascadeMemberPhase(
  *
  * WR-08: `undo` puts the root back to disabled, gated on `run.root` (the
  * sentinel `do` sets only once materialization completes -- a `Phase.undo`
- * cannot assume its `do` ran to completion). This phase is no longer
- * unconditionally last: `runEnableCascadeWithRoot` pushes WR-08's own config
- * phase after it, so a throw from THAT phase reaches back here through
- * `runPhases`'s reverse-order undo, and the root's own materialized install
- * must unwind exactly like a member's.
+ * cannot assume its `do` ran to completion). `runEnableCascadeWithRoot`
+ * pushes the config phase after this one, so a throw from THAT phase
+ * reaches back here through `runPhases`'s reverse-order undo, and the
+ * root's own materialized install unwinds exactly like a member's.
  */
 function buildEnableRootPhase(
   transaction: EnableDisableTransaction,
@@ -1024,16 +1023,13 @@ function enableCascadeRollbackPartials(
  * WR-08: the config write(s) that overwrite a member's -- and, on the
  * fresh-root path, the root's own -- stale `enabled: false` entry, as the
  * FINAL phase of the SAME ledger the cascade's members (and, on that path,
- * the root) already ran in. Before this phase existed, both writes ran AFTER
- * `runPhases` had already returned `ok` and BEFORE `tx.save()`; a throw there
- * (an EACCES on the config file, for instance) propagated past the ledger
- * with every member's -- and the root's -- artifacts already materialized on
- * disk and no state save to record them (NFR-3 violation). As a phase, the
- * same throw now unwinds every phase before it through `runPhases`'s own
- * reverse-order undo, exactly like any other phase failure. `undo` is
- * omitted: a throw from a config write leaves no partial write this module
- * can observe to unwind, so there is nothing for `runPhases`'s catch to call
- * back into for this phase.
+ * the root) already ran in. As the ledger's final phase, a throw from either
+ * write (an EACCES on the config file, for instance) unwinds every phase
+ * before it through `runPhases`'s reverse-order undo (NFR-3), so no member's
+ * -- or the root's -- artifacts stay materialized on disk with no state save
+ * to record them. `undo` is omitted: a throw from a config write leaves no
+ * partial write this module can observe to unwind, so there is nothing for
+ * `runPhases`'s catch to call back into for this phase.
  */
 function buildEnableCascadeConfigPhase(
   transaction: EnableDisableTransaction,
