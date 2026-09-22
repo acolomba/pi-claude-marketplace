@@ -12,7 +12,7 @@
 // Model, tool, and thinking mappings are user contracts; owner tests assert
 // their exact converted output.
 
-import { generatedSkillName } from "../../domain/name.ts";
+import { declaredAgentName, generatedSkillName } from "../../domain/name.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { escapeRegExp } from "../../shared/regexp.ts";
@@ -518,6 +518,13 @@ export function convertAgent(input: {
   } = input;
   const { raw, body, sourceName, generatedName, sourcePath } = discovered;
 
+  // AG-1a: the name the file DECLARES, which is not the name it is stored
+  // under. `generatedName` stays the basename so the AG-5 ownership marker
+  // keeps matching; `declaredName` is what pi-subagents takes as the agent's
+  // localName and what the host workflow engine keys its agentType registry
+  // on, so a bridged workflow's agent({ agentType }) call resolves.
+  const declaredName = declaredAgentName(pluginName, sourceName);
+
   const warnings: string[] = [];
 
   // 1. Description (with fallback)
@@ -561,7 +568,7 @@ export function convertAgent(input: {
     }
   }
 
-  warnings.push(...droppedFieldWarnings(droppedFields, generatedName));
+  warnings.push(...droppedFieldWarnings(droppedFields, declaredName));
 
   // 7. Substitute plugin variables in the body (PI-10).
   // D-08 corollary: the shared primitive sides with PI-10 -- agents DO get
@@ -586,8 +593,9 @@ export function convertAgent(input: {
   //    ordering) lives behind a single seam.
   const fileContent = emitGeneratedAgentFile({
     frontmatter: {
-      name: generatedName,
+      name: declaredName,
       description,
+      aliases: [generatedName],
       ...optionalModel(modelResult.emit),
       ...toolsFields(toolsResult),
       ...optionalThinking(thinkingResult.emit),
@@ -688,13 +696,13 @@ function toolsFields(result: ValidatedToolMapping): GeneratedToolsFields {
  * derived from this table, which keeps the stage layer's generic
  * `dropped fields:` summary and these warnings in lockstep.
  */
-const GUIDED_DROPPED_FIELD_WARNINGS: Readonly<Record<string, (generatedName: string) => string>> =
+const GUIDED_DROPPED_FIELD_WARNINGS: Readonly<Record<string, (declaredName: string) => string>> =
   Object.freeze({
     "allowed-tools": (): string =>
       "`allowed-tools` is a slash-command field, not an agent frontmatter field -- dropped (Claude Code ignores it on agents too). Declare `tools:` in the source agent instead.",
-    mcpServers: (generatedName: string): string =>
+    mcpServers: (declaredName: string): string =>
       "agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). " +
-      `To grant this agent MCP tools, set subagents.agentOverrides["${generatedName}"].tools ` +
+      `To grant this agent MCP tools, set subagents.agentOverrides["${declaredName}"].tools ` +
       "(e.g. read,bash,mcp:<server>) in Pi settings.",
     permissionMode: (): string =>
       "agent-level `permissionMode` is not converted -- dropped (Claude Code ignores it for plugin agents too).",
@@ -711,11 +719,11 @@ export const GUIDED_DROPPED_FIELDS: ReadonlySet<string> = new Set(
   Object.keys(GUIDED_DROPPED_FIELD_WARNINGS),
 );
 
-function droppedFieldWarnings(droppedFields: readonly string[], generatedName: string): string[] {
+function droppedFieldWarnings(droppedFields: readonly string[], declaredName: string): string[] {
   const warnings: string[] = [];
   for (const [field, warningFor] of Object.entries(GUIDED_DROPPED_FIELD_WARNINGS)) {
     if (droppedFields.includes(field)) {
-      warnings.push(warningFor(generatedName));
+      warnings.push(warningFor(declaredName));
     }
   }
 

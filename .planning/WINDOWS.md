@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 21
+open_count: 22
 waived_count: 27
-fixed_count: 34
-total_count: 82
-last_updated: 2026-09-21T15:05:10.770Z
+fixed_count: 35
+total_count: 84
+last_updated: 2026-09-22T13:20:31.198Z
 ---
 
 # Broken Windows Ledger
@@ -97,6 +97,8 @@ last_updated: 2026-09-21T15:05:10.770Z
 | 80 | 114 | unmet-truth | .planning/workstreams/workflows/phases/114-degradation-and-documentation/114-VERIFICATION.md |  | [workflows-replay] the covered_files inclusion rule is inconsistent, so which later edits stale a phase is partly luck. Phase 114's list carried 114-CONTEXT.md, 114-REVIEW.md and 114-REVIEW-FIX.md while omitting 114-PATTERNS.md, 114-RESEARCH.md, 114-SECURITY.md, 114-VALIDATION.md and deferred-items.md. deferred-items.md moved during the messaging quick task and the staleness signal never saw it; docs/messaging-style-guide.md was caught only because it happened to be in the list. Two entries were added by the third re-verification pass, but the general rule was left alone because changing it changes what staleness means for every phase in the workstream. Related to #39, which records the other half of the same defect: a covered_files list naming a file a LATER pass rewrites makes its phase permanently un-completable. Together they say the list is both too narrow to detect all drift and too broad to stay stable. Deciding it needs a rule stated once and applied to every phase, not a per-phase judgement call. | waived | Carried to BACKLOG.md VSTALE-01 (with #66): the too-narrow half of the same covered_files rule question. | 2026-09-10T14:45:10.435Z | 2026-09-21T15:05:08.869Z |
 | 81 | 113 | unmet-truth | tests/architecture |  | [workflows-replay] one of the three promised-but-unbuilt regression gates is still unbuilt: the abort-path call-site enumeration. Entry #49 recorded three, and two were built on 2026-09-10 - tests/architecture/workflows-update-placed-names.test.ts for the onPlaced source, and tests/architecture/no-write-in-workflows-staging-scan.test.ts for the read-only scan, each planted and observed red before being trusted. The third has no gate. T-111-03 (111-01-PLAN.md:206) claims a source assertion keeps a bare path join out of the workflows bridge, and separately the removed grep threshold on abortPreparedWorkflows guarded that no unwind path omits the workflows arm. Both properties hold at HEAD by direct read, and update.test.ts#WLIF-02 would catch the single-function regression - what neither catches is a SECOND function-level entry point into the abort flow that skips the workflows arm on a different failure branch. The operator chose the two gates and not a third; recorded so the absence stays visible rather than dissolving into a closed entry. | waived | Accepted residual, decided at 116: two gates chosen (update.test.ts#WLIF-02 and the removed grep threshold's replacement), not a third. What stays ungated is a SECOND function-level entry point skipping the workflows arm on a different failure branch. Listed so the absence stays visible. | 2026-09-10T14:59:05.576Z | 2026-09-21T15:05:10.770Z |
 | 82 | 116 | unmet-truth | extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts | 404 | [workflows-replay] one cause reaches the cascade under two different reason tokens depending on which layer catches it. A held state lock during a backfill re-materialize is reported to the user as 'unreadable', not 'lock held'. reinstallPlugin catches StateLockHeldError and routes it through handleSinglePluginFailure -> reasonsFromTypedError, which knows only PluginShapeError, ManualRecoveryError and errno codes, so it falls through narrowReason's last-resort return at reinstall.messaging.ts:404 to 'unreadable'. maybeBackfillPlugin's failed arm then prefers outcome.reasons[0] over classifyOrchestratorThrow, which DOES map StateLockHeldError to 'lock held' at apply-outcomes.ts:380. So applyBackfillForScopeIsolated's own WR-02 wrapper says 'lock held' while the re-materialize path says 'unreadable' for the same cause, both from the same closed ContentReason set. narrowReason's own comment for the already-disabled arm states the principle this breaks: falling through to unreadable makes the row claim the cascade could not read the plugin, which is false - nothing was unreadable, another operation held the lock, and the operator loses the one word that would tell them to retry. Found while building the ENBL-08 lock-collision twin; the test pins 'unreadable' as OBSERVED not endorsed, with the mechanism in its assert block, so it reddens loudly if someone fixes this. | fixed |  | 2026-09-10T15:14:27.879Z | 2026-09-21T15:04:50.412Z |
+| 83 | 117 | deviation | extensions/pi-claude-marketplace/domain/name.ts | 163 | [workflows-live-uat] a bridged plugin agent is unaddressable as a workflow agentType, so every workflow agent() call that names one silently degrades. generatedAgentName builds "pi-claude-marketplace-<plugin>-<agent>"; the host engine keys its registry on the frontmatter name (agent-registry.ts:117-133 at 3.13.0) and upstream Claude Code namespaces plugin agents as "<plugin>:<agent>". Measured 2026-09-22 driving code-modernization:modernize-harden-scan against a scoped legacy/demo slice: the engine logged [INFO] unknown agentType "code-modernization:security-auditor"; using default tools/model five times, once per finder, and completed. The bound tool allowlist (read,find,grep,bash), model and systemPromptMode: replace are all dropped with no warning to the user. The sibling generator in the same file, generatedWorkflowName at name.ts:171+, already uses the colon form, so the divergence is internal as well as upstream. | fixed |  | 2026-09-22T12:10:09.555Z | 2026-09-22T13:20:31.198Z |
+| 84 | 117 | unrun-verify | tests/live-uat/README.md |  | [workflows-live-uat] the bridge-to-engine path is proven end to end but workflow OUTPUT quality is not, and the blocker is the sandbox rather than the bridge. Measured 2026-09-22, engine 3.13.0, pi 0.85.1, tmp/pi-uat sandbox: code-modernization:modernize-harden-scan ran to status completed in 16.5s with all five Find-phase agents done, the staged envelope loaded from the user saved store, the Claude-authored script parsed unmodified, log()/dedup/refutation stages ran and the script return value came back as JSON. It returned zero findings because every subagent declined to call any tool -- each emitted "structured_output recovered from prose extraction (the model never called the tool)" and then asserted in prose that no filesystem was available, which is false: agent.ts:818 defaults to createCodingTools(cwd) when the invocation passes none. A one-agent negative control that only asked for one file name field failed identically with SCHEMA_NONCOMPLIANCE at 217 output tokens, so the cause is not code-modernization, the six envelopes or this bridge. Sandbox has only openai-codex authed; gpt-5.5 and gpt-5.6-terra both failed this way and gpt-5.3-codex-spark hung past 200s without writing a run record, so the openai-codex-responses API path cannot be isolated from the engine subagent layer here. Closing this needs a second provider (an Anthropic key in tmp/pi-uat/agent) and one re-run; until then the Verify phase and the adversarial second pass are unobserved. | open |  | 2026-09-22T12:10:21.345Z |  |
 
 ````json
 [
@@ -1110,6 +1112,32 @@ last_updated: 2026-09-21T15:05:10.770Z
     "reason": "",
     "recorded_at": "2026-09-10T15:14:27.879Z",
     "resolved_at": "2026-09-21T15:04:50.412Z"
+  },
+  {
+    "id": 83,
+    "kind": "deviation",
+    "phase": "117",
+    "file": "extensions/pi-claude-marketplace/domain/name.ts",
+    "line": 163,
+    "description": "[workflows-live-uat] a bridged plugin agent is unaddressable as a workflow agentType, so every workflow agent() call that names one silently degrades. generatedAgentName builds \"pi-claude-marketplace-<plugin>-<agent>\"; the host engine keys its registry on the frontmatter name (agent-registry.ts:117-133 at 3.13.0) and upstream Claude Code namespaces plugin agents as \"<plugin>:<agent>\". Measured 2026-09-22 driving code-modernization:modernize-harden-scan against a scoped legacy/demo slice: the engine logged [INFO] unknown agentType \"code-modernization:security-auditor\"; using default tools/model five times, once per finder, and completed. The bound tool allowlist (read,find,grep,bash), model and systemPromptMode: replace are all dropped with no warning to the user. The sibling generator in the same file, generatedWorkflowName at name.ts:171+, already uses the colon form, so the divergence is internal as well as upstream.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-22T12:10:09.555Z",
+    "resolved_at": "2026-09-22T13:20:31.198Z",
+    "milestone": null
+  },
+  {
+    "id": 84,
+    "kind": "unrun-verify",
+    "phase": "117",
+    "file": "tests/live-uat/README.md",
+    "line": null,
+    "description": "[workflows-live-uat] the bridge-to-engine path is proven end to end but workflow OUTPUT quality is not, and the blocker is the sandbox rather than the bridge. Measured 2026-09-22, engine 3.13.0, pi 0.85.1, tmp/pi-uat sandbox: code-modernization:modernize-harden-scan ran to status completed in 16.5s with all five Find-phase agents done, the staged envelope loaded from the user saved store, the Claude-authored script parsed unmodified, log()/dedup/refutation stages ran and the script return value came back as JSON. It returned zero findings because every subagent declined to call any tool -- each emitted \"structured_output recovered from prose extraction (the model never called the tool)\" and then asserted in prose that no filesystem was available, which is false: agent.ts:818 defaults to createCodingTools(cwd) when the invocation passes none. A one-agent negative control that only asked for one file name field failed identically with SCHEMA_NONCOMPLIANCE at 217 output tokens, so the cause is not code-modernization, the six envelopes or this bridge. Sandbox has only openai-codex authed; gpt-5.5 and gpt-5.6-terra both failed this way and gpt-5.3-codex-spark hung past 200s without writing a run record, so the openai-codex-responses API path cannot be isolated from the engine subagent layer here. Closing this needs a second provider (an Anthropic key in tmp/pi-uat/agent) and one re-run; until then the Verify phase and the adversarial second pass are unobserved.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-22T12:10:21.345Z",
+    "resolved_at": null,
+    "milestone": null
   }
 ]
 ````

@@ -433,6 +433,7 @@ export type GeneratedToolsFields =
 export type GeneratedFrontmatterFields = {
   readonly name: string;
   readonly description: string;
+  readonly aliases?: readonly string[];
   readonly model?: string;
   readonly thinking?: string;
   readonly skills: readonly string[];
@@ -484,7 +485,8 @@ export interface GeneratedProvenanceFields {
  *   <body>
  *
  * AG-8 / D-84-04 / T-d8i-01 deterministic field order: name, description,
- * model, tools (only when an explicit allowlist exists), excludeTools
+ * aliases (only when non-empty), model, tools (only when an explicit
+ * allowlist exists), excludeTools
  * (only when tools is absent and disallowed names mapped, #179), thinking,
  * skills, skillPath (only when skills is
  * non-empty), systemPromptMode, inheritProjectContext, inheritSkills,
@@ -515,6 +517,13 @@ export function emitGeneratedAgentFile(input: {
     `name: ${frontmatter.name}`,
     `description: ${emitYamlScalar(frontmatter.description)}`,
   ];
+  if (frontmatter.aliases !== undefined && frontmatter.aliases.length > 0) {
+    // AG-1a: the file's own basename, which is the name this bridge declared
+    // before the agentType split. pi-subagents resolves an alias to the same
+    // agent, so a session that already addresses the flat name keeps working.
+    lines.push(`aliases: ${frontmatter.aliases.join(",")}`);
+  }
+
   if (frontmatter.model !== undefined) {
     lines.push(`model: ${frontmatter.model}`);
   }

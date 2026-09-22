@@ -202,7 +202,7 @@ async function assertAgentsMigrated(params: {
     });
     assert.strictEqual(
       await readFile(targetPath, "utf8"),
-      `---\nname: ${agent.generatedName}\ndescription: ${agent.description}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${agentSourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
+      `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${agentSourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
     );
   }
 

@@ -169,6 +169,36 @@ export function generatedAgentName(plugin: string, source: string): string {
 }
 
 /**
+ * Declared agent name generator (RN-1 / AG-1a).
+ *
+ * Format: `<plugin>:<agent>` -- the name the agent DECLARES in its frontmatter,
+ * as distinct from `generatedAgentName`, which names the file on disk and
+ * carries the AG-5 ownership marker. Two consumers read this field and both
+ * take it verbatim: pi-subagents as the agent's `localName`, and the host
+ * workflow engine as its `agentType` registry key. A workflow script authored
+ * against Claude Code addresses a plugin agent as `<plugin>:<agent>`, so any
+ * other shape makes every `agent({ agentType })` call in a bridged workflow
+ * resolve to nothing and silently fall back to default tools and model.
+ *
+ * The separator is a literal `:` on every platform rather than
+ * `commandNamespaceSeparator()`. That helper exists because command and skill
+ * names BECOME filenames, and Windows cannot spell `:` in one. This name never
+ * reaches the filesystem, so the colon is safe everywhere -- and a Windows dot
+ * here would miss the agentType the script names just as the old flat form did.
+ *
+ * The complete source name is preserved without elision, exactly as
+ * `generatedAgentName` preserves it, so bot and acme-bot stay distinct
+ * within plugin acme.
+ */
+export function declaredAgentName(plugin: string, source: string): string {
+  assertSafeName(plugin);
+  assertSafeName(source);
+  const declared = `${plugin}:${source}`;
+  assertSafeName(declared);
+  return declared;
+}
+
+/**
  * Workflow name generator (RN-1 / WNAM-06).
  *
  * Format: `<plugin>:<workflow>` -- the same colon separator command names use.

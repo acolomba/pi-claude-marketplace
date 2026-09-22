@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   assertSafeName,
+  declaredAgentName,
   generatedAgentName,
   generatedCommandName,
   generatedSkillName,
@@ -476,6 +477,76 @@ describe("generatedAgentName", () => {
 
       // assert
       assert.throws(generateAgentName, (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.strictEqual(error.message, errorMessage);
+        return true;
+      });
+    });
+  }
+});
+
+describe("declaredAgentName", () => {
+  for (const { plugin, source, expectedDeclaredName } of [
+    { plugin: "acme", source: "bot", expectedDeclaredName: "acme:bot" },
+    // No elision, matching generatedAgentName: with it, plugin acme's `bot`
+    // and `acme-bot` would both declare `acme:bot` and collide.
+    { plugin: "acme", source: "acme-bot", expectedDeclaredName: "acme:acme-bot" },
+    { plugin: "ab", source: "abc", expectedDeclaredName: "ab:abc" },
+    { plugin: "acme", source: "acme", expectedDeclaredName: "acme:acme" },
+    { plugin: "Ac.Me", source: "Ac.Me-Bot_v2", expectedDeclaredName: "Ac.Me:Ac.Me-Bot_v2" },
+  ]) {
+    test(`declares ${plugin} + ${source} as ${expectedDeclaredName}`, () => {
+      // arrange
+      const pluginName = plugin;
+      const sourceName = source;
+
+      // act
+      const declaredName = declaredAgentName(pluginName, sourceName);
+
+      // assert
+      assert.strictEqual(declaredName, expectedDeclaredName);
+    });
+  }
+
+  test("separates with a colon on every platform, unlike command and skill names", () => {
+    // arrange
+    // Those names become filenames, so they take a dot on Windows. This one
+    // is frontmatter only, and a dot here would miss the `<plugin>:<agent>`
+    // agentType a bridged workflow script names.
+    const plugin = "code-modernization";
+    const source = "security-auditor";
+
+    // act
+    const declaredName = declaredAgentName(plugin, source);
+
+    // assert
+    assert.strictEqual(declaredName, "code-modernization:security-auditor");
+    assert.ok(!declaredName.includes("."));
+  });
+
+  for (const { pluginName, sourceName, errorMessage } of [
+    {
+      pluginName: "acme",
+      sourceName: "..",
+      errorMessage: 'Name must not be "." or "..".',
+    },
+    {
+      pluginName: "acme",
+      sourceName: "a/b",
+      errorMessage: 'Name "a/b" must not contain path separators.',
+    },
+  ]) {
+    test(`rejects ${sourceName} with the shared name rules`, () => {
+      // arrange
+      const plugin = pluginName;
+      const source = sourceName;
+
+      // act
+      const declareAgentName = () => declaredAgentName(plugin, source);
+
+      // assert
+      assert.throws(declareAgentName, (error: unknown) => {
         assert.ok(error instanceof Error);
         assert.strictEqual(error.constructor, Error);
         assert.strictEqual(error.message, errorMessage);

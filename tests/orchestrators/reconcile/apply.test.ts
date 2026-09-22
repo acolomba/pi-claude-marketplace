@@ -1936,8 +1936,8 @@ describe("applyReconcile", () => {
         message:
           "2 post-install warnings surfaced from reconcile installs.\n" +
           "\n" +
-          '[bot0] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["pi-claude-marketplace-duo-bot0"].tools (e.g. read,bash,mcp:<server>) in Pi settings.\n' +
-          '[bot1] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["pi-claude-marketplace-duo-bot1"].tools (e.g. read,bash,mcp:<server>) in Pi settings.',
+          '[bot0] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["duo:bot0"].tools (e.g. read,bash,mcp:<server>) in Pi settings.\n' +
+          '[bot1] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["duo:bot1"].tools (e.g. read,bash,mcp:<server>) in Pi settings.',
         severity: "warning",
       },
     ]);
@@ -2983,7 +2983,7 @@ describe("applyReconcile", () => {
         message:
           "1 post-install warning surfaced from reconcile installs.\n" +
           "\n" +
-          '[bot0] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["pi-claude-marketplace-quiet-bot0"].tools (e.g. read,bash,mcp:<server>) in Pi settings.',
+          '[bot0] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["quiet:bot0"].tools (e.g. read,bash,mcp:<server>) in Pi settings.',
         severity: "warning",
       },
     ]);
