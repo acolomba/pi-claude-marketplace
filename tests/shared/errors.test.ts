@@ -46,6 +46,7 @@ void ({ phase: "commands", msg: "commands failed" } satisfies Phase3Failure);
 void ({ phase: "agents", msg: "agents failed" } satisfies Phase3Failure);
 void ({ phase: "hooks", msg: "hooks failed" } satisfies Phase3Failure);
 void ({ phase: "mcp", msg: "mcp failed" } satisfies Phase3Failure);
+void ({ phase: "workflows", msg: "workflows failed" } satisfies Phase3Failure);
 // @ts-expect-error phase 3 failures use the closed bridge phase union
 void ({ phase: "files", msg: "files failed" } satisfies Phase3Failure);
 // @ts-expect-error the shared entry shape declares no per-entry cause; the

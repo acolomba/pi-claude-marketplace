@@ -195,8 +195,8 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
  *   "skipped"            -> `${ICON_INSTALLED} ${name} [${scope}] (skipped)`
  *                           (+ ` {<reason>,...}` iff `mp.reasons` is defined
  *                           and non-empty, composed via `composeReasons` with
- *                           both soft-dep flags FALSE; mp-level skipped never
- *                           emits soft-dep markers.) UXG-04 SPECIAL CASE: when
+ *                           all three soft-dep flags FALSE; mp-level skipped
+ *                           never emits soft-dep markers.) UXG-04 SPECIAL CASE: when
  *                           `mp.reasons` contains `"already autoupdate"` /
  *                           `"already no autoupdate"` the row renders
  *                           `... <autoupdate> {already autoupdate}` /
@@ -222,7 +222,7 @@ function wrapDescription(text: string, indentCol: number, wrapCol: number): stri
  *
  * The `"skipped"` arm reuses the file-private `composeReasons` helper to
  * render the reasons brace, which requires the threaded `SoftDepStatus` probe
- * even though mp-level skipped passes BOTH declares-flags as `false`
+ * even though mp-level skipped passes all three declares-flags as `false`
  * (guarantees no soft-dep marker leaks onto mp-skipped rows). Every call site
  * in this file MUST pass the probe.
  */
@@ -237,8 +237,8 @@ export function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDe
     case "failed": {
       // D-48-A: append the closed-set reason brace iff `mp.reasons` is present
       // and non-empty (marketplace-op precondition failure with no plugin child
-      // rows, e.g. `marketplace add`). Pass (false, false) for the soft-dep
-      // declares-flags -- mp-level rows never emit soft-dep markers (mirrors the
+      // rows, e.g. `marketplace add`). Pass (false, false, false) for the
+      // soft-dep declares-flags -- mp-level rows never emit soft-dep markers (mirrors the
       // "skipped" arm). composeReasons returns "" when reasons is
       // undefined/empty, so the existing bare `(failed)` byte form
       // (update/autoupdate mp-failure states that ride the cause on a child row)
@@ -264,8 +264,8 @@ export function renderMpHeader(mp: MarketplaceNotificationMessage, probe: SoftDe
       // The "skipped" arm is SHARED across mp-level skips (UXG-05's
       // `(skipped) {up-to-date}`, the idempotent autoupdate no-ops, etc.). The
       // reasons brace is composed via composeReasons reusing the helper that
-      // backs plugin-level skipped rows. CRITICAL: pass (false, false) for the
-      // two soft-dep declares flags -- mp-level skipped never emits
+      // backs plugin-level skipped rows. CRITICAL: pass (false, false, false)
+      // for the three soft-dep declares flags -- mp-level skipped never emits
       // {requires pi-subagents} / {requires pi-mcp} markers; those are
       // plugin-row-only. composeReasons returns "" when mp.reasons is undefined
       // or empty, so the conditional join collapses cleanly with no trailing
@@ -522,7 +522,7 @@ export function composeReasons(
  * the FULL parenthesized token (the caller passes `"(upgradable)"` etc.,
  * INCLUDING the parens, so the `"(manual recovery)"` literal keeps its space
  * verbatim). The `p` param is the structural subset those variants share: a
- * required `name` and an optional `scope` / `version` / `reasons`. Both
+ * required `name` and an optional `scope` / `version` / `reasons`. All three
  * declares-flags are `false` (these arms never carry `dependencies`).
  *
  * `reasons` is OPTIONAL because `PluginDisabledMessage` declares it so;
@@ -874,14 +874,14 @@ function renderPendingRow(
  * -> here so every per-arm bracket call has the parent marketplace's scope
  * available.
  *
- * Soft-dep marker injection: only the `installed` / `updated` /
- * `reinstalled` / `partially-installed` arms declare `dependencies`; those
- * arms pass `p.dependencies.includes("agents")` /
- * `p.dependencies.includes("mcp")` to `composeReasons`. The other 15 arms pass
- * `false` for both declares-flags so the soft-dep markers cannot leak onto
- * rows that structurally never declare a soft dep. `partially-installed` is
- * the one arm whose field is OPTIONAL (WR-03): the success cascades thread the
- * staged counts, the inventory rows omit them.
+ * Soft-dep marker injection: only the `installed` / `updated` / `reinstalled` /
+ * `partially-installed` arms declare `dependencies`; those arms pass
+ * `p.dependencies.includes("agents")` / `p.dependencies.includes("mcp")` /
+ * `p.dependencies.includes("workflows")` to `composeReasons`. The other 15
+ * arms pass `false` for all three declares-flags so the soft-dep markers
+ * cannot leak onto rows that structurally never declare a soft dep.
+ * `partially-installed` is the one arm whose field is OPTIONAL (WR-03): the
+ * success cascades thread the staged counts, the inventory rows omit them.
  *
  * Per-variant `composeReasons` first argument, over the 19 plugin statuses:
  *  - 7 reasons-less variants (uninstalled, available, remote,
@@ -1363,7 +1363,7 @@ function appendResolvedComponentLines(
  * says the container was found in the scope the command did not target.
  *
  * `probe` is accepted for signature parity with the other info renderers and
- * threaded into `composeReasons` with BOTH soft-dep declares-flags FALSE --
+ * threaded into `composeReasons` with all three soft-dep declares-flags FALSE --
  * info-surface rows NEVER emit soft-dep markers.
  */
 export function renderMarketplaceNotAdded(
@@ -1490,8 +1490,8 @@ export function composeMarketplaceBlock(
   probe: SoftDepStatus,
 ): string {
   // Pass the threaded soft-dep probe into renderMpHeader so the "skipped" arm
-  // can reuse composeReasons. The mp-skipped arm passes (false, false) for the
-  // two declares-flags; no soft-dep marker can leak onto an mp-level row.
+  // can reuse composeReasons. The mp-skipped arm passes (false, false, false)
+  // for the three declares-flags; no soft-dep marker can leak onto an mp-level row.
   const lines: string[] = [renderMpHeader(mp, probe)];
   for (const p of mp.plugins) {
     lines.push(...composePluginLines(p, probe, mp.scope));

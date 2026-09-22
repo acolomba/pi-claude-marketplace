@@ -152,12 +152,20 @@ export async function assertNoForbiddenSurface(
  * `pattern` must not carry the `g` flag: `RegExp.prototype.test` on a global
  * regex advances `lastIndex` between calls and would skip files.
  */
-export async function filesMatching(dirRel: string, pattern: RegExp): Promise<string[]> {
+export async function filesMatching(
+  dirRel: string,
+  pattern: RegExp,
+  opts: {
+    /** Scan root. Defaults to the repository; a temp-root control injects its own. */
+    readonly root?: string;
+  } = {},
+): Promise<string[]> {
   assert.ok(
     !pattern.global,
     `filesMatching: ${String(pattern)} is global; test() would be stateful`,
   );
-  const names = await readdir(path.join(REPO_ROOT, dirRel), { recursive: true });
+  const scanRoot = opts.root ?? REPO_ROOT;
+  const names = await readdir(path.join(scanRoot, dirRel), { recursive: true });
   const matched: string[] = [];
 
   for (const name of names) {
@@ -166,7 +174,7 @@ export async function filesMatching(dirRel: string, pattern: RegExp): Promise<st
     }
 
     const rel = path.posix.join(dirRel, name.split(path.sep).join("/"));
-    const src = await readFile(path.join(REPO_ROOT, rel), "utf8");
+    const src = await readFile(path.join(scanRoot, rel), "utf8");
     if (pattern.test(stripComments(src))) {
       matched.push(rel);
     }

@@ -65,8 +65,8 @@ interface FetchBoundary {
  * The fetch command's notification boundary. fetch is handed the whole
  * `ExtensionContext` / `ExtensionAPI` rather than the two narrow read contracts
  * `makeCtx` builds, so the members it may reach are stated as expectations and
- * verified after the call: one cascade emission and the single soft-dependency
- * probe, which reads the tool list twice.
+ * verified after the call: one cascade emission and the soft-dependency probe,
+ * which reads the tool list three times -- pi-subagents, mcp adapter, workflow engine.
  */
 function makeFetchBoundary(): FetchBoundary {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "fetch context" });
