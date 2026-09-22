@@ -1806,8 +1806,8 @@ describe("buildReconcilePendingNotification", () => {
   }
 
   test("D-09-12: previews a dependency install as a bare will-install row", () => {
-    // arrange -- a bucket entry never matches a force-install key, so the
-    // row carries no `partial` modifier.
+    // arrange -- a bucket entry never matches a `resolvePendingForceInstalls`
+    // key, so the row carries no `partial` modifier.
     const plans = [
       reconcilePlan("project", {
         pluginsToDependencyInstall: [

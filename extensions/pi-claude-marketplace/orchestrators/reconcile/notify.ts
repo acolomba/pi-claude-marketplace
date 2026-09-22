@@ -419,9 +419,9 @@ export function buildReconcilePendingNotification(
 
     // MISS-01 / D-09-12: the dependency-install bucket previews the same
     // action the config-driven install bucket does, so both feed one loop
-    // and one token. A bucket entry never matches a force-install key
-    // (force-install candidates come from `pluginsToInstall` resolution
-    // alone), so its row is always the bare token.
+    // and one token. A bucket entry never matches a key
+    // `resolvePendingForceInstalls` resolved (its candidates come from
+    // `pluginsToInstall` alone), so its row is always the bare token.
     for (const o of [...plan.pluginsToInstall, ...plan.pluginsToDependencyInstall]) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
       // FSTAT-06 / D-66-04: stamp the partial modifier when the planned install
