@@ -127,6 +127,7 @@ import {
   removePluginRecord,
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
+  type LedgerDegradationSignals,
 } from "./shared.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
@@ -1100,9 +1101,6 @@ export function installedPluginOutcome(
     summary.stagedCommandNames.length > 0 ||
     summary.stagedAgentNames.length > 0 ||
     summary.stagedMcpServerNames.length > 0;
-  const degradedKinds = Array.from(
-    new Set(summary.frontmatterDegradations.map((degradation) => degradation.kind)),
-  );
 
   return {
     status: "installed",
@@ -1115,6 +1113,27 @@ export function installedPluginOutcome(
     ...(summary.resolved.state === "partially-available" && {
       unsupported: [...summary.resolved.unsupported],
     }),
+    ...ledgerDegradationSignals(summary),
+  };
+}
+
+/**
+ * SURF-05 / WARN-01: the degradation signals a completed ledger run leaves on
+ * the root's own `(installed)` row -- `orphanRewake` from the resolver and one
+ * `degradedKinds` entry per component kind whose frontmatter did not parse.
+ * Every projection of a root summary spreads this one derivation
+ * (`installedPluginOutcome` here, the reload dependency-install outcome in
+ * `install-flow.ts`), so a signal added to it reaches each row without a
+ * per-projection edit. Both members are omitted when the run raised neither
+ * (NREG-01).
+ */
+export function ledgerDegradationSignals(
+  summary: InstallLedgerSummary,
+): Pick<LedgerDegradationSignals, "orphanRewake" | "degradedKinds"> {
+  const degradedKinds = Array.from(
+    new Set(summary.frontmatterDegradations.map((degradation) => degradation.kind)),
+  );
+  return {
     ...(summary.resolved.orphanRewake === true && { orphanRewake: true }),
     ...(degradedKinds.length > 0 && { degradedKinds }),
   };

@@ -10,6 +10,7 @@ import { canonicalCloneUrl } from "../../../extensions/pi-claude-marketplace/dom
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   installedPluginOutcome,
+  ledgerDegradationSignals,
   runInstallLedger,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -270,6 +271,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
   assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty?.version, "pinned-by-caller");
 
   assert.equal(ledgerOutcome.kind, "installed");
+  assert.deepStrictEqual(ledgerDegradationSignals(ledgerOutcome.summary), {});
   assert.deepStrictEqual(installedPluginOutcome(ledgerOutcome.summary, [], false), {
     declaresAgents: false,
     declaresMcp: false,
@@ -296,6 +298,10 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
     stagedMcpServerNames: ["server"],
     stagedSkillNames: ["skill"],
   };
+  assert.deepStrictEqual(ledgerDegradationSignals(richSummary), {
+    degradedKinds: ["skill", "command"],
+    orphanRewake: true,
+  });
   assert.deepStrictEqual(installedPluginOutcome(richSummary, ["warning"], true), {
     declaresAgents: true,
     declaresMcp: true,

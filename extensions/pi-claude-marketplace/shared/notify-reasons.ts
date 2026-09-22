@@ -78,7 +78,7 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * D-09-09 added `dependency installed`, the reload dependency-install
  * step's marker for a missing declared dependency it materialized -- an
  * undeclared plugin appearing with no stated reason is the row a user
- * cannot explain, so it rides an `installed` row alone; it is neither
+ * cannot explain, so it rides only an `installed` row; it is neither
  * idempotent (a record was materialized) nor a failure (the install
  * succeeded), so it joins the command-private reasons (60 to 61). The
  * arithmetic above is renumbered rather than annotated with the gap, so the

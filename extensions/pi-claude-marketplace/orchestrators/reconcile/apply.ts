@@ -631,20 +631,7 @@ async function applyPluginInstalls(
           result.postCommitWarnings.length > 0 && {
             postCommitWarnings: result.postCommitWarnings,
           }),
-        // SURF-05 / D-63-08 / IN-07: propagate the orphan-rewake flag so the
-        // reconcile composer pushes the `orphan rewake` token onto the
-        // `(installed)` row, exactly as the enable arm below already does for
-        // the same ledger run. Omitted when false (NREG-01).
-        ...(result.orphanRewake === true && { orphanRewake: true }),
-        // WARN-01 / D-86-03: propagate the degraded-component kinds so the
-        // reconcile composer can raise the `(installed)` row to `warning`
-        // and push the `malformed skill` / `malformed command` token.
-        // Omitted when empty (NREG-01), mirroring the postCommitWarnings
-        // conditional spread above.
-        ...(result.degradedKinds !== undefined &&
-          result.degradedKinds.length > 0 && {
-            degradedKinds: result.degradedKinds,
-          }),
+        ...installedRowDegradation(result),
       });
     } else {
       outcomes.push({
@@ -678,9 +665,11 @@ async function applyPluginInstalls(
  * D-09-09: on `installed`, one `plugin-installed` outcome is pushed PER
  * cascade member -- every materialized member gets a row under its own
  * marketplace block, keyed by that member's OWN name and marketplace, not
- * the bucket entry's. `postCommitWarnings` rides only the member whose key
- * equals the entry's root key; `alreadyInstalled` members are not carried by
- * the outcome at all and get no row (D-09-11). On `failed`, ONE
+ * the bucket entry's. `postCommitWarnings` and the root ledger run's
+ * `installedRowDegradation` signals ride only the member whose key equals the
+ * entry's root key, and any member that fell back to its current copy carries
+ * `dependencyCurrentCopy` (TAGS-02); `alreadyInstalled` members are not
+ * carried by the outcome at all and get no row (D-09-11). On `failed`, ONE
  * `plugin-install-failed` outcome is pushed keyed by the DEPENDENCY's own
  * `op.marketplace` / `op.plugin`, reusing `classifyOrchestratorThrow` and
  * `redactedDependencyCascadeError` verbatim -- the same reused path
@@ -738,14 +727,11 @@ async function applyDependencyInstalls(
             result.postCommitWarnings.length > 0 && {
               postCommitWarnings: result.postCommitWarnings,
             }),
-          // WR-01: the root's own WARN-01 degradation signals, gated on the
-          // member being the root exactly as `postCommitWarnings` is above --
+          // The root's own degradation signals, gated on the member being the
+          // root exactly as `postCommitWarnings` is above --
           // `InstallMissingDependencyOutcome` carries them only for the root's
           // own ledger run, never per member.
-          ...(member.key === rootKey && result.orphanRewake === true && { orphanRewake: true }),
-          ...(member.key === rootKey &&
-            result.degradedKinds !== undefined &&
-            result.degradedKinds.length > 0 && { degradedKinds: result.degradedKinds }),
+          ...(member.key === rootKey && installedRowDegradation(result)),
           // WR-02: `fellBackToCurrentCopy` is a REQUIRED member fact
           // (`CascadeMemberOutcome`); every member, not only the root, can
           // have fallen back to its current copy.
@@ -856,6 +842,25 @@ function degradationFromEnable(
     ...(result.degradedKinds !== undefined && { degradedKinds: result.degradedKinds }),
     ...(result.stagedAgents === true && { stagedAgents: true }),
     ...(result.stagedMcpServers === true && { stagedMcpServers: true }),
+  };
+}
+
+/**
+ * SURF-05 / D-63-08 / WARN-01 / D-86-03: the degradation signals an install
+ * outcome carries onto its `(installed)` projection, so the reconcile composer
+ * pushes the `orphan rewake` token and raises the row to `warning` with the
+ * `malformed skill` / `malformed command` token. Both the config-driven
+ * install arm and the reload dependency-install arm spread this one
+ * derivation. Omitted when false or empty (NREG-01), mirroring the
+ * `postCommitWarnings` conditional spread at each call site.
+ */
+function installedRowDegradation(
+  result: Pick<EnableDegradationSignals, "orphanRewake" | "degradedKinds">,
+): Pick<EnableDegradationSignals, "orphanRewake" | "degradedKinds"> {
+  return {
+    ...(result.orphanRewake === true && { orphanRewake: true }),
+    ...(result.degradedKinds !== undefined &&
+      result.degradedKinds.length > 0 && { degradedKinds: result.degradedKinds }),
   };
 }
 
