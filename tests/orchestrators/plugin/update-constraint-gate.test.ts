@@ -358,8 +358,7 @@ describe("evaluateUpdateConstraint", () => {
       // D-10-14: a `path` entry source with no satisfying marketplace tag
       // falls back to the current copy.
       fellBackToCurrentCopy: true,
-      disclosure:
-        'constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+      disclosure: 'constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
     });
   });
 
@@ -588,8 +587,7 @@ describe("evaluateUpdateConstraint", () => {
       range: ">=1.0.0 <2.0.0-0",
       holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
       fellBackToCurrentCopy: false,
-      disclosure:
-        'constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+      disclosure: 'constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
     });
   });
 
@@ -822,8 +820,7 @@ describe("evaluateUpdateConstraint", () => {
       range: ">=1.0.0 <2.0.0-0",
       holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
       fellBackToCurrentCopy: false,
-      disclosure:
-        'constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+      disclosure: 'constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
     });
   });
 

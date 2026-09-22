@@ -389,7 +389,10 @@ test("UPDT-02: the document names every token the held update row stamps", async
   await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(
     manifestPath,
-    JSON.stringify({ name: "mp", plugins: [{ name: "shared-lib", source: "./plugins/shared-lib" }] }),
+    JSON.stringify({
+      name: "mp",
+      plugins: [{ name: "shared-lib", source: "./plugins/shared-lib" }],
+    }),
   );
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });

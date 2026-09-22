@@ -13,7 +13,6 @@ import { seedUnconstrainedTarget } from "../plugin/seed-unconstrained-target.ts"
 import type { PluginUpdateOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-
 void ({
   status: "updated",
   name: "alpha",
