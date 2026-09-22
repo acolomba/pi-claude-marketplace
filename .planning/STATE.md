@@ -4,17 +4,17 @@ milestone: v1.20
 milestone_name: transitive-dependencies
 current_phase: 10
 current_phase_name: Constraint-aware update
-status: planning
-stopped_at: Phase 10 context gathered
-last_updated: "2026-09-22T11:55:29.973Z"
+status: executing
+stopped_at: Completed 10-01-PLAN.md
+last_updated: "2026-09-22T14:31:17.390Z"
 last_activity: 2026-09-22
-last_activity_desc: Phase 09 complete, transitioned to Phase 10
-state_head: d9b67d1f4eb8c3ddc1babfde36a909a06698920b
+last_activity_desc: Phase 10 execution started
+state_head: 7289c7c9750408b6f2cf5ae68b8bb06dc75f074a
 progress:
   total_phases: 12
   completed_phases: 9
-  total_plans: 36
-  completed_plans: 36
+  total_plans: 40
+  completed_plans: 37
   percent: 75
 ---
 
@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-09-22 after Phase 9 reload installs mi
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 10 — Constraint-aware update, the next of the seven
+**Current focus:** Phase 10 — Constraint-aware update
 phases (6-12) that align the shipped dependency feature with the Claude Code
 dependency docs. Phases 6-9 are complete.
 44 requirements across 12 phases (25 shipped in Phases 1-5 as PR #198, 19
@@ -36,9 +36,9 @@ under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 10 — Constraint-aware update
-Plan: Not started
-Status: Ready to plan
+Phase: 10 (Constraint-aware update) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
 
 **Phase 9 closed 2026-09-22**, verified 12/12 must-haves with no human items;
 regression gate on the final tree: 7489/7489 unit, 38/38 integration; `npm run
@@ -411,7 +411,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-22 — Phase 09 complete, transitioned to Phase 10
+Last activity: 2026-09-22 — Phase 10 execution started
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 5 of 5 phases complete (100%).
@@ -609,6 +609,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 09 P02 | 50 min | 2 tasks | 2 files |
 | Phase 09 P03 | 275min | 2 tasks | 11 files |
 | Phase 09 P04 | 80 min | 3 tasks | 10 files |
+| Phase 10 P01 | 62min | 3 tasks | 24 files |
 
 ## Accumulated Context
 
@@ -885,6 +886,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 09]: 09-03: applyDependencyInstalls gates on opts.reason === "reload" in one if; refreshTogglePlan re-plans only pluginsToEnable/Disable/DependencyDisable from a fresh read pass, never the mutating buckets or source-mismatch rows.
 - [Phase 09]: The catalog's reconcile-dependency-install-failed fenced bytes were rendered through the real notify() dispatcher and matched the apply test's own MISS-02 closure-failure assertion exactly. — Never hand-type published-contract bytes (08-03/09-01 precedent).
 - [Phase 09]: check-unused-type-members.contracts.json's remap removed one entry 09-03's own reason: event.reason thread made redundant and added one 09-03 never registered for its new assertOrchestratedFailedOutcome narrowing function; net entry count held at 133. — Task 3's own gate demanded both corrections; neither is a 09-04 addition of new excuse surface.
+- [Phase 10]: D-10-09 checkpoint: operator selected proceed-as-recommended -- the new closed-set reason token is 'dependents constrain', spelled on all nine pinning surfaces (62-member Reason set).
+- [Phase 10]: describeConstraint's detail parameter carries intersectDependencyRanges' own diagnostic text (position/count-only), not a raw declared range or the folded range -- keeps the arm parameter genuinely used under noUnusedParameters without leaking declared-range content.
+- [Phase 10]: ConstraintHolder.range is optional, not the plan artifacts' plain range: string -- a range-less declarer still holds the key for the cause line but is filtered out of the intersectDependencyRanges fold.
 
 ### Pending Todos
 
@@ -1018,13 +1022,13 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 10 context gathered
+**Stopped at:** Completed 10-01-PLAN.md
 
-**Resume file:** .planning/phases/10-constraint-aware-update/10-CONTEXT.md
+**Resume file:** None
 
 **Read beside it:** `.planning/phases/09-reload-installs-missing-dependencies/09-CONTEXT.md`
 
-Last session: 2026-09-22T11:55:29.688Z
+Last session: 2026-09-22T14:31:17.086Z
 Autonomous run (`/gsd-autonomous --from 9`) took Phase 9 from discuss through
 transition in one session: smart discuss (four areas, every decision checked
 against the 2.1.267 binary at the operator's "follow upstream" instruction),
