@@ -79,6 +79,7 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../pl
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
+import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { runPhases } from "../../transaction/phase-ledger.ts";
 import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -1999,12 +2000,23 @@ export interface InstallMissingDependencyOptions {
   readonly authMemo?: Map<string, AuthAttemptResult>;
 }
 
-/** MISS-01 / MISS-02: the outcome of installing one missing dependency and its closure. */
+/**
+ * MISS-01 / MISS-02: the outcome of installing one missing dependency and its
+ * closure.
+ *
+ * WR-01: `orphanRewake` and `degradedKinds` carry the root's own
+ * `LedgerDegradationSignals`, the same signals `installedPluginOutcome`
+ * derives for a config-driven install -- omitted when the root ledger run
+ * raised neither (NREG-01), so `apply.ts` can stamp the root member's row the
+ * same way `applyPluginInstalls`'s success arm already does.
+ */
 export type InstallMissingDependencyOutcome =
   | {
       readonly status: "installed";
       readonly members: readonly CascadeMemberOutcome[];
       readonly postCommitWarnings?: readonly string[];
+      readonly orphanRewake?: true;
+      readonly degradedKinds?: readonly DegradeKind[];
     }
   | { readonly status: "skipped" }
   | { readonly status: "failed"; readonly error: Error; readonly cause: string };
@@ -2179,10 +2191,15 @@ async function installMissingDependencyWithTransaction(
 
   // D-03-INV: drops the root marketplace's completion cache, same as install.
   const warnings = await collectPostCommitWarnings(outcome.root, completionCache, scope, true);
+  // WR-01: the same derivation `installedPluginOutcome` runs for a
+  // config-driven install's root ledger summary.
+  const degradedKinds = [...new Set(outcome.root.frontmatterDegradations.map((d) => d.kind))];
   return {
     status: "installed",
     members: outcome.members,
     ...(warnings.length > 0 && { postCommitWarnings: warnings }),
+    ...(outcome.root.resolved.orphanRewake === true && { orphanRewake: true }),
+    ...(degradedKinds.length > 0 && { degradedKinds }),
   };
 }
 

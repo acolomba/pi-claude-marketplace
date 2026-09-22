@@ -738,6 +738,18 @@ async function applyDependencyInstalls(
             result.postCommitWarnings.length > 0 && {
               postCommitWarnings: result.postCommitWarnings,
             }),
+          // WR-01: the root's own WARN-01 degradation signals, gated on the
+          // member being the root exactly as `postCommitWarnings` is above --
+          // `InstallMissingDependencyOutcome` carries them only for the root's
+          // own ledger run, never per member.
+          ...(member.key === rootKey && result.orphanRewake === true && { orphanRewake: true }),
+          ...(member.key === rootKey &&
+            result.degradedKinds !== undefined &&
+            result.degradedKinds.length > 0 && { degradedKinds: result.degradedKinds }),
+          // WR-02: `fellBackToCurrentCopy` is a REQUIRED member fact
+          // (`CascadeMemberOutcome`); every member, not only the root, can
+          // have fallen back to its current copy.
+          ...(member.fellBackToCurrentCopy && { dependencyCurrentCopy: true }),
         });
       }
 

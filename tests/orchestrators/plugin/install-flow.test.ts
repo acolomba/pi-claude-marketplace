@@ -11835,6 +11835,54 @@ test("D-09-05: a malformed skill degrades the missing dependency and surfaces a 
   });
 });
 
+test("WR-01: an orphan-rewake hook on the missing dependency carries orphanRewake on the outcome", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-orphan-rewake-"));
+    try {
+      // arrange -- SURF-05 fixture: rewakeMessage WITHOUT asyncRewake: true
+      // triggers detectOrphanRewake -> partial.orphanRewake = true, exactly as
+      // it does for a config-driven install.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "secrets-vault",
+        hooksJson: {
+          PreToolUse: [
+            {
+              matcher: "",
+              hooks: [{ type: "command", command: "echo orphan", rewakeMessage: "wake me" }],
+            },
+          ],
+        },
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        ranges: [],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      assert.ok(outcome.status === "installed");
+      assert.equal(outcome.orphanRewake, true);
+      const after = await loadState(locations.extensionRoot);
+      assert.equal(after.marketplaces["mp"]?.plugins["secrets-vault"]?.enabled, true);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("D-09-04: the entry point walks with disabled records as walls", async () => {
   await withHermeticHome(async ({ installMissingDependency }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-wall-"));

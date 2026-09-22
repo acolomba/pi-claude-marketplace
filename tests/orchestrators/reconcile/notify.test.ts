@@ -873,6 +873,47 @@ describe("buildReconcileAppliedCascade", () => {
     });
   });
 
+  test("WR-02: names a dependency that fell back to its current copy on its install row", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-installed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        version: "1.0.0",
+        dependencies: [],
+        dependencyInstalled: true,
+        dependencyCurrentCopy: true,
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "installed",
+              name: "secrets-vault",
+              version: "1.0.0",
+              dependencies: [],
+              reasons: ["dependency installed", "dependency current copy"],
+              severity: "info",
+              needsReload: true,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("D-09-09: an outcome without the flag renders byte-identically to today", () => {
     // arrange
     const outcomes: readonly PerEntryOutcome[] = [

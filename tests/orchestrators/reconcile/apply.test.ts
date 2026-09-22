@@ -4621,17 +4621,155 @@ describe("applyReconcile", () => {
     // act
     await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
 
-    // assert -- the cascade row (CascadeMemberOutcome carries no per-member
-    // degradedKinds, so the row itself stays the plain {dependency installed}
-    // token) plus the sanctioned second post-commit diagnostic (RECON-04's
-    // one exception) naming the degrade's free-text detail.
+    // assert -- WR-01: the root's own WARN-01 signals ride the cascade row
+    // (`{dependency installed, malformed skill}` at `warning`), same as a
+    // config-driven install's malformed-skill row, plus the sanctioned second
+    // post-commit diagnostic (RECON-04's one exception) naming the degrade's
+    // free-text detail.
     assert.equal(notifications.length, 2);
     const [cascade, diagnostic] = notifications;
     assert.match(
       cascade?.message ?? "",
-      /secrets-vault v1\.0\.0 \(installed\) \{dependency installed\}/,
+      /secrets-vault v1\.0\.0 \(installed\) \{dependency installed, malformed skill\}/,
     );
+    assert.equal(cascade?.severity, "warning");
     assert.match(diagnostic?.message ?? "", /post-install warning/);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("WR-01: an orphan-rewake hook on the missing dependency carries the token onto the root's row", async (t) => {
+    // arrange -- same shape as the malformed-skill case, but the degradation
+    // signal is SURF-05's orphan rewake rather than WARN-01's malformed
+    // frontmatter. Unlike a malformed component, the orphan token moves no
+    // severity channel (apply-outcomes.ts), so the row stays info.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-reload-orphan-rewake");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { orphanRewakeHooks: true, skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● secrets-vault v1.0.0 (installed) {dependency installed, orphan rewake}\n" +
+          "\n" +
+          "Reconcile: 1 success",
+      },
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("WR-02: a missing dependency that falls back to its current copy carries the token onto its row", async (t) => {
+    // arrange -- deploy-kit declares secrets-vault with a REAL version
+    // constraint (not the bare-token default, which is unconstrained and
+    // never reaches the tag probe). secrets-vault's marketplace root carries
+    // no `.git`, so the real (uninjected) tag probe's listing fails and
+    // TAGS-02's fallback installs the current copy.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-reload-current-copy");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    await writeUnder(
+      manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: [
+          {
+            name: "deploy-kit",
+            version: "1.0.0",
+            source: "./plugins/deploy-kit",
+            dependencies: [{ name: "secrets-vault", version: "^1.0.0" }],
+          },
+          { name: "secrets-vault", version: "1.0.0", source: "./plugins/secrets-vault" },
+        ],
+      }),
+    );
+    await writeUnder(
+      path.join(marketplaceRoot, "plugins", "deploy-kit", ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: "deploy-kit",
+        version: "1.0.0",
+        dependencies: [{ name: "secrets-vault", version: "^1.0.0" }],
+      }),
+    );
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● secrets-vault v1.0.0 (installed) {dependency installed, dependency current copy}\n" +
+          "\n" +
+          "Reconcile: 1 success",
+      },
+    ]);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });

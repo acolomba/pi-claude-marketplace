@@ -121,6 +121,15 @@ export interface PluginInstalledOutcome
    */
   readonly dependencyInstalled?: true;
   /**
+   * WR-02 / TAGS-02: present only when this row's member fell back to its
+   * current copy (`CascadeMemberOutcome.fellBackToCurrentCopy`) because no
+   * release tag satisfied the closure's constraints; omitted otherwise
+   * (NREG-01). Mirrors the standalone cascade's own `{dependency current
+   * copy}` marker (`install-cascade.messaging.ts`) so the reload row names
+   * the same fact.
+   */
+  readonly dependencyCurrentCopy?: true;
+  /**
    * S2 / PR #51: orchestrated-mode `InstallPluginOutcome.postCommitWarnings`
    * propagated through to the reconcile cascade caller. Mirrors the
    * `import/execute.ts::installOnePlannedPlugin` pattern -- post-commit hygiene warnings

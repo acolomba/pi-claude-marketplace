@@ -574,11 +574,17 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
  * FIRST, ahead of `orphan rewake`, on the `{dependency pruned, data kept}`
  * precedent -- the why-this-row marker leads and the ledger signals follow.
  * The token moves no severity channel.
+ *
+ * WR-02: `dependencyCurrentCopy` pushes `{dependency current copy}` right
+ * after `dependency installed`, the same relative position the standalone
+ * cascade's `composeCascadeMemberRows` gives it. The token moves no severity
+ * channel.
  */
 function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstalledMessage {
   const degradedReasons = malformedReasonsForKinds(outcome.degradedKinds);
   const reasons: ContentReason[] = [
     ...(outcome.dependencyInstalled === true ? (["dependency installed"] as const) : []),
+    ...(outcome.dependencyCurrentCopy === true ? (["dependency current copy"] as const) : []),
     ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
     ...degradedReasons,
   ];
