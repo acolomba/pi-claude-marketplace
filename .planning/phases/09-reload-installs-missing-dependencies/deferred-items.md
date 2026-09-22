@@ -6,7 +6,7 @@
   "^1.0.0" })` fixture callback introduced by plan 09-03's commit
   `71dcea21` (`test(09-03): prove the reload-driven install end to end`) is
   `async` but contains no `await` expression.
-  status: open
+  status: fixed (orchestrator commit `14ff68e3`, wave-3 post-merge gate; WINDOWS.md entry #60 marked fixed)
   **What:** `npm run lint` (ESLint) reports one error:
   `Async method 'marketplaceTagProbe' has no 'await' expression`. This is
   the only ESLint finding on the tree; it is not caused by plan 09-04's own
