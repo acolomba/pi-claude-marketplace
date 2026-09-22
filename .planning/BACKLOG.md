@@ -3280,3 +3280,28 @@ teardown the sibling fixtures already use (a `finally` per case or a
 `t.after`), then grep the tree for other `mkdtemp` sites with no matching
 removal.
 
+
+## TEST-PHANTOMMP-01: fixtures hand-build marketplace records that exist only in state
+
+Surfaced while fixing a Phase 10 regression (2026-09-22). Several tests assign
+a second marketplace straight into `state.marketplaces[...]` with a
+`manifestPath` / `marketplaceRoot` pointing at a directory the test never
+creates. Nothing read those paths, so the fixtures passed — until Phase 10's
+constraint gate made `buildScopeDeclarationDetail` walk every installed record
+in the scope before candidate resolution, at which point the unreadable
+manifest made the walk refuse closed (D-10-05) and held an unrelated plugin's
+update. `update-flow.test.ts`'s PDEF-01 case was fixed in `afa96ed2` by
+seeding a real `other-mp/marketplace.json`.
+
+Two more carry the same shape and pass today only because their verbs never
+reach that walk: `tests/orchestrators/plugin/reinstall-flow.test.ts:882` and
+`tests/orchestrators/plugin/install-flow.test.ts:785` (the
+`conflictingMarketplaceRecord` helper, used by PI-6, PDEF-01 and RESV-06).
+They are latent, not broken — the next phase that puts a scope-wide
+declaration read in front of install or reinstall will turn both red for a
+reason that has nothing to do with that phase.
+
+Scope when picked up: give both fixtures a loadable on-disk manifest the way
+`afa96ed2` did, and consider a shared seeding helper so a record and its
+manifest cannot be created apart. `uninstall.test.ts::seedDeclaringScope`
+already writes both and is the model.
