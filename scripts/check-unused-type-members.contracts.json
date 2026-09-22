@@ -658,12 +658,12 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts:57:54"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:692:49",
+      "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:839:49",
       "owner": "degradationFromEnable.result",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within EnableDisablePluginOutcome by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:692:11"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:839:11"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:730:7",
@@ -704,15 +704,6 @@
       "category": "external-input",
       "purpose": "The installed resources_discover event declaration requires this discriminant, and the registered handler is checked against that declaration, so the local mirror has to spell it.",
       "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:405:5",
-      "necessity": "extensions/pi-claude-marketplace/index.ts:90:5"
-    },
-    {
-      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:100:3",
-      "owner": "ResourcesDiscoverEvent",
-      "key": "reason",
-      "category": "external-input",
-      "purpose": "The installed resources_discover event declaration requires this slot, and the registered handler is checked against that declaration, so the local mirror has to spell it.",
-      "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:407:5",
       "necessity": "extensions/pi-claude-marketplace/index.ts:90:5"
     },
     {
@@ -785,8 +776,8 @@
       "key": "skillPaths",
       "category": "external-output",
       "purpose": "The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/index.ts:169:11",
-      "boundary": "extensions/pi-claude-marketplace/index.ts:168:9"
+      "origin": "extensions/pi-claude-marketplace/index.ts:180:11",
+      "boundary": "extensions/pi-claude-marketplace/index.ts:179:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:105:3",
@@ -794,8 +785,8 @@
       "key": "promptPaths",
       "category": "external-output",
       "purpose": "The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/index.ts:170:11",
-      "boundary": "extensions/pi-claude-marketplace/index.ts:168:9"
+      "origin": "extensions/pi-claude-marketplace/index.ts:181:11",
+      "boundary": "extensions/pi-claude-marketplace/index.ts:179:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:196:3",
@@ -1039,20 +1030,28 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:536:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:549:36",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:565:36",
       "owner": "unwrapCascade",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within InstallCascadeResult by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:549:4"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:565:4"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:977:61",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:993:61",
       "owner": "InstalledLedgerResult",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within InstallLedgerResult by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:977:30"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:993:30"
+    },
+    {
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2030:56",
+      "owner": "assertOrchestratedFailedOutcome",
+      "key": "status",
+      "category": "type-selection",
+      "purpose": "Selects within InstallPluginOutcome by status, so this position accepts one variant group rather than the whole union.",
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2030:24"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1009:61",

@@ -477,9 +477,7 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
                 status: "failed",
                 name: "secrets-vault",
                 reasons: ["dependency failed"],
-                cause: new Error(
-                  'Dependency "crypto-core@mp" is not declared by its marketplace.',
-                ),
+                cause: new Error('Dependency "crypto-core@mp" is not declared by its marketplace.'),
                 severity: "error",
                 needsReload: false,
               },
