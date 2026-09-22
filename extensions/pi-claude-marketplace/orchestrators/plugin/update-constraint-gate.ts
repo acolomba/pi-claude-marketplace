@@ -87,6 +87,17 @@ export interface UpdateConstraintOptions {
   };
 }
 
+/**
+ * A satisfying release tag's identity: the commit it resolved to and the
+ * version its name declares. Shared with `update-preflight.ts`'s candidate
+ * resolution, which threads the SAME pin through the resolver's callbacks
+ * (D-10-17) -- one declaration, not two structurally-identical ones.
+ */
+export interface UpdateTagPin {
+  readonly oid: string;
+  readonly version: string;
+}
+
 /** What the target's installed dependents hold it to. */
 export type UpdateConstraintVerdict =
   | { readonly kind: "unconstrained" }
@@ -94,7 +105,7 @@ export type UpdateConstraintVerdict =
       readonly kind: "admits";
       readonly range: string;
       readonly holders: readonly ConstraintHolder[];
-      readonly pin?: { readonly oid: string; readonly version: string };
+      readonly pin?: UpdateTagPin;
       readonly fellBackToCurrentCopy: boolean;
     }
   | { readonly kind: "held"; readonly cause: string };
@@ -230,7 +241,7 @@ function constraintTagSource(entry: PluginEntry): ConstraintTagSource {
 function admitsRange(
   range: string,
   holders: readonly ConstraintHolder[],
-  pin?: { readonly oid: string; readonly version: string },
+  pin?: UpdateTagPin,
 ): UpdateConstraintVerdict {
   return {
     kind: "admits",
