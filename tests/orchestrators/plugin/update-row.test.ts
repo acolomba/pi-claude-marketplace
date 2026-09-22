@@ -365,9 +365,62 @@ test("D-10-15: an in-range current-copy fallback names itself on the success row
   const result = updatedRowFromOutcome(outcome, "user", severity);
 
   // assert
-  assert.ok("reasons" in result);
-  assert.strictEqual(result.reasons?.[0], "dependency current copy");
-  assert.strictEqual(result.severity, "warning");
+  assert.deepStrictEqual(result, {
+    dependencies: [],
+    from: "1.0.0",
+    name: "shared-lib",
+    needsReload: true,
+    reasons: ["dependency current copy"],
+    scope: "user",
+    severity: "warning",
+    status: "updated",
+    to: "1.5.0",
+  });
+});
+
+test("D-10-15: all four written axes emit in the documented order on one row", () => {
+  // arrange -- current copy, orphan rewake, the malformed kinds, then the
+  // dropped kinds; a token appended instead of prepended moves the array.
+  const outcome = {
+    constraint: {
+      disclosure: 'constrained to the combined range (^1.0.0) -- required by "alpha@mp"',
+      fellBackToCurrentCopy: true,
+    },
+    declaresAgents: true,
+    declaresMcp: true,
+    degradedKinds: ["command", "skill"] as const,
+    fromVersion: "1.0.0",
+    name: "shared-lib",
+    orphanRewake: true,
+    partialDegrade: { kinds: ["hooks", "lspServers"], newlyDegraded: false },
+    partition: "updated" as const,
+    stagedAgentNames: ["pi-claude-marketplace-shared-lib-review"],
+    stagedMcpServerNames: ["shared-lib-server"],
+    toVersion: "1.5.0",
+  };
+  const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
+
+  // act
+  const result = updatedRowFromOutcome(outcome, "project", severity);
+
+  // assert
+  assert.deepStrictEqual(result, {
+    dependencies: ["agents", "mcp"],
+    name: "shared-lib",
+    needsReload: true,
+    reasons: [
+      "dependency current copy",
+      "orphan rewake",
+      "malformed skill",
+      "malformed command",
+      "unsupported hooks",
+      "lsp",
+    ],
+    scope: "project",
+    severity: "warning",
+    status: "partially-installed",
+    version: "1.5.0",
+  });
 });
 
 test("an outcome with no constraint produces a message with no reasons key at all", () => {
