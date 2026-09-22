@@ -5,11 +5,11 @@ milestone_name: transitive-dependencies
 current_phase: 10
 current_phase_name: Constraint-aware update
 status: planning
-stopped_at: Phase 09 complete, ready to plan Phase 10
-last_updated: "2026-09-22T10:45:56.315Z"
+stopped_at: Phase 10 context gathered
+last_updated: "2026-09-22T11:55:29.973Z"
 last_activity: 2026-09-22
 last_activity_desc: Phase 09 complete, transitioned to Phase 10
-state_head: bc89db9aa3c6ff7c4b81f59295e436858ca9c760
+state_head: d9b67d1f4eb8c3ddc1babfde36a909a06698920b
 progress:
   total_phases: 12
   completed_phases: 9
@@ -1018,13 +1018,13 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 09 complete, ready to plan Phase 10
+**Stopped at:** Phase 10 context gathered
 
-**Resume file:** None
+**Resume file:** .planning/phases/10-constraint-aware-update/10-CONTEXT.md
 
 **Read beside it:** `.planning/phases/09-reload-installs-missing-dependencies/09-CONTEXT.md`
 
-Last session: 2026-09-22T10:50:00.000Z
+Last session: 2026-09-22T11:55:29.688Z
 Autonomous run (`/gsd-autonomous --from 9`) took Phase 9 from discuss through
 transition in one session: smart discuss (four areas, every decision checked
 against the 2.1.267 binary at the operator's "follow upstream" instruction),
