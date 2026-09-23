@@ -1,7 +1,8 @@
 ---
 phase: 11-cross-marketplace-dependency-allowlist
 verified: 2026-09-23T18:54:13Z
-status: human_needed
+status: passed
+human_verified: 2026-09-23T19:10:57Z
 score: 20/20 must-haves verified
 covered_files:
   - .planning/REQUIREMENTS.md
@@ -79,7 +80,7 @@ human_verification:
 # Phase 11: Cross-marketplace dependency allowlist Verification Report
 
 **Phase goal:** A plugin may only pull a dependency from another marketplace when its own marketplace permits it, while an already-installed dependency still satisfies the declaration.
-**Status:** human_needed. Functional goal and XMKT-01/02 are verified; two unresolved judgment-tier prohibitions require human disposition.
+**Status:** passed. Functional goal and XMKT-01/02 are verified; both judgment-tier prohibitions passed human review in `11-UAT.md`.
 **Re-verification:** No previous Phase 11 VERIFICATION.md existed.
 
 ## Goal Achievement
@@ -109,7 +110,7 @@ human_verification:
 | 19 | Documentation and catalog describe direct and reload authority, strict field validation, installed-first, both remedies, and the info line | ✓ VERIFIED | `docs/dependency-resolution.md`, `docs/messaging-style-guide.md:86`, and `docs/output-catalog.md` carry the rules; production-composer document agreement and 230-state catalog contract are active, and the named catalog test passed. |
 | 20 | Phase checks are recorded honestly, including the local format baseline | ✓ VERIFIED | Isolated Wave 7 check is recorded as exit 0: 7,646 unit tests at 100% and 38 integration. Parent run results supplied by orchestrator are 7,646/7,646 unit, 38/38 integration, 7/7 type-member, and 3/3 prior-phase E2E; the chained parent check exits 1 at formatting. This verifier independently reproduced only `.planning/config.json` failing `npx prettier --check`; the file is user-owned and was not edited. |
 
-**Score:** 20/20 truths verified; 0 present-but-behavior-unverified. The two prohibition review items below are separate and prevent an overall `passed` status.
+**Score:** 20/20 truths verified; 0 present-but-behavior-unverified. The two separate prohibition review items passed in `11-UAT.md`.
 
 ### Decision Coverage
 
@@ -176,16 +177,16 @@ Both IDs are mapped to Phase 11 in `.planning/REQUIREMENTS.md` and occur in PLAN
 
 No unreferenced `TBD`, `FIXME`, `XXX`, `TODO`, `HACK`, or `PLACEHOLDER` marker was found in the phase's changed production or linked test files. `11-REVIEW.md` is clean. The parent checkout's `npx prettier --check .planning/config.json` exits 1 on pre-existing user-owned formatting drift; the isolated Wave 7 `npm run check` passed. The local chained check's nonzero status is reported accurately and is not evidence of a feature failure.
 
-### Human Verification Required
+### Human Verification Completed
 
-The following two items are **unverified-prohibition — human review recommended**. They originate from unresolved judgment-tier `must_haves.prohibitions` in `11-03-PLAN.md`, with no wired enforcement descriptor. My code/output review finds no violation, but that judgment is non-authoritative under the verification contract.
+The following items originated from judgment-tier `must_haves.prohibitions` in `11-03-PLAN.md`, with no wired enforcement descriptor. The user reviewed both wording decisions in `11-UAT.md` and marked each `pass` on 2026-09-23.
 
-1. **Added marketplace is not automatic permission.** Review a refusal for a dependency in an added but unlisted marketplace. Expect the refusal to explain that the root marketplace's allowlist governs the automatic install. Decide whether the prohibition is satisfied.
-2. **Manual installation remains an explicit remedy.** Review the same refusal. Expect it to name the dependency to install manually first, alongside the separate root `marketplace.json` edit. Decide whether the prohibition is satisfied.
+1. **Added marketplace is not automatic permission.** The user confirmed that the refusal explains the root marketplace's allowlist decision for a dependency in an added but unlisted marketplace.
+2. **Manual installation remains an explicit remedy.** The user confirmed that the refusal names the dependency to install manually first and separately offers the root `marketplace.json` edit.
 
 ### Gaps Summary
 
-No observable truth, required artifact, key link, or requirement failed. No item is deferred to Phase 12; that phase concerns `prune`. The two human prohibition decisions are the only reason the overall status is `human_needed`.
+No observable truth, required artifact, key link, requirement, or human review item failed. No item is deferred to Phase 12; that phase concerns `prune`.
 
 ---
 
