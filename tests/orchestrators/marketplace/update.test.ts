@@ -535,9 +535,7 @@ test("CMC-10 + MU-1: bare form against empty scope succeeds with `(no marketplac
     });
 
     // assert
-    assert.deepStrictEqual(notifications, [
-      { message: "(no marketplaces)\n\nMarketplace update: 0 successes" },
-    ]);
+    assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)" }]);
   });
 });
 
@@ -2537,7 +2535,7 @@ test("SC-6 / MU-1: updateAllMarketplaces (no scope) with both scopes empty notif
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
-    assert.equal(first.message, "(no marketplaces)\n\nMarketplace update: 0 successes");
+    assert.equal(first.message, "(no marketplaces)");
     assert.equal(first.message.includes("Run /reload to "), false);
   });
 });

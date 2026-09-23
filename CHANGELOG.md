@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Internal: the GSD discuss phase now loads a Claude Code compatibility research skill before it generates questions, so phase decisions cite verified upstream behavior instead of assumption. `AGENTS.md` and `PROJECT.md` now state the upstream-parity rule and the two things that license a divergence, and both record the hook bridge that their component list had been omitting. (#210)
+  - Internal: the marketplace-remove test that covers the in-lock concurrent disappearance now injects the state load instead of racing a real filesystem writer, so the branch is covered on every run rather than only when the race lands. It was the intermittent cause of sub-100% coverage runs in CI.
+
+## [0.19.0] - 2026-09-22
+
+- Empty bulk command results now show the empty-state message without a redundant `0 successes` line. Populated bulk results keep their totals. (#209)
 - Internal: upgraded fallow to 3.27, promoted its warn-default dependency and suppression rules to errors, moved the stdio ban into a rule pack, and wired its agent surfaces through `scripts/init.sh`. (#204)
 - Every `/claude:plugin` verb now rejects an unknown flag or an extra argument before it does any work. (#202)
   - `--local` is accepted only by the verbs that write configuration. Marketplace `info`, `list`, and `update` read both configuration files and write neither, so they now reject it.

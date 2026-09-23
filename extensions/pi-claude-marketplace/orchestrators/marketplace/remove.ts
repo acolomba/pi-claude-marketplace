@@ -69,7 +69,10 @@ import {
   type MarketplaceRows,
   type Single,
 } from "../../shared/notify-context.ts";
-import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import {
+  withLockedStateTransaction,
+  type LockedStateTransactionDeps,
+} from "../../transaction/with-state-guard.ts";
 import { garbageCollectPluginClones } from "../plugin/clone-gc.ts";
 
 import { REMOVE_CONTEXT, type RemoveRowMsg } from "./remove.messaging.ts";
@@ -162,6 +165,15 @@ export interface RemoveMarketplaceOptions {
    * --local path.
    */
   readonly local?: boolean;
+  /**
+   * D-12-style injection seam for the locked-state transaction. Tests inject a
+   * `loadState` that omits the target record, which is the only deterministic
+   * way to reach the in-lock disappearance arm: the pre-guard probe reads the
+   * real file and finds the record, while the in-lock load does not. Racing a
+   * real concurrent writer leaves that arm covered only when the race lands.
+   * Zero runtime cost in production: the value is forwarded unchanged.
+   */
+  readonly stateTransaction?: LockedStateTransactionDeps;
 }
 
 async function removePath(pathPromise: Promise<string>): Promise<void> {
@@ -720,22 +732,26 @@ export async function removeMarketplace(
   const cfgInvalidSentinel = new Error("cfg-invalid-sentinel");
 
   try {
-    await withLockedStateTransaction(locations, async (tx) => {
-      const sk = await runRemoveLockBody({
-        tx,
-        opts,
-        locations,
-        targetConfigPath,
-        orchestrated,
-        cascade,
-        successfullyUnstaged,
-        failedPlugins,
-        cfgInvalidSentinel,
-      });
-      if (sk !== undefined) {
-        sourceKindAtRecord = sk;
-      }
-    });
+    await withLockedStateTransaction(
+      locations,
+      async (tx) => {
+        const sk = await runRemoveLockBody({
+          tx,
+          opts,
+          locations,
+          targetConfigPath,
+          orchestrated,
+          cascade,
+          successfullyUnstaged,
+          failedPlugins,
+          cfgInvalidSentinel,
+        });
+        if (sk !== undefined) {
+          sourceKindAtRecord = sk;
+        }
+      },
+      opts.stateTransaction,
+    );
   } catch (err) {
     if (err !== cfgInvalidSentinel) {
       throw err;
