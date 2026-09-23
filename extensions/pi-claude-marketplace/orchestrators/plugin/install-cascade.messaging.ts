@@ -301,6 +301,15 @@ function closureFailureFacts(
           failure.key,
         ),
       };
+    case "cross-marketplace":
+      return {
+        key: failure.key,
+        reasons: ["cross-marketplace"],
+        cause: new DependencyCascadeError(
+          `Dependency "${failure.key}", declared by "${failure.requiredBy}", is from marketplace "${failure.marketplace}", which root marketplace "${failure.rootMarketplace}" does not allow. Install "${failure.key}" manually first, or add "${failure.marketplace}" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "${failure.rootMarketplace}".`,
+          failure.key,
+        ),
+      };
     case "not-found":
       return {
         key: failure.key,

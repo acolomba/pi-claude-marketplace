@@ -683,6 +683,8 @@ async function seedPathMarketplaceWithPlugin(opts: {
    * whichever scope that call chose.
    */
   dependencyMarketplace?: string;
+  /** Foreign marketplaces the root marketplace explicitly permits. */
+  allowedDependencyMarketplaces?: readonly string[];
   /** Pre-seed a state.json with this plugin already installed (PI-5/PI-15). */
   preInstall?: boolean;
   /** Seed an additional plugin in state that already owns one of the generated names (PI-6). */
@@ -735,6 +737,9 @@ async function seedPathMarketplaceWithPlugin(opts: {
 
   const manifest = {
     name: marketplaceName,
+    ...(opts.allowedDependencyMarketplaces !== undefined && {
+      allowCrossMarketplaceDependenciesOn: [...opts.allowedDependencyMarketplaces],
+    }),
     plugins: [
       buildSeededMarketplaceEntry(pluginName, opts),
       ...(await seedSiblingPlugins(marketplaceRoot, opts)),
@@ -3231,6 +3236,88 @@ test("WR-03: installPlugin's marketplaceTagProbe seam reaches a path-source depe
   });
 });
 
+for (const allowed of [false, true]) {
+  test(`XMKT-01 direct install ${allowed ? "allows listed" : "refuses unlisted"} foreign dependency`, async () => {
+    await withHermeticHome(async ({ installPlugin }) => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-xmkt01-policy-"));
+      try {
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "tools-src"),
+          marketplaceName: "tools",
+          pluginName: "some-other-plugin",
+          scope: "user",
+          skills: [{ sourceName: "tool" }],
+        });
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "official-src"),
+          marketplaceName: "official",
+          pluginName: "hello",
+          skills: [{ sourceName: "tool" }],
+          declareDependencies: true,
+          dependencyMarketplace: "tools",
+          ...(allowed && { allowedDependencyMarketplaces: ["tools"] }),
+        });
+        const project = locationsFor("project", cwd);
+        const user = locationsFor("user", cwd);
+        const projectStateBefore = await readFile(project.stateJsonPath, "utf8");
+        const userStateBefore = await readFile(user.stateJsonPath, "utf8");
+        const projectTreeBefore = await retryTree(project.scopeRoot);
+        const userTreeBefore = await retryTree(user.scopeRoot);
+        const { ctx, pi, notifications } = makeCtx();
+
+        const outcome = await installPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "official",
+          plugin: "hello",
+        });
+
+        if (allowed) {
+          assert.equal(outcome.status, "installed");
+          const installed = await loadState(project.extensionRoot);
+          assert.equal(installed.marketplaces["official"]?.plugins.hello?.provenance, "explicit");
+          assert.equal(
+            installed.marketplaces["tools"]?.plugins["some-other-plugin"]?.provenance,
+            "dependency",
+          );
+        } else {
+          assertRetryFailure(
+            outcome,
+            'Dependency "some-other-plugin@tools", declared by "hello@official", is from marketplace "tools", which root marketplace "official" does not allow. Install "some-other-plugin@tools" manually first, or add "tools" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "official".',
+          );
+          assert.equal(await readFile(project.stateJsonPath, "utf8"), projectStateBefore);
+          assert.deepEqual(await retryTree(project.scopeRoot), projectTreeBefore);
+          await assert.rejects(stat(project.configJsonPath), /ENOENT/);
+        }
+
+        assert.equal(await readFile(user.stateJsonPath, "utf8"), userStateBefore);
+        assert.deepEqual(await retryTree(user.scopeRoot), userTreeBefore);
+        assert.equal(notifications.length, 1);
+        assert.equal(notifications[0]?.severity, allowed ? undefined : "error");
+        assert.equal(
+          notifications[0]?.message,
+          allowed
+            ? "● official [project]\n" +
+                "  ● hello v0.0.1 (installed)\n" +
+                "  ● some-other-plugin@tools v0.0.1 (installed)\n\n" +
+                "/reload to pick up changes"
+            : "Some plugin operations have failed.\n\n" +
+                "● official [project]\n" +
+                "  ⊘ hello (failed) {dependency failed}\n" +
+                "  ⊘ some-other-plugin@tools (failed) {cross-marketplace}\n" +
+                '    cause: Dependency "some-other-plugin@tools", declared by "hello@official", is from marketplace "tools", which root marketplace "official" does not allow. Install "some-other-plugin@tools" manually first, or add "tools" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "official".',
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("RESV-01 / RESV-06: a dependency no marketplace declares fails the install whole", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-missing-"));
@@ -3862,6 +3949,7 @@ test("D-04-05 / CMP-3: a dependency adopted from a user-scope marketplace surviv
         skills: [{ sourceName: "tool" }],
         declareDependencies: true,
         dependencyMarketplace: "deps-mp",
+        allowedDependencyMarketplaces: ["deps-mp"],
       });
       const install = makeCtx();
 

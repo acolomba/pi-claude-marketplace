@@ -489,6 +489,27 @@ function collectInstalledKeys(state: ExtensionState): ReadonlySet<string> {
   return keys;
 }
 
+/** Reads the selected root marketplace's validated policy from its cached manifest. */
+async function loadInstallRootAllowlist(args: {
+  readonly scope: Scope;
+  readonly cwd: string;
+  readonly marketplace: string;
+  readonly state: ExtensionState;
+}): Promise<ReadonlySet<string>> {
+  const source = await resolveInstallMarketplaceSource({
+    targetScope: args.scope,
+    cwd: args.cwd,
+    marketplace: args.marketplace,
+    targetState: args.state,
+  });
+  if (source === undefined) {
+    return new Set<string>();
+  }
+
+  const manifest = await loadMarketplaceManifest(source.sourceRecord.manifestPath);
+  return new Set(manifest.allowCrossMarketplaceDependenciesOn ?? []);
+}
+
 /**
  * The cascade's catalog read: one plugin's declared dependencies, in the
  * D-01-32 read order. The plugin's OWN manifest answers wherever it is readable
@@ -1449,6 +1470,12 @@ async function installPluginWithTransaction(
           state,
           locations,
           rootKey,
+          rootAllowedMarketplaces: await loadInstallRootAllowlist({
+            scope,
+            cwd,
+            marketplace,
+            state,
+          }),
           lookup: (subject) => lookupCascadeDependencies(state, { scope, cwd, locations }, subject),
           // RESV-03 / CMP-3: the pin probe reads a member's source out of the
           // marketplace record, and it must reach that record the same way the
@@ -2093,6 +2120,12 @@ async function installMissingDependencyWithTransaction(
           state,
           locations,
           rootKey,
+          rootAllowedMarketplaces: await loadInstallRootAllowlist({
+            scope,
+            cwd,
+            marketplace,
+            state,
+          }),
           // D-09-05: the declarers' folded ranges pin the root exactly as a
           // constrained member is pinned.
           rootRanges: opts.ranges,

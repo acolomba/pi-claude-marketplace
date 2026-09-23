@@ -83,6 +83,14 @@ const CLOSURE_FAILURES = {
     marketplace: "tools",
     requiredBy: ROOT_KEY,
   },
+  "cross-marketplace": {
+    ok: false,
+    reason: "cross-marketplace",
+    key: DEPENDENCY_KEY,
+    requiredBy: ROOT_KEY,
+    marketplace: "tools",
+    rootMarketplace: "official",
+  },
   "not-found": { ok: false, reason: "not-found", key: DEPENDENCY_KEY, requiredBy: ROOT_KEY },
   "unusable-declaration": {
     ok: false,

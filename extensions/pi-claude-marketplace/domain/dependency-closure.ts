@@ -36,8 +36,8 @@
 // installed plugins, so a constraint declared outside the graph being resolved
 // cannot fail an install.
 //
-// The root is exempt from three guards: already-installed, marketplace-known,
-// and catalog-absent. All three are preconditions of the REQUESTED plugin, and
+// The root is exempt from four guards: already-installed, install permission,
+// marketplace-known, and catalog-absent. These are preconditions of the REQUESTED plugin, and
 // the caller's materialization path owns them -- it resolves a marketplace
 // across scopes in ways a pure walk over one snapshot cannot see, and it
 // reports each miss against the right subject (the marketplace for an unadded
@@ -120,6 +120,12 @@ export interface ClosureMember {
   readonly ranges: readonly string[];
 }
 
+/** Root marketplace permission and target-scope records for an install walk. */
+export interface DependencyInstallPolicy {
+  readonly allowedMarketplaces: ReadonlySet<string>;
+  readonly recordedKeys: ReadonlySet<string>;
+}
+
 /** Inputs of one closure resolution. */
 export interface ResolveDependencyClosureOptions {
   readonly rootKey: string;
@@ -128,6 +134,8 @@ export interface ResolveDependencyClosureOptions {
   readonly installedKeys: ReadonlySet<string>;
   /** Marketplace names already added to the target scope (D-03-08). */
   readonly knownMarketplaces: ReadonlySet<string>;
+  /** Omitted only for a traversal that cannot install new plugins. */
+  readonly installPolicy?: DependencyInstallPolicy;
 }
 
 /**
@@ -152,6 +160,14 @@ export type DependencyClosureResult =
       readonly key: string;
       readonly marketplace: string;
       readonly requiredBy: string;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: "cross-marketplace";
+      readonly key: string;
+      readonly requiredBy: string;
+      readonly marketplace: string;
+      readonly rootMarketplace: string;
     }
   | {
       readonly ok: false;
@@ -206,6 +222,7 @@ interface DependencyEdge extends WalkEdge {
 /** Mutable walk state, allocated once per `resolveDependencyClosure` call. */
 interface WalkContext {
   readonly options: ResolveDependencyClosureOptions;
+  readonly rootMarketplace: string;
   readonly members: Map<string, MutableMember>;
   readonly path: string[];
   readonly visited: Set<string>;
@@ -347,10 +364,9 @@ async function walkChildren(
 }
 
 /**
- * Records a declared edge and walks it unless one of the two guards only a
- * dependency is subject to stops it. With `walkEdge`'s pair this is the guard
- * chain, in the one order that is load-bearing:
- * already-installed -> marketplace-known -> cycle -> memo.
+ * Records a declared edge, then applies dependency-only guards before walking
+ * it. With `walkEdge`'s pair this is the guard chain, in load-bearing order:
+ * already-installed -> root permission -> marketplace-known -> cycle -> memo.
  *
  * RESV-05 precedes D-03-08 deliberately: a dependency that is already
  * installed is skipped BEFORE its marketplace is checked, which is what keeps a
@@ -372,6 +388,24 @@ async function walkDependencyEdge(
     }
 
     return undefined;
+  }
+
+  const policy = ctx.options.installPolicy;
+  if (
+    !isRoot &&
+    policy !== undefined &&
+    !policy.recordedKeys.has(edge.key) &&
+    edge.parts.marketplace !== ctx.rootMarketplace &&
+    !policy.allowedMarketplaces.has(edge.parts.marketplace)
+  ) {
+    return {
+      ok: false,
+      reason: "cross-marketplace",
+      key: edge.key,
+      requiredBy: edge.requiredBy,
+      marketplace: edge.parts.marketplace,
+      rootMarketplace: ctx.rootMarketplace,
+    };
   }
 
   if (!isRoot && !ctx.options.knownMarketplaces.has(edge.parts.marketplace)) {
@@ -463,6 +497,7 @@ export async function resolveDependencyClosure(
 
   const ctx: WalkContext = {
     options,
+    rootMarketplace: rootParts.marketplace,
     members: new Map(),
     path: [],
     visited: new Set(),
