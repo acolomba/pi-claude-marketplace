@@ -5725,6 +5725,117 @@ test("LOAD-03: --prune sweeps the orphan while the surviving declarer is named o
   });
 });
 
+test("allowed named uninstall prunes only after the depended-on primary leaves", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-allowed-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        {
+          keeper: { dependencies: ["x"] },
+          x: { dependencies: ["d"] },
+          d: { provenance: "dependency" },
+          orphan: { provenance: "dependency" },
+        },
+        cwd,
+      );
+      const { ctx, pi, notifications } = makeCtx();
+
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+      });
+
+      assert.deepStrictEqual(await recordedInventory(locations), {
+        "keeper@mp": ["mp-keeper-skill"],
+      });
+      assert.deepStrictEqual(
+        await stagedSkills(locations, [
+          "mp-keeper-skill",
+          "mp-x-skill",
+          "mp-d-skill",
+          "mp-orphan-skill",
+        ]),
+        {
+          "mp-keeper-skill": true,
+          "mp-x-skill": false,
+          "mp-d-skill": false,
+          "mp-orphan-skill": false,
+        },
+      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ○ x v0.0.1 (uninstalled) {dependents unsatisfied}\n" +
+            "    cause: required by keeper@mp\n" +
+            "  ○ d v0.0.1 (uninstalled) {dependency pruned}\n" +
+            "  ○ orphan v0.0.1 (uninstalled) {dependency pruned}\n\n" +
+            "/reload to pick up changes",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a failed named uninstall does not sweep a pre-existing orphan", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-primary-failed-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { x: {}, orphan: { provenance: "dependency" } },
+        cwd,
+      );
+      const before = await readFile(locations.stateJsonPath);
+      const { ctx, pi, notifications } = makeCtx();
+
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+        cascade: cascadeFailure(new Error("primary refused")),
+      });
+
+      assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
+      assert.deepStrictEqual(await recordedInventory(locations), {
+        "x@mp": ["mp-x-skill"],
+        "orphan@mp": ["mp-orphan-skill"],
+      });
+      assert.deepStrictEqual(await stagedSkills(locations, ["mp-x-skill", "mp-orphan-skill"]), {
+        "mp-x-skill": true,
+        "mp-orphan-skill": true,
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n  ⊘ x v0.0.1 (failed) {unreadable}\n" +
+            "    cause: primary refused",
+          severity: "error",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("LOAD-03: a declarer the same --prune run sweeps is not named as a surviving dependent", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-prune-adjacent-"));

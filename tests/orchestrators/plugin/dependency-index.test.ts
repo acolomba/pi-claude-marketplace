@@ -176,6 +176,39 @@ test("D-05-06: every record except the excluded one is indexed by the keys it de
   });
 });
 
+test("standalone indexing includes every installed declarer without an exclusion", async () => {
+  const mp = mpRecord();
+  const other = otherRecord();
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: { dependencies: ["helper"] },
+      helper: { dependencies: ["kit@other"] },
+      paused: { dependencies: ["helper"] },
+    }),
+    [other.manifestPath]: manifestOf("other", { kit: {} }),
+  });
+
+  const walk = await buildScopeDeclarationIndex({
+    state: stateOf(mp, other),
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  assert.deepStrictEqual(indexEntries(walk), {
+    "app@mp": ["helper@mp"],
+    "helper@mp": ["kit@other"],
+    "paused@mp": ["helper@mp"],
+    "kit@other": [],
+  });
+  assert.deepStrictEqual(walk.ok ? walk.candidates.map((candidate) => candidate.key) : [], [
+    "app@mp",
+    "helper@mp",
+    "paused@mp",
+    "kit@other",
+  ]);
+});
+
 test("D-05-10: every indexed record is a candidate carrying its provenance and the snapshot's own objects, the excluded target omitted", async () => {
   // arrange
   const mp = mpRecord();
