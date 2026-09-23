@@ -5,11 +5,11 @@ milestone_name: transitive-dependencies
 current_phase: 10
 current_phase_name: Constraint-aware update
 status: verifying
-stopped_at: Completed 10-04-PLAN.md
-last_updated: "2026-09-22T20:32:30.827Z"
+stopped_at: Phase 10 executed, reviewed, fixed and verified passed; halted at the milestone lifecycle gate (verification.status reads stale — tooling, not content)
+last_updated: "2026-09-23T01:01:41.147Z"
 last_activity: 2026-09-22
 last_activity_desc: Phase 10 execution complete, ready for verification
-state_head: 00e3b1ef9fd3dfd603b95be640fba0a699ad23b9
+state_head: b11de280433c43080e6b1d145595d137c254e919
 progress:
   total_phases: 12
   completed_phases: 9
@@ -1031,13 +1031,13 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Completed 10-04-PLAN.md
+**Stopped at:** Phase 10 executed, reviewed, fixed and verified passed; halted at the milestone lifecycle gate (verification.status reads stale — tooling, not content)
 
-**Resume file:** None
+**Resume file:** .planning/phases/10-constraint-aware-update/10-VERIFICATION.md
 
 **Read beside it:** `.planning/phases/09-reload-installs-missing-dependencies/09-CONTEXT.md`
 
-Last session: 2026-09-22T20:32:30.525Z
+Last session: 2026-09-23T01:01:40.859Z
 Autonomous run (`/gsd-autonomous --from 9`) took Phase 9 from discuss through
 transition in one session: smart discuss (four areas, every decision checked
 against the 2.1.267 binary at the operator's "follow upstream" instruction),
