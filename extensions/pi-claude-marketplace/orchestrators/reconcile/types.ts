@@ -180,7 +180,8 @@ export interface PlannedDependencyDisable {
  * the install cascade's, not the planner's (T-06-10: a fold that fails is
  * unsatisfiable, never no-constraint, and one fold site is what keeps that
  * true). `requiredBy` is the first eligible declarer in verdict order, the
- * key a closure failure on this root names as its dependent.
+ * key a closure failure on this root names as its dependent. `declarers`
+ * retains each eligible source key once in that order for original-edge policy.
  */
 export interface PlannedDependencyInstall {
   readonly scope: Scope;
@@ -188,6 +189,7 @@ export interface PlannedDependencyInstall {
   readonly marketplace: string;
   readonly ranges: readonly string[];
   readonly requiredBy: string;
+  readonly declarers: readonly string[];
 }
 
 /**
