@@ -739,12 +739,12 @@
       "filter": "extensions/pi-claude-marketplace/shared/notification-summary.ts:41:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/shared/notification-types.ts:581:48",
+      "id": "extensions/pi-claude-marketplace/shared/notification-types.ts:585:48",
       "owner": "isScopeBearingListRow",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within PluginNotificationMessage by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/shared/notification-types.ts:581:11"
+      "filter": "extensions/pi-claude-marketplace/shared/notification-types.ts:585:11"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notify-context.ts:271:52",

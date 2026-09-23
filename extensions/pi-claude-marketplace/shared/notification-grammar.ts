@@ -1640,8 +1640,11 @@ export function composePluginLinesWith(
   // partition to interpolate. A held update's row names the constraining
   // plugins and marks which of them are currently disabled -- the same
   // remedy shape as the `disabled` / `uninstalled` cause lines above. The
-  // slot lives on `PluginUpdateSkippedMessage` alone, so every other
-  // `skipped` producer has no `cause` to set and keeps its byte-frozen row.
+  // slot lives on `PluginUpdateSkippedMessage`, so a producer that types its
+  // rows as `PluginSkippedMessage` has no `cause` to set and keeps its
+  // byte-frozen row. A producer that types its rows as the dispatcher union
+  // `PluginNotificationMessage` does reach the slot -- the union names this
+  // variant -- so the split narrows the base type, not every caller.
   if (
     p.status === "failed" ||
     p.status === "manual recovery" ||
@@ -1652,8 +1655,8 @@ export function composePluginLinesWith(
     // `skipped` splits two ways here: the base row declares no `cause` slot
     // at all, and only `PluginUpdateSkippedMessage` adds one. The membership
     // test is what reads the slot off whichever arm carries it, and it is
-    // also the reason a new `skipped` producer cannot grow a trailer by
-    // setting a field the base type does not have.
+    // also the reason a `skipped` producer typed at the base cannot grow a
+    // trailer: it has no field to set.
     const cause = "cause" in p ? p.cause : undefined;
     const trailer = renderIndentedCauseChain(cause, "    ");
     if (trailer !== "") {

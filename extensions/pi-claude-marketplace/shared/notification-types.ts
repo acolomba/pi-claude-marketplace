@@ -478,10 +478,14 @@ export interface PluginSkippedMessage extends MessageBase {
  * legally interpolates one -- every frozen trailer constant interpolates
  * nothing by contract.
  *
- * The slot lives on this variant rather than on `PluginSkippedMessage` so
- * the roughly a dozen other `skipped` producers cannot grow one: a row
- * literal typed as the base that sets `cause` is an excess-property error.
- * Only `UpdateMsg` and `UpdateRowMsg` name this type.
+ * The slot lives on this variant rather than on `PluginSkippedMessage`, so a
+ * row literal typed as the base -- every non-update surface's own `*Msg`
+ * union -- is an excess-property error when it sets `cause`. That is the
+ * whole of the guard. The dispatcher union `PluginNotificationMessage` names
+ * this variant too, so a producer that composes its rows at the dispatcher
+ * type sets `cause` on a `skipped` row and compiles; the catalog fixtures
+ * compose at that type and do exactly this. No production surface composes
+ * rows at the dispatcher type today.
  */
 export interface PluginUpdateSkippedMessage extends PluginSkippedMessage {
   readonly cause?: Error;
