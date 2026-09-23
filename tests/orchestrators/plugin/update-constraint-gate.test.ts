@@ -513,6 +513,61 @@ describe("evaluateUpdateConstraint", () => {
     assert.deepStrictEqual(calls[0]?.auth, { ctx, credentialOps: credOps });
   });
 
+  test("D-10-20: a commit-pinned git entry still probes tags for its constraint", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+    const entrySha = "7777777777777777777777777777777777777777";
+    const tagOid = "8888888888888888888888888888888888888888";
+    const source: GitBackedSource = {
+      kind: "url",
+      raw: "https://example.com/target",
+      url: "https://example.com/target",
+      sha: entrySha,
+    };
+    const calls: DependencyTagProbeOptions[] = [];
+    const seam: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: (probeOptions) => {
+        calls.push(probeOptions);
+        return Promise.resolve({
+          kind: "pinned",
+          tag: "target--v1.4.0",
+          oid: tagOid,
+          version: "1.4.0",
+        });
+      },
+      probeMarketplaceTags: () => {
+        throw new Error("not expected on a git-backed entry source");
+      },
+    };
+
+    // act
+    const verdict = await evaluateUpdateConstraint(
+      options({
+        state,
+        entry: { name: "target", source },
+        seam,
+        auth: { ctx: silentCtx(), credentialOps: credentialOps() },
+      }),
+    );
+
+    // assert
+    assert.deepStrictEqual(verdict, {
+      kind: "admits",
+      range: ">=1.0.0 <2.0.0-0",
+      holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
+      pin: { oid: tagOid, version: "1.4.0" },
+      fellBackToCurrentCopy: false,
+      disclosure:
+        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+    });
+    assert.strictEqual(calls.length, 1);
+    assert.deepStrictEqual(calls[0]?.source, source);
+  });
+
   test("UPDT-01: the git arm threads the caller's auth bundle untouched", async () => {
     // arrange
     const declarations = new Map<string, readonly AddressedDependency[]>([
