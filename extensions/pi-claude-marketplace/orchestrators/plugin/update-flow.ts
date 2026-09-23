@@ -1031,14 +1031,11 @@ export function createPluginUpdateOperations(
       runPluginUpdate,
       composeUpdateCascade,
     );
-  // D-10-18: ONE memo pair per autoupdate run, allocated inside this factory
-  // rather than in `createPluginUpdateOperations`'s own body. The binding
-  // this function belongs to lives for the whole extension load, so a memo
-  // pair allocated beside it would outlive every run and serve a stale
-  // listing -- a release tag pushed after the first cascade would stay
-  // invisible until the process restarted. The memos still span every
-  // plugin of ONE run, so a marketplace common to several of them is listed
-  // once, and the cascade's warm-cache expectation for path sources holds.
+  // D-10-18: ONE memo pair per autoupdate run. `beginPluginUpdateRun`
+  // allocates the pair, so the pair's lifetime is the run's and a release tag
+  // pushed between two runs is visible to the second. The pair spans every
+  // plugin of one run, so a marketplace common to several of them is listed
+  // once and the cascade's warm-cache expectation for path sources holds.
   const beginPluginUpdateRun = (): PluginUpdateFn => {
     const constraintTagMemo = new Map<string, readonly RemoteTag[]>();
     const constraintMarketplaceTagMemo = new Map<string, readonly ReleaseTagCandidate[]>();

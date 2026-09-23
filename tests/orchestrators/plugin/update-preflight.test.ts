@@ -260,9 +260,8 @@ test("returns the complete prepared candidate for a version transition", async (
   const prepared = await prepare(seed);
 
   // assert -- the WHOLE prepared value, so a member added to
-  // `PreparedPluginUpdate` cannot slip past this case the way `constraint`
-  // did. `resolvedSha` is absent rather than `undefined`: a path source is
-  // spread in only when a commit resolved.
+  // `PreparedPluginUpdate` is a red case here. `resolvedSha` is absent rather
+  // than `undefined`: a path source is spread in only when a commit resolved.
   assert.ok(!("partition" in prepared));
   assert.deepStrictEqual(prepared, {
     state: prepared.state,

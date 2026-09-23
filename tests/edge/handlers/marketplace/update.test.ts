@@ -322,8 +322,9 @@ test("D-10-18: begins one cascade run per command and none when the handler is b
   // arrange -- every other case injects a factory that returns the same
   // function however often it is called, so those cases are invariant to WHEN
   // the handler calls it. Counting the calls is what pins the run boundary to
-  // the command: a factory call moved into `makeMarketplaceUpdateHandler`'s
-  // body scores 1 here before either command runs, and 1 after both.
+  // the command: an allocation in `makeMarketplaceUpdateHandler`'s body
+  // instead of the returned closure scores 1 before either command runs, and
+  // 1 after both.
   const { cwd, networkCallCount } = await createHermeticScope(t, "run-boundary");
   const clones = await seedThreeMarketplaces(cwd);
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 4, {
