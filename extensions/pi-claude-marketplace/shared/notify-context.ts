@@ -133,7 +133,8 @@ export type MarketplaceRows<Msg> = WithPlugins<MarketplaceNotificationMessage, M
  * `computeSeverity` -> `cascadeSeverity` MAX-reduces every row's `severity` to
  * the envelope severity, and the per-row `needsReload` OR-reduce drives the
  * `/reload to pick up changes` trailer. `Messaging.label` feeds the trailing
- * tally on plural cascades.
+ * tally when plural cardinality makes it eligible. An empty default result
+ * suppresses the success line.
  *
  * RLD-05 / D-07: `kind` defaults to the plain `"cascade"` arm. The
  * `/claude:plugin disable` command does not thread a distinguishing kind --
@@ -164,10 +165,9 @@ export function notifyWithContext<
   const marketplaces: readonly MarketplaceNotificationMessage[] = rows;
   // OUT-04 / D-04: thread the command's operation label + the STRUCTURAL
   // single-vs-bulk cardinality onto the cascade envelope. The trailing tally
-  // (OUT-03) renders IFF `cardinality === "plural"`; `label` is its
-  // `<Operation>` prefix. Single-target callers declare `"single"` explicitly
-  // and get no tally. These fields are read only by the tally composer in
-  // `emitWithSummary` -- they never affect the per-row body or severity.
+  // (OUT-03) is eligible IFF `cardinality === "plural"`; an empty default result
+  // suppresses the success line. `label` is its prefix; single callers get no tally.
+  // These fields feed only the tally composer and never affect body or severity.
   const message: CascadeNotificationMessage = {
     ...(kind === undefined ? {} : { kind }),
     marketplaces,

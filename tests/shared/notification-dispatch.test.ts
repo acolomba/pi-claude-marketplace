@@ -4961,7 +4961,7 @@ for (const { name, tally, expected } of [
   });
 }
 
-test("an empty default plural tally reports zero successes", (t) => {
+test("an empty default plural cascade emits only its sentinel", (t) => {
   // arrange
   const ctx = createContext(t);
   const pi = piWithBothLoaded();
@@ -4976,9 +4976,7 @@ test("an empty default plural tally reports zero successes", (t) => {
   notify(ctx as never, pi, message);
 
   // assert
-  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "(no marketplaces)\n\nMarketplace list: 0 successes",
-  ]);
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, ["(no marketplaces)"]);
 });
 
 test("a marketplace-level reload stamp emits the trailer", (t) => {

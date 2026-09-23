@@ -53,6 +53,8 @@
   "project_code": null,
   "phase_naming": "sequential",
   "agent_skills": {
+    "gsd-discuss-phase": ["skills/claude-code-compat-research"],
+    "gsd-advisor-researcher": ["skills/claude-code-compat-research"],
     "gsd-executor": [
       "skills/typescript-comments",
       "skills/typescript-unit-testing",
