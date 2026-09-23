@@ -22,14 +22,14 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-22 after Phase 9 reload installs missing declared dependencies)
+See: `.planning/PROJECT.md` (updated 2026-09-22 after Phase 10 constraint-aware update)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 10 — Constraint-aware update
-phases (6-12) that align the shipped dependency feature with the Claude Code
-dependency docs. Phases 6-9 are complete.
+**Current focus:** Phase 11 — Cross-marketplace dependency allowlist
+within phases 6-12, which align the shipped dependency feature with the Claude
+Code dependency docs. Phases 6-10 are complete.
 44 requirements across 12 phases (25 shipped in Phases 1-5 as PR #198, 19
 added 2026-09-18). v1.19 Unit Test Refactor closed 2026-09-04 and is archived
 under `.planning/milestones/v1.19-*`.
@@ -39,6 +39,18 @@ under `.planning/milestones/v1.19-*`.
 Phase: 11 — Cross-marketplace dependency allowlist
 Plan: Not started
 Status: Ready to plan
+
+**Phase 10 closed 2026-09-22**, verified 3/3 must-haves with no human items;
+the final code review is clean after one test-reliability fix. `update`, bulk
+`update`, and `autoupdate` now select the highest release tag admitted by the
+intersection of same-scope installed dependents' ranges for both git-backed
+and path sources, then re-check the version that actually resolved before any
+write. A held plugin is skipped at warning severity with
+`{dependents constrain}` and a cause line naming its holders while the rest of
+the run continues. Current-copy fallbacks and ceiling results disclose their
+constraint context; unconstrained updates keep their prior bytes and network
+behavior. The review fix replaced a verdict-stubbed preflight case with a real
+commit-pinned git-source gate path. UPDT-01 and UPDT-02 are complete.
 
 **Phase 9 closed 2026-09-22**, verified 12/12 must-haves with no human items;
 regression gate on the final tree: 7489/7489 unit, 38/38 integration; `npm run
@@ -929,7 +941,10 @@ session that must settle it:
   and passed — this note was stale (the report was already on disk when it was
   written). Phase 2 also closed clean: `02-VERIFICATION.md` passed 10/10.
 - RESOLVED by 117-12: D-117-20 in `117-CONTEXT.md` now reads 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only, matching the operator decision taken in plan 117-11 and the retained all-pair artifact. The superseded 197 + 7 wording is gone.
-- npm run check is not fully green: an ESLint require-await violation in tests/orchestrators/plugin/install-flow.test.ts:11732 (from plan 09-03's commit 71dcea21) is deferred (deferred-items.md, WINDOWS.md entry 60) rather than fixed by 09-04, per Task 3's own scope instruction.
+- `npm run check` reaches the pre-existing, operator-owned
+  `.planning/config.json` formatting drift. Phase 10's focused formatting,
+  typecheck, lint, Fallow, unit, integration, direct-coverage, and type-member
+  gates are green; the local config edit remains intentionally unstaged.
 
 ### Quick Tasks Completed
 
@@ -1034,11 +1049,11 @@ hit the same wall; convert it rather than re-disclosing it.
 
 **Stopped at:** Phase 10 complete, ready to plan Phase 11
 
-**Resume file:** .planning/phases/10-constraint-aware-update/10-VERIFICATION.md
+**Resume file:** None
 
 **Read beside it:** `.planning/phases/09-reload-installs-missing-dependencies/09-CONTEXT.md`
 
-Last session: 2026-09-23T01:01:40.859Z
+Last session: 2026-09-23T02:12:02.630Z
 Autonomous run (`/gsd-autonomous --from 9`) took Phase 9 from discuss through
 transition in one session: smart discuss (four areas, every decision checked
 against the 2.1.267 binary at the operator's "follow upstream" instruction),

@@ -93,6 +93,19 @@ operator's instruction to follow upstream. New closed-set reason
 `{dependency installed}` (61); catalog 220 -> 222 states. BACKLOG gained
 `MISS-MPADD-01` and `RECON-REPLAN-01`.
 
+**Delivered 2026-09-22 (Phase 10, verified 3/3):** `update` and
+`autoupdate` now keep a dependency inside the intersection of every installed
+dependent's declared range. The preflight selects the highest satisfying
+release tag for both git-backed and path sources, memoizes tag listings once
+per repository or marketplace per run, and re-checks the version that actually
+resolved before any write. If no acceptable version exists, the plugin is
+skipped at warning severity with `{dependents constrain}` and a cause line that
+names the holders; bulk updates continue. Current-copy path fallbacks and
+already-at-the-ceiling results disclose why they were accepted. Unconstrained
+updates retain their prior bytes and network behavior. UPDT-01 and UPDT-02 are
+complete; final verification passed after a clean code-review rerun and one
+test-strengthening fix for the commit-pinned git-source preflight path.
+
 **Delivered 2026-09-21 (Phase 8, verified 13/13):** `enable` and `disable`
 understand dependencies. `enable <plugin>` resolves the declared closure
 transitively in the same scope and reports one row per member, re-materializing
@@ -475,6 +488,15 @@ All prior validated requirements below remain historical completed work.
   Code review converged over three iterations (0 critical, 3 warning in the
   first; one restructure pass removed a duplicated signal derivation); see
   D-09-01..16 in Key Decisions.
+- ✓ `update`, bulk `update`, and `autoupdate` select the highest available
+  version admitted by every same-scope installed dependent's declared range,
+  for both git-backed and path sources. If no version is admitted, that plugin
+  is skipped at warning severity with `{dependents constrain}` and a cause line
+  naming the holders while the rest of the run continues. The version that
+  actually resolves is re-checked before any write, current-copy fallbacks and
+  ceiling results are disclosed, and unconstrained updates keep their previous
+  bytes and network behavior — v1.20 Phase 10 (UPDT-01, UPDT-02), verified
+  2026-09-22, 3/3 with no human items.
 - ✓ `enable` and `disable` understand dependencies: `enable <plugin>` resolves
   the declared closure transitively in the same scope, reports one row per
   member and re-materializes a disabled member through its own record as
@@ -833,6 +855,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-07-03 (v1.20 Phase 7, 2026-09-19): the TAGS-02 fallback row (no tag satisfies → marketplace's current copy installs) stays a quiet `info`-level note, not a warning — a deliberate divergence from upstream, which surfaces the analogous fallback as a warning.** A mid-review-cycle fix accidentally reversed this to `warning` (matching upstream); the regression was caught and reverted the same cycle. | The install itself always succeeds here; Phase 6's load-time check is what actually flags and disables a dependent if the fallback version is genuinely out of range, so nothing is wrong yet at install time. | -- Locked |
 | **D-08-01/02/03 + review rulings (v1.20 Phase 8, 2026-09-21):** the disable refusal is a plain-English instruction naming dependents in order, not a chained command (`disable` takes one target); the cascade-enable token is `{dependency enabled}` and `{dependents remain}` returns for the disable refusal (B1), while `{dependency disabled}` is retired; the enable cascade reports the full closure. Review rulings: a re-enabled member's EXISTING `enabled: false` config entry is overwritten to `true` and a member with no entry never gets one (D-04-02); the enable cascade and the disable guard are standalone-only, the install-cascade re-enable runs on every install; a `{not installed}` member stamps `warning` and does not refuse; one walk owns the install cascade's re-enable closure (`liveInstalledKeys`), after a discovery/fold split regressed three review passes running. |
 | **D-09-01..16 + review rulings (v1.20 Phase 9, 2026-09-22):** the reload's missing-dependency bucket derives from the verdict's `missing` arm for dependents that will be enabled once the pass applies (enabled, marker-held, or config-declared enabled; never a user-disabled record the config leaves alone, never one the plan uninstalls/disables); a disabled installed dependency is left alone (upstream installs only `not-found`); one cascade per missing key rooted at the dependency with the declarers' ranges folded once and every member `provenance: "dependency"`; the step runs after `install plugins`, only on an explicit `/reload` (upstream's session start never installs), and re-plans only the three toggle buckets when at least one dependency landed; the LOAD-02 lift is provenance-independent; rows are one `(installed) {dependency installed}` per materialized member, a cascade-wrapped failure renders `{dependency failed}` with the cause line (no per-kind classifier), an already-present member is silent, preview keeps the empty verdict default (PENDING-VERDICT-01 stays open); a failed install is retried on every reload; `marketplace add`/autoupdate are not wired (MISS-MPADD-01). Review rulings: the reload row carries the root's degradation signals and `{dependency current copy}` through one `ledgerDegradationSignals` derivation shared by both install projections. |
+| **D-10-01/09/12/17a/18 + review ruling (v1.20 Phase 10, 2026-09-22):** update constraint handling is a two-stage preflight: select the highest satisfying tag, then re-check the version that actually resolved before any write; the published held token is `{dependents constrain}` and stays outside the idempotent-reason set, so manual and automatic held rows are warnings; the constraint disclosure is required-but-nullable and atomically shaped on prepared, updated, and unchanged outcomes; tag listings are memoized once per repository or marketplace per run. The final review strengthened the commit-pinned git-source preflight test so it reaches the real source-kind branch instead of stubbing the verdict. | Keeps every update inside the ranges its same-scope installed dependents declare, preserves bulk progress and unconstrained behavior, prevents silent omission of user-visible constraint residue, and proves the sha-bearing git-source route through production logic rather than a test double. | -- Locked |
 
 ## Evolution
 
@@ -854,6 +877,8 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-09-22 after v1.20 Phase 10 constraint-aware update verified 3/3 and its autonomous code review converged clean after one test-strengthening fix. UPDT-01 and UPDT-02 are complete. Phases 6-10 of the parity extension are complete; Phase 11 (cross-marketplace dependency allowlist) is next. Prior updates follow._
 
 _Last updated: 2026-09-21 after Phase 8 enablement-parity-for-dependencies verified 13/13 (no human items). Phases 6-8 of the 2026-09-18 extension are complete: the load-time dependency check, marketplace-repository tag resolution, and enable/disable/install-cascade parity. EDEP-01..03 read Complete. Phase 9 (reload installs missing declared dependencies) is next. Prior updates follow._
 
