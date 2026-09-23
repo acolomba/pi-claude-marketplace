@@ -2574,6 +2574,60 @@ test("EDEP-03 a disabled dependency declaring a plugin its marketplace does not 
   assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
 });
 
+test("XMKT-02 a recorded disabled foreign member cannot grant its new child permission", async (t) => {
+  const environment = await createHermeticEnvironment(
+    t,
+    "install-cascade-disabled-foreign-policy-",
+  );
+  const { state } = await seedOneDisabledDependency(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  const rootRecord = state.marketplaces[MARKETPLACE];
+  assert.ok(rootRecord !== undefined);
+  const bar = rootRecord.plugins.bar;
+  assert.ok(bar !== undefined);
+  state.marketplaces.beta = { ...rootRecord, name: "beta", plugins: { bar } };
+  const before = JSON.stringify(state);
+  const treeBefore = await retryTree(locations.scopeRoot);
+  const seen: string[] = [];
+  const seam: InstallCascadeLedgerSeam = {
+    runInstallLedger: (_state, _locations, options) => {
+      seen.push(options.plugin);
+      throw new Error("a policy refusal must not materialize any member");
+    },
+    cascadeUnstagePlugin,
+  };
+
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", marketplace: "beta" }],
+      "bar@beta": [{ name: "new-leaf", marketplace: "gamma" }],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set(),
+    installedKeys: new Set(["bar@beta"]),
+    knownMarketplaces: new Set([MARKETPLACE, "beta", "gamma"]),
+    seam,
+  });
+
+  assert.deepStrictEqual(cascade, {
+    kind: "closure-failed",
+    failure: {
+      ok: false,
+      reason: "cross-marketplace",
+      key: "new-leaf@gamma",
+      requiredBy: "bar@beta",
+      marketplace: "gamma",
+      rootMarketplace: MARKETPLACE,
+    },
+  });
+  assert.deepStrictEqual(seen, []);
+  assert.strictEqual(JSON.stringify(state), before);
+  assert.deepStrictEqual(await retryTree(locations.scopeRoot), treeBefore);
+});
+
 test("a requested plugin that is recorded and disabled is refused by its own ledger, not re-enabled as a member", async (t) => {
   // arrange: "foo", the requested plugin, is recorded and disabled; it
   // declares "bar", which is never installed.

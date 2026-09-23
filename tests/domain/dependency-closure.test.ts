@@ -435,6 +435,173 @@ test("XMKT-02 a recorded disabled foreign key may be read through without permis
   assert.deepStrictEqual(asked, ["root@official", "formatter@tools"]);
 });
 
+test("XMKT-01 every transitive edge uses the original root marketplace", async () => {
+  const graph = {
+    "root@alpha": [{ name: "bridge", marketplace: "beta" }],
+    "bridge@beta": [{ name: "leaf", marketplace: "gamma" }],
+    "leaf@gamma": [],
+  };
+  const denied = catalog(graph);
+
+  const refusal = await resolveDependencyClosure({
+    rootKey: "root@alpha",
+    lookup: denied.lookup,
+    installedKeys: new Set(),
+    knownMarketplaces: new Set(["alpha", "beta", "gamma"]),
+    installPolicy: { allowedMarketplaces: new Set(["beta"]), recordedKeys: new Set() },
+  });
+
+  assert.deepStrictEqual(refusal, {
+    ok: false,
+    reason: "cross-marketplace",
+    key: "leaf@gamma",
+    requiredBy: "bridge@beta",
+    marketplace: "gamma",
+    rootMarketplace: "alpha",
+  });
+  assert.deepStrictEqual(denied.asked, ["root@alpha", "bridge@beta"]);
+
+  const permitted = catalog(graph);
+  const result = await resolveDependencyClosure({
+    rootKey: "root@alpha",
+    lookup: permitted.lookup,
+    installedKeys: new Set(),
+    knownMarketplaces: new Set(["alpha", "beta", "gamma"]),
+    installPolicy: { allowedMarketplaces: new Set(["beta", "gamma"]), recordedKeys: new Set() },
+  });
+  assert.strictEqual(result.ok, true);
+  assert.deepStrictEqual(permitted.asked, ["root@alpha", "bridge@beta", "leaf@gamma"]);
+});
+
+test("XMKT-01 an intermediary can depend back on the root marketplace", async () => {
+  const { lookup, asked } = catalog({
+    "root@alpha": [{ name: "bridge", marketplace: "beta" }],
+    "bridge@beta": [{ name: "leaf", marketplace: "alpha" }],
+    "leaf@alpha": [],
+  });
+  const resolved = await resolveDependencyClosure({
+    rootKey: "root@alpha",
+    lookup,
+    installedKeys: new Set(),
+    knownMarketplaces: new Set(["alpha", "beta"]),
+    installPolicy: { allowedMarketplaces: new Set(["beta"]), recordedKeys: new Set() },
+  });
+  assert.strictEqual(resolved.ok, true);
+  assert.deepStrictEqual(asked, ["root@alpha", "bridge@beta", "leaf@alpha"]);
+});
+
+for (const { allowed, expected } of [
+  { allowed: ["tools"], expected: true },
+  { allowed: ["Tools"], expected: false },
+  { allowed: [" tools"], expected: false },
+  { allowed: ["tools "], expected: false },
+  { allowed: ["tools", "tools"], expected: true },
+]) {
+  test(`XMKT-01 permission compares exact marketplace names in ${JSON.stringify(allowed)}`, async () => {
+    const { lookup, asked } = catalog({
+      "root@official": [{ name: "formatter", marketplace: "tools" }],
+      "formatter@tools": [],
+    });
+    const resolved = await resolveDependencyClosure({
+      rootKey: "root@official",
+      lookup,
+      installedKeys: new Set(),
+      knownMarketplaces: new Set(["official", "tools"]),
+      installPolicy: { allowedMarketplaces: new Set(allowed), recordedKeys: new Set() },
+    });
+    assert.strictEqual(resolved.ok, expected);
+    assert.deepStrictEqual(
+      asked,
+      expected ? ["root@official", "formatter@tools"] : ["root@official"],
+    );
+  });
+}
+
+for (const allowed of [false, true]) {
+  test(`XMKT-01 an unknown foreign marketplace ${allowed ? "passes policy then fails lookup" : "fails policy first"}`, async () => {
+    const { lookup, asked } = catalog({ "root@alpha": [{ name: "leaf", marketplace: "gone" }] });
+    const resolved = await resolveDependencyClosure({
+      rootKey: "root@alpha",
+      lookup,
+      installedKeys: new Set(),
+      knownMarketplaces: new Set(["alpha"]),
+      installPolicy: {
+        allowedMarketplaces: new Set(allowed ? ["gone"] : []),
+        recordedKeys: new Set(),
+      },
+    });
+    assert.deepStrictEqual(
+      resolved,
+      allowed
+        ? {
+            ok: false,
+            reason: "marketplace-not-added",
+            key: "leaf@gone",
+            marketplace: "gone",
+            requiredBy: "root@alpha",
+          }
+        : {
+            ok: false,
+            reason: "cross-marketplace",
+            key: "leaf@gone",
+            marketplace: "gone",
+            requiredBy: "root@alpha",
+            rootMarketplace: "alpha",
+          },
+    );
+    assert.deepStrictEqual(asked, ["root@alpha"]);
+  });
+}
+
+test("XMKT-02 recorded foreign edges retain every range before the installed check", async () => {
+  const { lookup, asked } = catalog({
+    "root@alpha": [{ name: "left" }, { name: "right" }],
+    "left@alpha": [{ name: "leaf", marketplace: "gone", version: "^1.0.0" }],
+    "right@alpha": [{ name: "leaf", marketplace: "gone", version: "^1.2.0" }],
+  });
+  const resolved = await resolveDependencyClosure({
+    rootKey: "root@alpha",
+    lookup,
+    installedKeys: new Set(["leaf@gone"]),
+    knownMarketplaces: new Set(["alpha"]),
+    installPolicy: { allowedMarketplaces: new Set(), recordedKeys: new Set(["leaf@gone"]) },
+  });
+  assert.strictEqual(resolved.ok, true);
+  assert.deepStrictEqual(resolved.alreadyInstalled, [
+    {
+      key: "leaf@gone",
+      name: "leaf",
+      marketplace: "gone",
+      requiredBy: "left@alpha",
+      ranges: ["^1.0.0", "^1.2.0"],
+    },
+  ]);
+  assert.deepStrictEqual(asked, ["root@alpha", "left@alpha", "right@alpha"]);
+});
+
+test("XMKT-02 a recorded disabled foreign edge exempts only itself", async () => {
+  const { lookup, asked } = catalog({
+    "root@alpha": [{ name: "bridge", marketplace: "beta" }],
+    "bridge@beta": [{ name: "leaf", marketplace: "gamma" }],
+  });
+  const resolved = await resolveDependencyClosure({
+    rootKey: "root@alpha",
+    lookup,
+    installedKeys: new Set(),
+    knownMarketplaces: new Set(["alpha", "beta", "gamma"]),
+    installPolicy: { allowedMarketplaces: new Set(), recordedKeys: new Set(["bridge@beta"]) },
+  });
+  assert.deepStrictEqual(resolved, {
+    ok: false,
+    reason: "cross-marketplace",
+    key: "leaf@gamma",
+    requiredBy: "bridge@beta",
+    marketplace: "gamma",
+    rootMarketplace: "alpha",
+  });
+  assert.deepStrictEqual(asked, ["root@alpha", "bridge@beta"]);
+});
+
 test("D-03-08 a dependency naming an unadded marketplace fails the whole closure", async () => {
   // arrange
   const { lookup } = catalog({ "root@mp": [{ name: "helper", marketplace: "other" }] });
