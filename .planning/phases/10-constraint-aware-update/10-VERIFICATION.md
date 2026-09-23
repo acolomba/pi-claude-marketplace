@@ -1,6 +1,6 @@
 ---
 phase: 10-constraint-aware-update
-verified: 2026-09-23T02:13:41Z
+verified: 2026-09-23T03:00:23Z
 status: passed
 score: 3/3 must-haves verified
 covered_files:
@@ -70,7 +70,7 @@ covered_files:
   - tests/shared/notification-grammar.test.ts
   - tests/shared/notification-types.test.ts
   - tests/shared/notify-reasons.test.ts
-covered_digest: "v1:sha256:f3091a362ae6c23db0b1f175ddf78778a17438f4d17b2d70ec85cffaec0c5bf2"
+covered_digest: "v1:sha256:982e2f517afc07f7571da21bcb3c8a5eacdae189cc096d78824a61437cfe390f"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -84,7 +84,7 @@ re_verification:
 # Phase 10: Constraint-Aware Update Verification Report
 
 **Phase Goal:** An update never moves a dependency out of the range its dependents declare. When every installed dependent's constraints leave room, the update takes the highest version inside it; when they leave none, that plugin's update is skipped and the user is told which plugin is holding it.
-**Verified:** 2026-09-23T02:13:41Z
+**Verified:** 2026-09-23T03:00:23Z
 **Status:** passed
 **Re-verification:** Yes — fresh current-head verification after an earlier passing report
 
@@ -94,7 +94,7 @@ re_verification:
 
 | # | Truth | Status | Evidence |
 |---|---|---|---|
-| 1 | All three update surfaces select the highest git- or path-source release tag inside every installed dependent's range intersection. | ✓ VERIFIED | The gate folds declaration detail through `intersectDependencyRanges`, calls the source probe, and returns its pin unchanged. Preflight materializes that pin and runs the post-fetch guard. Named UPDT-01 git/path/preflight tests and an equal-semver held-out spot-check passed. |
+| 1 | All three update surfaces select the highest git- or path-source release tag inside every installed dependent's range intersection. | ✓ VERIFIED | The gate folds declaration detail through `intersectDependencyRanges`, calls the source probe, and returns its pin unchanged. Preflight materializes that pin and runs the post-fetch guard. Named UPDT-01 git/path/preflight tests, the production-driven D-10-20 SHA-bearing-source test, and an equal-semver held-out spot-check passed. |
 | 2 | With no satisfying version, only that plugin is skipped; the warning names its constraining plugins and the bulk update continues. | ✓ VERIFIED | Held verdicts become skipped candidates, `constraintCauseFor` renders sorted holders, and both cascades continue per plugin. The named UPDT-02 bulk-isolation test passed with exact output. |
 | 3 | Unconstrained behavior is unchanged and only approved update modules own tag/network work. | ✓ VERIFIED | The unconstrained arm returns before probing; exact-byte SC3 tests exercise real preflight. Network-ownership, offline, and catalog architecture tests passed. |
 
@@ -109,7 +109,7 @@ The plan frontmatter also has 22 legacy `verification: null` prohibitions. Manua
 Not honored:
 - D-10-20
 
-The mechanical decision query missed D-10-20. Manual evidence proves it: `constraintTagSource` does not exempt a source with a declared `sha`, and the passing D-10-20 preflight test proves a constraint pin overrides that entry `sha`. This is a traceability-parser miss, not an implementation gap.
+The mechanical decision query still misses D-10-20. Production-driven evidence now proves both halves of it: the new gate test calls `evaluateUpdateConstraint`, shows that a SHA-bearing git source reaches `probeDependencyTags`, and asserts that the verdict carries the different tag-derived oid/version; the existing preflight test proves that resulting pin overrides the entry `sha` during materialization. This is a traceability-parser miss, not an implementation gap. The converged `10-REVIEW.md` is clean with zero findings.
 
 ### Required Artifacts
 
@@ -143,6 +143,7 @@ The mechanical decision query missed D-10-20. Manual evidence proves it: `constr
 |---|---|---|
 | Highest satisfying git pin is returned unchanged | named UPDT-01 gate test: 1 pass, 0 fail | ✓ PASS |
 | Recorded version comes from the tag, not raw sha | named UPDT-01 preflight test: 1 pass, 0 fail | ✓ PASS |
+| SHA-bearing git entry still reaches the constraint tag probe | named `D-10-20: a commit-pinned git entry still probes tags for its constraint`: 1 pass, 0 fail | ✓ PASS |
 | Path siblings share one listing per run | named D-10-18 flow test: 1 pass, 0 fail | ✓ PASS |
 | No-tag candidate is protected post-fetch | named UPDT-01 preflight test: 1 pass, 0 fail | ✓ PASS |
 | Held plugin does not stop bulk update | named UPDT-02 cascade test: 1 pass, 0 fail | ✓ PASS |
@@ -157,7 +158,8 @@ The mechanical decision query missed D-10-20. Manual evidence proves it: `constr
 |---|---|---|
 | `npm run typecheck` | exit 0 | ✓ PASS |
 | `npm run lint` | exit 0 | ✓ PASS |
-| direct source/test-pair coverage | gate: 100% lines, branches, and functions | ✓ PASS |
+| direct source/test-pair coverage | gate: 72/72 branches, 14/14 functions, 525/525 lines | ✓ PASS |
+| converged code review | `10-REVIEW.md`: clean, 0 critical, 0 warning, 0 info | ✓ PASS |
 | disabled-test scan | no `.skip`, `.todo`, or `.only` | ✓ PASS |
 | test-oracle review | literal/independent expected values; no self-derived oracle | ✓ PASS |
 
@@ -169,7 +171,7 @@ No Phase 10 plan or summary declares a probe script. Named behavioral and archit
 
 | Requirement | Source Plans | Status | Evidence |
 |---|---|---|---|
-| UPDT-01 | 10-01 through 10-04 | ✓ SATISFIED | Both source probes use the shared selector; exact pins are materialized and rechecked. Git, path, boundary, pin-recording, and post-fetch tests pass. |
+| UPDT-01 | 10-01 through 10-04 | ✓ SATISFIED | Both source probes use the shared selector; exact pins are materialized and rechecked. Git, path, boundary, pin-recording, post-fetch, and production-driven D-10-20 SHA-bearing-source tests pass. |
 | UPDT-02 | 10-01, 10-03, 10-04 | ✓ SATISFIED | Held causes reach both cascades, exact output names sorted holders, and bulk isolation passes. |
 
 No requirement is orphaned: `.planning/REQUIREMENTS.md` maps exactly UPDT-01 and UPDT-02 to Phase 10, and both appear in plan frontmatter.
@@ -192,5 +194,5 @@ No gaps. The current repository head satisfies the phase goal and both mapped re
 
 ---
 
-_Verified: 2026-09-23T02:13:41Z_
+_Verified: 2026-09-23T03:00:23Z_
 _Verifier: the agent (gsd-verifier)_
