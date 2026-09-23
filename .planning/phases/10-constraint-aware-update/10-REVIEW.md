@@ -1,6 +1,6 @@
 ---
 phase: 10-constraint-aware-update
-reviewed: 2026-09-23T02:27:16Z
+reviewed: 2026-09-23T02:55:54Z
 depth: standard
 files_reviewed: 30
 files_reviewed_list:
@@ -35,42 +35,43 @@ files_reviewed_list:
   - tests/scripts/check-unused-type-members.negative.test.ts
   - tests/shared/notification-types.test.ts
 findings:
-  critical: 1
+  critical: 0
   warning: 0
   info: 0
-  total: 1
-status: issues_found
+  total: 0
+status: clean
 ---
 
 # Phase 10: Code Review Report
 
-**Reviewed:** 2026-09-23T02:27:16Z
+**Reviewed:** 2026-09-23T02:55:54Z
 **Depth:** standard
 **Files Reviewed:** 30
-**Status:** issues_found
+**Status:** clean
 
 ## Summary
 
-The post-review production fixes are coherent: the autoupdate tag memos now start once per marketplace-update command, the two command forms share the resulting update function, the constrained disclosure no longer claims an unproven ceiling, and update-only skipped causes are removed from the base skipped-row contract. TypeScript, ESLint, workflow gates, fallow, and source formatting passed. Fourteen of the fifteen directly changed test modules passed; the remaining type-member negative suite could not launch its nested Node process in the sandbox (`spawnSync ... EPERM`), so that environmental failure is not a finding. The full project gate also stopped on an unrelated, pre-existing Prettier failure in `.planning/config.json`.
+CR-01 is closed. Commit `29e6ec29` adds a production-driven case for a
+SHA-bearing git entry. The case calls `evaluateUpdateConstraint`, verifies that
+the real source classifier sends the SHA-bearing source to
+`probeDependencyTags`, and verifies that the returned verdict carries the
+different tag-derived object ID and version. Restoring the former SHA exemption
+would make both the probe-call assertion and the verdict assertion fail.
 
-One test-reliability defect remains. The new D-10-20 case does not exercise the constraint-gate branch that decides whether an entry with its own `sha` is still tag-probed, so the exact regression it was added to prevent can return while the suite stays green.
+The focused test passed. Direct coverage also passed with 100% branch, function,
+and line coverage for `update-constraint-gate.ts` (72/72 branches, 14/14
+functions, 525/525 lines). The remaining files in the persisted 30-file scope
+have not changed since the previous standard-depth review. The final regression
+scan found no new Critical, Warning, or Info findings.
+
+All reviewed files meet quality standards. No issues found.
 
 ## Narrative Findings (AI reviewer)
 
-## Critical Issues
-
-### CR-01: The pinned-entry regression test injects the behavior it claims to prove
-
-**File:** `tests/orchestrators/plugin/update-preflight.test.ts:791-836`
-
-**Issue:** The case says it proves that a constraint-selected tag overrides a marketplace entry's own declared `sha`, but lines 815-823 replace the real constraint gate with a stub that directly returns the selected `tagOid`. The test therefore exercises only `resolveUpdateCandidate`'s handling of an already-produced pin. It never reaches `constraintTagSource` at `extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts:271-275`, which is the branch that must treat a `url` / `git-subdir` / `github` source as tag-probeable even when `source.sha` is present.
-
-A plausible wrong implementation still passes: restore the previously proposed exemption `parsed.sha === undefined ? { kind: "git", source: parsed } : { kind: "absent" }`. Production would then stop probing tags for commit-pinned entries and D-10-20 would fail in real use, while this test remains green because its stub bypasses that decision and supplies the tag pin anyway. Under the project's unit-test rules, a case that a plausible wrong implementation passes is a blocking test-reliability defect.
-
-**Fix:** Add a real-gate case for a `url`, `git-subdir`, or `github` entry that already carries `sha`. Drive `evaluateUpdateConstraint` with an injected `UpdateConstraintSeam`, assert that `probeDependencyTags` receives that source and returns a different tag oid, and assert the verdict carries that oid/version. Keep the existing preflight case to prove that the resulting pin overrides the entry sha during materialization. Alternatively, drive the full update flow with a local tagged repository and assert the persisted record moves from the entry sha to the constraint-selected tag.
+No narrative findings.
 
 ---
 
-_Reviewed: 2026-09-23T02:27:16Z_
+_Reviewed: 2026-09-23T02:55:54Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
