@@ -14,9 +14,9 @@ provides:
   - fail-closed unreadable-declarer reporting
 affects: [12-02, 12-03, 12-04, 12-07]
 actuals:
-  tokens: 9722
+  tokens: 10518
   tasks: 2
-  commits: 3
+  commits: 5
 plan_head_before: 94463afe198e238d65ae9786e1bed61d456cc641
 tech-stack:
   added: []
@@ -68,7 +68,7 @@ coverage:
         ref: tests/integration/standalone-prune.test.ts#an unreadable declarer refuses prune without changing either scope
         status: pass
     human_judgment: false
-duration: 51min
+duration: 63min
 completed: 2026-09-23
 status: complete
 ---
@@ -79,10 +79,10 @@ The registered `/claude:plugin prune` command now removes dependency orphans fro
 
 ## Performance
 
-- **Duration:** about 51 minutes
+- **Duration:** about 63 minutes
 - **Tasks:** 2
 - **Files changed:** 13
-- **Commits:** 3 production and test commits
+- **Commits:** 3 production and test commits, the initial summary commit, and a comment correction
 
 ## Accomplishments
 
@@ -95,6 +95,8 @@ The registered `/claude:plugin prune` command now removes dependency orphans fro
 1. **RED tracer:** `fcef6310` — failing registered-command integration test, with `RED_EVIDENCE_OK` from the TAP evidence gate.
 2. **Task 1:** `0bbe9b9c` — standalone operation, command wiring, and required direct test pairs.
 3. **Task 2:** `c62ff3d1` — project isolation and unreadable-declarer command cases.
+4. **Initial summary:** `092430b2` — execution record and self-check.
+5. **Comment correction:** `f64c53a9` — documentation of the shared sweep's two callers.
 
 ## Verification
 
@@ -105,6 +107,7 @@ The registered `/claude:plugin prune` command now removes dependency orphans fro
 - Direct coverage of new `prune.ts`, handler, and operations composition — 100% lines, branches, and functions for each pair.
 - `SKIP=trufflehog,npm-format-check pre-commit run --files <changed files>` — pass before each task commit. The global format hook was skipped under the repository's documented linked-worktree exception because operator-owned `.planning/config.json` has pre-existing formatting drift; changed files passed Prettier separately.
 - `fallow audit --base HEAD` — pass before each task commit. The agent-marker audit returned a JSON runtime error for a missing temporary rule-pack path, which the repository rules classify as non-blocking.
+- The comment correction also passed the full changed-file pre-commit gate and Fallow base audit.
 
 ## Deviations from Plan
 
@@ -119,6 +122,9 @@ The new verb changed exact command inventory and usage bytes, and the operations
 **3. [Rule 1 - Type surface] Exported the shared sweep's declaration type without moving its contract anchor.**
 Fallow found a private type in the new public sweep signature. A type-only re-export made the signature public while preserving the type-member gate's source location.
 
+**4. [Rule 1 - Documentation bug] Corrected comments on the shared sweep.**
+The comments in `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts` described named uninstall only, although standalone prune now calls the sweep too. Commit `f64c53a9` describes both callers without changing behavior.
+
 ## Issues Encountered
 
 The initial `node --test` RED run reported only a file-level failure in this sandbox. Running the file with the TAP reporter showed the intended orphan-retention assertion and passed GSD's `tdd-red-evidence` gate. Task 2's behaviors were already implemented by Task 1, so its added cases passed after the exact failure-row literal was corrected.
@@ -129,4 +135,4 @@ Plan 02 can expand direct fixpoint and failed-member coverage. Later plans add p
 
 ## Self-Check: PASSED
 
-The summary, operation, handler, and command tracer exist on disk. All three task commits exist, and `git rev-list` measures three commits from `plan_head_before` through the Task 2 commit.
+The summary, operation, handler, and command tracer exist on disk. All five listed commits exist, and `git rev-list` measures five commits from `plan_head_before` through the comment correction.
