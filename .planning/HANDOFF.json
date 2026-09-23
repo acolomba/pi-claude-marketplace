@@ -1,0 +1,92 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-09-23T10:35:46.975Z",
+  "phase": "11",
+  "phase_name": "Cross-marketplace dependency allowlist",
+  "phase_dir": ".planning/phases/11-cross-marketplace-dependency-allowlist",
+  "plan": null,
+  "task": 0,
+  "total_tasks": 3,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": 0,
+      "name": "Complete Phase 10 and transition project state to Phase 11",
+      "status": "done",
+      "commit": "adf503e9"
+    },
+    {
+      "id": 1,
+      "name": "Initialize Phase 11 discussion and identify open areas",
+      "status": "done"
+    },
+    {
+      "id": 2,
+      "name": "Select discussion scope",
+      "status": "done",
+      "progress": "The user selected all three open areas (option 4)."
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 1,
+      "name": "Decide marketplace info allowlist output",
+      "status": "not_started"
+    },
+    {
+      "id": 2,
+      "name": "Decide invalid allowlist field handling",
+      "status": "not_started"
+    },
+    {
+      "id": 3,
+      "name": "Decide cross-marketplace refusal message detail",
+      "status": "not_started"
+    },
+    {
+      "id": 4,
+      "name": "Finish discuss-phase artifacts, then research, plan, and execute Phase 11",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {
+      "action": "Answer the three selected Phase 11 discussion areas",
+      "context": "The interactive discussion must finish before CONTEXT.md or planning artifacts are written.",
+      "blocking": true
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "The root plugin's marketplace allowlist governs every new cross-marketplace dependency edge.",
+      "rationale": "ROADMAP Phase 11 and XMKT-01 define the root marketplace as the policy owner.",
+      "phase": "11"
+    },
+    {
+      "decision": "An absent allowCrossMarketplaceDependenciesOn field is an empty allowlist.",
+      "rationale": "This is a locked Phase 11 success criterion.",
+      "phase": "11"
+    },
+    {
+      "decision": "An already-installed dependency bypasses the allowlist guard.",
+      "rationale": "XMKT-02 preserves the existing installed-first guard order.",
+      "phase": "11"
+    },
+    {
+      "decision": "Refusal uses the closed-set cross-marketplace reason, names allowCrossMarketplaceDependenciesOn, and never auto-adds a marketplace.",
+      "rationale": "The upstream parity handoff and D-03-08 already settled these behaviors.",
+      "phase": "11"
+    }
+  ],
+  "uncommitted_files": [
+    " M .claude/settings.json",
+    " M .codex/config.toml",
+    " M .planning/config.json",
+    " M .planning/state.json",
+    "?? .mcp.json"
+  ],
+  "next_action": "Resume Phase 11 discuss-phase in text mode. Ask the first question about marketplace info output, then cover invalid field handling and refusal message detail. Do not write CONTEXT.md until those answers are complete.",
+  "context_notes": "Phase 10 is complete and committed. Phase 11 has no CONTEXT.md, PLAN.md, research, verification, code edits, or implementation commits. Code scouting found the manifest schema in domain/manifest.ts, the installed-first and marketplace-known guard chain in domain/dependency-closure.ts, and marketplace info projection in orchestrators/marketplace/info.ts. The user's five pre-existing worktree changes are not part of this work and must not be staged or rewritten."
+}
