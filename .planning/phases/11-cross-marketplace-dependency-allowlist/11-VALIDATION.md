@@ -28,18 +28,30 @@ created: "2026-09-23"
 
 ## Per-Task Verification Map
 
-Plan task IDs and waves will be filled after the plans are written. The required
-behavior and test targets are:
+Every planned task has a focused check below. Full commands and immediate
+failure conditions remain in each PLAN.md; all results stay pending until execution.
 
-| Requirement | Behavior | Automated command | Status |
-| --- | --- | --- | --- |
-| XMKT-01 | Schema accepts an absent or string-array allowlist and rejects malformed present values with the field name. | `node --test tests/domain/manifest.test.ts` | ⬜ pending |
-| XMKT-01 | A direct cascade uses its root marketplace's list for direct and transitive edges; an added but unlisted marketplace is refused before lookup. | `node --test tests/domain/dependency-closure.test.ts tests/orchestrators/plugin/install-cascade.test.ts` | ⬜ pending |
-| XMKT-02 | An installed dependency satisfies before the allowlist check, including when its marketplace is absent. | `node --test tests/domain/dependency-closure.test.ts tests/orchestrators/plugin/install-cascade.test.ts` | ⬜ pending |
-| XMKT-01 | Reload checks every original declarer before the missing-key cascade, accepts any authorizing declarer, and uses the missing plugin's list for its own transitive edges. | `node --test tests/orchestrators/reconcile/plan.test.ts tests/orchestrators/reconcile/apply.test.ts tests/orchestrators/plugin/install-flow.test.ts` | ⬜ pending |
-| XMKT-01 | Refusal leaves state and files unchanged; an already-recorded missing key skips the policy before manifest reads. | `node --test tests/orchestrators/plugin/install-flow.test.ts` | ⬜ pending |
-| XMKT-01 | `marketplace info` prints `allowed_marketplaces:` only for nonempty parsed lists, including two-scope output. | `node --test tests/orchestrators/marketplace/info.test.ts tests/shared/notification-grammar.test.ts` | ⬜ pending |
-| XMKT-01 | The closed-set `cross-marketplace` row names the blocked edge and both remedies; catalog and dependency documentation agree. | `node --test tests/orchestrators/plugin/install-cascade.messaging.test.ts tests/architecture/catalog-uat/catalog-contract.test.ts tests/architecture/dependency-doc-agreement.test.ts` | ⬜ pending |
+| Task ID | Wave | Requirement | Behavior | Automated command | Status |
+| --- | --- | --- | --- | --- | --- |
+| 11-01-01 | 1 | XMKT-01 | Real marketplace command accepts a string array and rejects a scalar with the field named. | `node --test tests/domain/manifest.test.ts tests/orchestrators/marketplace/add.test.ts` | ⬜ pending |
+| 11-01-02 | 1 | XMKT-01 | Complete schema matrix preserves all string values and refuses every malformed present shape. | `node --test tests/domain/manifest.test.ts tests/orchestrators/marketplace/add.test.ts` | ⬜ pending |
+| 11-02-01 | 2 | XMKT-01 | Info displays only nonempty lists, safely escaped and independently scoped. | `node --test tests/orchestrators/marketplace/info.test.ts tests/shared/notification-grammar.test.ts` | ⬜ pending |
+| 11-02-02 | 2 | XMKT-01 | Info catalog and type anchors agree. | `node --test tests/architecture/catalog-uat/catalog-contract.test.ts tests/architecture/catalog-uat/catalog-parser.test.ts` | ⬜ pending |
+| 11-03-01 | 3 | XMKT-01 | The real notify boundary renders cross-marketplace with both remedies. | `node --test tests/architecture/catalog-uat/catalog-contract.test.ts tests/architecture/catalog-uat/catalog-parser.test.ts` | ⬜ pending |
+| 11-03-02 | 3 | XMKT-01 | Reason membership, ordering, count, classification, and type anchors stay coherent. | `node --test tests/architecture/notify-closed-set-locks.test.ts tests/architecture/compat-01-no-expansion.test.ts tests/shared/notification-types.test.ts tests/architecture/catalog-uat/catalog-contract.test.ts tests/architecture/catalog-uat/catalog-parser.test.ts tests/architecture/no-orchestrator-network.test.ts` | ⬜ pending |
+| 11-04-01 | 4 | XMKT-01, XMKT-02 | Real direct install permits a listed edge and refuses an unlisted edge before writes. | `node --test tests/orchestrators/plugin/install-flow.test.ts` | ⬜ pending |
+| 11-04-02 | 4 | XMKT-01, XMKT-02 | Required callers and exhaustive failure documentation remain complete. | `node --test tests/orchestrators/plugin/install-cascade.test.ts tests/architecture/dependency-doc-agreement.test.ts tests/architecture/catalog-uat/catalog-contract.test.ts` | ⬜ pending |
+| 11-05-01 | 5 | XMKT-01, XMKT-02 | Direct root governs transitive edges; installed-first, disabled traversal, exact strings, and guard order remain correct. | `node --test tests/orchestrators/plugin/install-flow.test.ts tests/domain/dependency-closure.test.ts tests/orchestrators/plugin/install-cascade.test.ts tests/orchestrators/plugin/enable-disable.test.ts` | ⬜ pending |
+| 11-05-02 | 5 | XMKT-01, XMKT-02 | Production refusal projection preserves the policy root, declarer, and both remedies. | `node --test tests/shared/notify-reasons.test.ts tests/orchestrators/plugin/install-cascade.messaging.test.ts tests/architecture/dependency-doc-agreement.test.ts tests/architecture/catalog-uat/catalog-contract.test.ts` | ⬜ pending |
+| 11-06-01 | 6 | XMKT-01, XMKT-02 | Missing install checks original declarers before B's cascade and skips recorded B before policy reads. | `node --test tests/orchestrators/plugin/install-flow.test.ts` | ⬜ pending |
+| 11-06-02 | 6 | XMKT-01, XMKT-02 | Reload retains every eligible declarer, accepts any grant, and preserves the refusal reason. | `node --test tests/orchestrators/reconcile/plan.test.ts tests/orchestrators/reconcile/apply.test.ts tests/orchestrators/plugin/install-flow.test.ts` | ⬜ pending |
+| 11-06-03 | 6 | XMKT-01, XMKT-02 | B's own policy controls B-to-C; refusal is fail-clean and corrected-policy reload retries succeed. | `node --test tests/orchestrators/plugin/install-flow.test.ts tests/orchestrators/reconcile/types.test.ts` | ⬜ pending |
+| 11-07-01 | 7 | XMKT-01, XMKT-02 | Complete user guidance agrees with the actual production composer. | `node --test tests/architecture/dependency-doc-agreement.test.ts tests/architecture/partial-vocabulary-guard.test.ts` | ⬜ pending |
+| 11-07-02 | 7 | XMKT-01, XMKT-02 | Reload catalog, offline boundaries, and all project gates have honest results. | `npm run check` | ⬜ pending |
+
+Every command fails verification on a non-zero exit, a zero-test summary where
+tests are expected, or a missing required downstream gate. Preserve and report
+the known operator-owned formatting baseline; it is not a passing full check.
 
 ## Wave 0 Requirements
 

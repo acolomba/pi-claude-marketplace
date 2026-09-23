@@ -473,11 +473,47 @@ Plans:
 2. A dependency already installed in the scope satisfies the declaration whatever the allowlist says. (XMKT-02)
 3. A `marketplace.json` without the field behaves as an empty allowlist; `info` and the cascade read the same parsed value.
 
-**Plans**: 0 plans
+**Plans**: 7 plans
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 11 to break down)
+**Wave 1**
+
+- [ ] 11-01-PLAN.md — validate the optional allowlist as an exact array of strings (XMKT-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 11-02-PLAN.md — show the parsed allowlist in marketplace info (XMKT-01)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 11-03-PLAN.md — add the closed-set refusal reason and both remedies (XMKT-01)
+
+**Wave 4** *(blocked on Waves 2 and 3 completion)*
+
+- [ ] 11-04-PLAN.md — enforce the root marketplace policy in direct installs (XMKT-01, XMKT-02)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 11-05-PLAN.md — cover transitive and installed cases and refusal output (XMKT-01, XMKT-02)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 11-06-PLAN.md — authorize reload's original edge and preserve all declarers (XMKT-01, XMKT-02)
+
+**Wave 7** *(blocked on Waves 5 and 6 completion)*
+
+- [ ] 11-07-PLAN.md — publish the policy, pin reload output, and run regression gates (XMKT-01, XMKT-02)
+
+**Cross-cutting constraints:**
+
+- A direct install uses only its root marketplace's parsed allowlist for every uninstalled foreign edge; being added alone grants no permission.
+- Absent and empty allowlists permit same-root edges and refuse new foreign edges before dependency catalog lookup or materialization.
+- Every edge is recorded before the installed check; installed dependency ranges remain merged and existing version checks still run.
+- A recorded foreign dependency is exempt from the new policy even when its marketplace is absent; enabled records remain walls and disabled records retain direct install's existing read-through/re-enable behavior.
+- For A@alpha -> B@beta -> C@gamma, alpha must allow both beta and gamma; beta's own list cannot authorize C during that direct install.
+- A policy refusal changes no persistent state, config, plugin files, or marketplace clones and reports cross-marketplace plus both remedies.
+- Marketplace matching is exact and case-sensitive; strings are neither trimmed nor normalized.
 
 **Notes.** Owners: `domain/manifest.ts` (schema field), `domain/dependency-closure.ts` (the guard slots after the already-installed check and before resolution, per D-03-10), a new closed-set reason on every pin surface. D-03-08 parity holds: upstream never auto-adds a marketplace to satisfy a dependency, and neither does this.
 
