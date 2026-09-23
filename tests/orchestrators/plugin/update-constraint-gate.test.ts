@@ -1006,21 +1006,24 @@ describe("admitResolvedVersion", () => {
     assert.strictEqual(result.kind, "held");
   });
 
-  test("UPDT-02: a holder set that declared no range is still named on the held line", () => {
-    // arrange -- no holder here has a range to reject the version with, so
-    // the per-holder filter finds nobody; the line names the whole set
-    // rather than ending on "required by" with no subject.
-    const holders: readonly ConstraintHolder[] = [{ key: "a@mp", disabled: false }];
-    const verdict = admits("^1.0.0", holders);
+  test("UPDT-02: a holder that declared no range is left off the held line", () => {
+    // arrange -- `b@mp` holds the key without constraining it, so it has
+    // nothing to reject the version with and sending the user to it would be
+    // a wrong remedy.
+    const holders: readonly ConstraintHolder[] = [
+      { key: "a@mp", range: "<=1.5.0", disabled: false },
+      { key: "b@mp", disabled: false },
+    ];
+    const verdict = admits("<=1.5.0", holders);
 
     // act
-    const result = admitResolvedVersion(verdict, "5.0.0");
+    const result = admitResolvedVersion(verdict, "1.6.0");
 
     // assert
     assert.ok(result.kind === "held");
     assert.strictEqual(
       result.cause,
-      'version 5.0.0 falls outside what the combined range admits (^1.0.0) -- required by "a@mp"',
+      'version 1.6.0 falls outside what the combined range admits (<=1.5.0) -- required by "a@mp"',
     );
   });
 });

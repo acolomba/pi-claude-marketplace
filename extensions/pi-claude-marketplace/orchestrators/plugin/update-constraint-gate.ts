@@ -508,17 +508,18 @@ export function admitResolvedVersion(
     return { kind: "admitted" };
   }
 
+  // The rejecting set is never empty here, so the line always has a subject
+  // behind `-- required by`. `admits.range` IS the intersection of the
+  // holders' own declared ranges, and a version outside an intersection is
+  // outside at least one of its members. An `admits` verdict only exists once
+  // that intersection is narrower than `*`, and a holder set whose members
+  // all declared no range folds to `*` and returns `unconstrained` instead,
+  // so at least one declared range is always in play.
   const rejecting = admits.holders.filter(
     (holder) => holder.range !== undefined && !recordedVersionSatisfies(toVersion, holder.range),
   );
-  // A version outside the fold is outside at least one DECLARED range, so a
-  // holder set that produced the fold always has a rejecting member. A
-  // holder set whose members all declared no range has none -- name the
-  // whole set then, rather than end the line on "required by" with nobody
-  // behind it, which is a row the user cannot act on.
-  const named = rejecting.length > 0 ? rejecting : admits.holders;
   return {
     kind: "held",
-    cause: describeConstraint(admits.range, named, "out-of-range", toVersion),
+    cause: describeConstraint(admits.range, rejecting, "out-of-range", toVersion),
   };
 }
