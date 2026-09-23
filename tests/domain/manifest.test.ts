@@ -43,6 +43,7 @@ async function manifestFileWith(t: TestContext, manifestBody: string): Promise<s
 describe("marketplace manifest schema", () => {
   for (const marketplaceManifest of [
     { name: "marketplace", plugins: [] },
+    { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: ["tools"] },
     {
       name: "marketplace",
       plugins: [
@@ -90,6 +91,10 @@ describe("marketplace manifest schema", () => {
     [{ name: "marketplace", plugins: [], owner: null }, "/owner: must be object"],
     [{ name: "marketplace", plugins: [], owner: {} }, "/owner: must have required properties name"],
     [{ name: "marketplace", plugins: [], owner: { name: 42 } }, "/owner/name: must be string"],
+    [
+      { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: "tools" },
+      "/allowCrossMarketplaceDependenciesOn: must be array",
+    ],
   ] as const) {
     test(`rejects ${JSON.stringify(marketplaceManifest)}`, async (t) => {
       // arrange

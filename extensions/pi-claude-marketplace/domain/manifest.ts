@@ -30,6 +30,7 @@ const MARKETPLACE_SCHEMA = Type.Object({
   name: Type.String(),
   plugins: Type.Array(PLUGIN_ENTRY_SCHEMA),
   strict: Type.Optional(Type.Boolean()),
+  allowCrossMarketplaceDependenciesOn: Type.Optional(Type.Array(Type.String())),
   owner: Type.Optional(
     Type.Object({
       name: Type.String(),
