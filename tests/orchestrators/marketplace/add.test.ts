@@ -516,6 +516,69 @@ test("MA-8 / ATTR-07: duplicate name in same scope renders (failed) {duplicate n
   });
 });
 
+test("accepts a path marketplace with an allowed dependency marketplace", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "allowed-marketplace");
+    const manifestDirectory = path.join(marketplaceRoot, ".claude-plugin");
+    await mkdir(manifestDirectory, { recursive: true });
+    await writeFile(
+      path.join(manifestDirectory, "marketplace.json"),
+      JSON.stringify({
+        name: "allowed-marketplace",
+        plugins: [],
+        allowCrossMarketplaceDependenciesOn: ["tools"],
+      }),
+    );
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps, state } = createGitOps();
+
+    // act
+    await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: marketplaceRoot, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● allowed-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(Object.keys((await loadState(locations.extensionRoot)).marketplaces), [
+      "allowed-marketplace",
+    ]);
+    assert.deepStrictEqual(state.cloneCalls, []);
+  });
+});
+
+test("rejects a path marketplace with a scalar dependency allowlist", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "invalid-allowlist");
+    const manifestDirectory = path.join(marketplaceRoot, ".claude-plugin");
+    await mkdir(manifestDirectory, { recursive: true });
+    await writeFile(
+      path.join(manifestDirectory, "marketplace.json"),
+      JSON.stringify({
+        name: "invalid-allowlist",
+        plugins: [],
+        allowCrossMarketplaceDependenciesOn: "tools",
+      }),
+    );
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps, state } = createGitOps();
+
+    // act
+    await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: marketplaceRoot, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n" +
+          `⊘ ${marketplaceRoot} [project] (failed) {invalid manifest}`,
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+    assert.deepStrictEqual(state.cloneCalls, []);
+  });
+});
+
 test("MA-9 / ATTR-07: invalid manifest after clone renders (failed) {invalid manifest}; cleanupStaging still runs", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
