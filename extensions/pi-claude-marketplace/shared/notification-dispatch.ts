@@ -314,9 +314,10 @@ export function notify(
   const blocks = message.marketplaces.map((mp) => composeMarketplaceBlock(mp, probe));
   const body = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
 
-  // OUT-03 / OUT-04 / D-04: the per-operation tally renders on PLURAL ops
-  // (cardinality === "plural"), sits AFTER the body and BEFORE the reload-hint
-  // trailer, and is empty for single-target / legacy emissions.
+  // OUT-03 / OUT-04 / D-04: PLURAL cardinality makes the per-operation tally
+  // eligible. The tally sits AFTER the body and BEFORE the reload-hint trailer.
+  // It is empty for an empty default result and for single-target / legacy
+  // emissions.
   const tally = composeTally(message);
 
   // Compute reload-hint per the state-change trigger ladder and append it

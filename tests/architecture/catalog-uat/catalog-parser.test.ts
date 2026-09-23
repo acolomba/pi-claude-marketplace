@@ -76,7 +76,7 @@ test("loadCatalogExamples parses all 227 independent catalog tuples", async () =
   assert.deepStrictEqual(examples[0], {
     section: "/claude:plugin list",
     state: "empty",
-    expected: "(no marketplaces)\n\nPlugin list: 0 successes",
+    expected: "(no marketplaces)",
   });
   assert.deepStrictEqual(examples.at(-1), {
     section: "manual-recovery-anchors",

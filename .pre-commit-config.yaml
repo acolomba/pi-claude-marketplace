@@ -121,7 +121,7 @@ repos:
         entry: npm run fallow
         language: system
         pass_filenames: false
-        files: '^(\.fallowrc\.json|tsconfig\.json|eslint\.config\.js|(extensions|tests)/.*\.(ts|mjs)|scripts/.*\.mjs|package(-lock)?\.json)$'
+        files: '^(\.fallowrc\.json|rule-packs/.*\.json|tsconfig\.json|eslint\.config\.js|(extensions|tests)/.*\.(ts|mjs)|scripts/.*\.mjs|package(-lock)?\.json)$'
       # Fails any workflow that installs npm packages without --ignore-scripts.
       # It runs on the change itself, before the code is committed.
       - id: workflow-install-scripts

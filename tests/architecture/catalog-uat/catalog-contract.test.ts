@@ -134,8 +134,10 @@ const EXPECTED_SECTION_COUNT = 20;
 // whose cause line names the effective range and its holders (225 -> 226).
 // D-10-12: +1 state for the autoupdate cascade's held row -- the same token,
 // cause line and `warning` severity the manual cascade renders (226 -> 227).
+// #209 removes empty success tallies without changing the state count; the
+// catalog is 127 UTF-8 bytes shorter after the merge.
 const EXPECTED_STATE_COUNT = 227;
-const EXPECTED_UTF8_BYTES = 31_539;
+const EXPECTED_UTF8_BYTES = 31_412;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,

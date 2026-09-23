@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { watch } from "node:fs";
 import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -1452,19 +1451,16 @@ test("reports a concurrent in-lock disappearance as an empty successful removal"
     name: "concurrent",
     source: pathSource("./concurrent"),
   });
-  const replacementPath = path.join(locations.extensionRoot, "replacement-state.json");
-  await writeFile(replacementPath, '{\n  "schemaVersion": 2,\n  "marketplaces": {}\n}\n');
-  let replaced = false;
-  const stateLockName = path.basename(locations.stateLockFile);
-  const watcher = watch(locations.extensionRoot, (_event, filename) => {
-    if (!replaced && filename === stateLockName) {
-      replaced = true;
-      void rename(replacementPath, locations.stateJsonPath);
-    }
-  });
-  testContext.after(() => {
-    watcher.close();
-  });
+  // The pre-guard probe reads the real file and finds the record; this load,
+  // which runs inside the lock, does not. That asymmetry IS the concurrent
+  // removal, expressed without racing a real writer.
+  let inLockLoads = 0;
+  const stateTransaction = {
+    loadState: async (): Promise<ExtensionState> => {
+      inLockLoads += 1;
+      return await Promise.resolve({ schemaVersion: 2 as const, marketplaces: {} });
+    },
+  };
   const cascade: typeof cascadeUnstagePlugin = () => {
     throw new Error("cascade must not run after the record vanished");
   };
@@ -1480,10 +1476,11 @@ test("reports a concurrent in-lock disappearance as an empty successful removal"
     scope: "project",
     cwd,
     cascade,
+    stateTransaction,
   });
 
   // assert
-  assert.strictEqual(replaced, true);
+  assert.strictEqual(inLockLoads, 1);
   assert.strictEqual(outcome, undefined);
   assert.deepStrictEqual(notification.calls, [{ message: "● concurrent [project] (removed)" }]);
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {

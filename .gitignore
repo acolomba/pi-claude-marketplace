@@ -3,6 +3,7 @@
 /.agents/skills/herdr/
 /.agents/skills/humanizer/
 /.agents/skills/simple-english/
+/.agents/skills/fallow/
 # fetch record for the skills above, not a version pin (see CONTRIBUTING.md)
 /skills-lock.json
 
@@ -14,6 +15,7 @@
 
 # gsd
 /.gsd
+/.gsd-capabilities.json
 /.planning/research/.cache/
 
 # claude
@@ -36,6 +38,7 @@
 /.claude/skills/herdr
 /.claude/skills/humanizer
 /.claude/skills/simple-english
+/.claude/skills/fallow
 /.claude/skills/spike-findings-*/
 
 # codex

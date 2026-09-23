@@ -173,7 +173,7 @@ ______________________________________________________________________
 
 Plugin-list surface. Marketplaces render as list-surface headers (`mp.status === undefined`); `mp.details.autoupdate` drives the `<autoupdate>` marker; plugin rows indent two spaces beneath.
 
-The command is structurally plural, independent of the number of rows it finds. Every example therefore ends with a `Plugin list:` tally, including the zero-result sentinel and one-result inventories. Plugin leaf rows are the counted operations; an empty marketplace header is grouping context, while a failed marketplace with no plugin children counts as one failure.
+The command is structurally plural, independent of the number of rows it finds. For an empty result, the sentinel is the complete body. Nonempty examples retain a `Plugin list:` tally. Plugin leaf rows are the counted operations. An empty marketplace header is grouping context. A failed marketplace with no plugin children counts as one failure.
 
 The optional filter flags (`--installed`, `--available`, `--unavailable`, `--partial`) select buckets by union; with no flag every bucket renders. They partition cleanly (LIST-01 / D-67-01): `--installed` spans the full installed inventory -- `installed`, `upgradable`, `disabled`, and the derived `partially-installed` / `partially-upgradable` rows; `--available` selects not-installed installable plugins; `--partial` selects not-installed plugins that resolve `partially-available` (the partially-available candidates); `--unavailable` selects only structurally-unavailable plugins. The list surface de-collapses the render token by resolver state (USTAT-01 / D-64-01): a not-installed plugin resolving `partially-available` renders `(partially-available)` / `⊖`, while a structurally-unavailable plugin renders `(unavailable)` / `⊘`. The `--partial` / `--unavailable` filters key on the internal resolver-state bucket, which is independent of the render token (so the partition is unaffected by the token split). There is no `--upgradable` filter.
 
@@ -183,11 +183,9 @@ The optional filter flags (`--installed`, `--available`, `--unavailable`, `--par
 
 ```text
 (no marketplaces)
-
-Plugin list: 0 successes
 ```
 
-The renderer emits the literal `(no marketplaces)` body for an empty top-level `marketplaces: []` (per D-16-17), followed by the structural plural zero-result tally. No reload-hint, no severity arg (info).
+The renderer emits the literal `(no marketplaces)` for an empty top-level `marketplaces: []` (per D-16-17). The sentinel is the complete body. Nonempty plural results retain their tally. No reload hint or severity argument appears.
 
 ### Single marketplace, mixed plugin statuses (user scope)
 
@@ -1913,11 +1911,9 @@ Marketplace-list surface. Each marketplace renders as a list-surface header carr
 
 ```text
 (no marketplaces)
-
-Marketplace list: 0 successes
 ```
 
-Empty top-level `marketplaces: []` renders the sentinel literal per D-16-17. Because list is structurally plural, the zero-result tally remains visible. No reload-hint, no severity arg.
+Empty top-level `marketplaces: []` renders the sentinel literal per D-16-17. The command remains structurally plural. The sentinel is the complete body. Nonempty examples retain their tally. No reload hint or severity argument appears.
 
 ### Single marketplace
 
@@ -2955,11 +2951,9 @@ With `<name>`, this is a single marketplace, multi-plugin cascade and emits no t
 
 ```text
 (no marketplaces)
-
-Marketplace update: 0 successes
 ```
 
-The no-name invocation remains plural when target discovery finds nothing.
+The no-name invocation remains plural when target discovery finds nothing. The empty sentinel is the complete body. Nonempty examples retain their tally.
 
 ### All marketplaces -- one target
 
@@ -3459,11 +3453,9 @@ Idempotent no-op -- the flag was already in the requested state. `mp.status` = `
 
 ```text
 (no marketplaces)
-
-Marketplace autoupdate: 0 successes
 ```
 
-The no-name invocation is plural even when no marketplace rows exist.
+The no-name invocation remains plural when no marketplace rows exist. The empty sentinel is the complete body. Nonempty examples retain their tally.
 
 ### All marketplaces -- one result
 

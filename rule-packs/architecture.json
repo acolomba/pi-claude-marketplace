@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "name": "architecture",
+  "description": "Call bans that hold across every zone of the extension. A rule here applies by file glob, so an exemption can name one file where the boundary matrix could only name a zone.",
+  "rules": [
+    {
+      "id": "no-direct-stdio",
+      "kind": "banned-call",
+      "callees": ["process.stdout.*", "process.stderr.*"],
+      "files": ["extensions/**"],
+      "message": "IL-2: user-visible output goes through ctx.ui.notify; the extension never writes to stdout or stderr directly."
+    }
+  ]
+}
