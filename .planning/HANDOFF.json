@@ -1,8 +1,8 @@
 {
   "version": "1.0",
-  "timestamp": "2026-09-22T21:59:00.183Z",
+  "timestamp": "2026-09-23T10:40:14.991Z",
   "phase": "117",
-  "phase_name": "Measured `agent()` failure evidence (milestone workflows-replay, archived)",
+  "phase_name": "Measured agent failure evidence (milestone workflows-replay, archived)",
   "phase_dir": ".planning/workstreams/workflows",
   "plan": null,
   "task": null,
@@ -11,96 +11,102 @@
   "completed_tasks": [
     {
       "id": 1,
-      "name": "Load the host workflow engine in scripts/pi.sh",
+      "name": "Diagnose the OpenAI child-tool failure and commit the resolved debug record",
       "status": "done",
-      "commit": "d467c09e"
+      "commit": "a0d8f9ee"
     },
     {
       "id": 2,
-      "name": "Live UAT of code-modernization workflows against a scoped legacy/demo slice",
+      "name": "Confirm pi-dynamic-workflows 3.13.0 is current upstream and isolate three engine defects",
       "status": "done",
       "commit": null
     },
     {
       "id": 3,
-      "name": "Record broken-window ledger entries 83 (agentType) and 84 (unproven output)",
+      "name": "Fix explicit-extension result delivery and open upstream PR 232",
       "status": "done",
-      "commit": "c940bffc"
+      "commit": "8c62327"
     },
     {
       "id": 4,
-      "name": "Fix the agentType gap: declaredAgentName + aliases, 52 test pins, compat doc",
+      "name": "Fix host and child Pi SDK compatibility and open upstream PR 233",
       "status": "done",
-      "commit": "c940bffc"
+      "commit": "d3ef63a"
     },
     {
       "id": 5,
-      "name": "Merge main (PR #210 + 0.19.0) and follow workflows into the component lists",
+      "name": "Fix the completed workflow status heading and open upstream PR 234",
       "status": "done",
-      "commit": "b795979f"
+      "commit": "abb61e7"
+    },
+    {
+      "id": 6,
+      "name": "Run a combined OpenAI plugin smoke test across Pi host 0.85.1 and engine dependency 0.87.0",
+      "status": "done",
+      "commit": null
     }
   ],
   "remaining_tasks": [
     {
-      "id": 6,
-      "name": "Close ledger 84: add a second provider to tmp/pi-uat/agent and re-run one workflow",
-      "status": "not_started"
-    },
-    {
       "id": 7,
-      "name": "Decide the version question: main released 0.19.0 and this branch was already 0.19.0",
+      "name": "Monitor upstream PRs 232, 233, and 234; respond to review and CI",
       "status": "not_started"
     },
     {
       "id": 8,
-      "name": "Open the PR for features/workflow",
+      "name": "Decide the version bump for features/workflow",
+      "status": "not_started"
+    },
+    {
+      "id": 9,
+      "name": "Open the pi-claude-marketplace features/workflow PR",
+      "status": "not_started"
+    },
+    {
+      "id": 10,
+      "name": "Decide whether to fix the code-modernization credential-finding semantic dedup issue",
       "status": "not_started"
     }
   ],
   "blockers": [
     {
-      "description": "Workflow engine subagents are offered NO tools (not even structured_output), so workflow OUTPUT quality is unproven. Ledger entry 84. Main-session tool calls work fine on the same provider, so it is the engine<->pi child-session boundary.",
+      "description": "Upstream PRs 232, 233, and 234 are open but GitHub reports BLOCKED with no checks because a maintainer must approve the first CI run from the new fork.",
       "type": "external",
-      "workaround": "None. Five candidate causes already ruled out by experiment (tool-search deferral, model choice, the agentType allowlist, customTools API drift, our bridge). Needs a second provider to isolate."
+      "workaround": "Wait for maintainer approval, then inspect CI and review feedback."
     }
   ],
   "async_jobs": [],
   "human_actions_pending": [
     {
-      "action": "Add an Anthropic API key to tmp/pi-uat/agent (auth.json currently holds openai-codex only)",
-      "context": "The only way left to isolate ledger 84: if child sessions get tools under a second provider it is codex-specific, if not it is an engine<->pi bug to file upstream.",
-      "blocking": false
+      "action": "Rotate or re-authenticate the OpenAI credential that was exposed during the earlier audit investigation.",
+      "context": "Copied credentials were removed from both disposable /tmp sandboxes, but credential rotation requires the account owner.",
+      "blocking": true
     },
     {
-      "action": "Decide whether features/workflow needs a version bump before the PR",
-      "context": "main released 0.19.0 while this branch was already at 0.19.0, so package.json / EXTENSION_VERSION / sonar auto-merged with no conflict and the unreleased workflows work now sits under a released number. Nothing flagged it.",
+      "action": "Decide whether features/workflow needs a version bump before its PR.",
+      "context": "Main released 0.19.0 while this branch already used 0.19.0, so the workflows changes still need an explicit release-version decision.",
       "blocking": false
     }
   ],
   "decisions": [
     {
-      "decision": "Split the agent identity in two: the file keeps its pi-claude-marketplace- basename, a new declaredAgentName() supplies the frontmatter name as <plugin>:<agent>",
-      "rationale": "One value was serving both the AG-5 ownership marker (filename) and the name both consumers resolve (frontmatter). Only the latter had to change, so the ownership marker and the AGENT-01 migration seam stay untouched.",
+      "decision": "Use OpenAI credentials only for workflow validation.",
+      "rationale": "The workflow must work with an OpenAI model, and the user explicitly rejected an Anthropic-credential dependency.",
       "phase": "117"
     },
     {
-      "decision": "Use a literal ':' rather than commandNamespaceSeparator()",
-      "rationale": "That helper spells a dot on Windows because command and skill names become filenames. The declared agent name never reaches the filesystem, and a Windows dot would miss the agentType a workflow script names exactly as the old flat form did.",
+      "decision": "Submit three pi-dynamic-workflows PRs instead of one combined PR.",
+      "rationale": "The upstream contributor guide requires one concern per PR. Delivery, runtime compatibility, and status rendering are independent defects.",
       "phase": "117"
     },
     {
-      "decision": "Carry the old flat name as an `aliases` frontmatter entry",
-      "rationale": "pi-subagents resolves aliases (agents.ts:1525), so the rename is non-breaking for existing references. The engine ignores aliases, which is correct: nothing ever addressed the flat name as an agentType.",
+      "decision": "Keep the combined integration branch local and test patch-identical cherry-picks of the three PR commits.",
+      "rationale": "The upstream PRs must stay isolated, while the local combined build verifies their interaction before merge.",
       "phase": "117"
     },
     {
-      "decision": "Update the 52 merge/rename test pins per-site rather than by sweep",
-      "rationale": "The flat-name occurrences are not interchangeable. Emitter-output fixtures must move; legacy oldBytes/previousBytes fixtures, index entries and targetPaths must stay flat. A regex would have rewritten the migration tests' own inputs to match their expectations.",
-      "phase": "117"
-    },
-    {
-      "decision": "Give the WR-06 advisory test a row instead of deleting the tally from its expectation",
-      "rationale": "main's #209 suppresses the success line on an empty result. With no tally the test would no longer prove the ordering its name claims ('folds advisory lines before the tally').",
+      "decision": "Do not change pi-claude-marketplace production code for the engine defects.",
+      "rationale": "The root causes and fix sites are in pi-dynamic-workflows. The marketplace bridge already installed and invoked the saved workflow correctly.",
       "phase": "117"
     }
   ],
@@ -110,6 +116,6 @@
     "?? .mcp.json",
     "?? .planning/workstreams/workflows/.verification-ledger.json"
   ],
-  "next_action": "Decide the version question and open the PR for features/workflow; ledger 84 can close later and does not gate the PR.",
-  "context_notes": "The milestone is archived and all nine phases are complete; this session was PR-prep, not phase execution. Three commits sit on top of the archived milestone: d467c09e (pi.sh loads the engine), c940bffc (the agentType fix), b795979f (merge of main). npm run check was green immediately before the merge commit. The uncommitted files are deliberate: the codegraph wiring is per-machine and never staged. IMPORTANT on verification: report a gate's result from CHECK_EXIT written into the log, never from a tool-reported exit code -- that misread npm run check twice this session, in opposite directions."
+  "next_action": "Check upstream PRs 232-234 for approved CI or review feedback, then decide the features/workflow version bump and prepare the repository PR.",
+  "context_notes": "No active phase exists. The workflows-replay milestone is archived, and this was post-milestone UAT plus upstream defect work. features/workflow is seven commits ahead of origin/features/workflow. The final smoke run read-fixture-mudxlglt-nz0e5t used the current marketplace extension, Pi host 0.85.1, a local combined engine build with Pi dependency 0.87.0, and OpenAI gpt-5.6-terra. It called native read and structured_output with zero errors, returned workflow-tool-probe, delivered into the parent session, removed pendingDelivery, and rendered Workflow completed. Cost was about $0.0059. No background process remains. Do not infer a cross-version test from source state: read the installed host and engine package versions first. Do not report gate status from a compound shell command's final exit code."
 }
