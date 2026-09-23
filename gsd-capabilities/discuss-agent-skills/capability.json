@@ -1,0 +1,34 @@
+{
+  "id": "discuss-agent-skills",
+  "role": "feature",
+  "version": "1.0.0",
+  "title": "Discuss phase agent skills",
+  "description": "Loads project-configured discuss-phase skills before phase analysis.",
+  "tier": "core",
+  "requires": [],
+  "engines": {
+    "gsd": ">=1.14.0"
+  },
+  "runtimeCompat": {
+    "supported": ["*"],
+    "unsupported": []
+  },
+  "skills": [],
+  "agents": [],
+  "hooks": [],
+  "config": {},
+  "steps": [],
+  "contributions": [
+    {
+      "point": "discuss:pre",
+      "into": "orchestrator",
+      "fragment": {
+        "path": "fragments/load-discuss-agent-skills.md"
+      },
+      "produces": [],
+      "consumes": [],
+      "onError": "halt"
+    }
+  ],
+  "gates": []
+}

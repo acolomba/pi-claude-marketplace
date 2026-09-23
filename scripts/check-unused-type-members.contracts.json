@@ -266,20 +266,20 @@
       "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts:541:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:674:38",
+      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:686:38",
       "owner": "removeMarketplace.opts",
       "key": "notifications",
       "category": "type-refinement",
       "purpose": "Narrows notifications at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:674:9"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:686:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:674:55",
+      "id": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:686:55",
       "owner": "removeMarketplace.opts.notifications",
       "key": "mode",
       "category": "type-refinement",
       "purpose": "Narrows mode at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:674:9"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts:686:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts:105:78",
