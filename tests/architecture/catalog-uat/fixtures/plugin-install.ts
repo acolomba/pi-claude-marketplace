@@ -778,6 +778,41 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
       },
     },
 
+    // D-11-06: an added marketplace still needs the root marketplace's
+    // permission before a new dependency may install from it. The cause names
+    // the declaration and both remedies while the cascade stays fail-clean.
+    "dependency-cross-marketplace": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "formatter@tools",
+                reasons: ["cross-marketplace"],
+                cause: new Error(
+                  'Dependency "formatter@tools", declared by "helper@official", is from marketplace "tools", which root marketplace "official" does not allow. Install "formatter@tools" manually first, or add "tools" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "official".',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // RESV-01: the dependency's marketplace IS added but declares no entry under
     // that name. The inherited `not in manifest` token already states exactly
     // this, so the cascade mints nothing for it.

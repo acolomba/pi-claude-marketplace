@@ -351,6 +351,8 @@ type CommandPrivateReason =
   | "constraint too complex"
   | "invalid version constraint"
   | "dependency marketplace not added"
+  // D-11-06: the root marketplace's policy refuses this dependency edge.
+  | "cross-marketplace"
   | "dependency cycle"
   | "dependency failed"
   // TAGS-02 / D-07-03: no marketplace tag satisfied the path-source

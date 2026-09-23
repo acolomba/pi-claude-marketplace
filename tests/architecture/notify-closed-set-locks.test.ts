@@ -98,6 +98,7 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "dependents remain": true,
   "dependency installed": true,
   "dependents constrain": true,
+  "cross-marketplace": true,
 };
 
 const STATUS_TOKEN_ENROLLMENT: Record<StatusToken, true> = {
@@ -159,7 +160,7 @@ const MARKETPLACE_STATUS_ENROLLMENT: Record<MarketplaceStatus, true> = {
   skipped: true,
 };
 
-test("OUT-08: Reason is the closed 62-entry reason set", () => {
+test("OUT-08: Reason is the closed 63-entry reason set", () => {
   // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
   // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
   // MCPR-03 / D-02: +1 for the malformed mcp failure-class member (34 -> 35).
@@ -251,7 +252,8 @@ test("OUT-08: Reason is the closed 62-entry reason set", () => {
   // constraint gate's marker for a plugin held to versions its installed
   // dependents jointly admit. NOT idempotent: the update the user asked for
   // was not carried out (61 -> 62).
-  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 62);
+  // D-11-06: +1 for the root marketplace's cross-marketplace refusal (62 -> 63).
+  assert.strictEqual(Object.keys(REASON_ENROLLMENT).length, 63);
 });
 
 test("SNM-02: StatusToken is the closed 24-entry token set", () => {

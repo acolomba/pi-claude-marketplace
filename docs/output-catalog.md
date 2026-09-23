@@ -60,7 +60,7 @@ This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ct
 
 ### Reasons rendering
 
-Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 62-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only block is the dependency-cascade vocabulary -- `{no matching version}`, `{version conflict}`, `{constraint too complex}`, `{invalid version constraint}`, `{dependency marketplace not added}`, `{dependency cycle}`, `{dependency failed}`, `{dependency promoted}`, `{dependency pruned}`, `{dependency unsatisfied}`, `{dependency version unsatisfied}`, `{dependents unsatisfied}`, `{dependency current copy}`, `{dependency enabled}`, `{dependents remain}`, `{dependency installed}` and `{dependents constrain}` -- which sits after uninstall's data-disposition marker `{data kept}`. `{dependency disabled}` is RETIRED (EDEP-03): `{dependency enabled}` replaces the skip it used to name.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 63-member `extensions/pi-claude-marketplace/shared/notification-types.ts::Reason` union defines the closed set. The typed `workflows` kind maps to `{workflows}`; the final append-only block is the dependency-cascade vocabulary -- `{no matching version}`, `{version conflict}`, `{constraint too complex}`, `{invalid version constraint}`, `{dependency marketplace not added}`, `{dependency cycle}`, `{dependency failed}`, `{dependency promoted}`, `{dependency pruned}`, `{dependency unsatisfied}`, `{dependency version unsatisfied}`, `{dependents unsatisfied}`, `{dependency current copy}`, `{dependency enabled}`, `{dependents remain}`, `{dependency installed}`, `{dependents constrain}`, and `{cross-marketplace}` -- which sits after uninstall's data-disposition marker `{data kept}`. `{dependency disabled}` is RETIRED (EDEP-03): `{dependency enabled}` replaces the skip it used to name.
 
 Structural `unavailable` rows derive reasons from resolver notes through `narrowResolverNotes`. Partial rows derive typed unsupported kinds through `narrowUnsupportedKinds`. The typed `workflows` kind uses the second path.
 
@@ -932,11 +932,26 @@ Some plugin operations have failed.
   ⊘ helper (failed) {dependency failed}
 ```
 
-The one dependency failure with a trust rule behind it. Nothing here adds or clones a marketplace to satisfy a dependency, so a plugin cannot introduce a new source of code by declaring one against it (D-03-08). The row names the marketplace through the dependency KEY that is its subject -- a closed-set token cannot interpolate a name -- and the cause points at the command that would add it, naming `<source>` rather than the marketplace name because `marketplace add` takes a source.
+The dependency's marketplace is absent from the target scope. The cascade does not add or clone a marketplace to satisfy a declaration (D-03-08). The row names the marketplace through the dependency key, and its cause points at `marketplace add <source>`, which takes a source rather than a marketplace name. An added marketplace is available, but its presence alone does not grant permission for a new cross-marketplace dependency edge (D-11-01).
 
 `{dependency marketplace not added}` is a CONTENT reason and therefore a different token from the three structural `marketplace not added*` markers. Those three carry a standalone marketplace row as their subject and are excluded from `ContentReason` for that reason; this one rides the DEPENDENCY's row, on the `{marketplace in user scope}` precedent -- it explains why THIS dependency could not be resolved and makes no claim about a marketplace the user named.
 
 One deliberate divergence from upstream (D-03-08): upstream warns and installs the requesting plugin degraded. Under this project's all-or-nothing rollback an unknown-marketplace dependency is one more failure among the others and triggers the same whole-cascade unwind.
+
+### Dependency cascade -- root marketplace disallows the target marketplace (D-11-06)
+
+<!-- catalog-state: dependency-cross-marketplace -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@tools (failed) {cross-marketplace}
+    cause: Dependency "formatter@tools", declared by "helper@official", is from marketplace "tools", which root marketplace "official" does not allow. Install "formatter@tools" manually first, or add "tools" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "official".
+  ⊘ helper (failed) {dependency failed}
+```
+
+The target marketplace is added, but the root marketplace has not granted permission to install a new dependency from it. The failed dependency row identifies its declarer, target marketplace, and policy root. Its cause offers both remedies: install the named dependency manually first, or edit the root marketplace's `allowCrossMarketplaceDependenciesOn` list. The requesting plugin has its own failed row. Severity is `error`; neither row requests reload because the refusal happens before materialization.
 
 ### Dependency cascade -- the dependency is not in its marketplace (RESV-01)
 
