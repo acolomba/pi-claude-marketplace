@@ -229,10 +229,18 @@ The empty set, `byKey` map, and read-only state-load option are design recommend
 | A5 | Security enforcement should be treated as enabled where no explicit override was established. | Security Domain | The planner might otherwise omit security tests. |
 | A6 | Preview and actual can promise identical order only for the same state snapshot and successful member removals. | Open Questions | A concurrent change or failed unstage can change the actual member set. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Concurrent change between preview and execution:** no locked preview can promise later execution against identical state. The accepted contract should be same algorithm/order on the same snapshot, with actual execution recomputing under its lock. This is an inference from the mandated read-only preview and locked actual path. [ASSUMED]
-2. **Actual failure versus preview:** a failed member remains installed and may hold later candidates, so actual rows can be fewer than the preview's success-case plan. Retain failed-member protection and document preview as intended removals. [VERIFIED: extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:630-652]
+1. **RESOLVED — Concurrent change between preview and execution:** The preview
+   describes its current, unlocked snapshot. Actual `prune` recomputes inside
+   its write lock; a later concurrent state change can change the candidate
+   set. D-12-01's same-order rule applies when both paths observe the same
+   snapshot. This follows from the mandated read-only preview and locked
+   actual path. [VERIFIED: .planning/phases/12-standalone-prune-with-dry-run/12-CONTEXT.md:20-25; .planning/ROADMAP.md Phase 12 success criteria 1-2]
+2. **RESOLVED — Actual failure versus preview:** A failed member remains
+   installed and can hold later candidates. Preview lists intended removals;
+   actual output may contain fewer successful removal rows and a failure row.
+   Keep the existing failed-member protection. [VERIFIED: extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:630-652; .planning/phases/05-prune-on-uninstall/05-CONTEXT.md D-05-13]
 
 ## Environment Availability
 

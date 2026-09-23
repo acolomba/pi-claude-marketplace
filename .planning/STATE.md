@@ -4,18 +4,18 @@ milestone: v1.20
 milestone_name: transitive-dependencies
 current_phase: 12
 current_phase_name: Standalone prune with dry-run
-status: planning
+status: executing
 stopped_at: Phase 12 context gathered
-last_updated: "2026-09-23T21:12:58.253Z"
+last_updated: "2026-09-23T22:01:37.405Z"
 last_activity: 2026-09-23
 last_activity_desc: Phase 11 complete, transitioned to Phase 12
-state_head: 655b511c432a77f65382f72ffe450b087527824e
+state_head: c8fc580611a1e9dc642ea004c27c62e5ae26a4da
 progress:
   total_phases: 12
   completed_phases: 11
-  total_plans: 47
+  total_plans: 55
   completed_plans: 47
-  percent: 92
+  percent: 85
 ---
 
 # Project State
@@ -36,9 +36,9 @@ under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 12 — Standalone prune with dry-run
+Phase: 12 (Standalone prune with dry-run) — READY TO EXECUTE
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 
 **Phase 11 closed 2026-09-23**, verified 20/20 functional truths and both
 human wording checks. The validated manifest allowlist controls new foreign
