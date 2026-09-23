@@ -317,6 +317,7 @@ const EXPECTED_REASONS = [
   // UPDT-02 / D-10-09: the update-preflight constraint gate's marker for a
   // plugin held to versions its installed dependents jointly admit.
   "dependents constrain",
+  "cross-marketplace",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

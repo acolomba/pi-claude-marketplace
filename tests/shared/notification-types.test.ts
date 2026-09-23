@@ -97,6 +97,7 @@ const EXPECTED_REASONS = [
   "dependents remain",
   "dependency installed",
   "dependents constrain",
+  "cross-marketplace",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [
@@ -232,6 +233,7 @@ const skippedMessage = {
 } satisfies PluginSkippedMessage;
 
 const contentReason: ContentReason = "marketplace in user scope";
+const crossMarketplaceReason: ContentReason = "cross-marketplace";
 const severity: Severity = "warning";
 
 void pluginStatusIsExhaustive;
@@ -240,6 +242,7 @@ void notificationKindIsExhaustive;
 void installedMessage;
 void skippedMessage;
 void contentReason;
+void crossMarketplaceReason;
 void severity;
 
 void ({

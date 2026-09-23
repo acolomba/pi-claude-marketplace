@@ -185,7 +185,10 @@ export type Reason =
   // token claims the source advertised no tag in range, which is false on
   // the arm where a version WAS found and simply falls outside what the
   // dependents allow.
-  | "dependents constrain";
+  | "dependents constrain"
+  // D-11-06: the root marketplace disallows a new cross-marketplace edge.
+  // The cause names the policy root and both available remedies.
+  | "cross-marketplace";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<
