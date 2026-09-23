@@ -136,8 +136,9 @@ const EXPECTED_SECTION_COUNT = 20;
 // cause line and `warning` severity the manual cascade renders (226 -> 227).
 // #209 removes empty success tallies without changing the state count; the
 // catalog is 127 UTF-8 bytes shorter after the merge.
-const EXPECTED_STATE_COUNT = 227;
-const EXPECTED_UTF8_BYTES = 31_412;
+// D-11-04: one nonempty marketplace-info policy state (227 -> 228).
+const EXPECTED_STATE_COUNT = 228;
+const EXPECTED_UTF8_BYTES = 31_560;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -426,7 +427,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 227 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 228 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

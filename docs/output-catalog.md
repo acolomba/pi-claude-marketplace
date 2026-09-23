@@ -2065,7 +2065,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin marketplace info <name>`
 
-Read-only detail surface. Renders the marketplace header at column 0 carrying the `<autoupdate>` or `<no autoupdate>` marker, followed by per-attribute lines (`github:`, `url:`, or `path:`; optional `last_updated:` for git-backed sources github + url per D-76-10; optional `description:` when `marketplace.json` carries one). INFO-01 + INFO-03 + INFO-04 + INFO-07 + MURL-05 lock the full state set below.
+Read-only detail surface. Renders the marketplace header at column 0 carrying the `<autoupdate>` or `<no autoupdate>` marker, followed by per-attribute lines (`github:`, `url:`, or `path:`; optional `last_updated:` for git-backed sources github + url per D-76-10; optional `description:` when `marketplace.json` carries one; `allowed_marketplaces:` for a nonempty parsed allowlist). INFO-01 + INFO-03 + INFO-04 + INFO-07 + MURL-05 lock the full state set below.
 
 Severity routing: every success state is `info` (no second arg to `ctx.ui.notify`); the two `{marketplace not added}` failure states and the `{invalid manifest}` manifest-failure state route to `error`. No reload-hint fires on any state (info surfaces are read-only per SNM-33).
 
@@ -2080,6 +2080,19 @@ Triggered by `marketplace info <name> [--scope ...]` against a github-sourced ma
 github: anthropics/claude-plugins-official#main
 last_updated: 2026-06-03T00:00:00Z
 description: Official Claude plugin marketplace.
+```
+
+### Success -- nonempty allowed marketplaces
+
+Triggered when the parsed `allowCrossMarketplaceDependenciesOn` array is nonempty. The `allowed_marketplaces:` line follows `description:` when present, retains source order, and uses compact JSON array notation. A present empty array and an absent field both omit the line; duplicate and empty-string entries in a nonempty array remain visible. Control and bidirectional characters in entries are escaped for display only. Severity `info`.
+
+<!-- catalog-state: marketplace-info-allowed-marketplaces -->
+
+```text
+● policy-mp [user] <no autoupdate>
+path: /home/user/marketplaces/policy-mp
+description: Policy marketplace.
+allowed_marketplaces: ["tools","team"]
 ```
 
 ### Success -- github source, minimal (no ref, no lastUpdatedAt, no description)

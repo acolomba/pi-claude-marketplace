@@ -501,6 +501,38 @@ for (const { source, expectedSource } of [
   });
 }
 
+test("marketplace info escapes hostile allowlist values on one line without mutation", () => {
+  // arrange
+  const allowedMarketplaces = [
+    'quote"slash\\',
+    "line\nfeed",
+    "c1\u0085",
+    "separators\u2028\u2029",
+    "bidi\u061c\u200e\u200f\u202a\u202e\u2066\u2069",
+    "café",
+    "",
+  ];
+  const before = [...allowedMarketplaces];
+  const message = {
+    kind: "marketplace-info" as const,
+    name: "policy",
+    scope: "user" as const,
+    details: { autoupdate: false },
+    source: { sourceKind: "path" as const, absPath: "/policy" },
+    allowedMarketplaces,
+  };
+
+  // act
+  const rendered = renderMarketplaceInfo(message, bothLoadedProbe());
+
+  // assert
+  assert.equal(
+    rendered,
+    '● policy [user] <no autoupdate>\npath: /policy\nallowed_marketplaces: ["quote\\"slash\\\\","line\\nfeed","c1\\u0085","separators\\u2028\\u2029","bidi\\u061c\\u200e\\u200f\\u202a\\u202e\\u2066\\u2069","café",""]',
+  );
+  assert.deepEqual(allowedMarketplaces, before);
+});
+
 test("marketplace info cascades preserve zero and many shapes and order", () => {
   // arrange
   const first = {

@@ -1130,6 +1130,14 @@ function composeMpInfoHeader(name: string, scope: Scope, details: MarketplaceDet
   return `${ICON_INSTALLED} ${name} [${scope}] ${marker}`;
 }
 
+/** Encode an info-only view; never alter the parsed policy used for matching. */
+function renderAllowedMarketplaces(names: readonly string[]): string {
+  return JSON.stringify(names).replace(
+    /[\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]/g,
+    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
+}
+
 /**
  * INFO-01 / INFO-04: render a `MarketplaceInfoMessage` to its
  * single-string body. Composes:
@@ -1139,7 +1147,9 @@ function composeMpInfoHeader(name: string, scope: Scope, details: MarketplaceDet
  *   - optional `last_updated: <ISO8601>` (git-backed kinds github + url;
  *     never path per D-76-10),
  *   - optional `description: <text>` (single attribute line, NOT wrapped
- *     -- description wrapping is `plugin info`-only per INFO-02).
+ *     -- description wrapping is `plugin info`-only per INFO-02),
+ *   - `allowed_marketplaces:` for a nonempty parsed policy, escaped as one
+ *     compact JSON array without changing the parsed strings.
  *
  * Joins all lines with `\n`. `probe` is unused on info surfaces (info
  * messages do not emit soft-dep markers) but accepted for signature parity
@@ -1183,6 +1193,10 @@ export function renderMarketplaceInfo(
 
   if (message.description !== undefined) {
     lines.push(`description: ${message.description}`);
+  }
+
+  if (message.allowedMarketplaces !== undefined && message.allowedMarketplaces.length > 0) {
+    lines.push(`allowed_marketplaces: ${renderAllowedMarketplaces(message.allowedMarketplaces)}`);
   }
 
   return lines.join("\n");
