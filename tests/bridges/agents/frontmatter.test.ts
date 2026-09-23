@@ -724,6 +724,56 @@ Review files.
     });
   }
 
+  test("renders nonempty aliases before optional metadata and preserves body bytes", () => {
+    // arrange
+    const generatedAgent = {
+      frontmatter: {
+        name: "pi-claude-marketplace-acme-reviewer",
+        description: "Review source changes",
+        aliases: ["review", "audit"],
+        model: "anthropic/claude-sonnet-4-6",
+        skills: [],
+        inheritSkills: false,
+      },
+      provenance: {
+        pluginName: "acme",
+        sourceName: "reviewer",
+        sourcePath: "agents/reviewer.md",
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+      body: "Review the source.\nKeep the final newline.\n",
+    };
+    const expectedGeneratedAgentFile = `---
+name: pi-claude-marketplace-acme-reviewer
+description: Review source changes
+aliases: review,audit
+model: anthropic/claude-sonnet-4-6
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: reviewer
+  sourcePath: agents/reviewer.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Review the source.
+Keep the final newline.
+`;
+
+    // act
+    const generatedAgentFile = emitGeneratedAgentFile(generatedAgent);
+
+    // assert
+    assert.strictEqual(generatedAgentFile, expectedGeneratedAgentFile);
+  });
+
   test("emits complete metadata, sanitized provenance, a skill legend, and exact body bytes", () => {
     // arrange
     const generatedAgent = {
