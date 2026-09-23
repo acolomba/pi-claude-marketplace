@@ -40,7 +40,7 @@ constraint silently unchecked for a phase.
 - [x] **Phase 7: Marketplace-repository tag resolution for path-source dependencies** — a constrained dependency whose marketplace entry is a relative path resolves against the marketplace repository's `{name}--v{version}` tags, read from the local clone offline; no satisfying tag installs the current copy and defers to Phase 6's check. Also records the kept `sha` divergence. (TAGS-01, TAGS-02, TAGS-03, DIVG-01) (completed 2026-09-19)
 - [x] **Phase 8: Enablement parity for dependencies** — `enable` cascades to declared dependencies and lists them, `disable` is refused while an enabled dependent needs the plugin and names the dependents to disable first (D-08-01), and a cascade enables a disabled already-installed dependency through its record instead of skipping it. Closes BACKLOG ENBL-DEP-01. (EDEP-01, EDEP-02, EDEP-03) (completed 2026-09-21)
 - [x] **Phase 9: Reload installs missing declared dependencies** — a reload installs any declared dependency an installed plugin lacks, through the cascade with provenance `dependency`; a dependency that cannot be installed is reported on its own row and the dependent falls to Phase 6's check. (MISS-01, MISS-02) (completed 2026-09-22)
-- [ ] **Phase 10: Constraint-aware update** — `update` and `autoupdate` move a constrained plugin only to the highest version every installed dependent's range accepts, and skip-and-report when none does, naming the constraining plugin. (UPDT-01, UPDT-02)
+- [x] **Phase 10: Constraint-aware update** — `update` and `autoupdate` move a constrained plugin only to the highest version every installed dependent's range accepts, and skip-and-report when none does, naming the constraining plugin. (UPDT-01, UPDT-02) (completed 2026-09-22)
 - [ ] **Phase 11: Cross-marketplace dependency allowlist** — a dependency in another marketplace is refused unless the root marketplace's `marketplace.json` lists it in `allowCrossMarketplaceDependenciesOn`; an already-installed dependency still satisfies. (XMKT-01, XMKT-02)
 - [ ] **Phase 12: Standalone prune with dry-run** — `prune` sweeps the scope's orphaned dependency-installed plugins without uninstalling anything else, `--dry-run` shows the sweep without running it, and the flag surface closes at `--dry-run` alone (no prompt, no `-y`). Closes BACKLOG PRUNE-CMD-01. (PRUNE-06, PRUNE-07, FLAG-02)
 
@@ -543,7 +543,7 @@ plugin names — so plan these phases with the UI gate skipped.
 | 7. Marketplace-repository tag resolution for path-source dependencies | v1.20 | 3/3 | Complete    | 2026-09-19 |
 | 8. Enablement parity for dependencies | v1.20 | 3/3 | Complete    | 2026-09-21 |
 | 9. Reload installs missing declared dependencies | v1.20 | 4/4 | Complete    | 2026-09-22 |
-| 10. Constraint-aware update | v1.20 | 4/4 | In Progress|  |
+| 10. Constraint-aware update | v1.20 | 4/4 | Complete    | 2026-09-22 |
 | 11. Cross-marketplace dependency allowlist | v1.20 | 0/0 | Not started | — |
 | 12. Standalone prune with dry-run | v1.20 | 0/0 | Not started | — |
 

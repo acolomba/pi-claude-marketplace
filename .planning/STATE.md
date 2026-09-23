@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v1.20
 milestone_name: transitive-dependencies
-current_phase: 10
-current_phase_name: Constraint-aware update
-status: verifying
-stopped_at: Phase 10 executed, reviewed, fixed and verified passed; halted at the milestone lifecycle gate (verification.status reads stale — tooling, not content)
-last_updated: "2026-09-23T01:01:41.147Z"
+current_phase: 11
+current_phase_name: Cross-marketplace dependency allowlist
+status: planning
+stopped_at: Phase 10 complete, ready to plan Phase 11
+last_updated: "2026-09-23T02:12:02.630Z"
 last_activity: 2026-09-22
-last_activity_desc: Phase 10 execution complete, ready for verification
-state_head: b11de280433c43080e6b1d145595d137c254e919
+last_activity_desc: Phase 10 complete, transitioned to Phase 11
+state_head: c486341646a54d38554dc6ce2fdaad2db28b7544
 progress:
   total_phases: 12
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 40
   completed_plans: 40
-  percent: 75
+  percent: 83
 ---
 
 # Project State
@@ -36,9 +36,9 @@ under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 10 (Constraint-aware update) — EXECUTED
-Plan: 4 of 4 (all complete)
-Status: Phase complete — ready for verification
+Phase: 11 — Cross-marketplace dependency allowlist
+Plan: Not started
+Status: Ready to plan
 
 **Phase 9 closed 2026-09-22**, verified 12/12 must-haves with no human items;
 regression gate on the final tree: 7489/7489 unit, 38/38 integration; `npm run
@@ -411,7 +411,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-22 — Phase 10 execution started
+Last activity: 2026-09-22 — Phase 10 complete, transitioned to Phase 11
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 5 of 5 phases complete (100%).
@@ -438,7 +438,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 
 **Velocity:**
 
-- Total plans completed: 187
+- Total plans completed: 191
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -461,6 +461,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | 07 | 3 | - | - |
 | 8 | 3 | - | - |
 | 09 | 4 | - | - |
+| 10 | 4 | - | - |
 
 **Recent Trend:** 35 Phase 113 plans completed with all direct owner, review, validation, verification, security, and clean-repository gates green.
 **Per-Plan Metrics:**
@@ -1031,7 +1032,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 10 executed, reviewed, fixed and verified passed; halted at the milestone lifecycle gate (verification.status reads stale — tooling, not content)
+**Stopped at:** Phase 10 complete, ready to plan Phase 11
 
 **Resume file:** .planning/phases/10-constraint-aware-update/10-VERIFICATION.md
 
