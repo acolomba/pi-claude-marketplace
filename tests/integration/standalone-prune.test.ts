@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -37,7 +37,7 @@ function pluginRecord(provenance: "explicit" | "dependency", skill: string) {
   };
 }
 
-async function seedScope(scope: Scope, cwd: string): Promise<void> {
+async function seedScope(scope: Scope, cwd: string): Promise<ExtensionState> {
   const locations = locationsFor(scope, cwd);
   const marketplaceRoot = path.join(locations.extensionRoot, "sources", "mp");
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
@@ -85,6 +85,24 @@ async function seedScope(scope: Scope, cwd: string): Promise<void> {
     },
   };
   await saveState(locations.extensionRoot, state);
+  return state;
+}
+
+async function scopeTree(
+  scope: Scope,
+  cwd: string,
+): Promise<readonly (readonly [string, string | null])[]> {
+  const root = locationsFor(scope, cwd).scopeRoot;
+  const names = (await readdir(root, { recursive: true })).sort();
+  return Promise.all(
+    names.map(async (name) => {
+      const absolute = path.join(root, name);
+      const bytes = (await stat(absolute)).isDirectory()
+        ? null
+        : (await readFile(absolute)).toString("base64");
+      return [name, bytes] as const;
+    }),
+  );
 }
 
 function registeredCommand(cwd: string) {
@@ -119,14 +137,19 @@ function registeredCommand(cwd: string) {
 
 test("prune removes an orphan dependency through the registered command", async () => {
   await withHermeticEnvironment("standalone-prune-", async ({ cwd }) => {
-    await seedScope("user", cwd);
+    const seeded = await seedScope("user", cwd);
     const { command, ctx, notifications, gitCalls } = registeredCommand(cwd);
     const locations = locationsFor("user", cwd);
 
     await command.handler("prune", ctx);
 
     const state = await loadState(locations.extensionRoot);
-    assert.deepStrictEqual(Object.keys(state.marketplaces.mp?.plugins ?? {}), ["app"]);
+    assert.deepStrictEqual(state, {
+      ...seeded,
+      marketplaces: {
+        mp: { ...seeded.marketplaces.mp, plugins: { app: pluginRecord("explicit", "app-skill") } },
+      },
+    });
     assert.equal(
       await readFile(path.join(locations.skillsTargetDir, "app-skill", "SKILL.md"), "utf8"),
       "---\nname: app-skill\n---\nbody\n",
@@ -138,6 +161,79 @@ test("prune removes an orphan dependency through the registered command", async 
       {
         message:
           "● mp [user]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(gitCalls.clone, []);
+    assert.deepStrictEqual(gitCalls.fetch, []);
+  });
+});
+
+test("project prune removes only the project orphan", async () => {
+  await withHermeticEnvironment("standalone-prune-project-", async ({ cwd }) => {
+    await seedScope("user", cwd);
+    const projectSeed = await seedScope("project", cwd);
+    const userBefore = await scopeTree("user", cwd);
+    const { command, ctx, notifications, gitCalls } = registeredCommand(cwd);
+    const project = locationsFor("project", cwd);
+
+    await command.handler("prune --scope project", ctx);
+
+    assert.deepStrictEqual(await loadState(project.extensionRoot), {
+      ...projectSeed,
+      marketplaces: {
+        mp: {
+          ...projectSeed.marketplaces.mp,
+          plugins: { app: pluginRecord("explicit", "app-skill") },
+        },
+      },
+    });
+    assert.deepStrictEqual(await scopeTree("user", cwd), userBefore);
+    assert.equal(
+      await readFile(path.join(project.skillsTargetDir, "app-skill", "SKILL.md"), "utf8"),
+      "---\nname: app-skill\n---\nbody\n",
+    );
+    await assert.rejects(readFile(path.join(project.skillsTargetDir, "orphan-skill", "SKILL.md")));
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(gitCalls.clone, []);
+    assert.deepStrictEqual(gitCalls.fetch, []);
+  });
+});
+
+test("an unreadable declarer refuses prune without changing either scope", async () => {
+  await withHermeticEnvironment("standalone-prune-unreadable-", async ({ cwd }) => {
+    await seedScope("user", cwd);
+    await seedScope("project", cwd);
+    const user = locationsFor("user", cwd);
+    await writeFile(
+      path.join(
+        user.extensionRoot,
+        "sources",
+        "mp",
+        "plugins",
+        "app",
+        ".claude-plugin",
+        "plugin.json",
+      ),
+      "{",
+    );
+    const userBefore = await scopeTree("user", cwd);
+    const projectBefore = await scopeTree("project", cwd);
+    const { command, ctx, notifications, gitCalls } = registeredCommand(cwd);
+
+    await command.handler("prune", ctx);
+
+    assert.deepStrictEqual(await scopeTree("user", cwd), userBefore);
+    assert.deepStrictEqual(await scopeTree("project", cwd), projectBefore);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [user]\n  ⊘ app (failed) {unreadable}\n    cause: cannot read the dependencies of app@mp: its own manifest is present but cannot be read",
+        severity: "error",
       },
     ]);
     assert.deepStrictEqual(gitCalls.clone, []);
