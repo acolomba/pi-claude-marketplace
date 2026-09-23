@@ -3,6 +3,7 @@ phase: 11-cross-marketplace-dependency-allowlist
 verified: 2026-09-23T18:54:13Z
 status: passed
 human_verified: 2026-09-23T19:10:57Z
+fingerprint_refreshed: 2026-09-23T19:14:48Z
 score: 20/20 must-haves verified
 covered_files:
   - .planning/REQUIREMENTS.md
@@ -64,7 +65,7 @@ covered_files:
   - tests/shared/notification-grammar.test.ts
   - tests/shared/notification-types.test.ts
   - tests/shared/notify-reasons.test.ts
-covered_digest: "v1:sha256:934b2ab906c40a48c7a9618f91e024b5dff7a87ced1536100a2f95b56b1bd2ec"
+covered_digest: "v1:sha256:55d38fdc4313acaef4158dcb987fb0655c6bc475b259f16f88be08192c73c143"
 behavior_unverified: 0
 overrides_applied: 0
 prohibitions_flagged: 2
@@ -81,7 +82,7 @@ human_verification:
 
 **Phase goal:** A plugin may only pull a dependency from another marketplace when its own marketplace permits it, while an already-installed dependency still satisfies the declaration.
 **Status:** passed. Functional goal and XMKT-01/02 are verified; both judgment-tier prohibitions passed human review in `11-UAT.md`.
-**Re-verification:** No previous Phase 11 VERIFICATION.md existed.
+**Re-verification:** The post-transition fingerprint was refreshed after the roadmap marked Phase 11 complete and the requirements tracker marked XMKT-01/02 complete. No implementation or test file in the covered set changed.
 
 ## Goal Achievement
 
@@ -171,7 +172,7 @@ No linked `.skip`, `.todo`, or `.only` test was found. Temporary-file seed write
 | XMKT-01 | 11-01 through 11-07 | ✓ SATISFIED | Validated field, direct/reload root authorization, transitive denial, exact reason/remedies, and fail-clean tests above. |
 | XMKT-02 | 11-04 through 11-07 | ✓ SATISFIED | Installed check precedes permission; named recorded-range test and disabled-record cases pass. |
 
-Both IDs are mapped to Phase 11 in `.planning/REQUIREMENTS.md` and occur in PLAN frontmatter; no orphaned Phase 11 requirement exists. The tracker still labels both `Pending`; updating planning status belongs to the orchestrator after verification, and does not contradict the tested implementation.
+Both IDs are mapped to Phase 11 in `.planning/REQUIREMENTS.md` and occur in PLAN frontmatter; no orphaned Phase 11 requirement exists. The tracker labels both `Complete` after the phase transition.
 
 ### Anti-Patterns and Local Gate
 
