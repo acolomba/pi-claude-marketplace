@@ -1,21 +1,16 @@
 ---
-status: testing
+status: complete
 phase: 11-cross-marketplace-dependency-allowlist
 source: [11-VERIFICATION.md]
 started: 2026-09-23T18:56:09Z
-updated: 2026-09-23T18:56:09Z
+updated: 2026-09-23T19:10:08Z
 ---
 
 # Phase 11 Human Verification
 
 ## Current Test
 
-number: 1
-name: Added marketplace does not grant automatic dependency permission
-expected: |
-  An added marketplace alone does not authorize a new foreign dependency.
-  The refusal says that the root marketplace's allowlist controls the install.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -26,7 +21,7 @@ The `tools` marketplace is available, while `official` does not list it.
 
 expected: The refusal says that `official` does not allow `tools`. It must not
 describe adding `tools` as sufficient permission for automatic installation.
-result: [pending]
+result: pass
 
 ### 2. Manual installation remains an explicit remedy
 
@@ -36,14 +31,14 @@ example in `docs/output-catalog.md`.
 expected: The refusal names the dependency to install manually first and
 separately offers an edit to the named root marketplace's
 `allowCrossMarketplaceDependenciesOn` list.
-result: [pending]
+result: pass
 
 ## Summary
 
 total: 2
-passed: 0
+passed: 2
 issues: 0
-pending: 2
+pending: 0
 skipped: 0
 blocked: 0
 
