@@ -524,6 +524,39 @@ describe("composeCascadeFailureMessage", () => {
     });
   });
 
+  test("XMKT-01 a policy refusal on the root key emits one failed subject row", () => {
+    const subject: CascadeFailureSubject = {
+      kind: "closure",
+      failure: {
+        ok: false,
+        reason: "cross-marketplace",
+        key: ROOT_KEY,
+        requiredBy: "bridge@beta",
+        marketplace: "official",
+        rootMarketplace: "alpha",
+      },
+    };
+
+    const rows = failureRows(subject);
+    const emitted = emit(rows, BOTH_LOADED);
+
+    assert.strictEqual(rows.length, 1);
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ helper (failed) {cross-marketplace}",
+        '    cause: Dependency "helper@official", declared by "bridge@beta", is from marketplace "official", which root marketplace "alpha" does not allow. Install "helper@official" manually first, or add "official" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".',
+      ].join("\n"),
+    });
+    assert.deepStrictEqual(
+      rows.map((row) => row.needsReload),
+      [false],
+    );
+  });
+
   test("a dependency its marketplace does not declare reuses the inherited token", () => {
     // arrange
     const subject: CascadeFailureSubject = {
@@ -841,6 +874,41 @@ describe("composeCascadeFailureMessage", () => {
 });
 
 describe("cascadeFailureCause", () => {
+  test("XMKT-01 carries the transitive declarer and original policy root into the thrown cause", () => {
+    const subject: CascadeFailureSubject = {
+      kind: "closure",
+      failure: {
+        ok: false,
+        reason: "cross-marketplace",
+        key: "formatter@tools",
+        requiredBy: "bridge@beta",
+        marketplace: "tools",
+        rootMarketplace: "official",
+      },
+    };
+
+    const thrown = cascadeFailureCause(subject, ROOT_KEY);
+    const rows = failureRows(subject);
+    const failed = rows.find((row) => row.name === "formatter@tools");
+
+    assert.ok(thrown instanceof DependencyCascadeError);
+    assert.strictEqual(thrown.key, "formatter@tools");
+    assert.strictEqual(
+      thrown.message,
+      'Dependency "formatter@tools", declared by "bridge@beta", is from marketplace "tools", which root marketplace "official" does not allow. Install "formatter@tools" manually first, or add "tools" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "official".',
+    );
+    assert.ok(failed !== undefined && "cause" in failed);
+    assert.strictEqual(failed.cause?.message, thrown.message);
+    assert.deepStrictEqual(
+      rows.map((row) => row.needsReload),
+      [false, false],
+    );
+    assert.deepStrictEqual(
+      rows.map((row) => row.severity),
+      ["error", "error"],
+    );
+  });
+
   test("hands the orchestrator the same Error the rendered row carries", () => {
     // arrange
     const subject: CascadeFailureSubject = {

@@ -3318,6 +3318,93 @@ for (const allowed of [false, true]) {
   });
 }
 
+for (const allowGamma of [false, true]) {
+  test(`XMKT-01 direct install ${allowGamma ? "allows" : "refuses"} a transitive foreign marketplace using the original root policy`, async () => {
+    await withHermeticHome(async ({ installPlugin }) => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-xmkt01-transitive-"));
+      try {
+        const project = locationsFor("project", cwd);
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "gamma-src"),
+          marketplaceName: "gamma",
+          pluginName: "some-other-plugin",
+          skills: [{ sourceName: "gamma-tool" }],
+        });
+        const gamma = (await loadState(project.extensionRoot)).marketplaces.gamma;
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "beta-src"),
+          marketplaceName: "beta",
+          pluginName: "some-other-plugin",
+          skills: [{ sourceName: "beta-tool" }],
+          declareDependencies: true,
+          dependencyMarketplace: "gamma",
+          allowedDependencyMarketplaces: ["gamma"],
+        });
+        const beta = (await loadState(project.extensionRoot)).marketplaces.beta;
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "alpha-src"),
+          marketplaceName: "alpha",
+          pluginName: "hello",
+          skills: [{ sourceName: "alpha-tool" }],
+          declareDependencies: true,
+          dependencyMarketplace: "beta",
+          allowedDependencyMarketplaces: allowGamma ? ["beta", "gamma"] : ["beta"],
+        });
+        const state = await loadState(project.extensionRoot);
+        assert.ok(gamma !== undefined && beta !== undefined);
+        await saveState(project.extensionRoot, {
+          ...state,
+          marketplaces: { ...state.marketplaces, beta, gamma },
+        });
+        const stateBefore = await readFile(project.stateJsonPath, "utf8");
+        const treeBefore = await retryTree(cwd);
+        const { ctx, pi, notifications } = makeCtx();
+
+        const outcome = await installPlugin({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "alpha",
+          plugin: "hello",
+        });
+
+        if (allowGamma) {
+          assert.equal(outcome.status, "installed");
+          const installed = await loadState(project.extensionRoot);
+          assert.ok(installed.marketplaces.alpha?.plugins.hello !== undefined);
+          assert.ok(installed.marketplaces.beta?.plugins["some-other-plugin"] !== undefined);
+          assert.ok(installed.marketplaces.gamma?.plugins["some-other-plugin"] !== undefined);
+        } else {
+          assertRetryFailure(
+            outcome,
+            'Dependency "some-other-plugin@gamma", declared by "some-other-plugin@beta", is from marketplace "gamma", which root marketplace "alpha" does not allow. Install "some-other-plugin@gamma" manually first, or add "gamma" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".',
+          );
+          assert.equal(await readFile(project.stateJsonPath, "utf8"), stateBefore);
+          assert.deepStrictEqual(await retryTree(cwd), treeBefore);
+          await assert.rejects(stat(project.configJsonPath), /ENOENT/);
+          assert.deepStrictEqual(notifications, [
+            {
+              severity: "error",
+              message:
+                "Some plugin operations have failed.\n\n" +
+                "● alpha [project]\n" +
+                "  ⊘ hello (failed) {dependency failed}\n" +
+                "  ⊘ some-other-plugin@gamma (failed) {cross-marketplace}\n" +
+                '    cause: Dependency "some-other-plugin@gamma", declared by "some-other-plugin@beta", is from marketplace "gamma", which root marketplace "alpha" does not allow. Install "some-other-plugin@gamma" manually first, or add "gamma" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".',
+            },
+          ]);
+        }
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("RESV-01 / RESV-06: a dependency no marketplace declares fails the install whole", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-resv01-missing-"));
