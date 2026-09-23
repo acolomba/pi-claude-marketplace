@@ -704,6 +704,7 @@ async function applyDependencyInstalls(
       plugin: op.plugin,
       ranges: op.ranges,
       requiredBy: op.requiredBy,
+      declarers: op.declarers,
     });
 
     if (result.status === "skipped") {
@@ -747,7 +748,7 @@ async function applyDependencyInstalls(
       scope: op.scope,
       marketplace: op.marketplace,
       plugin: op.plugin,
-      reason: classifyOrchestratorThrow(result.error),
+      reason: result.reason ?? classifyOrchestratorThrow(result.error),
       ...(result.error instanceof DependencyCascadeError && {
         cause: redactedDependencyCascadeError(result.error),
       }),

@@ -51,7 +51,7 @@ import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 
 import { emptyReconcilePlan } from "./types.ts";
 
-import type { ScopeSatisfactionVerdict } from "./dependency-verdict.ts";
+import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./dependency-verdict.ts";
 import type {
   PlannedDependencyDisable,
   PlannedDependencyInstall,
@@ -758,6 +758,34 @@ function isEligibleDependencyInstallDependent(
   );
 }
 
+/** Collected ranges and sources for one missing dependency. */
+interface DependencyInstallGroup {
+  ranges: string[];
+  requiredBy: string;
+  declarers: string[];
+}
+
+/** Fold one eligible verdict row while keeping its first diagnostic declarer. */
+function addMissingDependencyGroup(
+  grouped: Map<string, DependencyInstallGroup>,
+  entry: UnsatisfiedDeclaration,
+): void {
+  const group = grouped.get(entry.dependency);
+  if (group === undefined) {
+    grouped.set(entry.dependency, {
+      ranges: [...(entry.ranges ?? [])],
+      requiredBy: entry.dependent,
+      declarers: [entry.dependent],
+    });
+    return;
+  }
+
+  group.ranges.push(...(entry.ranges ?? []));
+  if (!group.declarers.includes(entry.dependent)) {
+    group.declarers.push(entry.dependent);
+  }
+}
+
 /**
  * MISS-01, D-09-01, D-09-05: turns the precomputed verdict's `missing` arm
  * into the dependency-install bucket, one entry per missing dependency key,
@@ -778,7 +806,7 @@ function buildDependencyInstallBucket(
     return [];
   }
 
-  const grouped = new Map<string, { ranges: string[]; requiredBy: string }>();
+  const grouped = new Map<string, DependencyInstallGroup>();
   for (const entry of verdict.unsatisfied) {
     if (entry.kind !== "missing") {
       continue;
@@ -791,16 +819,7 @@ function buildDependencyInstallBucket(
       continue;
     }
 
-    const group = grouped.get(entry.dependency);
-    if (group === undefined) {
-      grouped.set(entry.dependency, {
-        ranges: [...(entry.ranges ?? [])],
-        requiredBy: entry.dependent,
-      });
-      continue;
-    }
-
-    group.ranges.push(...(entry.ranges ?? []));
+    addMissingDependencyGroup(grouped, entry);
   }
 
   const planned: PlannedDependencyInstall[] = [];
@@ -821,6 +840,7 @@ function buildDependencyInstallBucket(
       marketplace: parsed.marketplace,
       ranges: group.ranges,
       requiredBy: group.requiredBy,
+      declarers: group.declarers,
     });
   }
 

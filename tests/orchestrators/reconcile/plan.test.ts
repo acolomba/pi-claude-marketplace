@@ -991,6 +991,7 @@ describe("planReconcile", () => {
           marketplace: "keep",
           ranges: [],
           requiredBy: "deploy-kit@keep",
+          declarers: ["deploy-kit@keep"],
         },
       ],
       sourceMismatches: [],
@@ -1045,6 +1046,7 @@ describe("planReconcile", () => {
           marketplace: "keep",
           ranges: ["^2.0.0"],
           requiredBy: "deploy-kit@keep",
+          declarers: ["deploy-kit@keep"],
         },
       ],
       sourceMismatches: [],
@@ -1079,6 +1081,42 @@ describe("planReconcile", () => {
         marketplace: "keep",
         ranges: ["^1.0.0", ">=1.2.0"],
         requiredBy: "a@keep",
+        declarers: ["a@keep", "b@keep"],
+      },
+    ]);
+  });
+
+  test("XMKT-01 retains each eligible original declarer once without dropping ranges", () => {
+    // arrange
+    const merged = mergedConfig(
+      { alpha: { source: "acme/alpha" }, gamma: { source: "acme/gamma" } },
+      { "a@alpha": {}, "c@gamma": {} },
+    );
+    const state = stateWith({
+      alpha: marketplaceRecord("alpha", githubSource("acme/alpha"), { a: pluginRecord(true) }),
+      gamma: marketplaceRecord("gamma", githubSource("acme/gamma"), { c: pluginRecord(true) }),
+    });
+    const verdict: ScopeSatisfactionVerdict = {
+      ok: true,
+      unsatisfied: [
+        { dependent: "a@alpha", dependency: "b@beta", kind: "missing", ranges: ["^1.0.0"] },
+        { dependent: "c@gamma", dependency: "b@beta", kind: "missing", ranges: [">=1.2.0"] },
+        { dependent: "a@alpha", dependency: "b@beta", kind: "missing", ranges: ["<2.0.0"] },
+      ],
+    };
+
+    // act
+    const plan = planReconcile(merged, state, "project", verdict);
+
+    // assert
+    assert.deepStrictEqual(plan.pluginsToDependencyInstall, [
+      {
+        scope: "project",
+        plugin: "b",
+        marketplace: "beta",
+        ranges: ["^1.0.0", ">=1.2.0", "<2.0.0"],
+        requiredBy: "a@alpha",
+        declarers: ["a@alpha", "c@gamma"],
       },
     ]);
   });
@@ -1111,6 +1149,7 @@ describe("planReconcile", () => {
         marketplace: "keep",
         ranges: ["^1.0.0"],
         requiredBy: "a@keep",
+        declarers: ["a@keep", "b@keep"],
       },
     ]);
   });
@@ -1217,6 +1256,7 @@ describe("planReconcile", () => {
         marketplace: "keep",
         ranges: [],
         requiredBy: "deploy-kit@keep",
+        declarers: ["deploy-kit@keep"],
       },
     ]);
   });
@@ -1479,6 +1519,7 @@ describe("planReconcile", () => {
         marketplace: "keep",
         ranges: [],
         requiredBy: "deploy-kit@keep",
+        declarers: ["deploy-kit@keep"],
       },
     ]);
   });

@@ -101,6 +101,7 @@ const plannedDependencyInstall = {
   marketplace: "official",
   ranges: ["^2.0.0"],
   requiredBy: "deploy-kit@official",
+  declarers: ["deploy-kit@official"],
 } satisfies PlannedDependencyInstall;
 const sourceMismatch = {
   scope: "project",
@@ -312,6 +313,23 @@ void ({
   // @ts-expect-error unsatisfied declarations use a closed three-member vocabulary
   kind: "unreadable",
 } satisfies PlannedDependencyDisable);
+void ({
+  scope: "project",
+  plugin: "secrets-vault",
+  marketplace: "official",
+  ranges: [],
+  requiredBy: "deploy-kit@official",
+  // @ts-expect-error a missing install must carry every eligible original declarer
+} satisfies PlannedDependencyInstall);
+void ({
+  scope: "project",
+  plugin: "secrets-vault",
+  marketplace: "official",
+  ranges: [],
+  requiredBy: "deploy-kit@official",
+  // @ts-expect-error declarers is a list of plugin keys, not one key
+  declarers: "deploy-kit@official",
+} satisfies PlannedDependencyInstall);
 void ({
   scope: "project",
   cause: "source-mismatch",

@@ -388,6 +388,7 @@ async function writeMarketplaceSource(
   directory: string,
   marketplace: string,
   trees: Readonly<Record<string, PluginTree>>,
+  allowedDependencyMarketplaces?: readonly string[],
 ): Promise<{ readonly marketplaceRoot: string; readonly manifestPath: string }> {
   const marketplaceRoot = path.join(parentDir, directory);
   for (const [plugin, tree] of Object.entries(trees)) {
@@ -399,6 +400,9 @@ async function writeMarketplaceSource(
     manifestPath,
     JSON.stringify({
       name: marketplace,
+      ...(allowedDependencyMarketplaces !== undefined && {
+        allowCrossMarketplaceDependenciesOn: [...allowedDependencyMarketplaces],
+      }),
       plugins: Object.entries(trees).map(([plugin, tree]) => ({
         name: plugin,
         version: "1.0.0",
@@ -4220,6 +4224,7 @@ describe("applyReconcile", () => {
           marketplace: "mp",
           ranges: [],
           requiredBy: "deploy-kit@mp",
+          declarers: ["deploy-kit@mp"],
         },
       ],
     });
@@ -4306,6 +4311,7 @@ describe("applyReconcile", () => {
           marketplace: "mp",
           ranges: [],
           requiredBy: "bravo@mp",
+          declarers: ["bravo@mp"],
         },
       ],
     });
@@ -5560,6 +5566,209 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
+  for (const scenario of [
+    { name: "second foreign policy", secondMarketplace: "gamma", secondAllows: true },
+    { name: "later same-marketplace source", secondMarketplace: "beta", secondAllows: false },
+    { name: "neither original policy", secondMarketplace: "gamma", secondAllows: false },
+  ] as const) {
+    test(`XMKT-01 reload evaluates ${scenario.name}`, async (t) => {
+      // arrange
+      const { cwd, project, user } = await createHermeticScopes(t, "dependency-original-sources");
+      const alpha = await writeMarketplaceSource(cwd, "alpha-src", "alpha", {
+        a: { dependencies: ["b@beta"], skill: "clean" },
+      });
+      const beta = await writeMarketplaceSource(cwd, "beta-src", "beta", {
+        b: { skill: "clean" },
+        ...(scenario.secondMarketplace === "beta" && {
+          c: { dependencies: ["b@beta"] as const, skill: "clean" as const },
+        }),
+      });
+      const gamma =
+        scenario.secondMarketplace === "gamma"
+          ? await writeMarketplaceSource(
+              cwd,
+              "gamma-src",
+              "gamma",
+              { c: { dependencies: ["b@beta"], skill: "clean" } },
+              scenario.secondAllows ? ["beta"] : [],
+            )
+          : undefined;
+      await writeUnder(
+        project.configJsonPath,
+        configBytes({
+          marketplaces: {
+            alpha: { source: alpha.marketplaceRoot },
+            beta: { source: beta.marketplaceRoot },
+            ...(gamma !== undefined && { gamma: { source: gamma.marketplaceRoot } }),
+          },
+          plugins: {
+            "a@alpha": {},
+            [`c@${scenario.secondMarketplace}`]: {},
+          },
+        }),
+      );
+      await seedState(project, {
+        schemaVersion: 3,
+        lastReconciledExtensionVersion: EXTENSION_VERSION,
+        marketplaces: {
+          alpha: marketplaceRecord({
+            cwd,
+            scope: "project",
+            marketplace: "alpha",
+            rawSource: alpha.marketplaceRoot,
+            manifestPath: alpha.manifestPath,
+            marketplaceRoot: alpha.marketplaceRoot,
+            plugins: {
+              a: pluginRecord({ pluginRoot: path.join(alpha.marketplaceRoot, "plugins", "a") }),
+            },
+          }),
+          beta: marketplaceRecord({
+            cwd,
+            scope: "project",
+            marketplace: "beta",
+            rawSource: beta.marketplaceRoot,
+            manifestPath: beta.manifestPath,
+            marketplaceRoot: beta.marketplaceRoot,
+            ...(scenario.secondMarketplace === "beta" && {
+              plugins: {
+                c: pluginRecord({ pluginRoot: path.join(beta.marketplaceRoot, "plugins", "c") }),
+              },
+            }),
+          }),
+          ...(gamma !== undefined && {
+            gamma: marketplaceRecord({
+              cwd,
+              scope: "project",
+              marketplace: "gamma",
+              rawSource: gamma.marketplaceRoot,
+              manifestPath: gamma.manifestPath,
+              marketplaceRoot: gamma.marketplaceRoot,
+              plugins: {
+                c: pluginRecord({ pluginRoot: path.join(gamma.marketplaceRoot, "plugins", "c") }),
+              },
+            }),
+          }),
+        },
+      });
+      const planned = await replanFromDisk(project);
+      assert.deepStrictEqual(planned.pluginsToDependencyInstall, [
+        {
+          scope: "project",
+          plugin: "b",
+          marketplace: "beta",
+          ranges: [],
+          requiredBy: "a@alpha",
+          declarers: ["a@alpha", `c@${scenario.secondMarketplace}`],
+        },
+      ]);
+      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+      const { gitOps, clonedUrls } = createOfflineGitOps();
+
+      // act
+      await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+      // assert
+      const b = await recordFor(project, "beta", "b");
+      if (scenario.secondMarketplace === "gamma" && !scenario.secondAllows) {
+        assert.equal(b, undefined);
+        assert.match(notifications[0]?.message ?? "", /b \(failed\) \{cross-marketplace\}/);
+        assert.match(
+          notifications[0]?.message ?? "",
+          /declared by "a@alpha".*root marketplace "alpha".*Install "b@beta" manually first.*allowCrossMarketplaceDependenciesOn/,
+        );
+        assert.equal((await recordFor(project, "alpha", "a"))?.enabled, false);
+      } else {
+        assert.equal(b?.provenance, "dependency");
+        assert.deepStrictEqual(notifications, [
+          {
+            message:
+              "● beta [project]\n" +
+              "  ● b v1.0.0 (installed) {dependency installed}\n" +
+              "\n" +
+              "Reconcile: 1 success",
+          },
+        ]);
+      }
+
+      assert.equal(await pathExists(user.stateJsonPath), false);
+      assert.deepStrictEqual(clonedUrls(), []);
+      verifyBoundary();
+    });
+  }
+
+  test("XMKT-01 reload installs a user-sourced missing dependency into project scope", async (t) => {
+    // arrange
+    const { cwd, project, user } = await createHermeticScopes(t, "dependency-user-source");
+    const alpha = await writeMarketplaceSource(
+      cwd,
+      "alpha-src",
+      "alpha",
+      { a: { dependencies: ["b@beta"], skill: "clean" } },
+      ["beta"],
+    );
+    const beta = await writeMarketplaceSource(cwd, "beta-user-src", "beta", {
+      b: { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({
+        marketplaces: { alpha: { source: alpha.marketplaceRoot } },
+        plugins: { "a@alpha": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        alpha: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "alpha",
+          rawSource: alpha.marketplaceRoot,
+          manifestPath: alpha.manifestPath,
+          marketplaceRoot: alpha.marketplaceRoot,
+          plugins: {
+            a: pluginRecord({ pluginRoot: path.join(alpha.marketplaceRoot, "plugins", "a") }),
+          },
+        }),
+      },
+    });
+    await seedState(user, {
+      schemaVersion: 3,
+      marketplaces: {
+        beta: marketplaceRecord({
+          cwd,
+          scope: "user",
+          marketplace: "beta",
+          rawSource: beta.marketplaceRoot,
+          manifestPath: beta.manifestPath,
+          marketplaceRoot: beta.marketplaceRoot,
+        }),
+      },
+    });
+    const userBefore = await readFile(user.stateJsonPath);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, reason: "reload" });
+
+    // assert
+    assert.equal((await recordFor(project, "beta", "b"))?.provenance, "dependency");
+    assert.deepStrictEqual(await readFile(user.stateJsonPath), userBefore);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● beta [project]\n" +
+          "  ● b v1.0.0 (installed) {dependency installed}\n" +
+          "\n" +
+          "Reconcile: 1 success",
+      },
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
   test("D-09-09: a cross-marketplace member renders under its own marketplace block", async (t) => {
     // arrange -- deploy-kit@mp declares { name: "shared-lib", marketplace:
     // "tools" }, with tools added and declaring shared-lib.
@@ -5574,6 +5783,7 @@ describe("applyReconcile", () => {
       mp.manifestPath,
       JSON.stringify({
         name: "mp",
+        allowCrossMarketplaceDependenciesOn: ["tools"],
         plugins: [
           {
             name: "deploy-kit",

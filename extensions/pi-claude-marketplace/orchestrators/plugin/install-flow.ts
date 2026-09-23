@@ -510,6 +510,71 @@ async function loadInstallRootAllowlist(args: {
   return new Set(manifest.allowCrossMarketplaceDependenciesOn ?? []);
 }
 
+/** Selects distinct foreign policies without letting their order outrank a same-marketplace grant. */
+function originalDeclaringMarketplaces(
+  declarers: readonly string[],
+  marketplace: string,
+): { sameMarketplace: boolean; foreign: ReadonlySet<string> } {
+  const declaringMarketplaces = new Set<string>();
+  for (const key of declarers) {
+    const at = key.lastIndexOf("@");
+    if (at <= 0 || at === key.length - 1) {
+      continue;
+    }
+
+    const declaringMarketplace = key.slice(at + 1);
+    if (declaringMarketplace === marketplace) {
+      return { sameMarketplace: true, foreign: declaringMarketplaces };
+    }
+
+    declaringMarketplaces.add(declaringMarketplace);
+  }
+
+  return { sameMarketplace: false, foreign: declaringMarketplaces };
+}
+
+/** Reads each eligible original source's policy before a missing root can install. */
+async function authorizeMissingDependency(args: {
+  readonly scope: Scope;
+  readonly cwd: string;
+  readonly marketplace: string;
+  readonly state: ExtensionState;
+  readonly declarers: readonly string[];
+}): Promise<boolean> {
+  const sources = originalDeclaringMarketplaces(args.declarers, args.marketplace);
+  if (sources.sameMarketplace) {
+    return true;
+  }
+
+  let policyError: Error | undefined;
+  for (const declaringMarketplace of sources.foreign) {
+    try {
+      const source = await resolveInstallMarketplaceSource({
+        targetScope: args.scope,
+        cwd: args.cwd,
+        marketplace: declaringMarketplace,
+        targetState: args.state,
+      });
+      if (source === undefined) {
+        continue;
+      }
+
+      const manifest = await loadMarketplaceManifest(source.sourceRecord.manifestPath);
+      if (manifest.allowCrossMarketplaceDependenciesOn?.includes(args.marketplace) === true) {
+        return true;
+      }
+    } catch (err: unknown) {
+      policyError ??= err as Error;
+    }
+  }
+
+  if (policyError !== undefined) {
+    throw policyError;
+  }
+
+  return false;
+}
+
 /**
  * The cascade's catalog read: one plugin's declared dependencies, in the
  * D-01-32 read order. The plugin's OWN manifest answers wherever it is readable
@@ -2023,6 +2088,8 @@ export interface InstallMissingDependencyOptions {
    * `requiredBy`), carried onto a marketplace-absent failure's subject.
    */
   readonly requiredBy: string;
+  /** Every eligible original declarer; absent for singular direct callers. */
+  readonly declarers?: readonly string[];
   readonly tagProbe?: CascadeTagProbe;
   readonly marketplaceTagProbe?: CascadeMarketplaceTagProbe;
   readonly cloneCacheSeam?: InstallCloneCacheSeam;
@@ -2048,7 +2115,12 @@ export type InstallMissingDependencyOutcome =
       readonly postCommitWarnings?: readonly string[];
     } & Pick<LedgerDegradationSignals, "orphanRewake" | "degradedKinds">)
   | { readonly status: "skipped" }
-  | { readonly status: "failed"; readonly error: Error; readonly cause: string };
+  | {
+      readonly status: "failed";
+      readonly error: Error;
+      readonly cause: string;
+      readonly reason?: "cross-marketplace";
+    };
 
 /** Outcome of the locked closure inside `installMissingDependencyWithTransaction`. */
 type InstallMissingDependencyTransactionOutcome =
@@ -2114,6 +2186,49 @@ async function installMissingDependencyWithTransaction(
         // recorded, so this arm saves nothing and installs nothing.
         if (state.marketplaces[marketplace]?.plugins[plugin] !== undefined) {
           return { kind: "already-recorded" };
+        }
+
+        const targetSource = await resolveInstallMarketplaceSource({
+          targetScope: scope,
+          cwd,
+          marketplace,
+          targetState: state,
+        });
+        if (targetSource === undefined) {
+          cascadeFailure.subject = {
+            kind: "closure",
+            failure: {
+              ok: false,
+              reason: "marketplace-not-added",
+              key: rootKey,
+              marketplace,
+              requiredBy: opts.requiredBy,
+            },
+          };
+          throw cascadeFailureCause(cascadeFailure.subject, rootKey);
+        }
+
+        const authorized = await authorizeMissingDependency({
+          scope,
+          cwd,
+          marketplace,
+          state,
+          declarers: opts.declarers ?? [opts.requiredBy],
+        });
+        if (!authorized) {
+          const at = opts.requiredBy.lastIndexOf("@");
+          cascadeFailure.subject = {
+            kind: "closure",
+            failure: {
+              ok: false,
+              reason: "cross-marketplace",
+              key: rootKey,
+              requiredBy: opts.requiredBy,
+              marketplace,
+              rootMarketplace: opts.requiredBy.slice(at + 1),
+            },
+          };
+          throw cascadeFailureCause(cascadeFailure.subject, rootKey);
         }
 
         const cascade = await runInstallCascade({
@@ -2217,7 +2332,9 @@ async function installMissingDependencyWithTransaction(
             orchestrated: true,
           });
     assertOrchestratedFailedOutcome(failed);
-    return failed;
+    return subject?.kind === "closure" && subject.failure.reason === "cross-marketplace"
+      ? { ...failed, reason: "cross-marketplace" }
+      : failed;
   }
 
   if (outcome.kind === "already-recorded") {

@@ -658,12 +658,12 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts:57:54"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:837:49",
+      "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:838:49",
       "owner": "degradationFromEnable.result",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within EnableDisablePluginOutcome by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:837:11"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:838:11"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:736:7",
@@ -1030,28 +1030,28 @@
       "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:538:11"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:591:36",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:656:36",
       "owner": "unwrapCascade",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within InstallCascadeResult by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:591:4"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:656:4"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:1019:61",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:1084:61",
       "owner": "InstalledLedgerResult",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within InstallLedgerResult by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:1019:30"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:1084:30"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2071:56",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2143:56",
       "owner": "assertOrchestratedFailedOutcome",
       "key": "status",
       "category": "type-selection",
       "purpose": "Selects within InstallPluginOutcome by status, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2071:24"
+      "filter": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2143:24"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:1011:61",

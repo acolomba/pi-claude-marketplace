@@ -46,6 +46,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   DependencyCascadeError,
+  InvalidMarketplaceManifestError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
@@ -11732,6 +11733,531 @@ test("RESV-06: a dependency whose own ledger throws is the block's subject", asy
 // that names a config file or a disabled landing.
 // ───────────────────────────────────────────────────────────────────────────
 
+test("XMKT-01 reload refuses an unlisted original declarer before installing the missing root", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-original-edge-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "alpha-src"),
+        marketplaceName: "alpha",
+        pluginName: "a",
+        preInstall: true,
+      });
+      const alpha = (await loadState(locations.extensionRoot)).marketplaces["alpha"];
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "beta-src"),
+        marketplaceName: "beta",
+        pluginName: "b",
+        allowedDependencyMarketplaces: ["alpha"],
+      });
+      const state = await loadState(locations.extensionRoot);
+      assert.ok(alpha !== undefined);
+      state.marketplaces["alpha"] = alpha;
+      await saveState(locations.extensionRoot, state);
+      const before = await readFile(locations.stateJsonPath);
+      const beforeTree = await retryTree(locations.scopeRoot);
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "beta",
+        plugin: "b",
+        ranges: [],
+        requiredBy: "a@alpha",
+      });
+
+      // assert
+      assert.equal(outcome.status, "failed");
+      assert.ok(outcome.status === "failed");
+      assert.equal("reason" in outcome ? outcome.reason : undefined, "cross-marketplace");
+      assert.equal(
+        outcome.error.message,
+        'Dependency "b@beta", declared by "a@alpha", is from marketplace "beta", which root marketplace "alpha" does not allow. Install "b@beta" manually first, or add "beta" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".',
+      );
+      assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), beforeTree);
+      assert.equal(await pathExists(locations.configJsonPath), false);
+      assert.equal(await pathExists(locations.configLocalJsonPath), false);
+
+      await writeFile(
+        path.join(cwd, "alpha-src", ".claude-plugin", "marketplace.json"),
+        JSON.stringify({
+          name: "alpha",
+          allowCrossMarketplaceDependenciesOn: ["beta"],
+          plugins: [{ name: "a", source: "./plugins/a" }],
+        }),
+      );
+      const retry = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "beta",
+        plugin: "b",
+        ranges: [],
+        requiredBy: "a@alpha",
+      });
+      assert.equal(retry.status, "installed");
+      assert.equal(
+        (await loadState(locations.extensionRoot)).marketplaces["beta"]?.plugins["b"]?.provenance,
+        "dependency",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const scenario of [
+  { name: "a later allowlisted marketplace", secondMarketplace: "gamma" },
+  { name: "a later same marketplace declarer", secondMarketplace: "beta" },
+] as const) {
+  test(`XMKT-01 reload accepts ${scenario.name}`, async () => {
+    await withHermeticHome(async ({ installMissingDependency }) => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-original-allowed-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "alpha-src"),
+          marketplaceName: "alpha",
+          pluginName: "a",
+          preInstall: true,
+        });
+        const alpha = (await loadState(locations.extensionRoot)).marketplaces["alpha"];
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, `${scenario.secondMarketplace}-source`),
+          marketplaceName: scenario.secondMarketplace,
+          pluginName: "c",
+          preInstall: true,
+          ...(scenario.secondMarketplace === "gamma" && {
+            allowedDependencyMarketplaces: ["beta"],
+          }),
+        });
+        const second = (await loadState(locations.extensionRoot)).marketplaces[
+          scenario.secondMarketplace
+        ];
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "beta-src"),
+          marketplaceName: "beta",
+          pluginName: "b",
+        });
+        const state = await loadState(locations.extensionRoot);
+        assert.ok(alpha !== undefined && second !== undefined);
+        state.marketplaces["alpha"] = alpha;
+        if (scenario.secondMarketplace === "beta") {
+          const beta = state.marketplaces["beta"];
+          const c = second.plugins["c"];
+          assert.ok(beta !== undefined && c !== undefined);
+          beta.plugins["c"] = c;
+        } else {
+          state.marketplaces["gamma"] = second;
+        }
+
+        await saveState(locations.extensionRoot, state);
+        if (scenario.secondMarketplace === "beta") {
+          await writeFile(
+            alpha.manifestPath,
+            JSON.stringify({
+              name: "alpha",
+              allowCrossMarketplaceDependenciesOn: "beta",
+              plugins: [],
+            }),
+          );
+        }
+
+        const { ctx, pi } = makeCtx();
+
+        // act
+        const outcome = await installMissingDependency({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "beta",
+          plugin: "b",
+          ranges: [],
+          requiredBy: "a@alpha",
+          declarers:
+            scenario.secondMarketplace === "gamma"
+              ? ["@beta", "broken@", "a@alpha", "c@gamma"]
+              : ["a@alpha", "c@beta"],
+        });
+
+        // assert
+        assert.equal(outcome.status, "installed");
+        assert.equal(
+          (await loadState(locations.extensionRoot)).marketplaces["beta"]?.plugins["b"]?.provenance,
+          "dependency",
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+for (const scenario of [
+  { betaAllowsGamma: false, gammaRecorded: false },
+  { betaAllowsGamma: true, gammaRecorded: false },
+  { betaAllowsGamma: false, gammaRecorded: true },
+] as const) {
+  test(`XMKT-01 missing B uses B's policy when beta grants ${String(scenario.betaAllowsGamma)} and C is recorded ${String(scenario.gammaRecorded)}`, async () => {
+    await withHermeticHome(async ({ installMissingDependency }) => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-nested-policy-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "alpha-src"),
+          marketplaceName: "alpha",
+          pluginName: "a",
+          preInstall: true,
+          allowedDependencyMarketplaces: ["beta", "gamma"],
+        });
+        const alpha = (await loadState(locations.extensionRoot)).marketplaces["alpha"];
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "gamma-src"),
+          marketplaceName: "gamma",
+          pluginName: "some-other-plugin",
+          preInstall: scenario.gammaRecorded,
+        });
+        const gamma = (await loadState(locations.extensionRoot)).marketplaces["gamma"];
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "beta-src"),
+          marketplaceName: "beta",
+          pluginName: "b",
+          declareDependencies: true,
+          dependencyMarketplace: "gamma",
+          allowedDependencyMarketplaces: scenario.betaAllowsGamma ? ["gamma"] : [],
+        });
+        const state = await loadState(locations.extensionRoot);
+        assert.ok(alpha !== undefined && gamma !== undefined);
+        state.marketplaces["alpha"] = alpha;
+        state.marketplaces["gamma"] = gamma;
+        await saveState(locations.extensionRoot, state);
+        const before = await readFile(locations.stateJsonPath);
+        const { ctx, pi } = makeCtx();
+
+        // act
+        const outcome = await installMissingDependency({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "beta",
+          plugin: "b",
+          ranges: [],
+          requiredBy: "a@alpha",
+        });
+
+        // assert
+        if (scenario.betaAllowsGamma || scenario.gammaRecorded) {
+          assert.equal(outcome.status, "installed");
+          assert.ok(outcome.status === "installed");
+          assert.deepStrictEqual(
+            outcome.members.map((member) => member.key),
+            scenario.gammaRecorded ? ["b@beta"] : ["some-other-plugin@gamma", "b@beta"],
+          );
+        } else {
+          assert.equal(outcome.status, "failed");
+          assert.ok(outcome.status === "failed");
+          assert.equal(outcome.reason, "cross-marketplace");
+          assert.match(
+            outcome.error.message,
+            /Dependency "some-other-plugin@gamma", declared by "b@beta".*root marketplace "beta" does not allow/,
+          );
+          assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
+        }
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+for (const scenario of [
+  { firstSource: "malformed", laterAuthorizer: false },
+  { firstSource: "malformed", laterAuthorizer: true },
+  { firstSource: "missing", laterAuthorizer: false },
+  { firstSource: "missing", laterAuthorizer: true },
+] as const) {
+  test(`XMKT-01 reload checks a ${scenario.firstSource} first source with later grant ${String(scenario.laterAuthorizer)}`, async () => {
+    await withHermeticHome(async ({ installMissingDependency }) => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-malformed-policy-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "alpha-src"),
+          marketplaceName: "alpha",
+          pluginName: "a",
+          preInstall: true,
+        });
+        const alpha = (await loadState(locations.extensionRoot)).marketplaces["alpha"];
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "gamma-src"),
+          marketplaceName: "gamma",
+          pluginName: "c",
+          preInstall: true,
+          allowedDependencyMarketplaces: ["beta"],
+        });
+        const gamma = (await loadState(locations.extensionRoot)).marketplaces["gamma"];
+        await seedPathMarketplaceWithPlugin({
+          cwd,
+          marketplaceRoot: path.join(cwd, "beta-src"),
+          marketplaceName: "beta",
+          pluginName: "b",
+        });
+        const state = await loadState(locations.extensionRoot);
+        assert.ok(alpha !== undefined && gamma !== undefined);
+        if (scenario.firstSource === "malformed") {
+          state.marketplaces["alpha"] = alpha;
+        }
+
+        state.marketplaces["gamma"] = gamma;
+        await saveState(locations.extensionRoot, state);
+        if (scenario.firstSource === "malformed") {
+          await writeFile(
+            alpha.manifestPath,
+            JSON.stringify({
+              name: "alpha",
+              allowCrossMarketplaceDependenciesOn: "beta",
+              plugins: [],
+            }),
+          );
+        }
+
+        const { ctx, pi } = makeCtx();
+
+        // act
+        const outcome = await installMissingDependency({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "beta",
+          plugin: "b",
+          ranges: [],
+          requiredBy: "a@alpha",
+          declarers: scenario.laterAuthorizer ? ["a@alpha", "c@gamma"] : ["a@alpha"],
+        });
+
+        // assert
+        if (scenario.laterAuthorizer) {
+          assert.equal(outcome.status, "installed");
+          assert.equal(
+            (await loadState(locations.extensionRoot)).marketplaces["beta"]?.plugins["b"]
+              ?.provenance,
+            "dependency",
+          );
+        } else {
+          assert.equal(outcome.status, "failed");
+          assert.ok(outcome.status === "failed");
+          if (scenario.firstSource === "malformed") {
+            assert.ok(outcome.error instanceof InvalidMarketplaceManifestError);
+            assert.match(outcome.error.message, /allowCrossMarketplaceDependenciesOn/);
+          } else {
+            assert.equal(outcome.reason, "cross-marketplace");
+          }
+
+          assert.equal(
+            (await loadState(locations.extensionRoot)).marketplaces["beta"]?.plugins["b"],
+            undefined,
+          );
+        }
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("XMKT-01 project declaring policy outranks a permissive user source", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-project-policy-"));
+    try {
+      // arrange
+      const project = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        scope: "user",
+        marketplaceRoot: path.join(cwd, "alpha-user-src"),
+        marketplaceName: "alpha",
+        pluginName: "a",
+        allowedDependencyMarketplaces: ["beta"],
+      });
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "alpha-project-src"),
+        marketplaceName: "alpha",
+        pluginName: "a",
+        preInstall: true,
+      });
+      const alpha = (await loadState(project.extensionRoot)).marketplaces["alpha"];
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "beta-src"),
+        marketplaceName: "beta",
+        pluginName: "b",
+      });
+      const state = await loadState(project.extensionRoot);
+      assert.ok(alpha !== undefined);
+      state.marketplaces["alpha"] = alpha;
+      await saveState(project.extensionRoot, state);
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "beta",
+        plugin: "b",
+        ranges: [],
+        requiredBy: "a@alpha",
+      });
+
+      // assert
+      assert.equal(outcome.status, "failed");
+      assert.ok(outcome.status === "failed");
+      assert.equal(outcome.reason, "cross-marketplace");
+      assert.equal(
+        (await loadState(project.extensionRoot)).marketplaces["beta"]?.plugins["b"],
+        undefined,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("XMKT-01 project missing install reads a user-only target source into project scope", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-user-target-"));
+    try {
+      // arrange
+      const project = locationsFor("project", cwd);
+      const user = locationsFor("user", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        scope: "user",
+        marketplaceRoot: path.join(cwd, "beta-user-src"),
+        marketplaceName: "beta",
+        pluginName: "b",
+      });
+      const userBefore = await readFile(user.stateJsonPath);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "alpha-project-src"),
+        marketplaceName: "alpha",
+        pluginName: "a",
+        preInstall: true,
+        allowedDependencyMarketplaces: ["beta"],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "beta",
+        plugin: "b",
+        ranges: [],
+        requiredBy: "a@alpha",
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      assert.equal(
+        (await loadState(project.extensionRoot)).marketplaces["beta"]?.plugins["b"]?.provenance,
+        "dependency",
+      );
+      assert.deepStrictEqual(await readFile(user.stateJsonPath), userBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("XMKT-01 missing install reports a source removed after authorization", async () => {
+  await withHermeticHome(async ({ installMissingDependency, transactionControl }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-source-race-"));
+    try {
+      // arrange
+      const project = locationsFor("project", cwd);
+      const user = locationsFor("user", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        scope: "user",
+        marketplaceRoot: path.join(cwd, "beta-user-src"),
+        marketplaceName: "beta",
+        pluginName: "b",
+      });
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "alpha-project-src"),
+        marketplaceName: "alpha",
+        pluginName: "a",
+        preInstall: true,
+        allowedDependencyMarketplaces: ["beta"],
+      });
+      let removed = false;
+      transactionControl.runPhases = async <C>(phases: readonly Phase<C>[], ctx: C) => {
+        if (!removed) {
+          removed = true;
+          const state = await loadState(user.extensionRoot);
+          delete state.marketplaces["beta"];
+          await saveState(user.extensionRoot, state);
+        }
+
+        return runPhases(phases, ctx);
+      };
+
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "beta",
+        plugin: "b",
+        ranges: [],
+        requiredBy: "a@alpha",
+      });
+
+      // assert
+      assert.equal(removed, true);
+      assert.equal(outcome.status, "failed");
+      assert.match("cause" in outcome ? outcome.cause : "", /not added/i);
+      assert.equal((await loadState(project.extensionRoot)).marketplaces["beta"], undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("MISS-01 / D-09-05: the entry point installs the missing dependency and its closure as dependencies, enabled, with no config entry", async (t) => {
   await withHermeticHome(async ({ completionCache, installMissingDependency }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-closure-"));
@@ -12136,6 +12662,12 @@ test("D-09-06: an already-recorded key is skipped inside the lock", async () => 
         pluginName: "secrets-vault",
         preInstall: true,
       });
+      const seeded = await loadState(locations.extensionRoot);
+      const recorded = seeded.marketplaces["mp"]?.plugins["secrets-vault"];
+      assert.ok(recorded !== undefined);
+      recorded.enabled = false;
+      await saveState(locations.extensionRoot, seeded);
+      await unlink(path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json"));
       const before = await stat(locations.stateJsonPath);
       const { ctx, pi } = makeCtx();
 
