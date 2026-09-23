@@ -473,7 +473,7 @@ Plans:
 2. A dependency already installed in the scope satisfies the declaration whatever the allowlist says. (XMKT-02)
 3. A `marketplace.json` without the field behaves as an empty allowlist; `info` and the cascade read the same parsed value.
 
-**Plans**: 2/7 plans executed
+**Plans**: 3/7 plans executed
 
 Plans:
 
@@ -487,7 +487,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 11-03-PLAN.md — add the closed-set refusal reason and both remedies (XMKT-01)
+- [x] 11-03-PLAN.md — add the closed-set refusal reason and both remedies (XMKT-01)
 
 **Wave 4** *(blocked on Waves 2 and 3 completion)*
 
@@ -580,7 +580,7 @@ plugin names — so plan these phases with the UI gate skipped.
 | 8. Enablement parity for dependencies | v1.20 | 3/3 | Complete    | 2026-09-21 |
 | 9. Reload installs missing declared dependencies | v1.20 | 4/4 | Complete    | 2026-09-22 |
 | 10. Constraint-aware update | v1.20 | 4/4 | Complete    | 2026-09-22 |
-| 11. Cross-marketplace dependency allowlist | v1.20 | 2/7 | In Progress|  |
+| 11. Cross-marketplace dependency allowlist | v1.20 | 3/7 | In Progress|  |
 | 12. Standalone prune with dry-run | v1.20 | 0/0 | Not started | — |
 
 ## Carried Forward
