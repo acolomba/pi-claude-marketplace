@@ -5,9 +5,9 @@ milestone_name: Workflow Bridge Replay onto main
 current_plan: none
 status: Awaiting next milestone
 stopped_at: milestone workflows-replay archived (2026-09-21)
-last_updated: "2026-09-21T15:45:27.440Z"
-last_activity: 2026-09-21
-last_activity_desc: Milestone workflows-replay completed and archived
+last_updated: "2026-09-23T13:24:55.087Z"
+last_activity: 2026-09-23
+last_activity_desc: "Completed quick task 260923-b1z: scoped PR #205 babysit review"
 state_head: dbcc1a20bc363c4a38c618f11276ec4384ecb8a1
 progress:
   total_phases: 9
@@ -38,7 +38,7 @@ closed the three gaps the bridge originally shipped with. The code sits on
 Phase: Milestone workflows-replay complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-09-21 — Milestone workflows-replay completed and archived
+Last activity: 2026-09-23 — Completed quick task 260923-b1z: scoped PR #205 babysit review
 
 Archived 2026-09-21 as one milestone of nine phases (109-117), per the decision
 recorded under Decisions. The archive ran only after the debt the audit graded
@@ -101,6 +101,7 @@ reference ambiguous when the two branches are read side by side.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260909-ox9 | Re-derive the stale `PluginNotificationMessage` enumeration in the messaging style guide | 2026-09-09 | `a39ba7a4` | [260909-ox9-re-derive-the-stale-pluginnotificationme](./quick/260909-ox9-re-derive-the-stale-pluginnotificationme/) |
+| 260923-b1z | Re-run PR #205 babysit review only on files changed after the prior pass | 2026-09-23 | `e8e185d7` | [260923-b1z-re-run-pr-205-babysit-review-only-on-fil](./quick/260923-b1z-re-run-pr-205-babysit-review-only-on-fil/) |
 
 Closes the last open deferred item filed by the degradation-and-documentation
 phase. The union listing was deleted rather than corrected — it was the second
