@@ -15,6 +15,11 @@ import type { TestContext } from "node:test";
 void ({ name: "marketplace", plugins: [] } satisfies MarketplaceManifest);
 void ({
   name: "marketplace",
+  plugins: [],
+  allowCrossMarketplaceDependenciesOn: ["tools"],
+} satisfies MarketplaceManifest);
+void ({
+  name: "marketplace",
   plugins: [{ name: "plugin", source: "./plugin" }],
   strict: false,
   owner: { name: "Owner" },
@@ -23,6 +28,12 @@ void ({
 void ({ name: "marketplace" } satisfies MarketplaceManifest);
 // @ts-expect-error The strict declaration is boolean when present.
 void ({ name: "marketplace", plugins: [], strict: "false" } satisfies MarketplaceManifest);
+void ({
+  name: "marketplace",
+  plugins: [],
+  // @ts-expect-error The dependency allowlist contains strings only.
+  allowCrossMarketplaceDependenciesOn: [42],
+} satisfies MarketplaceManifest);
 
 /**
  * MM-1: the compiled validator is module-private, so a schema case reaches it
@@ -44,6 +55,17 @@ describe("marketplace manifest schema", () => {
   for (const marketplaceManifest of [
     { name: "marketplace", plugins: [] },
     { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: ["tools"] },
+    { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: [] },
+    {
+      name: "marketplace",
+      plugins: [],
+      allowCrossMarketplaceDependenciesOn: ["tools", "tools", "", "not a dependency name"],
+    },
+    {
+      name: "marketplace",
+      plugins: [],
+      allowCrossMarketplaceDependenciesOn: ["猫", "line\nfeed", "tab\t", "\u0000", "\u202e"],
+    },
     {
       name: "marketplace",
       plugins: [
@@ -94,6 +116,30 @@ describe("marketplace manifest schema", () => {
     [
       { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: "tools" },
       "/allowCrossMarketplaceDependenciesOn: must be array",
+    ],
+    [
+      { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: null },
+      "/allowCrossMarketplaceDependenciesOn: must be array",
+    ],
+    [
+      { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: false },
+      "/allowCrossMarketplaceDependenciesOn: must be array",
+    ],
+    [
+      { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: 42 },
+      "/allowCrossMarketplaceDependenciesOn: must be array",
+    ],
+    [
+      { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: {} },
+      "/allowCrossMarketplaceDependenciesOn: must be array",
+    ],
+    [
+      { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: ["tools", 42] },
+      "/allowCrossMarketplaceDependenciesOn/1: must be string",
+    ],
+    [
+      { name: "marketplace", plugins: [], allowCrossMarketplaceDependenciesOn: ["tools", null] },
+      "/allowCrossMarketplaceDependenciesOn/1: must be string",
     ],
   ] as const) {
     test(`rejects ${JSON.stringify(marketplaceManifest)}`, async (t) => {
