@@ -256,6 +256,47 @@ test("RESV-06 the failure table names each reason exactly once", async () => {
   );
 });
 
+test("XMKT-01 the documented refusal matches the production composer for direct and nested edges", async () => {
+  // arrange
+  const guide = await readDocSection("## Which marketplace a dependency comes from");
+  const cases = [
+    { requiredBy: ROOT_KEY, rootMarketplace: "official" },
+    { requiredBy: "middle@partner", rootMarketplace: "official" },
+  ] as const;
+
+  for (const { requiredBy, rootMarketplace } of cases) {
+    // act
+    const rows = composeCascadeFailureMessage({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootName: "helper",
+      subject: {
+        kind: "closure",
+        failure: {
+          ok: false,
+          reason: "cross-marketplace",
+          key: DEPENDENCY_KEY,
+          requiredBy,
+          marketplace: "tools",
+          rootMarketplace,
+        },
+      },
+    });
+
+    // assert
+    const failed = rows.find((row) => row.name === DEPENDENCY_KEY);
+    assert.ok(failed?.status === "failed");
+    assert.deepStrictEqual(failed.reasons, ["cross-marketplace"]);
+    assert.deepStrictEqual(
+      failed.cause?.message,
+      `Dependency "${DEPENDENCY_KEY}", declared by "${requiredBy}", is from marketplace "tools", which root marketplace "official" does not allow. Install "${DEPENDENCY_KEY}" manually first, or add "tools" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "official".`,
+    );
+    assert.ok(guide.includes("`allowCrossMarketplaceDependenciesOn`"));
+    assert.ok(guide.includes("install the dependency by name first"));
+    assert.ok(guide.includes("policy root's `marketplace.json`"));
+  }
+});
+
 test("EDEP-03 the already-installed section names the reasons a re-enabled dependency's row carries", async () => {
   // arrange: a member already installed and DISABLED is re-materialized
   // through its own record and renders an `installed` row, not a skip --

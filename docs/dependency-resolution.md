@@ -46,9 +46,13 @@ If one element breaks any of these rules, this extension refuses the whole `depe
 
 If an element names a marketplace, the dependency resolves from that marketplace. If an element names no marketplace, the dependency resolves from the marketplace of the plugin that declared it.
 
-For a direct install, the marketplace of the plugin you named controls every new dependency in the graph. Its `allowCrossMarketplaceDependenciesOn` list in `marketplace.json` must name each other marketplace exactly, including one reached through another dependency. An absent or empty list permits only dependencies from the root marketplace. Adding a marketplace makes it available but does not grant this permission. Names are case-sensitive and are neither trimmed nor normalized.
+For a direct install, the marketplace of the plugin you named is the policy root. Its `allowCrossMarketplaceDependenciesOn` list in `marketplace.json` must name each foreign marketplace needed by a new dependency, including one reached through another dependency. An intermediary marketplace cannot widen the root's permission with its own list. A dependency from the root marketplace needs no entry. An absent field and `[]` both grant no foreign permission. Adding a marketplace makes it available but does not grant this permission. Names are case-sensitive and are neither trimmed nor normalized.
 
-A dependency already recorded in the target scope is exempt from this permission check, even if its marketplace has since been removed. Its version constraint is still checked. A disabled record also counts as installed; a direct install reads through it and applies the root policy to any new dependencies it declares. To resolve a refusal, install the dependency by name first, or add its marketplace to the root marketplace's `allowCrossMarketplaceDependenciesOn` list.
+A dependency already recorded in the target scope is exempt from this permission check, even if its marketplace has since been removed. The existing enabled or disabled traversal rules still apply, and its version constraint is still checked. A disabled record also counts as installed; a direct install reads through it and applies the root policy to any new dependencies it declares. To resolve a refusal, install the dependency by name first, or add its marketplace to `allowCrossMarketplaceDependenciesOn` in the policy root's `marketplace.json`.
+
+A present `allowCrossMarketplaceDependenciesOn` field must be an array of strings. A scalar or an array with a non-string entry invalidates the marketplace manifest. The validation error names the field. The extension does not coerce or discard entries.
+
+`/claude:plugin marketplace info <name>` shows `allowed_marketplaces:` followed by the list as a JSON array, in source order, when the list is nonempty. It omits that line when the field is absent or `[]`. The info command and install cascade read the same parsed list.
 
 ## What a version constraint can say
 
@@ -238,6 +242,10 @@ A disable you asked for is never lifted this way. The check lifts only the disab
 One broken dependency reaches every plugin above it in a single reload. If `a` needs `b` and `b` needs `c`, then uninstalling `c` disables both `b` and `a` on the next reload, not one of them per reload. Installing `c` again brings both back on the next reload too.
 
 A `/reload` also installs a dependency the scope has never seen. If an installed plugin declares a dependency with no install record, `/reload` installs it through the same install cascade `install` uses, from the marketplace the declaration names, at a version inside every declaring plugin's range, and records it as installed for a dependency, not by name. The dependent then loads in the same reload.
+
+For this missing dependency, `/reload` checks every eligible plugin that originally declared it. A declarer in the dependency's marketplace grants permission. A declarer from another marketplace grants permission when its marketplace lists the dependency's marketplace in `allowCrossMarketplaceDependenciesOn`. Any one of these declarers can authorize the original edge. The first `requiredBy` key provides a stable name for a refusal message; it is not the only authority checked. After that edge is authorized, the missing dependency becomes the root of its own install cascade. Its marketplace's list controls any new foreign dependency that it declares. For example, when A needs B and B needs C, A's marketplace controls A-to-B and B's marketplace controls B-to-C.
+
+A refusal installs nothing from that cascade. The command does not add a marketplace for you. Install the missing dependency by name first, or add its marketplace to `allowCrossMarketplaceDependenciesOn` in an original declarer's marketplace manifest. If the refusal concerns a dependency inside B's cascade, edit B's marketplace manifest instead. Then run `/reload` again. The dependent remains disabled until its declaration is satisfied.
 
 ```text
 ● mp [project]
