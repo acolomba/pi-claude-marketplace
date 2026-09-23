@@ -5,11 +5,11 @@ milestone_name: transitive-dependencies
 current_phase: 11
 current_phase_name: Cross-marketplace dependency allowlist
 status: planning
-stopped_at: Phase 10 complete, ready to plan Phase 11
-last_updated: "2026-09-23T02:12:02.630Z"
+stopped_at: Phase 11 context gathered
+last_updated: "2026-09-23T11:47:18.996Z"
 last_activity: 2026-09-22
 last_activity_desc: Phase 10 complete, transitioned to Phase 11
-state_head: c486341646a54d38554dc6ce2fdaad2db28b7544
+state_head: 204fd24273f725b34b62d624bcfbb732069b091f
 progress:
   total_phases: 12
   completed_phases: 10
@@ -1049,13 +1049,13 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 10 complete, ready to plan Phase 11
+**Stopped at:** Phase 11 context gathered
 
-**Resume file:** None
+**Resume file:** .planning/phases/11-cross-marketplace-dependency-allowlist/11-CONTEXT.md
 
 **Read beside it:** `.planning/phases/09-reload-installs-missing-dependencies/09-CONTEXT.md`
 
-Last session: 2026-09-23T02:12:02.630Z
+Last session: 2026-09-23T11:47:18.675Z
 Autonomous run (`/gsd-autonomous --from 9`) took Phase 9 from discuss through
 transition in one session: smart discuss (four areas, every decision checked
 against the 2.1.267 binary at the operator's "follow upstream" instruction),
