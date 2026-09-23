@@ -353,6 +353,88 @@ test("RESV-05 the already-installed guard precedes the marketplace-known guard",
   );
 });
 
+test("XMKT-01 an added but unlisted foreign dependency is refused before catalog lookup", async () => {
+  const { lookup, asked } = catalog({
+    "root@official": [{ name: "formatter", marketplace: "tools" }],
+    "formatter@tools": [],
+  });
+
+  const resolved = await resolveDependencyClosure({
+    rootKey: "root@official",
+    lookup,
+    installedKeys: new Set(),
+    knownMarketplaces: new Set(["official", "tools"]),
+    installPolicy: { allowedMarketplaces: new Set(), recordedKeys: new Set() },
+  });
+
+  assert.deepStrictEqual(resolved, {
+    ok: false,
+    reason: "cross-marketplace",
+    key: "formatter@tools",
+    requiredBy: "root@official",
+    marketplace: "tools",
+    rootMarketplace: "official",
+  });
+  assert.deepStrictEqual(asked, ["root@official"]);
+});
+
+test("XMKT-01 a listed foreign dependency resolves through the root policy", async () => {
+  const { lookup, asked } = catalog({
+    "root@official": [{ name: "formatter", marketplace: "tools" }],
+    "formatter@tools": [],
+  });
+
+  const resolved = await resolveDependencyClosure({
+    rootKey: "root@official",
+    lookup,
+    installedKeys: new Set(),
+    knownMarketplaces: new Set(["official", "tools"]),
+    installPolicy: { allowedMarketplaces: new Set(["tools"]), recordedKeys: new Set() },
+  });
+
+  assert.strictEqual(resolved.ok, true);
+  assert.deepStrictEqual(asked, ["root@official", "formatter@tools"]);
+});
+
+test("XMKT-01 same-marketplace dependencies need no allowlist entry", async () => {
+  const { lookup, asked } = catalog({
+    "root@official": [{ name: "formatter" }],
+    "formatter@official": [],
+  });
+
+  const resolved = await resolveDependencyClosure({
+    rootKey: "root@official",
+    lookup,
+    installedKeys: new Set(),
+    knownMarketplaces: new Set(["official"]),
+    installPolicy: { allowedMarketplaces: new Set(), recordedKeys: new Set() },
+  });
+
+  assert.strictEqual(resolved.ok, true);
+  assert.deepStrictEqual(asked, ["root@official", "formatter@official"]);
+});
+
+test("XMKT-02 a recorded disabled foreign key may be read through without permission", async () => {
+  const { lookup, asked } = catalog({
+    "root@official": [{ name: "formatter", marketplace: "tools" }],
+    "formatter@tools": [],
+  });
+
+  const resolved = await resolveDependencyClosure({
+    rootKey: "root@official",
+    lookup,
+    installedKeys: new Set(),
+    knownMarketplaces: new Set(["official", "tools"]),
+    installPolicy: {
+      allowedMarketplaces: new Set(),
+      recordedKeys: new Set(["formatter@tools"]),
+    },
+  });
+
+  assert.strictEqual(resolved.ok, true);
+  assert.deepStrictEqual(asked, ["root@official", "formatter@tools"]);
+});
+
 test("D-03-08 a dependency naming an unadded marketplace fails the whole closure", async () => {
   // arrange
   const { lookup } = catalog({ "root@mp": [{ name: "helper", marketplace: "other" }] });

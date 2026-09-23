@@ -450,6 +450,8 @@ export interface InstallCascadeOptions {
    */
   readonly ledgerOptionsFor: (member: ResolvedCascadeMember) => InstallLedgerOptions;
   readonly installedKeys: ReadonlySet<string>;
+  /** Permission to install new foreign dependencies, from the root manifest. */
+  readonly rootAllowedMarketplaces: ReadonlySet<string>;
   /**
    * Keep a recorded DISABLED key in `installedKeys` instead of reading through
    * it (D-09-04): the walk stops there like a live dependency, produces no
@@ -1180,6 +1182,10 @@ export async function runInstallCascade(
         ? options.installedKeys
         : liveInstalledKeys(options.state, options.installedKeys),
     knownMarketplaces: options.knownMarketplaces,
+    installPolicy: {
+      allowedMarketplaces: options.rootAllowedMarketplaces,
+      recordedKeys: options.installedKeys,
+    },
   });
   if (!closure.ok) {
     return { kind: "closure-failed", failure: closure };

@@ -496,6 +496,34 @@ describe("composeCascadeFailureMessage", () => {
     });
   });
 
+  test("XMKT-01 a foreign refusal names its declarer and root marketplace with both remedies", () => {
+    const subject: CascadeFailureSubject = {
+      kind: "closure",
+      failure: {
+        ok: false,
+        reason: "cross-marketplace",
+        key: "formatter@tools",
+        requiredBy: "bridge@beta",
+        marketplace: "tools",
+        rootMarketplace: "official",
+      },
+    };
+
+    const emitted = emit(failureRows(subject), BOTH_LOADED);
+
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools (failed) {cross-marketplace}",
+        '    cause: Dependency "formatter@tools", declared by "bridge@beta", is from marketplace "tools", which root marketplace "official" does not allow. Install "formatter@tools" manually first, or add "tools" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "official".',
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
   test("a dependency its marketplace does not declare reuses the inherited token", () => {
     // arrange
     const subject: CascadeFailureSubject = {

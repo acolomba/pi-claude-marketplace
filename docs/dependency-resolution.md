@@ -46,6 +46,10 @@ If one element breaks any of these rules, this extension refuses the whole `depe
 
 If an element names a marketplace, the dependency resolves from that marketplace. If an element names no marketplace, the dependency resolves from the marketplace of the plugin that declared it.
 
+For a direct install, the marketplace of the plugin you named controls every new dependency in the graph. Its `allowCrossMarketplaceDependenciesOn` list in `marketplace.json` must name each other marketplace exactly, including one reached through another dependency. An absent or empty list permits only dependencies from the root marketplace. Adding a marketplace makes it available but does not grant this permission. Names are case-sensitive and are neither trimmed nor normalized.
+
+A dependency already recorded in the target scope is exempt from this permission check, even if its marketplace has since been removed. Its version constraint is still checked. A disabled record also counts as installed; a direct install reads through it and applies the root policy to any new dependencies it declares. To resolve a refusal, install the dependency by name first, or add its marketplace to the root marketplace's `allowCrossMarketplaceDependenciesOn` list.
+
 ## What a version constraint can say
 
 A version constraint follows the semantic versioning range syntax. This extension evaluates these forms.
@@ -265,21 +269,22 @@ Reconcile: 1 failure, 1 warning
 
 Each cause shows as a reason in braces on the failing dependency's own row. This table names every reason the cascade can show.
 
-| Reason                               | What it means                                                                                                                           |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `{no matching version}`              | The tag list was read. No `<plugin-name>--v<version>` tag in it satisfies the constraint.                                               |
-| `{version conflict}`                 | Two declarations ask for version sets that do not overlap, or the copy already installed falls outside the constraint.                  |
-| `{already installed}`                | Joins `{version conflict}` when the copy that fails the constraint is the one already on disk. The row also shows its recorded version. |
-| `{constraint too complex}`           | The declarations pass one of the two size limits above.                                                                                 |
-| `{invalid version constraint}`       | The text is not a range the evaluator can read.                                                                                         |
-| `{network unreachable}`              | The tag list could not be read. The network did not answer.                                                                             |
-| `{authentication required}`          | The tag list could not be read. The source repository refused the credentials.                                                          |
-| `{unreadable}`                       | The tag list could not be read, for a reason that is neither of the two above.                                                          |
-| `{not in manifest}`                  | The named marketplace has no entry with that plugin name.                                                                               |
-| `{dependency marketplace not added}` | You have not added the marketplace the dependency names.                                                                                |
-| `{dependency cycle}`                 | A plugin depends on itself, directly or through a chain of other plugins.                                                               |
-| `{invalid manifest}`                 | The `dependencies` declaration cannot be used. An element breaks a character rule, or it carries a `sha`.                               |
-| `{dependency failed}`                | Shown on the row of the plugin you named, when one of its dependencies is what failed.                                                  |
+| Reason                               | What it means                                                                                                                                              |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{no matching version}`              | The tag list was read. No `<plugin-name>--v<version>` tag in it satisfies the constraint.                                                                  |
+| `{version conflict}`                 | Two declarations ask for version sets that do not overlap, or the copy already installed falls outside the constraint.                                     |
+| `{already installed}`                | Joins `{version conflict}` when the copy that fails the constraint is the one already on disk. The row also shows its recorded version.                    |
+| `{constraint too complex}`           | The declarations pass one of the two size limits above.                                                                                                    |
+| `{invalid version constraint}`       | The text is not a range the evaluator can read.                                                                                                            |
+| `{network unreachable}`              | The tag list could not be read. The network did not answer.                                                                                                |
+| `{authentication required}`          | The tag list could not be read. The source repository refused the credentials.                                                                             |
+| `{unreadable}`                       | The tag list could not be read, for a reason that is neither of the two above.                                                                             |
+| `{not in manifest}`                  | The named marketplace has no entry with that plugin name.                                                                                                  |
+| `{dependency marketplace not added}` | You have not added the marketplace the dependency names.                                                                                                   |
+| `{cross-marketplace}`                | The root marketplace does not allow this new dependency's marketplace. Install the dependency by name first, or add its marketplace to the root allowlist. |
+| `{dependency cycle}`                 | A plugin depends on itself, directly or through a chain of other plugins.                                                                                  |
+| `{invalid manifest}`                 | The `dependencies` declaration cannot be used. An element breaks a character rule, or it carries a `sha`.                                                  |
+| `{dependency failed}`                | Shown on the row of the plugin you named, when one of its dependencies is what failed.                                                                     |
 
 The three "could not be read" reasons are deliberately separate from `{no matching version}`. A list that could not be read is a different fact from a list that held nothing usable.
 
