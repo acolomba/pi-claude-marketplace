@@ -138,8 +138,9 @@ const EXPECTED_SECTION_COUNT = 20;
 // catalog is 127 UTF-8 bytes shorter after the merge.
 // D-11-04: one nonempty marketplace-info policy state (227 -> 228).
 // D-11-06: one cross-marketplace dependency refusal (228 -> 229).
-const EXPECTED_STATE_COUNT = 229;
-const EXPECTED_UTF8_BYTES = 32_013;
+// D-11-06: one reload refusal retaining the dependent-disable row (229 -> 230).
+const EXPECTED_STATE_COUNT = 230;
+const EXPECTED_UTF8_BYTES = 32_526;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -428,7 +429,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 229 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 230 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

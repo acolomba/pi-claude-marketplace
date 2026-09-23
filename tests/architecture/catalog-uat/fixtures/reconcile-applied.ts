@@ -495,5 +495,47 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
         ],
       },
     },
+    "reconcile-dependency-cross-marketplace": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "alpha",
+            scope: "project",
+            plugins: [
+              {
+                status: "disabled",
+                name: "a",
+                version: "1.0.0",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error('Install "b@beta" or uninstall "a@alpha"'),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+          {
+            name: "beta",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "b",
+                reasons: ["cross-marketplace"],
+                cause: new Error(
+                  'Dependency "b@beta", declared by "a@alpha", is from marketplace "beta", which root marketplace "alpha" does not allow. Install "b@beta" manually first, or add "beta" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };
