@@ -331,7 +331,14 @@ test("D-09-16: a recorded plugin declaring a missing key plans the bucket, and t
       },
     ],
     pluginsToDependencyInstall: [
-      { scope: "project", plugin: "vault", marketplace: "mp", ranges: [], requiredBy: "app@mp" },
+      {
+        scope: "project",
+        plugin: "vault",
+        marketplace: "mp",
+        ranges: [],
+        requiredBy: "app@mp",
+        declarers: ["app@mp"],
+      },
     ],
     sourceMismatches: [],
   });
@@ -371,6 +378,13 @@ test("D-09-14: an unsatisfied declaration re-plans the same bucket entry", () =>
   // assert
   assert.deepStrictEqual(secondPlan, firstPlan);
   assert.deepStrictEqual(secondPlan.pluginsToDependencyInstall, [
-    { scope: "project", plugin: "vault", marketplace: "mp", ranges: [], requiredBy: "app@mp" },
+    {
+      scope: "project",
+      plugin: "vault",
+      marketplace: "mp",
+      ranges: [],
+      requiredBy: "app@mp",
+      declarers: ["app@mp"],
+    },
   ]);
 });

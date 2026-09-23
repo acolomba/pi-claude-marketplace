@@ -2905,6 +2905,26 @@ A plugin operation has failed.
 Reconcile: 1 failure, 1 warning
 ```
 
+### Reload refused a foreign missing dependency
+
+The original declaration from `a@alpha` needs `b@beta`. The `alpha` marketplace does not list `beta` in `allowCrossMarketplaceDependenciesOn`, so the dependency install fails before B's cascade starts. The failed row names the first eligible original declarer and the policy root. The dependent keeps its existing `{dependency unsatisfied}` disable row. Install B by name or change the list in `alpha`'s `marketplace.json`, then run `/reload` again. No marketplace is added and no dependency is partly installed. Severity: `error`; no reload hint.
+
+<!-- catalog-state: reconcile-dependency-cross-marketplace -->
+
+```text
+A plugin operation has failed.
+
+● alpha [project]
+  ◍ a v1.0.0 (disabled) {dependency unsatisfied}
+    cause: Install "b@beta" or uninstall "a@alpha"
+
+● beta [project]
+  ⊘ b (failed) {cross-marketplace}
+    cause: Dependency "b@beta", declared by "a@alpha", is from marketplace "beta", which root marketplace "alpha" does not allow. Install "b@beta" manually first, or add "beta" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".
+
+Reconcile: 1 failure, 1 warning
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin marketplace remove <name>`
