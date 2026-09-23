@@ -31,6 +31,7 @@ import { makePresenceProbe, probeManifestEntry } from "./git-source-probe.ts";
 import { createGetPluginInfo } from "./info.ts";
 import { createInstallMissingDependency, createInstallPlugin } from "./install-flow.ts";
 import { runInstallLedger } from "./install-outcome.ts";
+import { createPrunePlugin } from "./prune.ts";
 import { createReinstallPlugin } from "./reinstall-flow.ts";
 import { REAL_REINSTALL_TRANSACTION } from "./reinstall-replace.ts";
 import { selectDeclaringConfigWriteTarget, writeAdoptingConfigEntries } from "./shared.ts";
@@ -49,6 +50,7 @@ import type {
   InstallMissingDependencyOutcome,
   InstallTransaction,
 } from "./install-flow.ts";
+import type { PrunePluginOptions } from "./prune.ts";
 import type { ReinstallHooksRouting, ReinstallPluginFn } from "./reinstall-flow.ts";
 import type { UninstallHooksRouting, UninstallPluginOperation } from "./uninstall.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -129,6 +131,14 @@ export function createUninstallOperation(
   completionCache: CompletionCache,
 ): UninstallPluginOperation {
   return createUninstallPlugin(REAL_UNINSTALL_TRANSACTION, hooksRouting, completionCache);
+}
+
+/** Composes the standalone orphan sweep with uninstall's transaction owner. */
+export function createPruneOperation(
+  hooksRouting: UninstallHooksRouting,
+  completionCache: CompletionCache,
+): (options: PrunePluginOptions) => Promise<void> {
+  return createPrunePlugin(REAL_UNINSTALL_TRANSACTION, hooksRouting, completionCache);
 }
 
 /**

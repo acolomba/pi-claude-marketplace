@@ -58,6 +58,7 @@ import { makePluginInfoHandler } from "./handlers/plugin/info.ts";
 import { makeInstallHandler } from "./handlers/plugin/install.ts";
 import { makeListHandler } from "./handlers/plugin/list.ts";
 import { makePendingHandler } from "./handlers/plugin/pending.ts";
+import { makePruneHandler } from "./handlers/plugin/prune.ts";
 import { makeReinstallHandler } from "./handlers/plugin/reinstall.ts";
 import { makeUninstallHandler } from "./handlers/plugin/uninstall.ts";
 import { makeUpdateHandler } from "./handlers/plugin/update.ts";
@@ -72,7 +73,7 @@ import type { ExtensionAPI } from "../platform/pi-api.ts";
 
 const COMMAND_DESCRIPTION =
   "Manage Claude plugin marketplaces and plugins. Bootstrap, install, " +
-  "uninstall, list, import, update, and reinstall plugins from configured marketplaces.";
+  "uninstall, prune, list, import, update, and reinstall plugins from configured marketplaces.";
 
 /**
  * Wire the `/claude:plugin` slash command + the TC-7 autocomplete
@@ -92,6 +93,7 @@ export function registerClaudePluginCommand(
   const reinstallPlugins = createNodeReinstallPlugins(hooksRouting, deps.completionCache);
   const install = makeInstallHandler(pi, hooksRouting, deps.completionCache);
   const uninstall = makeUninstallHandler(pi, hooksRouting, deps.completionCache);
+  const prune = makePruneHandler(pi, hooksRouting, deps.completionCache);
   const pluginInfo = makePluginInfoHandler(pi);
   const enable = makeEnableDisableHandler(pi, true, hooksRouting);
   const disable = makeEnableDisableHandler(pi, false, hooksRouting);
@@ -102,6 +104,7 @@ export function registerClaudePluginCommand(
     bootstrap: makeBootstrapHandler(pi, deps),
     install,
     uninstall,
+    prune,
     update: makeUpdateHandler(pi, updatePlugins),
     fetch: makeFetchHandler(pi),
     reinstall: makeReinstallHandler(pi, reinstallPlugins),

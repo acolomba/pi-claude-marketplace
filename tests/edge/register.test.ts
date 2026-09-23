@@ -127,10 +127,11 @@ type PiRegistrar = Omit<ExtensionAPI, "registerTool"> & {
 };
 
 const EXPECTED_TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
+  "  prune [--scope user|project]\n" +
   "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
@@ -160,7 +161,7 @@ interface WrapperUnderTest {
 }
 
 const EXPECTED_COMMAND_DESCRIPTION =
-  "Manage Claude plugin marketplaces and plugins. Bootstrap, install, uninstall, list, import, " +
+  "Manage Claude plugin marketplaces and plugins. Bootstrap, install, uninstall, prune, list, import, " +
   "update, and reinstall plugins from configured marketplaces.";
 
 const OWN_COMMAND_LINE = "/claude:plugin install  alpha";
@@ -1530,6 +1531,12 @@ const COMMAND_ARGUMENT_CASES = [
     operand: "alpha@official",
     usage:
       "uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]",
+  },
+  {
+    verb: "prune",
+    operand: "",
+    usage: "prune [--scope user|project]",
+    unknown: 'Unknown option: "--bogus".',
   },
   {
     verb: "update",

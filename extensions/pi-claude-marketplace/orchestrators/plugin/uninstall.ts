@@ -521,7 +521,7 @@ function cascadeFailureCause(plugin: string, localOutcome: UnstageOutcome): Erro
  * record and renders a warning row. `hooksDropped` is the routing-cache fact:
  * a hooks config left disk, so the cache must forget it after the save.
  */
-interface PrunedMember {
+export interface PrunedMember {
   readonly marketplace: string;
   readonly plugin: string;
   readonly row: PluginUninstalledMessage | PluginFailedMessage;
@@ -619,16 +619,16 @@ async function removeDependencyMember(args: {
  * exact when it runs, and a key only a failed member holds is kept -- the
  * sweep removes only what nothing remaining declares (D-05-01).
  */
-async function sweepOrphans(args: {
+export async function sweepOrphans(args: {
   readonly snapshot: DeclarationSnapshot;
-  readonly primaryKey: string;
+  readonly initiallyGone: ReadonlySet<string>;
   readonly locations: ScopedLocations;
   readonly keepData: boolean;
   readonly cascade: typeof cascadeUnstagePlugin;
   readonly transaction: UninstallTransaction;
 }): Promise<PrunedMember[]> {
-  const { snapshot, primaryKey, ...removal } = args;
-  const gone = new Set([primaryKey]);
+  const { snapshot, initiallyGone, ...removal } = args;
+  const gone = new Set(initiallyGone);
   const order = pruneOrphans(snapshot.candidates, snapshot.index, gone);
   // Every key `pruneOrphans` returns is a candidate's key, so the filter
   // yields exactly one record per key and no lookup can miss.
@@ -680,7 +680,7 @@ function survivingDependents(
  * cleanup as the named plugin, with the SAME data disposition. The clone GC
  * is idempotent, so running it per member is correct.
  */
-async function finalizePrunedMembers(args: {
+export async function finalizePrunedMembers(args: {
   readonly members: readonly PrunedMember[];
   readonly hooksRouting: UninstallHooksRouting;
   readonly completionCache: CompletionCache;
@@ -1118,7 +1118,7 @@ async function uninstallPluginWithTransaction(
         prunedMembers.push(
           ...(await sweepOrphans({
             snapshot,
-            primaryKey,
+            initiallyGone: new Set([primaryKey]),
             locations,
             keepData,
             cascade,
@@ -1300,3 +1300,5 @@ export function createUninstallPlugin(
 
   return configuredUninstallPlugin;
 }
+
+export type { DeclarationSnapshot };

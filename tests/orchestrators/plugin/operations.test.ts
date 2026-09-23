@@ -17,6 +17,7 @@ import {
   createDependencyInstallOperation,
   createEnableOperation,
   createInstallOperation,
+  createPruneOperation,
   createReinstallOperation,
   createUninstallOperation,
   fetchPlugins,
@@ -435,6 +436,30 @@ test("constructs the uninstall operation without using its owners or starting as
 
   // assert
   assert.strictEqual(typeof uninstallPlugin, "function");
+  assert.deepStrictEqual(startedResourceTypes, []);
+  verify(hooksRouting);
+  verify(completionCache);
+});
+
+test("constructs the prune operation without using its owners or starting asynchronous work", (t) => {
+  // arrange
+  const hooksRouting = mock<UninstallHooksRouting>({ exactParams: true, name: "hooks routing" });
+  const completionCache = mock<CompletionCache>({ exactParams: true, name: "completion cache" });
+  const startedResourceTypes: string[] = [];
+  const resources = createHook({
+    init: (_asyncId, type) => {
+      startedResourceTypes.push(type);
+    },
+  });
+  t.after(() => resources.disable());
+
+  // act
+  resources.enable();
+  const prunePlugin = createPruneOperation(hooksRouting, completionCache);
+  resources.disable();
+
+  // assert
+  assert.strictEqual(typeof prunePlugin, "function");
   assert.deepStrictEqual(startedResourceTypes, []);
   verify(hooksRouting);
   verify(completionCache);

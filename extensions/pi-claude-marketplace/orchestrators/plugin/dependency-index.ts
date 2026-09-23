@@ -109,10 +109,10 @@ export interface ScopeDeclarationDetailOptions {
   readonly loadManifest?: typeof loadMarketplaceManifest;
 }
 
-/** Inputs of one scope-wide index build: the same read, plus the exclusion. */
+/** Inputs of one scope-wide index build, optionally excluding a named removal. */
 export interface ScopeDeclarationIndexOptions extends ScopeDeclarationDetailOptions {
-  /** The `name@marketplace` key under decision; it is never indexed. */
-  readonly exclude: string;
+  /** A named removal is never indexed; a standalone sweep indexes every record. */
+  readonly exclude?: string;
 }
 
 /**

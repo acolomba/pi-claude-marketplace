@@ -62,6 +62,7 @@ const TOP_LEVEL_DISPATCH: readonly DispatchRow[] = [
   { subcommand: "bootstrap", handler: "bootstrap" },
   { subcommand: "install", handler: "install" },
   { subcommand: "uninstall", handler: "uninstall" },
+  { subcommand: "prune", handler: "prune" },
   { subcommand: "update", handler: "update" },
   { subcommand: "fetch", handler: "fetch" },
   { subcommand: "reinstall", handler: "reinstall" },
@@ -92,10 +93,11 @@ const MARKETPLACE_DISPATCH: readonly DispatchRow[] = [
 ];
 
 const EXPECTED_TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
+  "  prune [--scope user|project]\n" +
   "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
