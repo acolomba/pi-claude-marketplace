@@ -516,8 +516,8 @@ function cascadeFailureCause(plugin: string, localOutcome: UnstageOutcome): Erro
 
 /**
  * D-05-10 / D-05-13: one dependency record the sweep visited, and what became
- * of it. `removed` records leave the snapshot and get the same post-commit
- * cleanup as the named plugin; a failed member keeps its (possibly shrunken)
+ * of it. `removed` records leave the snapshot and get the usual post-commit
+ * cleanup; a failed member keeps its (possibly shrunken)
  * record and renders a warning row. `hooksDropped` is the routing-cache fact:
  * a hooks config left disk, so the cache must forget it after the save.
  */
@@ -531,10 +531,10 @@ export interface PrunedMember {
 
 /**
  * D-05-13: the warning row for a pruned member whose cascade did not fully
- * unstage. It is the failed row the primary renders with `warning` in place of
- * `error`: the command WAS carried out -- the named plugin and the other
- * members are gone -- and this one plugin fell short. No reload: the member's
- * record is still there.
+ * unstage. It uses `warning` because other members may have been removed while
+ * this one plugin fell short. The member's record remains installed, so its
+ * failed row requests no reload and the record still holds its dependencies
+ * for the rest of this sweep.
  */
 function buildMemberFailedRow(member: IndexedRecord, cause: Error): PluginFailedMessage {
   return {
@@ -550,7 +550,7 @@ function buildMemberFailedRow(member: IndexedRecord, cause: Error): PluginFailed
 
 /**
  * D-05-10: the guard-free removal of ONE orphaned dependency record, run inside
- * the primary's locked transaction between its commit and the single save.
+ * the caller's locked transaction before its single save.
  *
  * The body is TOTAL. A throw here would abort the save after the named
  * plugin's artifacts are already off disk and leave its record a ghost (NFR-3),
@@ -604,12 +604,12 @@ async function removeDependencyMember(args: {
 }
 
 /**
- * D-05-01 / D-05-02 / D-05-03: the whole-scope orphan sweep. Decides the
- * removal order with `pruneOrphans` over the guard's index and candidates --
- * the same locked snapshot -- seeded with the named plugin's key, then runs
- * the member body once per key in that order (dependents before their
- * dependencies). Reached only from the arm where the named plugin was
- * actually removed.
+ * D-05-01 / D-05-02: the whole-scope orphan sweep. It decides the removal
+ * order with `pruneOrphans` over the locked snapshot and runs the member body
+ * once per key in that order (dependents before dependencies). Named uninstall
+ * passes its removed primary key in `initiallyGone`; its declaration index
+ * already excludes that primary. Standalone prune passes an empty set and
+ * indexes all installed records in the selected scope.
  *
  * PRUNE-03 / D-05-13: `pruneOrphans` marks each batch gone on the assumption
  * that every member in it goes, but a failed member keeps its record and is
@@ -674,10 +674,10 @@ function survivingDependents(
 }
 
 /**
- * D-05-09: the post-commit cleanup of every pruned member, after the primary's
- * own. A member whose hooks config left disk is dropped from the routing
+ * D-05-09: the post-commit cleanup of every pruned member. A member whose
+ * hooks config left disk is dropped from the routing
  * cache; a removed member gets the same cache, data-directory and clone-cache
- * cleanup as the named plugin, with the SAME data disposition. The clone GC
+ * cleanup as a named uninstall, with the caller's data disposition. The clone GC
  * is idempotent, so running it per member is correct.
  */
 export async function finalizePrunedMembers(args: {
