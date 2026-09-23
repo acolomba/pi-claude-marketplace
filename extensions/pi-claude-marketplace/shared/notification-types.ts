@@ -731,6 +731,7 @@ export interface MarketplaceInfoMessage {
     | { readonly sourceKind: "url"; readonly url: string; readonly ref?: string }
     | { readonly sourceKind: "path"; readonly absPath: string };
   readonly description?: string;
+  readonly allowedMarketplaces?: readonly string[];
 }
 
 /** Plugin information message. */

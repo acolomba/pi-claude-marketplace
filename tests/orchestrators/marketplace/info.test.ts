@@ -186,6 +186,7 @@ async function writeMarketplaceJson(
   manifestPath: string,
   name: string,
   description?: string,
+  allowedMarketplaces?: readonly string[],
 ): Promise<void> {
   await mkdir(path.dirname(manifestPath), { recursive: true });
   const manifest: Record<string, unknown> = { name, plugins: [] };
@@ -193,8 +194,168 @@ async function writeMarketplaceJson(
     manifest.description = description;
   }
 
+  if (allowedMarketplaces !== undefined) {
+    manifest.allowCrossMarketplaceDependenciesOn = allowedMarketplaces;
+  }
+
   await writeFile(manifestPath, JSON.stringify(manifest), "utf8");
 }
+
+test("marketplace info displays a nonempty allowlist after the description", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "policy.json");
+    await writeMarketplaceJson(manifestPath, "policy", "Policy marketplace.", [
+      "tools",
+      "team",
+      "tools",
+      "",
+    ]);
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot: "/marketplaces/policy",
+        name: "policy",
+        scope: "user",
+        source: pathSource("/marketplaces/policy"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message:
+        '● policy [user] <no autoupdate>\npath: /marketplaces/policy\ndescription: Policy marketplace.\nallowed_marketplaces: ["tools","team","tools",""]',
+    });
+
+    // act
+    await getMarketplaceInfo({ ctx: boundary.ctx, pi: boundary.pi, name: "policy", cwd });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
+});
+
+test("marketplace info omits an empty allowlist", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "empty.json");
+    await writeMarketplaceJson(manifestPath, "empty", undefined, []);
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot: "/marketplaces/empty",
+        name: "empty",
+        scope: "user",
+        source: pathSource("/marketplaces/empty"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message: "● empty [user] <no autoupdate>\npath: /marketplaces/empty",
+    });
+
+    // act
+    await getMarketplaceInfo({ ctx: boundary.ctx, pi: boundary.pi, name: "empty", cwd });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
+});
+
+test("marketplace info shows each scope's own allowlist", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const projectLocations = locationsFor("project", cwd);
+    const userLocations = locationsFor("user", cwd);
+    const projectPath = path.join(projectLocations.extensionRoot, "same.json");
+    const userPath = path.join(userLocations.extensionRoot, "same.json");
+    await writeMarketplaceJson(projectPath, "same", undefined, ["tools"]);
+    await writeMarketplaceJson(userPath, "same", undefined, ["team"]);
+    await saveMarketplace(
+      projectLocations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath: projectPath,
+        marketplaceRoot: "/project/same",
+        name: "same",
+        scope: "project",
+        source: pathSource("/project/same"),
+      }),
+    );
+    await saveMarketplace(
+      userLocations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath: userPath,
+        marketplaceRoot: "/user/same",
+        name: "same",
+        scope: "user",
+        source: pathSource("/user/same"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message:
+        '● same [project] <no autoupdate>\npath: /project/same\nallowed_marketplaces: ["tools"]\n\n● same [user] <no autoupdate>\npath: /user/same\nallowed_marketplaces: ["team"]',
+    });
+
+    // act
+    await getMarketplaceInfo({ ctx: boundary.ctx, pi: boundary.pi, name: "same", cwd });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
+});
+
+test("malformed present allowlist follows the invalid manifest info failure", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "bad-policy.json");
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "bad-policy",
+        plugins: [],
+        allowCrossMarketplaceDependenciesOn: "tools",
+      }),
+      "utf8",
+    );
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot: "/marketplaces/bad-policy",
+        name: "bad-policy",
+        scope: "user",
+        source: pathSource("/marketplaces/bad-policy"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message:
+        "A plugin operation has failed.\n\n● bad-policy [user] <no autoupdate>\n  ⊘ bad-policy (failed) {invalid manifest}\n    components: not resolved",
+      severity: "error",
+    });
+
+    // act
+    await getMarketplaceInfo({ ctx: boundary.ctx, pi: boundary.pi, name: "bad-policy", cwd });
+
+    // assert
+    assert.deepEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
+});
 
 test("INFO-01: an explicit user github source renders all optional fields", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
