@@ -202,11 +202,11 @@ depends on it.
 Parity with upstream's `allowCrossMarketplaceDependenciesOn`. Today any added
 marketplace may satisfy a dependency (D-03-08 covers only the not-added case).
 
-- [ ] **XMKT-01**: A dependency that resolves from a marketplace other than the
+- [x] **XMKT-01**: A dependency that resolves from a marketplace other than the
   root plugin's is refused unless the root marketplace's `marketplace.json`
   lists that marketplace in `allowCrossMarketplaceDependenciesOn`; the reason
   names the field.
-- [ ] **XMKT-02**: An already-installed dependency satisfies the declaration
+- [x] **XMKT-02**: An already-installed dependency satisfies the declaration
   regardless of the allowlist.
 
 ### Divergence record (DIVG)
@@ -285,8 +285,8 @@ this milestone.
 | MISS-02 | Phase 9 | Complete |
 | UPDT-01 | Phase 10 | Complete |
 | UPDT-02 | Phase 10 | Complete |
-| XMKT-01 | Phase 11 | Pending |
-| XMKT-02 | Phase 11 | Pending |
+| XMKT-01 | Phase 11 | Complete |
+| XMKT-02 | Phase 11 | Complete |
 | PRUNE-06 | Phase 12 | Pending |
 | PRUNE-07 | Phase 12 | Pending |
 | FLAG-02 | Phase 12 | Pending |

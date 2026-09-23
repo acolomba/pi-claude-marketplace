@@ -106,6 +106,18 @@ updates retain their prior bytes and network behavior. UPDT-01 and UPDT-02 are
 complete; final verification passed after a clean code-review rerun and one
 test-strengthening fix for the commit-pinned git-source preflight path.
 
+**Delivered 2026-09-23 (Phase 11, verified 20/20 plus 2/2 human checks):**
+marketplace manifests now validate `allowCrossMarketplaceDependenciesOn` as an
+optional string array. Info shows a nonempty policy with control characters
+escaped for display. Direct install and reload refuse a new dependency from a
+foreign marketplace unless the governing root marketplace lists it; an
+already-installed dependency still satisfies. Reload checks every eligible
+original declarer before the missing plugin's own cascade, and a nested edge
+uses that plugin's policy. Refusals are fail-clean and name both remedies:
+install the dependency manually first or edit the root marketplace's list.
+XMKT-01 and XMKT-02 are complete. Code review is clean, all 17 planned
+security threats are closed, and the Nyquist audit found no test gaps.
+
 **Delivered 2026-09-21 (Phase 8, verified 13/13):** `enable` and `disable`
 understand dependencies. `enable <plugin>` resolves the declared closure
 transitively in the same scope and reports one row per member, re-materializing
@@ -375,10 +387,10 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
-**In progress:** nothing. No milestone is active -- define the next one with
-`/gsd-new-milestone`.
+**In progress:** v1.20 transitive-dependencies. Phase 11 is complete;
+Phase 12 (standalone prune with dry-run) is next.
 
-**Just shipped:** refine-unit-tests (2026-09-13, Phases 1-9, 213 plans, 412 tasks;
+**Previously shipped:** refine-unit-tests (2026-09-13, Phases 1-9, 213 plans, 412 tasks;
 archived to `.planning/milestones/refine-unit-tests-*`). v1.19 gave every production
 module an owner test; this milestone asked whether those tests prove anything, and
 started from an evidence gate rather than a fix list. Phase 1 revalidated the whole
@@ -497,6 +509,12 @@ All prior validated requirements below remain historical completed work.
   ceiling results are disclosed, and unconstrained updates keep their previous
   bytes and network behavior — v1.20 Phase 10 (UPDT-01, UPDT-02), verified
   2026-09-22, 3/3 with no human items.
+- ✓ A new dependency from a foreign marketplace installs only when the
+  governing root marketplace lists it in `allowCrossMarketplaceDependenciesOn`;
+  an already-installed dependency still satisfies. Direct and reload refusals
+  name the blocked dependency, policy root, and both remedies, and leave no
+  partial install — v1.20 Phase 11 (XMKT-01, XMKT-02), verified 2026-09-23,
+  20/20 functional truths and 2/2 human wording checks.
 - ✓ `enable` and `disable` understand dependencies: `enable <plugin>` resolves
   the declared closure transitively in the same scope, reports one row per
   member and re-materializes a disabled member through its own record as
@@ -857,6 +875,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-08-01/02/03 + review rulings (v1.20 Phase 8, 2026-09-21):** the disable refusal is a plain-English instruction naming dependents in order, not a chained command (`disable` takes one target); the cascade-enable token is `{dependency enabled}` and `{dependents remain}` returns for the disable refusal (B1), while `{dependency disabled}` is retired; the enable cascade reports the full closure. Review rulings: a re-enabled member's EXISTING `enabled: false` config entry is overwritten to `true` and a member with no entry never gets one (D-04-02); the enable cascade and the disable guard are standalone-only, the install-cascade re-enable runs on every install; a `{not installed}` member stamps `warning` and does not refuse; one walk owns the install cascade's re-enable closure (`liveInstalledKeys`), after a discovery/fold split regressed three review passes running. |
 | **D-09-01..16 + review rulings (v1.20 Phase 9, 2026-09-22):** the reload's missing-dependency bucket derives from the verdict's `missing` arm for dependents that will be enabled once the pass applies (enabled, marker-held, or config-declared enabled; never a user-disabled record the config leaves alone, never one the plan uninstalls/disables); a disabled installed dependency is left alone (upstream installs only `not-found`); one cascade per missing key rooted at the dependency with the declarers' ranges folded once and every member `provenance: "dependency"`; the step runs after `install plugins`, only on an explicit `/reload` (upstream's session start never installs), and re-plans only the three toggle buckets when at least one dependency landed; the LOAD-02 lift is provenance-independent; rows are one `(installed) {dependency installed}` per materialized member, a cascade-wrapped failure renders `{dependency failed}` with the cause line (no per-kind classifier), an already-present member is silent, preview keeps the empty verdict default (PENDING-VERDICT-01 stays open); a failed install is retried on every reload; `marketplace add`/autoupdate are not wired (MISS-MPADD-01). Review rulings: the reload row carries the root's degradation signals and `{dependency current copy}` through one `ledgerDegradationSignals` derivation shared by both install projections. |
 | **D-10-01/09/12/17a/18 + review ruling (v1.20 Phase 10, 2026-09-22):** update constraint handling is a two-stage preflight: select the highest satisfying tag, then re-check the version that actually resolved before any write; the published held token is `{dependents constrain}` and stays outside the idempotent-reason set, so manual and automatic held rows are warnings; the constraint disclosure is required-but-nullable and atomically shaped on prepared, updated, and unchanged outcomes; tag listings are memoized once per repository or marketplace per run. The final review strengthened the commit-pinned git-source preflight test so it reaches the real source-kind branch instead of stubbing the verdict. | Keeps every update inside the ranges its same-scope installed dependents declare, preserves bulk progress and unconstrained behavior, prevents silent omission of user-visible constraint residue, and proves the sha-bearing git-source route through production logic rather than a test double. | -- Locked |
+| **D-11-01/02/03/04/05/06 (v1.20 Phase 11, 2026-09-23):** a missing foreign dependency requires exact membership in the governing root marketplace's validated allowlist before lookup or mutation; recorded dependencies remain exempt. Direct cascades keep their original root, while reload first checks every eligible original declarer and then uses the missing plugin's own policy for its children. Info displays the policy safely, and refusal names the policy root plus manual-install and allowlist-edit remedies. | Availability of a marketplace alone cannot authorize new code. Installed-first behavior and fail-clean retry remain intact across direct install and reload. | -- Locked |
 
 ## Evolution
 
@@ -879,7 +898,7 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-_Last updated: 2026-09-22 after v1.20 Phase 10 constraint-aware update verified 3/3 and its autonomous code review converged clean after one test-strengthening fix. UPDT-01 and UPDT-02 are complete. Phases 6-10 of the parity extension are complete; Phase 11 (cross-marketplace dependency allowlist) is next. Prior updates follow._
+_Last updated: 2026-09-23 after v1.20 Phase 11 cross-marketplace dependency allowlist verified 20/20 functional truths and 2/2 human wording checks. XMKT-01 and XMKT-02 are complete; Phase 12 (standalone prune with dry-run) is next. Prior updates follow._
 
 _Last updated: 2026-09-21 after Phase 8 enablement-parity-for-dependencies verified 13/13 (no human items). Phases 6-8 of the 2026-09-18 extension are complete: the load-time dependency check, marketplace-repository tag resolution, and enable/disable/install-cascade parity. EDEP-01..03 read Complete. Phase 9 (reload installs missing declared dependencies) is next. Prior updates follow._
 

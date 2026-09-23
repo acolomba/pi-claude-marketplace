@@ -2,43 +2,55 @@
 gsd_state_version: "1.0"
 milestone: v1.20
 milestone_name: transitive-dependencies
-current_phase: 11
-current_phase_name: Cross-marketplace dependency allowlist
-status: executing
-stopped_at: Phase 11 context gathered
-last_updated: "2026-09-23T12:40:48.021Z"
+current_phase: 12
+current_phase_name: Standalone prune with dry-run
+status: planning
+stopped_at: Phase 11 complete, ready to plan Phase 12
+last_updated: "2026-09-23T19:12:02.927Z"
 last_activity: 2026-09-23
-last_activity_desc: Phase 11 execution started
-state_head: c690d20f08415df9eb75b103ab6277adce2724fe
+last_activity_desc: Phase 11 complete, transitioned to Phase 12
+state_head: 934655adf84beb72684c66514bfd14bfa51f01e6
 progress:
   total_phases: 12
-  completed_phases: 10
+  completed_phases: 11
   total_plans: 47
-  completed_plans: 40
-  percent: 83
+  completed_plans: 47
+  percent: 92
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-22 after Phase 10 constraint-aware update)
+See: `.planning/PROJECT.md` (updated 2026-09-23 after Phase 11 cross-marketplace dependency allowlist)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 11 — Cross-marketplace dependency allowlist
+**Current focus:** Phase 12 — Standalone prune with dry-run
 within phases 6-12, which align the shipped dependency feature with the Claude
-Code dependency docs. Phases 6-10 are complete.
+Code dependency docs. Phases 6-11 are complete.
 44 requirements across 12 phases (25 shipped in Phases 1-5 as PR #198, 19
 added 2026-09-18). v1.19 Unit Test Refactor closed 2026-09-04 and is archived
 under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 11 (Cross-marketplace dependency allowlist) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 11
+Phase: 12 — Standalone prune with dry-run
+Plan: Not started
+Status: Ready to plan
+
+**Phase 11 closed 2026-09-23**, verified 20/20 functional truths and both
+human wording checks. The validated manifest allowlist controls new foreign
+dependency installs, while recorded dependencies remain exempt. Direct
+installs use the original root's policy; reload checks every eligible original
+declarer before the missing plugin's cascade, whose own policy controls its
+children. Refusals name both remedies and leave no partial install. Code review
+is clean, 17/17 planned security threats are closed, and the Nyquist audit found
+no test gaps. The isolated full check passed 7,646 unit tests at 100% coverage,
+38 integration tests, and all seven type-member negative controls. The parent
+checkout's chained check still stops at the operator-owned
+`.planning/config.json` formatting drift; that file remains unstaged.
 
 **Phase 10 closed 2026-09-22**, verified 3/3 must-haves with no human items;
 the final code review is clean after one test-reliability fix. `update`, bulk
@@ -423,7 +435,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-23 — Phase 11 execution started
+Last activity: 2026-09-23 — Phase 11 complete, transitioned to Phase 12
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 5 of 5 phases complete (100%).
@@ -450,7 +462,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 
 **Velocity:**
 
-- Total plans completed: 191
+- Total plans completed: 198
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -474,6 +486,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | 8 | 3 | - | - |
 | 09 | 4 | - | - |
 | 10 | 4 | - | - |
+| 11 | 7 | - | - |
 
 **Recent Trend:** 35 Phase 113 plans completed with all direct owner, review, validation, verification, security, and clean-repository gates green.
 **Per-Plan Metrics:**
@@ -637,6 +650,12 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 
 Decisions are logged in the PROJECT.md Key Decisions table.
 
+- [Phase 11] New foreign dependency installs require exact membership in the
+  governing root marketplace's validated allowlist before lookup or mutation.
+- [Phase 11] Reload checks every eligible original declarer for permission;
+  once B is installed, B's own policy governs B-to-C edges.
+- [Phase 11] Refusal names the blocked dependency and both the narrow manual
+  install remedy and the root marketplace policy edit.
 - Each executable plan and implementation commit owns one source-test pair.
 - Runtime tests use separate lowercase `// arrange`, `// act`, and `// assert` phases.
 - Lowercase `// act & assert` is reserved for one `assert.throws()` or `assert.rejects()` expression.
@@ -941,10 +960,10 @@ session that must settle it:
   and passed — this note was stale (the report was already on disk when it was
   written). Phase 2 also closed clean: `02-VERIFICATION.md` passed 10/10.
 - RESOLVED by 117-12: D-117-20 in `117-CONTEXT.md` now reads 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only, matching the operator decision taken in plan 117-11 and the retained all-pair artifact. The superseded 197 + 7 wording is gone.
-- `npm run check` reaches the pre-existing, operator-owned
-  `.planning/config.json` formatting drift. Phase 10's focused formatting,
-  typecheck, lint, Fallow, unit, integration, direct-coverage, and type-member
-  gates are green; the local config edit remains intentionally unstaged.
+- [Phase 11] `npm run check` reaches the pre-existing, operator-owned
+  `.planning/config.json` formatting drift. The isolated Phase 11 full check
+  passed, and downstream parent gates passed separately; the local config edit
+  remains intentionally unstaged.
 
 ### Quick Tasks Completed
 
@@ -1049,13 +1068,18 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 11 context gathered
+**Stopped at:** Phase 11 complete, ready to plan Phase 12
 
-**Resume file:** .planning/phases/11-cross-marketplace-dependency-allowlist/11-CONTEXT.md
+**Resume file:** None
 
-**Read beside it:** `.planning/phases/09-reload-installs-missing-dependencies/09-CONTEXT.md`
+Last session: 2026-09-23T19:13:05Z
+Phase 11 is complete. Seven plans executed, functional verification passed
+20/20, both human UAT checks passed, security closed 17/17 planned threats,
+and validation found no test gaps. Phase 12 is ready for discussion and
+planning. The operator-owned `.planning/config.json` formatting drift remains
+unstaged and blocks the parent checkout's chained `npm run check` at formatting.
 
-Last session: 2026-09-23T11:47:18.675Z
+Previous session: 2026-09-23T11:47:18.675Z
 Autonomous run (`/gsd-autonomous --from 9`) took Phase 9 from discuss through
 transition in one session: smart discuss (four areas, every decision checked
 against the 2.1.267 binary at the operator's "follow upstream" instruction),
