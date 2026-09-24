@@ -1,21 +1,37 @@
 ---
 phase: 12-standalone-prune-with-dry-run
-fixed_at: 2026-09-24T12:55:12Z
+fixed_at: 2026-09-24T13:49:18Z
 review_path: .planning/phases/12-standalone-prune-with-dry-run/12-REVIEW.md
-iteration: 4
-findings_in_scope: 3
-fixed: 3
+iteration: 5
+findings_in_scope: 1
+fixed: 1
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 12: Code Review Fix Report
 
-**Fixed at:** 2026-09-24T12:55:12Z
+**Fixed at:** 2026-09-24T13:49:18Z
 **Source review:** `.planning/phases/12-standalone-prune-with-dry-run/12-REVIEW.md`
-**Iteration:** 4
+**Iteration:** 5
 
-**Summary:** Three Critical findings were fixed. No finding was skipped. Earlier fixes remain recorded below.
+**Summary:** One Critical finding was fixed. No finding was skipped. Earlier fixes remain recorded below.
+
+## Iteration 5 fixed issues
+
+### CR-01: Cleanup failure is attributed to the wrong pruned plugin
+
+**Status:** fixed: requires human verification
+**Commit:** `97f39a60`
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/prune.ts`, `extensions/pi-claude-marketplace/shared/notification-types.ts`, `extensions/pi-claude-marketplace/shared/notification-summary.ts`, `extensions/pi-claude-marketplace/shared/notification-dispatch.ts`, `tests/orchestrators/plugin/prune.test.ts`, `tests/shared/notification-types.test.ts`, `tests/shared/notification-summary.test.ts`, `tests/shared/notification-dispatch.test.ts`, `tests/architecture/notify-closed-set-locks.test.ts`, `docs/output-catalog.md`, `tests/architecture/catalog-uat/fixtures/plugin-prune.ts`, `tests/architecture/catalog-uat/catalog-contract.test.ts`, `tests/architecture/catalog-uat/catalog-parser.test.ts`, and `scripts/check-unused-type-members.contracts.json`.
+
+**Applied fix:** Cleanup failures retain the member that raised them. Only that member's committed removal row receives its warning and cause. A transaction-wide failure after save emits a separate typed, scoped warning that states prune committed and requests `/reload`. Tests prove that `a` loses its data while `b` keeps its data and receives its own cleanup warning. A combined lock-release and `b` cleanup failure keeps both causes on their proper notifications. The exact second-member and committed-warning outputs are pinned in the catalog. The type-member contract coordinates now point to the `kind` selectors after those source lines moved.
+
+## Iteration 5 verification
+
+Checks ran in the shared `features/manifest` linked checkout. The new second-member regression failed before the implementation and passed after it. Focused prune, notification, and catalog tests passed (287 cases). The standalone prune integration passed (25 cases), and the changed notification-kind architecture and type tests passed with prune (68 cases). Direct-pair coverage reached 100% for `prune.ts` (68 branches, 18 functions, 336 lines), `notification-dispatch.ts` (47 branches, 17 functions, 449 lines), `notification-summary.ts` (130 branches, 19 functions, 636 lines), and `notification-types.ts` (26 branches, 3 functions, 861 lines). The final full unit run passed all 7,758 tests with 100% aggregate line, branch, and function coverage; all 15 integration test files passed. The parent's final scoped pre-commit run passed global lint, typecheck, Fallow, changed-pair coverage, the positive type-member check, changed-file Prettier, and Markdown checks. It skipped `npm-type-members-negative` because the sandbox cannot spawn Node (`EPERM`); the separate escalated run passed 7 of 7. It also skipped `trufflehog` for the linked checkout's `.git/index` limitation and `npm-format-check` because it scans untouched operator-owned `.planning/config.json`. The sandboxed Fallow agent audit returned a JSON temporary-worktree runtime error; the escalated `fallow audit --base HEAD` passed with zero introduced findings. Diff whitespace checks passed.
+
+## Earlier fix history: iteration 4
 
 ## Iteration 4 fixed issues
 
@@ -201,6 +217,6 @@ The final scoped pre-commit run passed every applicable hook. It skipped the Tru
 
 ---
 
-_Fixed: 2026-09-24T12:55:12Z_
+_Fixed: 2026-09-24T13:49:18Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: 4_
+_Iteration: 5_
