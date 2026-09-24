@@ -4,6 +4,10 @@ phase: 03-dependency-resolution
 source: [03-VERIFICATION.md]
 started: 2026-09-15T00:00:00Z
 updated: 2026-09-15T00:00:00Z
+audit_acknowledged:
+  milestone: v1.20
+  at: 2026-09-24
+  gap_snapshot: "testing::scenarios=0"
 ---
 
 ## Current Test

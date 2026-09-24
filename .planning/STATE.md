@@ -2,13 +2,12 @@
 gsd_state_version: "1.0"
 milestone: v1.20
 milestone_name: transitive-dependencies
-current_phase: 12
-status: completed
-stopped_at: Phase 12 complete — all phases complete
-last_updated: "2026-09-24T14:50:02.462Z"
+status: Awaiting next milestone
+stopped_at: v1.20 archived; awaiting next milestone
+last_updated: "2026-09-24T18:03:41.147Z"
 last_activity: 2026-09-24
-last_activity_desc: Phase 12 complete
-state_head: 3a511b4394f39b367432472327d7f9e06e059502
+last_activity_desc: Milestone v1.20 completed and archived
+state_head: ea8e65ca1f2ecfa488434ad317978c5a259df05a
 progress:
   total_phases: 12
   completed_phases: 12
@@ -21,449 +20,21 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-24 after Phase 12 standalone prune)
+See: `.planning/PROJECT.md` (updated 2026-09-24 after v1.20 closeout)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** v1.20 milestone audit and closeout. All 12 phases and 45
-requirements are complete. v1.19 Unit Test Refactor closed 2026-09-04 and is
-archived under `.planning/milestones/v1.19-*`.
+**Current focus:** Planning the next milestone. v1.20 closed with 12/12 phases
+and 45/45 requirements. The successful private-repository credential challenge
+remains deferred in Phase 3 UAT; its exception is recorded below.
 
 ## Current Position
 
-Phase: 12 (Standalone prune with dry-run) — COMPLETE
-Plan: 8 of 8 complete
-Status: All phases complete
-
-**Phase 12 closed 2026-09-24:** Standalone `prune` removes only orphaned
-dependency installs in one selected scope; `--dry-run` previews the same
-fixpoint without writing. The scoped empty result, exact flag set, catalog
-rows, and public docs are pinned; the list/info orphan marker was dropped.
-Code review is clean, goal verification passed 27/27, live Pi UAT passed 1/1,
-the validation audit found no test gaps, and all 12 planned security threats
-are closed. The final unit suite passed 7,760/7,760 at 100% aggregate
-coverage, and focused standalone integration passed 25/25. The chained
-`npm run check` stops at the operator-owned `.planning/config.json` formatting
-drift; unaffected gates passed separately.
-
-**Phase 11 closed 2026-09-23**, verified 20/20 functional truths and both
-human wording checks. The validated manifest allowlist controls new foreign
-dependency installs, while recorded dependencies remain exempt. Direct
-installs use the original root's policy; reload checks every eligible original
-declarer before the missing plugin's cascade, whose own policy controls its
-children. Refusals name both remedies and leave no partial install. Code review
-is clean, 17/17 planned security threats are closed, and the Nyquist audit found
-no test gaps. The isolated full check passed 7,646 unit tests at 100% coverage,
-38 integration tests, and all seven type-member negative controls. The parent
-checkout's chained check still stops at the operator-owned
-`.planning/config.json` formatting drift; that file remains unstaged.
-
-**Phase 10 closed 2026-09-22**, verified 3/3 must-haves with no human items;
-the final code review is clean after one test-reliability fix. `update`, bulk
-`update`, and `autoupdate` now select the highest release tag admitted by the
-intersection of same-scope installed dependents' ranges for both git-backed
-and path sources, then re-check the version that actually resolved before any
-write. A held plugin is skipped at warning severity with
-`{dependents constrain}` and a cause line naming its holders while the rest of
-the run continues. Current-copy fallbacks and ceiling results disclose their
-constraint context; unconstrained updates keep their prior bytes and network
-behavior. The review fix replaced a verdict-stubbed preflight case with a real
-commit-pinned git-source gate path. UPDT-01 and UPDT-02 are complete.
-
-**Phase 9 closed 2026-09-22**, verified 12/12 must-haves with no human items;
-regression gate on the final tree: 7489/7489 unit, 38/38 integration; `npm run
-lint`, `typecheck`, `lint:type-members` green. Four plans ran in three
-sequential waves on this checkout (worktree isolation degraded per #683). An
-explicit `/reload` (`resources_discover` `reason === "reload"`, never startup)
-now installs every declared dependency an installed plugin lacks: the planner
-derives a ninth bucket, `pluginsToDependencyInstall`, from the LOAD-01
-verdict's `missing` arm (D-09-01/02, deduped by key, raw ranges carried);
-`createInstallMissingDependency` roots the install cascade at the missing key
-with `rootRanges` folded once and `treatDisabledAsWall` (D-09-04/05), every
-member `provenance: "dependency"`, no config write, no promotion;
-`applyDependencyInstalls` runs after `install plugins` and, when at least one
-dependency landed, re-runs the read pass and drives only the three toggle
-buckets from the fresh plan (D-09-06/07), which is what lets a marker-held
-dependent come back up in the same reload; the LOAD-02 lift is now
-provenance-independent (D-09-08). Rows: one `(installed) {dependency
-installed}` per materialized member (61st reason, catalog 220 -> 222
-states), a failing dependency's own `(failed) {dependency failed}` with the
-cause line plus Phase 6's disable row (D-09-09/10, research R1); a missing
-dependency is retried on every `/reload` (D-09-14). Upstream parity was
-checked against the 2.1.267 binary for every decision (`resolveMissingDependencies`
-installs only `not-found`, never re-enables, and does not run at session
-start). MISS-01 and MISS-02 are complete in `REQUIREMENTS.md`; BACKLOG gained
-`MISS-MPADD-01` (`marketplace add` wiring, upstream does it) and
-`RECON-REPLAN-01` (always re-plan after any mutating bucket).
-
-**The code review took three iterations** (`09-REVIEW.md`, `09-REVIEW-FIX.md`):
-0 critical / 3 warning / 7 info, all warnings fixed (the reload row dropped
-the root's degradation signals and `fellBackToCurrentCopy`; an orphaned
-JSDoc), then the iteration-2 warning that the fix had DUPLICATED the signal
-derivation was closed by one restructure pass (`ledgerDegradationSignals` in
-`install-outcome.ts` feeds both projections); converged `clean` with 12 Info
-left open by ruling (IN-11: `enable-disable.ts` still hand-copies the same
-derivation; IN-13: the picked signal pair literal at six sites wants a named
-alias). Orchestrator-side gate fixes: retired `force-install` prose and 12
-shifted contracts pins after wave 1 (`4854f0b3`), a `require-await` fixture
-after wave 3 (`14ff68e3`, WINDOWS #60 fixed).
-
-**Environment debt surfaced this phase:** `/tmp` reached 100% inodes from
-~29.8k leaked `clone-cache*` fixture directories -- `tests/orchestrators/plugin/clone-cache.test.ts`
-`mkdtemp`s and never removes them, across every `npm test` run on this
-machine; the orchestrator swept the ones older than two hours. The leak is a
-pre-existing test-hygiene bug, not Phase 9's, and is not yet in BACKLOG. The
-pre-existing local `.planning/config.json` formatting drift still fails
-`format:check`; it is the operator's uncommitted edit and was never staged.
-
-**Phase 8 closed 2026-09-21**, verified 13/13 must-haves with no human items;
-full `npm run check` green on the final tree (7423 unit + 36 integration,
-100% coverage). Three plans ran in three sequential waves on this checkout
-(worktree isolation degraded per #683). `enable <plugin>` now resolves the
-declared closure transitively and reports one row per member; a disabled
-member is re-materialized through its own record as `(installed) {dependency
-enabled}` (EDEP-01, EDEP-03 enable arm); `disable <plugin>` refuses while an
-enabled dependent still declares it, `(failed) {dependents remain}` with a
-plain-English `cause:` naming the dependents in order (EDEP-02, D-08-01); the
-install cascade re-enables a disabled already-installed dependency
-transitively and installs anything it declares that was never installed, and
-`{already installed, dependency disabled}` is RETIRED with a documented
-supersession (`REASONS` 59 -> 60 -> 61 -> 60, catalog 220 states). Both
-cascades overwrite an EXISTING `enabled: false` config entry for a re-enabled
-member to `true` and never add one (D-04-02); the enable cascade and the
-disable guard are standalone-only, the install-cascade re-enable runs on every
-install. BACKLOG `ENBL-DEP-01` closed, `DEPS-STATUS-01` open.
-
-**The code review took four iterations** (`08-REVIEW.md`, `08-REVIEW-FIX.md`,
-per-iteration copies retained as `.iterN.md`): 5 critical / 7 warning in
-iteration 1, all fixed; the install cascade's transitive re-enable then
-regressed on every pass (CR-04 -> CR-07 -> CR-08) until an opus pass collapsed
-the discovery-walk / synthetic-root-fold split into one walk
-(`liveInstalledKeys`); iteration 4 found two stale comments, fixed directly.
-Ten Info findings are left open by ruling (naming, DRY, an optional-vs-
-discriminated member, a pre-existing double JSDoc, the D-04-07 promotion path
-not walking a disabled root's own dependencies -- IN-09 is the one worth a
-backlog entry). ROADMAP criterion 2 and REQUIREMENTS EDEP-02 were reworded to
-D-08-01's plain-English instruction (`8f291c20`).
-
-All four plans are executed. LOAD-01, LOAD-02 and LOAD-03 are closed in
-`REQUIREMENTS.md`. PRUNE-05 stays in the record with a pointer naming LOAD-03,
-Phase 6, and which halves of D-05-14..16 survive; the supersession record D-06-07
-required is `06-04-SUMMARY.md`. `PRUNE-GUARD-MR-01` is re-triaged and still open
-as a reporting question, and `PENDING-VERDICT-01` is new and unclaimed — `/claude:plugin
-pending` still previews an enable the load-time check will undo. The phase's one
-open verification item is runtime UAT: three plans each recorded a
-`manual_procedural` coverage entry at `status: unknown`, because nothing
-automated proves Pi's own resource view follows the disable and the one-pass
-lift in a live session.
-
-**Phases 6-12 were added on 2026-09-18** from
-`.planning/HANDOFF-upstream-dependency-parity.md`, after Phases 1-5 shipped as
-PR #198 (CI green, mergeable, audit passed 2026-09-17). Thirteen divergences
-from the upstream dependency docs (binary 2.1.267): nine aligned across the
-seven new phases, three kept with their reason (warn-and-degrade on an
-unresolvable dependency, `sha` on a dependency element, the `name@mp@^range`
-string superset), one skipped (author tooling and unsupported source kinds).
-Two operator decisions shaped the roadmap: extend this milestone rather than
-open v1.21 (PR #198 stays open and grows; the milestone audit is re-run at
-close), and lead with the load-time check (Phase 6) rather than the handoff's
-tag-resolution-first order, because Phase 7's no-matching-tag fallback, Phase
-8's consequence record and Phase 9's failed-install path all land on it.
-The one design point flagged for Phase 6's discuss: how the
-"disabled as a consequence" state is persisted so reconcile respects it
-without the config carrying it (D-04-02). PRUNE-05 is superseded by LOAD-03,
-not deleted from the record. BACKLOG `ENBL-DEP-01`, `PRUNE-CMD-01` and
-`PRUNE-GUARD-MR-01` are each claimed by a phase (8, 12, 6); `DEPS-STATUS-01`
-is not.
-
-**Phase 5 closed 2026-09-16** — see below.
-
-**Phase 5 closed 2026-09-16**, verified 6/6 must-haves; the four human items
-(live refusal row, live `--prune`, dev-tree provenance residue, and the
-two-stale-records scenario behind D-05-07) were accepted by the operator on
-2026-09-17 and D-05-07 stands. Three plans ran in three sequential waves on
-this checkout (worktree isolation degraded per #683). `uninstall X` now
-refuses on both entry points while any installed record in the scope
-declares X (`⊘ X (failed) {dependents remain}` with a sorted `cause:` line;
-disabled declarers hold, other-scope declarers are not consulted, an
-unreadable declarer refuses with `{unreadable}`); `uninstall --prune`
-sweeps the whole scope to a fixpoint between the primary's removal and the
-single `tx.save()`, removing only `provenance: "dependency"` records no
-remaining plugin declares, and renders each as `(uninstalled)
-{dependency pruned}`; reconcile never prunes and retries refused entries
-within one pass. `--prune` rides the catalog-owned flag surface beside
-`--keep-data`, and the drift guard pins exactly those two extra flags
-(FLAG-01). `dependents remain` and `dependency pruned` landed across all ten
-closed-set pin surfaces (catalog 212 states).
-
-**The code review converged in two iterations** (`05-REVIEW.md`,
-`05-REVIEW-FIX.md`): one critical (a failed pruned member no longer lets the
-sweep prune the dependencies only it declared — `isHeldBy` re-check per
-member) and four warnings fixed in five commits; two operator decisions were
-recorded as open Info items (a stricter guard on an unusable own manifest;
-`unreadable` vs a new `dependents unknown` token). `PRUNE-GUARD-MR-01` in
-BACKLOG.md records that `marketplace remove` bypasses the dependents guard.
-
-**Phase 4 closed 2026-09-16**, verified 9/9 must-haves; the one human item
-(the promoted row's legibility in a live session) was accepted on the pinned
-bytes. Six plans ran in six sequential waves on this checkout (worktree
-isolation degraded per #683). Every install record now carries
-`provenance: "explicit" | "dependency"` at `state.json` schemaVersion 3,
-back-filled `"explicit"` silently for older documents; reconcile keeps a
-`"dependency"` record out of its uninstall bucket AND retains a
-recorded-but-undeclared marketplace that holds one; Phase 3's cascade config
-write is retired, proven load-bearing both ways (reverting the exemption
-turned the reload-survival case red); and `install <plugin>` on a
-`"dependency"` record promotes it, reporting the new closed-set
-`{already installed, dependency promoted}` on an `installed` row.
-
-**The code review took four fix passes to converge** (16 fix commits;
-`04-REVIEW-FIX.md`). Three operator rulings shaped them and are recorded in
-`04-REVIEW.md` § Operator Decisions: the planner, not the config, keeps a
-CMP-3-adopted dependency marketplace alive (D-04-02 stays pure); `import`
-naming a dependency record promotes it; and **a plugin asked for by name is
-enabled** — promoting a disabled record re-materializes it through the enable
-path and stamps `{ enabled: true }` in whichever config file declares its key
-(base or local), so the reload its row asks for cannot disable it again. A
-version pin refuses promotion, `--partial` is the consent gate for a
-partially-installed record, `--map-model` has no bearing.
-
-**Two rulings were deliberately backlogged, not shipped** (`BACKLOG.md`
-ENBL-DEP-01, DEPS-STATUS-01): the cascade should ENABLE a disabled,
-already-installed dependency (upstream parity; reverses RESV-05's warning
-skip), and a plugin whose dependency is partially installed is itself partial
-with reasons. Phase 5 must not read either as done.
-
-**What Phase 5 inherits.** `--prune` reads `provenance` and re-derives the
-declarer set; nothing remembers who declared what. `plan.ts` sits at
-`diffMarketplaces` 14 / `buildUninstallBucket` 13 cognitive after the
-`isRetainedRecorded` extraction — one point of headroom less than it had. The
-operator's dev tree carries inert pre-milestone residue (04-05-SUMMARY,
-Pitfall H) — a `--prune` surprise there is not a prune defect. Executor
-commit-shape note for the planner: the `npm-typecheck` and
-`npm-coverage-direct` pre-commit hooks reject a red-test or half-swept commit,
-so a plan that pairs a production change with its covering tests must expect
-them to land as one commit.
-
-**Phase 3 closed 2026-09-15**, verified 5/5 must-haves with both human
-verification items run against running systems. A code review found 16 issues
-(5 blocker, 8 warning, 3 info); all 13 blocker+warning findings were fixed
-across 13 atomic commits, each with a test observed failing against the
-unfixed code. The load-bearing defect was CR-01: the cascade never declared
-its dependencies on the ORCHESTRATED install path, so `buildUninstallBucket`
-would have swept every cascade-installed dependency on the next
-`resources_discover` — RESV-01 would have read as satisfied while being false.
-Confirmed fixed in a live Pi session: after `/reload`, both dependencies
-survived.
-
-Live UAT also settled what no fake transport could: an annotated tag peels to
-its commit, a constraint selects over an advertised newer tag, and a no-match
-fails WITHOUT falling back to repository head (D-03-09). See `03-UAT.md`.
-
-**Three items carried out of Phase 3.** A SUCCESSFUL credential challenge is
-unexercised — `findProviderForHost` matches only github.com and gitlab.com
-(PROV-01), so no self-hosted fixture can reach Device Flow; the 401 arm was
-verified. WR-05 asked to close or re-scope PDEP-01 / DFEN-V2-01, which still
-sit in `BACKLOG.md` and `REQUIREMENTS.md`. And zero of the 297 plugins in
-`anthropics/claude-plugins-official` declare dependencies, so the cascade
-ships with no real-world consumer today.
-
-**Branching is settled, but the fix is uncommitted.** `config.json` carried
-`branching_strategy: milestone` with
-`milestone_branch_template: features/{milestone}`, resolving to
-`features/v1.20` — a branch that does not exist locally. `handle_branching`
-creates a missing milestone branch off `origin/main`, which would have
-stranded this milestone's work on `features/manifest`. Phase 3 was immune only
-because execute-phase reads config once at init, before that setting arrived
-via a merge of origin/main (commit `257f8827`). It is now
-`branching_strategy: none` — an agent-made edit deliberately left UNCOMMITTED,
-because the same file also carries the operator's own
-`model_profile_overrides.codex` edit that should not be bundled in. The
-setting reads from disk, so Phases 4-5 honor it either way; do not revert the
-file.
-
-Plan 03-06 made the cascade legible. A dependency cascade now renders one row
-per closure member beside the requesting plugin's own row, and a cascade that
-failed names the DEPENDENCY as the row's subject with a closed-set reason and
-its cause — not the plugin the user typed, for something one of its
-dependencies did. The closed reason vocabulary grew by exactly seven members
-(`no matching version`, `version conflict`, `constraint too complex`,
-`invalid version constraint`, `dependency marketplace not added`,
-`dependency cycle`, `dependency failed`), each carrying an inline note
-recording why no inherited member states the same fact; four of the twelve
-outcomes are carried by members that already existed, including the probe's
-own transport classification for a listing that could not be read. One token
-covers both `version conflict` subjects, separated by `{already installed,
-version conflict}` and the recorded version beside it rather than by a second
-member. The COMPAT-01 pinned enumeration was amended by equality in the same
-commit as the members — not loosened — and the length lock, the owner's own
-vocabulary test and both catalog counts moved with it.
-`install-cascade.messaging.ts` SPREADS install's render map instead of
-restating it, so a no-dependency install's bytes stay frozen and the one added
-arm (the RESV-05 skip) is the whole diff. Both interim prose formatters were
-deleted rather than extended: `cascadeFailureCause` hands the orchestrator the
-SAME Error the row carries. Twelve catalog states record the rendered bytes,
-produced by running the composition rather than typed by hand (the file moved
-24,145 → 27,100 UTF-8 bytes). RESV-01, RESV-03, RESV-04 and RESV-06 are
-Complete. Decision IDs through D-03-35 are allocated; a later plan mints from
-D-03-36. One UAT item is open (D10): the block has never been read by an
-operator in a live Pi session.
-Plan 03-05 is where RESV-03 actually fires. `resolveMemberConstraints` in
-`install-cascade.ts` sits between the closure walk and the ledger phase
-array, and that position is the whole rollback story: every constraint
-verdict is reached before a single `Phase` exists, so no failure arm has
-anything to unwind. A member's accumulated ranges are intersected; a real
-range selects a release tag through the injected probe and re-pins that
-member's install to the tag's commit, carried by the caller's own ledger
-options builder into the new `InstallLedgerOptions.sourcePinOverride`, which
-routes the EXISTING clone probe down its already-pinned arm. The wildcard
-short-circuit keeps the common case offline, and `isUnconstrainedRange`
-tests canonicalization rather than string identity — `["*", "x"]` intersects
-to `"* *"`, so a string comparison would have turned two authors both
-writing "any version" into a network query and, for a source with no release
-tags, into a failed install.
-RESV-05 is now a check and never a touch: an already-installed dependency is
-checked against the constraint before anything else (that check makes no
-query, so a cascade that will fail on disk state never reaches a remote), is
-left exactly as it was when it satisfies, and fails the whole install naming
-both the recorded version and the constraint when it does not. D-03-04 is
-upheld unguarded — the two fallback version forms diverge under coercion
-(`hash-123456789abc` becomes `123456789.0.0`, `sha-0123456789ab` becomes
-nothing at all), which is the unpredictability the decision accepted.
-Six constraint discriminants are stable for the messaging plan, all carrying
-the member key and a bounded range and no filesystem path. The inherited
-census debt is paid: `domain/dependency-range.ts`'s entry is gone and
-`install-cascade.ts#resolveMemberConstraints` took its place, justified
-inline. The plan's two-file list had to grow: `install-flow.ts` and
-`install-outcome.ts` carry the four lines that make the re-pin reach a real
-checkout, without which the probe's answer would have stopped at the ledger
-options boundary. RESV-05 is Complete; RESV-03 stays Pending because 03-06
-also declares it. Decision IDs through D-03-29 are allocated.
-Plan 03-04 gave the phase live tag resolution, the one genuinely new
-capability RESV-03 introduces. `platform/git.ts::listRemoteTags` reads a
-remote's tag advertisement through the single `isomorphic-git` chokepoint
-with `prefix: "refs/tags/"` and `peelTags: true`, so an annotated tag
-resolves to the commit it points at and yields one result, not two.
-`orchestrators/plugin/dependency-tag-probe.ts` turns an intersected
-constraint into the highest `<pluginName>--v<semver>` release tag that
-satisfies it, or into `no-matching-tag` / `tag-listing-failed`. Only tags
-carrying the dependency's OWN release prefix are candidates, so a crafted
-tag named for a different plugin can never be selected and no arbitrary
-unpinned ref is reachable. Satisfaction comes from
-`domain/dependency-range.ts`, not a second evaluator. The probe is absent
-from `NETWORK_FREE_TARGETS` while both install owners stay in it — the
-`install-clone-probe.ts` arrangement — so the NFR-5 gate needed no edit and
-neither owner gained a git surface.
-Task 2 was a `blocking-human` decision checkpoint on D-03-02's one-way
-rating. The developer replied `proceed-as-decided`, so D-03-09 stands: a
-no-match is the same failure in BOTH query arms and there is no fallback to
-the repository head anywhere, even where upstream soft-degrades. RESV-03
-stays Pending in REQUIREMENTS.md because plans 03-05 and 03-06 also declare
-it.
-One gate drift was found and closed: `tests/architecture/gate-targets.ts`'s
-`UNOWNED_EXPORT_CENSUS` had not been amended for `listRemoteTags`, so
-`npm run check` had been red since this plan's own task-1 commit. The census
-recorded `domain/dependency-range.ts`'s three exports with the removal
-condition named inline; plan 03-05 dropped that entry when it composed the
-probe.
-Plan 03-07 closed the phase's stated dependency on the manifest-read work.
-`orchestrators/plugin/dependency-declaration-read.ts` answers what one plugin
-declares in the D-01-32 order — the plugin's own manifest wherever it is
-readable offline, the marketplace entry otherwise — and `install-flow.ts`'s
-cascade lookup is now a call into it. A plugin whose real metadata lives in
-its own bare manifest therefore has its dependencies installed, which the
-entry-only read could not see. The read is offline by construction rather
-than by convention: its injected seam exposes a stat, a text read and the
-fs-only clone presence probe, so there is no materializing operation in the
-module to reach from any flag, and a git-source dependency with no
-materialized clone falls back to its entry instead of fetching. A
-present-but-unusable manifest falls back to the entry and is never read as a
-plugin that declares nothing. The `manifest-read-agreement` gate gained a
-fourth reader so the cascade read and `info`'s render cannot drift. One
-latent defect surfaced: three cascade fixtures declared the dependency on
-the marketplace entry alone, so the seeded plugin's own manifest suppressed
-it and the cases went vacuous — the seed now writes both sides in agreement
-(D-03-25). RESV-02 is Complete; RESV-01 stays Pending because a later plan
-in this phase also declares it.
-Plan 03-03 landed the phase's two documentation obligations before the
-network leaf that depends on them. The NFR-5 network policy now names the
-constrained-dependency tag query as a declared exception, in byte-identical
-wording in `.planning/PROJECT.md` and `CLAUDE.md` (D-03-03). A future reader
-meets it as a stated constraint rather than as a surprise from a failing
-architecture test. `docs/dependency-resolution.md` is RESV-03's written
-grammar: the two declared element shapes and their character rules, the
-constraint forms the evaluator handles, how several declarations intersect,
-both project-owned size caps, the plugin-release tag convention and why most
-third-party sources report no matching tag today, and a nine-cause failure
-list that the reason tokens plan 03-06 mints must agree with. It also states
-that nothing is added or cloned to satisfy a dependency, which is the
-user-facing form of the D-03-08 trust boundary. Both READMEs link it.
-Plan 03-02 made `semver` this package's own declared runtime dependency and
-added `domain/dependency-range.ts`, which folds the N ranges declared for one
-dependency name into one effective range or into `invalid`, `disjoint` or
-`too-complex`. Both denial-of-service caps are walked to completion before
-any work they bound is allocated.
-Plan 03-01 shipped the phase's tracer. `install foo@mp` now installs the
-plugins `foo` declares as dependencies: `domain/dependency-closure.ts` is a
-pure two-structure walk (a path stack that is the only cycle test, a separate
-visited memo that dedupes a diamond) whose post-order accumulator IS the
-install order, and `orchestrators/plugin/install-cascade.ts` is an outer
-`runPhases` ledger — one phase per closure member — driven inside
-`install-flow.ts`'s existing single `withLockedStateTransaction`. Every member
-is declared in the requesting plugin's own physical config file via the one
-batched write, so the reconcile uninstall bucket does not sweep a
-cascade-installed dependency on the next `resources_discover`. RESV-01, -02,
--04, -05 and -06 are all exercised but stay Pending in REQUIREMENTS.md: every
-one of them is also declared by a later plan in this phase.
-One data-loss defect was found and fixed during the tracer: the ledger's
-failing phase runs its OWN undo first (TR-02), so an install of an
-already-recorded plugin would have unstaged the very install its throw was
-reporting. Each phase now records itself in a `materialized` sentinel and
-`undo` acts only on what it finds there. Version constraints (RESV-03), live
-tag resolution, per-member reporting and the plugin-manifest-first read order
-are the remaining plans; `ClosureMember.ranges` and the injected
-`ClosureLookup` are already shaped for them.
-Phase 2 is complete and verified. `uninstall --keep-data` preserves the data
-directory; omitting it deletes without a prompt at both the explicit command
-and the load-time reconcile path (D-02-04, reaffirmed after a code-review
-challenge during Phase 2 — reconcile has no command line, so it stays on the
-promptless-delete default by design). The flag catalog declares
-`--keep-data`, the handler's consuming scanner forwards `keepData` to the
-operation plan 02-01 built, and `--delete-data`, `-y`, `--yes` and `--prune`
-reject before any mutation. DATA-01, DATA-02 and DATA-03 are marked Complete
-in REQUIREMENTS.md; FLAG-01 stays Pending for Phase 5's `--prune`.
-All of Phase 2's gates are closed: code review found 13 issues (1 critical
-— the reaffirmed D-02-04 tradeoff — 7 warning, 5 info), 9 were fixed, 1
-(WR-07) was fixed then reverted per operator decision, 3 (CR-01, WR-04,
-WR-05) were explicitly scoped out; Nyquist validation passed with 0 gaps;
-security audit passed with `threats_open: 0` across 6 STRIDE threats;
-regression covered by two full `npm run check` runs (0 failures); goal
-verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
-`02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
-Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-24 — Phase 12 complete
-Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
-whitespace-only `.mcp.json` formatting.
-Milestone progress is 5 of 5 phases complete (100%).
-See `01-VERIFICATION.md` for passing automated and real-plugin evidence.
-Phase 2 context records the user preference to follow existing output and help conventions.
-
-**Phase numbering restarts at 1 for this milestone** (operator decision,
-2026-09-09). Phases 1-117 belong to archived milestones. A bare phase number in
-v1.20 context always means a v1.20 phase.
-
-**The five phases:**
-
-| # | Phase | Requirements | Depends on |
-|---|-------|--------------|------------|
-| 1 | Manifest read fidelity | MANF-01..05, DEPS-01, DEPS-02 | nothing |
-| 2 | Uninstall data disposition and the uninstall option seam | DATA-01..03 | nothing |
-| 3 | Dependency resolution | RESV-01..06 | Phase 1 |
-| 4 | Install provenance | PROV-01..04 | Phase 3 |
-| 5 | Prune on uninstall | PRUNE-01..04, FLAG-01 | Phases 4 and 2 |
-
-Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
+Phase: Milestone v1.20 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-09-24 — Milestone v1.20 completed and archived
 
 ## Performance Metrics
 
@@ -1004,6 +575,7 @@ See [task summary](./quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/2
 
 | Category | Item | Status | Deferred At | Milestone |
 | -------- | ---- | ------ | ----------- | --------- |
+| uat_gaps | 03/03-UAT.md: successful credential challenge against a private GitHub or GitLab repository | testing; live check deferred | 2026-09-24 | v1.20 |
 | Tooling | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted) | Pending | Phase 116 discussion | v1.19 |
 | quick_tasks | 260720-d8i-move-agent-provenance-from-body-comment- | unknown | 2026-09-04 | v1.19 |
 | todos | 2026-09-02-detect-unused-code-and-type-members.md | (presence-only) | 2026-09-04 | v1.19 |
@@ -1080,15 +652,15 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 12 complete; milestone audit and closeout next
+**Stopped at:** v1.20 archived; awaiting next milestone
 
 **Resume file:** None
 
-Last session: 2026-09-24T14:50:02Z
-Phase 12 is complete. Eight plans executed; functional verification passed
-27/27, live Pi UAT passed, security closed 12/12 planned threats, and
-validation found no test gaps. Milestone audit is next. The operator-owned
-`.planning/config.json` formatting drift remains unstaged.
+Last session: 2026-09-24
+v1.20 is archived. All 12 phases and 45 requirements are complete. The clean
+committed tree passed the full gate. The Phase 3 private-repository credential
+challenge remains deferred to later UAT and acknowledged in the audit. The
+operator-owned `.planning/config.json` formatting drift remains unstaged.
 
 Previous session: 2026-09-23T11:47:18.675Z
 Autonomous run (`/gsd-autonomous --from 9`) took Phase 9 from discuss through
@@ -1218,27 +790,4 @@ The workstream archive removed the old routing blocker.
 
 ## Operator Next Steps
 
-- Plan Phase 4 (Install provenance, PROV-01..04) via `/gsd-plan-phase 4`.
-  `04-CONTEXT.md` exists and carries six decisions plus a fixed three-step
-  ordering contract the plan must honor.
-- **Decided 2026-09-15: `.planning/config.json` stays uncommitted.** It carries
-  an agent-made `git.branching_strategy: milestone → none` alongside the
-  operator's own `model_profile_overrides.codex` edit. The setting reads from
-  disk, so Phases 4-5 honor it either way. Do not re-raise this, and do not
-  revert the file.
-- Optional, non-blocking: provide a genuinely private repository on github.com
-  or gitlab.com to close UAT 2's last sub-item — a SUCCESSFUL credential
-  challenge is still unexercised. The 401 arm was verified end to end.
-- Optional, non-blocking: confirm whether alpha/beta/gamma were manually
-  uninstalled from the UAT home. `tmp/pi-uat` ends with zero plugins in both
-  `state.json` and `claude-plugins.json`, but only zeta and omega were
-  uninstalled in the transcript. Most likely a deliberate teardown; if not, an
-  unexplained removal would be a live reconcile bug.
-- The UAT git server was still running at resume (`node tmp/uat-git/server.mjs`,
-  `https://localhost:8443`). It is only needed to re-run UAT 2, and its TLS
-  certs expire 2026-09-17.
-- Phase 1 and Phase 2 verification both passed. Phase 2's full gate set (code
-  review, Nyquist, security, regression, goal verification) is closed.
-- Plan v1.20 phases with the UI gate skipped. No phase in this milestone is a
-  frontend phase, but the keyword gate false-positives on "component", the flag
-  "surface", and the `ui5` / `ui-theme-designer` plugin names.
+- Start the next milestone with $gsd-new-milestone

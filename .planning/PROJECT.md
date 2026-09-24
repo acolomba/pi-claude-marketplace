@@ -10,7 +10,13 @@
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
-## Current Milestone: v1.20 transitive-dependencies -- Dependency Provenance, Manifest Fallback and Uninstall Flags (branch: features/manifest, started 2026-09-09)
+## Previous Milestone: v1.20 transitive-dependencies -- Dependency Provenance, Manifest Fallback and Uninstall Flags (branch: features/manifest, shipped 2026-09-24; no npm release)
+
+**Outcome:** All 12 phases, 55 plans, and 45 requirements completed. The
+milestone audit found no requirement or integration gaps; the full clean-tree
+check passed 7,760 unit and 63 integration tests. Closeout is an explicit
+override because a successful live credential challenge against a private
+GitHub or GitLab repository remains deferred in Phase 3 UAT.
 
 **Goal:** Record how each installed plugin got there, so `uninstall --prune` can
 remove the ones nothing needs any more -- and close the two adjacent gaps that
@@ -57,9 +63,9 @@ Dependency resolution (Phase 3, verified 2026-09-15) installs a plugin's
 declared closure under one outer ledger. Install provenance (Phase 4, verified
 2026-09-16) records how every plugin got there and retires Phase 3's cascade
 config write. Prune on uninstall (Phase 5, verified 2026-09-16, human items
-accepted 2026-09-17) closes the milestone: `uninstall` refuses while any
-installed plugin in the scope still declares the target (disabled declarers
-included, unreadable declarers fail closed), `uninstall --prune` sweeps the
+accepted 2026-09-17) originally refused uninstall while a dependent remained;
+Phase 6 later replaced that refusal with a load-time unsatisfied check.
+`uninstall --prune` sweeps the
 scope to a fixpoint and removes only `provenance: "dependency"` records no
 remaining plugin declares, each reported as `{dependency pruned}`, and the
 uninstall flag surface is pinned at exactly `--keep-data` and `--prune`.
@@ -397,8 +403,12 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
-**In progress:** v1.20 transitive-dependencies. Phase 11 is complete;
-Phase 12 (standalone prune with dry-run) is next.
+**Current:** v1.20 transitive-dependencies closed 2026-09-24 with 45/45
+requirements and all 12 phase verifications passed. The clean committed tree
+passed `npm run check`: 7,760 unit tests, 63 integration tests, and 100%
+aggregate production coverage. One successful live private-repository
+credential challenge remains deferred in Phase 3 UAT. The next milestone is
+not yet defined.
 
 **Previously shipped:** refine-unit-tests (2026-09-13, Phases 1-9, 213 plans, 412 tasks;
 archived to `.planning/milestones/refine-unit-tests-*`). v1.19 gave every production
@@ -441,7 +451,8 @@ been declared in `package.json` and invoked by nothing, now run: the three fast 
 
 **Shipped:** url-source URL Sources (2026-07-13, Phases 76-79). Arbitrary public HTTPS git URLs are first-class sources for both marketplaces and plugins: `marketplace add/update/remove/info` clone `source.url` directly (no github.com reconstruction); the resolver classifies `url` / `git-subdir` / `github`-object plugin sources installable through a source-addressed refcounted clone cache (`plugin-clones/<urlhash12>-<sha12>/`, one external-monorepo clone serving every referencing plugin, warm-cache operations offline); the full plugin lifecycle works for git sources (sha-change atomic swaps, last-reference clone GC on uninstall/update/marketplace-remove, network-free list/info + install-completion parity); and the GitHub-only Device Flow generalized into a `GitAuthProvider` registry (public repos on any host clone unauthenticated, registered hosts run their flow host-keyed via `CredentialOps`, no-provider hosts fail clean, no-credential-leak gate covers every provider file). `npm run check` GREEN (2739 unit + 16 integration).
 
-**Next:** define the next milestone (`/gsd-new-milestone`). What carries forward, all
+**Next:** define the next milestone (`/gsd-new-milestone`). One live credential
+challenge remains in deferred UAT; see the v1.20 audit. Earlier context carried forward, all
 deliberate: **two** accepted direct-coverage shortfalls, down from seven
 (`bridges/commands/discover.ts` and `orchestrators/plugin/install-outcome.ts`, both pinned
 by whole reading string, so they fail on an improvement as loudly as on a regression); three
@@ -455,10 +466,11 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ## Requirements
 
-### Active — test-backlog
+### Active — awaiting next milestone
 
-See [REQUIREMENTS.md](REQUIREMENTS.md) for the current milestone requirements.
-All prior validated requirements below remain historical completed work.
+No active requirements are defined. The completed v1.20 requirements are in
+[the archive](milestones/v1.20-REQUIREMENTS.md). All validated requirements
+below remain historical completed work.
 
 ### Validated
 
@@ -731,11 +743,10 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 - **5 Claude hook events permanently inapplicable to Pi** -- `ConfigChange` (Claude config paths irrelevant under Pi), `Setup` (no Pi `--init-only` equivalent), `InstructionsLoaded` (Pi reads a different context-file model), `TaskCreated` / `TaskCompleted` (no canonical Pi task primitive; rpiv-todo and pi-crew are competing takes with semantics that don't map to Claude's TaskCreate). Silently dropped at hook-config parse time; debug-logged only. See `docs/research/claude-hooks-vs-pi-events.md` § "H -- Semantically inapplicable to Pi".
 - **Hook-payload extensions** -- `asyncRewake` / `rewakeMessage` / `rewakeSummary` and any future Claude Code hook-entry payload fields are tolerated (ignored + debug-logged at parse, surfaced once at install) but not implemented. The supported event still fires synchronously in-band.
 - **Full regex matchers** -- v1.13 supports literal tool names and pipe-OR alternation (covers 100% of the official Claude marketplace today); full regex matchers deferred.
-- **Automatic dependency resolution / pruning** -- declared `dependencies` produce a manual-install warning only
 - **Custom component-path arrays as supplemental** -- explicit declaration replaces the default
 - **Mutating LLM tools for install/update/remove** -- only listing tools exposed
 - **Rich interactive selectors** -- backlog
-- **JSON output / dry-run modes** -- backlog
+- **JSON output / general dry-run modes** -- backlog; standalone `prune --dry-run` shipped in v1.20
 - **Session-start autoupdate run** -- Claude Code parity, deferred
 - **`--force` install with `incomplete` state** -- deferred
 - **Managed/allowlist/blocklist policies** -- no Pi equivalent
@@ -885,8 +896,8 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-106-05: `{workflows}` is one canonical tail reason** (workflows-detection, Phase 106): the shared typed-kind classifier owns mapping, order, and first-wins deduplication for every consumer                                                                                                                                                                                                                                                                                                                                                                                                           | One mapping prevents list, info, install, update, and autoupdate from drifting or emitting duplicate workflow reasons.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | ✓ Good                                                                                                                                                                                                                                                                                                                                                             |
 | **D-02-04 reaffirmed (v1.20, Phase 2 code review, 2026-09-14):** `orchestrators/reconcile/apply.ts` keeps calling `uninstallPlugin` with no `keepData`, so the load-time reconcile path (no command line, fires on every `/reload`) stays on the promptless-delete default -- same as an explicit `uninstall` with no flag. Phase 2's own code reviewer flagged this as a critical finding (data loss on an automatic path with no opt-out) and proposed forcing `keepData: true` there; the operator reviewed the tradeoff and explicitly kept the original decision.                                 | This is success criterion DATA-03, not an oversight: one behavior at both entry points is the phase's stated goal. A future phase should not "fix" this again without a fresh operator decision -- the tradeoff (silent automatic deletion vs. a reconcile pass gaining a way to say "keep") was surfaced and answered here.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | -- Locked                                                                                                                                                                                                                                                                                                                                                          |
 | **D-04-02 / D-04-04 (v1.20 Phase 4, 2026-09-15):** the desired-state config names only plugins the user asked for; a cascade-installed dependency is protected by its `provenance: "dependency"` record, not by a config declaration. Phase 3's cascade config write was retired in a fixed order — field, reconcile exemption, then the write. | Reconcile would otherwise sweep every dependency on the next `resources_discover`; `--prune` needs the asked-for / pulled-in distinction the write destroyed. The order is a correctness contract: 04-05 proved the exemption load-bearing by reverting it and watching the reload-survival case go red. | -- Locked |
-| **D-04-07 + review rulings (v1.20 Phase 4, 2026-09-16): a plugin asked for by name is enabled.** `install <dep>` on a dependency record promotes it and, if the record was disabled, re-materializes and enables it, stamping `{ enabled: true }` in whichever config file declares the key; `import` naming the record promotes it; a version pin refuses promotion, `--partial` is the consent gate for a partially-installed record, `--map-model` has no bearing. The planner (not the config) retains a CMP-3-adopted dependency marketplace. | Keeps D-04-02's config purity while closing the review's reproduced criticals (an undeclared adopted marketplace torn down on reload; a promoted-but-still-disabled record re-disabled by the reload its own row asked for). The cascade half of the same rule — enabling a disabled dependency during a cascade — reverses RESV-05 and is backlogged (ENBL-DEP-01), not shipped. | -- Locked |
-| **D-05-01/02/07/14 + review fix (v1.20 Phase 5, 2026-09-16):** `--prune` is a whole-scope fixpoint sweep run once after the primary is removed, inside the one locked transaction, over `provenance: "dependency"` records only; `uninstall X` refuses while any installed record in the scope declares X (disabled declarers hold; an unreadable declarer fails closed and renders `{unreadable}`); reconcile never prunes. The CR-01 fix re-checks each pruned member with `isHeldBy` against the keys that actually left, so a failed member keeps the dependencies only it declared. | A removal that leaves a declared dependency unsatisfied is the state the guard exists to forbid; running the sweep on the same declaration index the guard reads keeps the two rules consistent, and the single-save contract keeps a partial sweep from ghosting a record. D-05-07 (fail closed) is rated reversible; the two-stale-records mutual block was reviewed by the operator and accepted with `marketplace remove` as the exit. | -- Locked |
+| **D-04-07 + review rulings (v1.20 Phase 4, 2026-09-16): a plugin asked for by name is enabled.** `install <dep>` on a dependency record promotes it and, if the record was disabled, re-materializes and enables it, stamping `{ enabled: true }` in whichever config file declares the key; `import` naming the record promotes it; a version pin refuses promotion, `--partial` is the consent gate for a partially-installed record, `--map-model` has no bearing. The planner (not the config) retains a CMP-3-adopted dependency marketplace. | Keeps D-04-02's config purity while closing the review's reproduced criticals (an undeclared adopted marketplace torn down on reload; a promoted-but-still-disabled record re-disabled by the reload its own row asked for). Phase 8 later shipped the cascade half of this rule and closed ENBL-DEP-01. | -- Locked |
+| **D-05-01/02/07/14 + review fix (v1.20 Phase 5, 2026-09-16):** `--prune` is a whole-scope fixpoint sweep run once after the primary is removed, inside the one locked transaction, over `provenance: "dependency"` records only; the Phase 5 dependent refusal was superseded by LOAD-03 in Phase 6; unreadable declarers still fail closed where the reconcile path requires it; reconcile never prunes. The CR-01 fix re-checks each pruned member with `isHeldBy` against the keys that actually left, so a failed member keeps the dependencies only it declared. | Phase 6 permits a dependent to become unsatisfied after uninstall and reports that state at load; the shared declaration index still protects the prune sweep, and the single-save contract prevents a partial sweep from ghosting a record. D-05-07 (fail closed) is rated reversible; the two-stale-records mutual block was reviewed by the operator and accepted with `marketplace remove` as the exit. | -- Locked |
 | **D-07-04 (v1.20 Phase 7, 2026-09-19): a tag-pinned path-source plugin materializes by copying the marketplace's `.git` into a fresh staging dir, then checking the tag out there — not by pointing isomorphic-git's `checkout` at a shared `dir`/`gitdir` pair against the marketplace clone's own `.git`.** Code review verified against the installed isomorphic-git source that the shared-gitdir construction (D-07-01's literal wording) writes `${gitdir}/index` regardless of `noUpdateHead`, silently desyncing the marketplace clone's own index. | The marketplace clone must never be mutated by materializing a dependency's pin. Copy-then-checkout is the same construction `clone-cache.ts::seedOnePluginMirror` already uses for the identical problem, so it invents no second mechanism, at the cost of one full `.git` copy per distinct pinned tag oid. | -- Locked |
 | **D-07-03 (v1.20 Phase 7, 2026-09-19): the TAGS-02 fallback row (no tag satisfies → marketplace's current copy installs) stays a quiet `info`-level note, not a warning — a deliberate divergence from upstream, which surfaces the analogous fallback as a warning.** A mid-review-cycle fix accidentally reversed this to `warning` (matching upstream); the regression was caught and reverted the same cycle. | The install itself always succeeds here; Phase 6's load-time check is what actually flags and disables a dependent if the fallback version is genuinely out of range, so nothing is wrong yet at install time. | -- Locked |
 | **D-08-01/02/03 + review rulings (v1.20 Phase 8, 2026-09-21):** the disable refusal is a plain-English instruction naming dependents in order, not a chained command (`disable` takes one target); the cascade-enable token is `{dependency enabled}` and `{dependents remain}` returns for the disable refusal (B1), while `{dependency disabled}` is retired; the enable cascade reports the full closure. Review rulings: a re-enabled member's EXISTING `enabled: false` config entry is overwritten to `true` and a member with no entry never gets one (D-04-02); the enable cascade and the disable guard are standalone-only, the install-cascade re-enable runs on every install; a `{not installed}` member stamps `warning` and does not refuse; one walk owns the install cascade's re-enable closure (`liveInstalledKeys`), after a discovery/fold split regressed three review passes running. |
@@ -915,7 +926,9 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-_Last updated: 2026-09-24 after v1.20 Phase 12 standalone prune verified 27/27 functional truths and live Pi UAT. All 12 phases and 45 requirements are complete; milestone audit is next. Prior updates follow._
+_Last updated: 2026-09-24 after v1.20 closeout. All 12 phases and 45
+requirements are complete; the Phase 3 private-repository credential check is
+deferred to later UAT. Prior updates follow._
 
 _Last updated: 2026-09-23 after v1.20 Phase 11 cross-marketplace dependency allowlist verified 20/20 functional truths and 2/2 human wording checks. XMKT-01 and XMKT-02 are complete; Phase 12 (standalone prune with dry-run) is next. Prior updates follow._
 
