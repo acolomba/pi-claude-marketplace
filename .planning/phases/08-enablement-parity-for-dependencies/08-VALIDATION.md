@@ -1,9 +1,9 @@
 ---
 phase: "08"
 slug: "enablement-parity-for-dependencies"
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-09-19"
 ---
 
@@ -38,14 +38,14 @@ created: "2026-09-19"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 08-01-* | TBD | TBD | EDEP-01 | — | `enable <plugin>` enables its declared dependencies transitively, one row each | unit/orchestrator | `node --test "tests/orchestrators/plugin/enable-disable.test.ts"` | ✅ | ⬜ pending |
-| 08-01-* | TBD | TBD | EDEP-01 | — | Row rendering for the cascade (root + member rows) | unit/messaging | `node --test "tests/orchestrators/plugin/enable-disable.messaging.test.ts"` | ✅ | ⬜ pending |
-| 08-02-* | TBD | TBD | EDEP-02 | — | `disable <plugin>` refused while a dependent declares it, names dependents + chained instruction | unit/orchestrator | `node --test "tests/orchestrators/plugin/enable-disable.test.ts"` | ✅ | ⬜ pending |
-| 08-02-* | TBD | TBD | EDEP-02 | — | Edge-level argument parsing unaffected (still single-target) | unit/edge | `node --test "tests/edge/handlers/plugin/enable-disable.test.ts"` | ✅ | ⬜ pending |
-| 08-03-* | TBD | TBD | EDEP-03 | — | Install cascade enables an already-installed disabled dependency through its record | unit/orchestrator | `node --test "tests/orchestrators/plugin/install-cascade.test.ts"` | ✅ | ⬜ pending |
-| 08-03-* | TBD | TBD | EDEP-03 | — | New `{dependency enabled}` row rendering, retirement of `{already installed, dependency disabled}` | unit/messaging + architecture | `node --test "tests/architecture/notify-closed-set-locks.test.ts"` + catalog-parser/catalog-contract tests | ✅ | ⬜ pending |
+| 08-01-* | 01 | 1 | EDEP-01 | — | `enable <plugin>` enables its declared dependencies transitively, one row each | unit/orchestrator | `node --test "tests/orchestrators/plugin/enable-disable.test.ts"` | ✅ | ✅ green |
+| 08-01-* | 01 | 1 | EDEP-01 | — | Row rendering for the cascade (root + member rows) | unit/messaging | `node --test "tests/orchestrators/plugin/enable-disable.messaging.test.ts"` | ✅ | ✅ green |
+| 08-02-* | 02 | 2 | EDEP-02 | — | `disable <plugin>` refused while a dependent declares it, names dependents + chained instruction | unit/orchestrator | `node --test "tests/orchestrators/plugin/enable-disable.test.ts"` | ✅ | ✅ green |
+| 08-02-* | 02 | 2 | EDEP-02 | — | Edge-level argument parsing unaffected (still single-target) | unit/edge | `node --test "tests/edge/handlers/plugin/enable-disable.test.ts"` | ✅ | ✅ green |
+| 08-03-* | 03 | 3 | EDEP-03 | — | Install cascade enables an already-installed disabled dependency through its record | unit/orchestrator | `node --test "tests/orchestrators/plugin/install-cascade.test.ts"` | ✅ | ✅ green |
+| 08-03-* | 03 | 3 | EDEP-03 | — | New `{dependency enabled}` row rendering, retirement of `{already installed, dependency disabled}` | unit/messaging + architecture | `node --test "tests/architecture/notify-closed-set-locks.test.ts"` + catalog-parser/catalog-contract tests | ✅ | ✅ green |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: ✅ green · ❌ red · ⚠️ flaky*
 
 ---
 
@@ -63,11 +63,21 @@ created: "2026-09-19"
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 120s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 120s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-09-24
+
+## Validation Audit 2026-09-24
+
+| Metric | Count |
+| --- | ---: |
+| Behavioral requirement gaps | 0 |
+| New tests needed | 0 |
+| Escalated | 0 |
+
+The phase plans and summaries map every behavior to a named test. The current milestone run passed 7,760/7,760 unit tests and all 15 integration files. The corresponding source/test pairs, catalog contracts, and architecture guards remain active. The chain-wide `npm run check` still stops on the operator-owned `.planning/config.json` formatting drift; the test results above were run separately on the current tree.
