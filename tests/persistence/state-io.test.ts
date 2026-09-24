@@ -281,19 +281,39 @@ for (const { name, state, expectedState } of [
   });
 }
 
-test("an explicit nonpersisting load normalizes legacy state only in memory", async (t) => {
+test("a nonpersisting legacy load leaves bytes intact while the default persists", async (t) => {
   const extensionRoot = await createExtensionRoot(t, "state-io-preview-");
   const stateJsonPath = path.join(extensionRoot, "state.json");
-  const originalBytes = '{"schemaVersion":1,"marketplaces":{}}';
+  const originalBytes = JSON.stringify({
+    schemaVersion: 1,
+    marketplaces: {
+      legacy: {
+        name: "legacy",
+        scope: "user",
+        source: "./legacy",
+        addedFromCwd: "/work",
+        plugins: {},
+      },
+    },
+  });
   await writeFile(stateJsonPath, originalBytes);
   const before = await stat(stateJsonPath, { bigint: true });
 
   const loaded = await loadState(extensionRoot, { persistMigration: false });
   await new Promise((resolve) => setTimeout(resolve, 30));
 
-  assert.deepStrictEqual(loaded, { schemaVersion: 3, marketplaces: {} });
+  assert.equal(loaded.schemaVersion, 3);
+  assert.equal(
+    loaded.marketplaces.legacy?.manifestPath,
+    path.join(extensionRoot, "sources", "legacy", ".claude-plugin", "marketplace.json"),
+  );
   assert.equal(await readFile(stateJsonPath, "utf8"), originalBytes);
   assert.equal((await stat(stateJsonPath, { bigint: true })).mtimeNs, before.mtimeNs);
+
+  const persisted = stateJsonPersisted(t, extensionRoot);
+  assert.deepStrictEqual(await loadState(extensionRoot), loaded);
+  await persisted;
+  assert.notEqual(await readFile(stateJsonPath, "utf8"), originalBytes);
 });
 
 test("rejects an unsupported stored schema version without replacing future bytes", async (t) => {

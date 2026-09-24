@@ -258,6 +258,83 @@ test("preview and actual prune select the same dependent-first fixpoint", async 
   });
 });
 
+test("repeated legacy previews normalize in memory without writing the scope", async () => {
+  await withHermeticEnvironment("standalone-prune-legacy-preview-", async ({ cwd }) => {
+    const seeded = await seedScope("user", cwd);
+    const marketplace = seeded.marketplaces.mp;
+    assert.ok(marketplace);
+    const locations = locationsFor("user", cwd);
+    const legacy = {
+      schemaVersion: 1,
+      marketplaces: {
+        mp: {
+          name: "mp",
+          scope: "user",
+          source: "./mp",
+          addedFromCwd: cwd,
+          plugins: marketplace.plugins,
+        },
+      },
+    };
+    await writeFile(locations.stateJsonPath, JSON.stringify(legacy));
+    await writeFile(locations.configJsonPath, '{"plugins":{}}');
+    const stateBefore = await readFile(locations.stateJsonPath);
+    const stateMtimeBefore = (await stat(locations.stateJsonPath, { bigint: true })).mtimeNs;
+    const configMtimeBefore = (await stat(locations.configJsonPath, { bigint: true })).mtimeNs;
+    const orphanSkill = path.join(locations.skillsTargetDir, "orphan-skill", "SKILL.md");
+    const skillMtimeBefore = (await stat(orphanSkill, { bigint: true })).mtimeNs;
+    const treeBefore = await scopeTree("user", cwd);
+    const { command, ctx, notifications, gitCalls } = registeredCommand(cwd);
+
+    await command.handler("prune --dry-run", ctx);
+    await command.handler("prune --dry-run", ctx);
+
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp [user]\n  ○ orphan (will uninstall) {dependency pruned}" },
+      { message: "● mp [user]\n  ○ orphan (will uninstall) {dependency pruned}" },
+    ]);
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
+    assert.equal((await stat(locations.stateJsonPath, { bigint: true })).mtimeNs, stateMtimeBefore);
+    assert.equal(
+      (await stat(locations.configJsonPath, { bigint: true })).mtimeNs,
+      configMtimeBefore,
+    );
+    assert.equal((await stat(orphanSkill, { bigint: true })).mtimeNs, skillMtimeBefore);
+    assert.deepStrictEqual(await scopeTree("user", cwd), treeBefore);
+    await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
+    assert.deepStrictEqual(gitCalls.clone, []);
+    assert.deepStrictEqual(gitCalls.fetch, []);
+  });
+});
+
+test("preview of a missing project state leaves both scope trees unchanged", async () => {
+  await withHermeticEnvironment("standalone-prune-missing-preview-", async ({ cwd }) => {
+    await seedScope("user", cwd);
+    const project = locationsFor("project", cwd);
+    await mkdir(project.scopeRoot, { recursive: true });
+    const projectBefore = await scopeTree("project", cwd);
+    const userBefore = await scopeTree("user", cwd);
+    const { command, ctx, notifications, gitCalls } = registeredCommand(cwd);
+
+    await command.handler("prune --scope project --dry-run", ctx);
+
+    assert.deepStrictEqual(await scopeTree("project", cwd), projectBefore);
+    assert.deepStrictEqual(await scopeTree("user", cwd), userBefore);
+    for (const missing of [
+      project.extensionRoot,
+      project.stateJsonPath,
+      project.configJsonPath,
+      project.stateLockFile,
+    ]) {
+      await assert.rejects(stat(missing), { code: "ENOENT" });
+    }
+
+    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(gitCalls.clone, []);
+    assert.deepStrictEqual(gitCalls.fetch, []);
+  });
+});
+
 test("project prune removes only the project orphan", async () => {
   await withHermeticEnvironment("standalone-prune-project-", async ({ cwd }) => {
     await seedScope("user", cwd);
