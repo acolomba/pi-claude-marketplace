@@ -3,6 +3,8 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
+import lockfile from "proper-lockfile";
+
 import {
   createHooksRouting,
   createHooksRuntime,
@@ -441,6 +443,84 @@ test("a failed member keeps its dependent chain while an independent orphan comm
           "  ○ free v1.0.0 (uninstalled) {dependency pruned}\n\n" +
           "/reload to pick up changes",
         severity: "warning",
+      },
+    ]);
+  });
+});
+
+for (const dryRun of [true, false] as const) {
+  test(`${dryRun ? "preview" : "actual prune"} reports malformed state as a scoped failure`, async () => {
+    await withHermeticEnvironment("prune-owner-malformed-state-", async ({ cwd }) => {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      await writeFile(locations.stateJsonPath, "{");
+      const { ctx, notifications } = makeCtx(cwd);
+
+      // act
+      await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project", dryRun });
+
+      // assert
+      assert.deepStrictEqual(await readFile(locations.stateJsonPath, "utf8"), "{");
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.match(notifications[0]?.message ?? "", /\(prune\) \[project\].*failed.*unreadable/s);
+      assert.match(notifications[0]?.message ?? "", /state\.json.*not valid JSON/);
+      assert.doesNotMatch(notifications[0]?.message ?? "", /\/reload|\/tmp\//);
+    });
+  });
+}
+
+test("actual prune reports a held lock without changing state", async () => {
+  await withHermeticEnvironment("prune-owner-held-lock-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    await saveState(locations.extensionRoot, { schemaVersion: 3, marketplaces: {} });
+    const stateBefore = await readFile(locations.stateJsonPath);
+    const release = await lockfile.lock(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
+      realpath: false,
+      retries: 0,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    try {
+      // act
+      await prune()({ ctx, pi: { getAllTools: () => [] }, cwd });
+
+      // assert
+      assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.match(notifications[0]?.message ?? "", /\(prune\) \[user\].*failed.*lock held/s);
+      assert.match(notifications[0]?.message ?? "", /operation is in progress/);
+      assert.doesNotMatch(notifications[0]?.message ?? "", /\/reload|\/tmp\//);
+    } finally {
+      await release();
+    }
+  });
+});
+
+test("actual prune reports a non-Error transaction rejection", async () => {
+  await withHermeticEnvironment("prune-owner-non-error-", async ({ cwd }) => {
+    // arrange
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- The boundary can reject with a non-Error value.
+      withLockedStateTransaction: () => Promise.reject(undefined),
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [user]\n  ⊘ (prune) (failed) {unreadable}\n    cause: undefined",
+        severity: "error",
       },
     ]);
   });

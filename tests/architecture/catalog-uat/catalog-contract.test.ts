@@ -142,8 +142,9 @@ const EXPECTED_SECTION_COUNT = 21;
 // D-11-06: one reload refusal retaining the dependent-disable row (229 -> 230).
 // PRUNE-06 / PRUNE-07: seven standalone sweep states pin realized, pending,
 // scoped empty, independent member failure, and unreadable-declarer output.
-const EXPECTED_STATE_COUNT = 237;
-const EXPECTED_UTF8_BYTES = 33_688;
+// CR-01: malformed state and held-lock failures add two command-scoped rows.
+const EXPECTED_STATE_COUNT = 239;
+const EXPECTED_UTF8_BYTES = 34_214;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -434,7 +435,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 21 fixture modules to 237 exact documented states", async () => {
+test("catalog contract matches all 21 fixture modules to 239 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

@@ -3,6 +3,8 @@ import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
+import lockfile from "proper-lockfile";
+
 import {
   createHooksRouting,
   createHooksRuntime,
@@ -200,6 +202,68 @@ function registeredCommand(cwd: string) {
   const { ctx, notifications } = makeCtx(cwd);
   return { command, ctx, notifications, gitCalls: git.state.calls };
 }
+
+for (const args of ["prune --dry-run", "prune"] as const) {
+  test(`${args} reports malformed state without exposing its path`, async () => {
+    await withHermeticEnvironment("standalone-prune-malformed-state-", async ({ cwd }) => {
+      // arrange
+      await seedScope("user", cwd);
+      const locations = locationsFor("user", cwd);
+      await writeFile(locations.stateJsonPath, "{");
+      const stateBefore = await readFile(locations.stateJsonPath);
+      const { command, ctx, notifications } = registeredCommand(cwd);
+
+      // act
+      await command.handler(args, ctx);
+
+      // assert
+      assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● (prune) [user]\n  ⊘ (prune) (failed) {unreadable}\n" +
+            "    cause: state.json at state.json is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2) -> Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+          severity: "error",
+        },
+      ]);
+    });
+  });
+}
+
+test("prune reports a held state lock and leaves the scope intact", async () => {
+  await withHermeticEnvironment("standalone-prune-held-lock-", async ({ cwd }) => {
+    // arrange
+    await seedScope("user", cwd);
+    const locations = locationsFor("user", cwd);
+    const stateBefore = await readFile(locations.stateJsonPath);
+    const release = await lockfile.lock(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
+      realpath: false,
+      retries: 0,
+    });
+    const { command, ctx, notifications } = registeredCommand(cwd);
+
+    try {
+      // act
+      await command.handler("prune", ctx);
+
+      // assert
+      assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● (prune) [user]\n  ⊘ (prune) (failed) {lock held}\n" +
+            "    cause: Another pi-claude-marketplace operation is in progress for user scope (.state-lock). Retry after it completes. -> Lock file is already being held",
+          severity: "error",
+        },
+      ]);
+    } finally {
+      await release();
+    }
+  });
+});
 
 test("prune removes an orphan dependency through the registered command", async () => {
   await withHermeticEnvironment("standalone-prune-", async ({ cwd }) => {

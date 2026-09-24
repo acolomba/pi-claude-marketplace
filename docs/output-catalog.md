@@ -1304,6 +1304,34 @@ A plugin operation has failed.
 
 The failure names the declarer and a redacted cause. The command removes nothing and emits no reload hint.
 
+### Malformed state refuses the sweep or preview
+
+Both `prune` and `prune --dry-run` report this command-scoped failure. The state path is redacted, and there is no reload hint.
+
+<!-- catalog-state: malformed-state -->
+
+```text
+A plugin operation has failed.
+
+● (prune) [user]
+  ⊘ (prune) (failed) {unreadable}
+    cause: state.json at state.json is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2) -> Expected property name or '}' in JSON at position 1 (line 1 column 2)
+```
+
+### State lock held
+
+The command reports the lock failure and leaves the scope unchanged. The lock path is redacted, and there is no reload hint.
+
+<!-- catalog-state: lock-held -->
+
+```text
+A plugin operation has failed.
+
+● (prune) [user]
+  ⊘ (prune) (failed) {lock held}
+    cause: Another pi-claude-marketplace operation is in progress for user scope (.state-lock). Retry after it completes. -> Lock file is already being held
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin reinstall`

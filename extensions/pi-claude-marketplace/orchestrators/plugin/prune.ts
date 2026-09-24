@@ -4,8 +4,10 @@
 import { pruneOrphans } from "../../domain/dependency-orphans.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
+import { errorMessage, StateLockHeldError } from "../../shared/errors.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
+import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 
 import { buildScopeDeclarationIndex } from "./dependency-index.ts";
 import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
@@ -60,6 +62,34 @@ function notifyUnreadable(
   );
 }
 
+/** Reports a prune operation failure without attributing it to a declaration. */
+function notifyOperationFailure(options: PrunePluginOptions, scope: Scope, error: unknown): void {
+  const cause = redactCauseChain(error) ?? new Error(errorMessage(error));
+  notifyWithContext(
+    options.ctx,
+    options.pi,
+    UNINSTALL_CONTEXT,
+    [
+      {
+        name: "(prune)",
+        scope,
+        plugins: [
+          {
+            status: "failed",
+            name: "(prune)",
+            reasons: [error instanceof StateLockHeldError ? "lock held" : "unreadable"],
+            cause,
+            severity: "error",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+    undefined,
+    "single",
+  );
+}
+
 /** Binds the standalone sweep to uninstall's guarded removal capabilities. */
 export function createPrunePlugin(
   transaction: UninstallTransaction,
@@ -70,60 +100,76 @@ export function createPrunePlugin(
     const scope = options.scope ?? "user";
     const locations = locationsFor(scope, options.cwd);
     if (options.dryRun === true) {
-      const state = await loadState(locations.extensionRoot, { persistMigration: false });
-      const snapshot = await buildScopeDeclarationIndex({ state, locations });
-      if (!snapshot.ok) {
-        notifyUnreadable(options, scope, snapshot.declarer, snapshot.cause);
-        return;
-      }
+      try {
+        const state = await loadState(locations.extensionRoot, { persistMigration: false });
+        const snapshot = await buildScopeDeclarationIndex({ state, locations });
+        if (!snapshot.ok) {
+          notifyUnreadable(options, scope, snapshot.declarer, snapshot.cause);
+          return;
+        }
 
-      const order = pruneOrphans(snapshot.candidates, snapshot.index, new Set<string>());
-      const marketplaces = order.flatMap((key) =>
-        snapshot.candidates
-          .filter((candidate) => candidate.key === key)
-          .map((candidate) => ({
-            name: candidate.marketplace.name,
-            scope,
-            plugins: [
-              {
-                status: "will uninstall" as const,
-                name: candidate.plugin,
-                reasons: ["dependency pruned" as const],
-                severity: "info" as const,
-                needsReload: false,
-              },
-            ],
-          })),
-      );
-      if (marketplaces.length > 0) {
-        notify(options.ctx, options.pi, { kind: "cascade", marketplaces, cardinality: "single" });
-      } else {
-        notify(options.ctx, options.pi, { kind: "prune-empty", scope });
+        const order = pruneOrphans(snapshot.candidates, snapshot.index, new Set<string>());
+        const marketplaces = order.flatMap((key) =>
+          snapshot.candidates
+            .filter((candidate) => candidate.key === key)
+            .map((candidate) => ({
+              name: candidate.marketplace.name,
+              scope,
+              plugins: [
+                {
+                  status: "will uninstall" as const,
+                  name: candidate.plugin,
+                  reasons: ["dependency pruned" as const],
+                  severity: "info" as const,
+                  needsReload: false,
+                },
+              ],
+            })),
+        );
+        if (marketplaces.length > 0) {
+          notify(options.ctx, options.pi, { kind: "cascade", marketplaces, cardinality: "single" });
+        } else {
+          notify(options.ctx, options.pi, { kind: "prune-empty", scope });
+        }
+      } catch (error: unknown) {
+        notifyOperationFailure(options, scope, error);
       }
 
       return;
     }
 
-    const outcome = await transaction.withLockedStateTransaction(locations, async (tx) => {
-      const snapshot = await buildScopeDeclarationIndex({ state: tx.state, locations });
-      if (!snapshot.ok) {
-        return { kind: "unreadable" as const, declarer: snapshot.declarer, cause: snapshot.cause };
-      }
+    let outcome:
+      | { readonly kind: "unreadable"; readonly declarer: string; readonly cause: Error }
+      | { readonly kind: "swept"; readonly members: Awaited<ReturnType<typeof sweepOrphans>> };
+    try {
+      outcome = await transaction.withLockedStateTransaction(locations, async (tx) => {
+        const snapshot = await buildScopeDeclarationIndex({ state: tx.state, locations });
+        if (!snapshot.ok) {
+          return {
+            kind: "unreadable" as const,
+            declarer: snapshot.declarer,
+            cause: snapshot.cause,
+          };
+        }
 
-      const members = await sweepOrphans({
-        snapshot,
-        initiallyGone: new Set<string>(),
-        locations,
-        keepData: false,
-        cascade: transaction.cascadeUnstagePlugin,
-        transaction,
+        const members = await sweepOrphans({
+          snapshot,
+          initiallyGone: new Set<string>(),
+          locations,
+          keepData: false,
+          cascade: transaction.cascadeUnstagePlugin,
+          transaction,
+        });
+        if (members.length > 0) {
+          await tx.save();
+        }
+
+        return { kind: "swept" as const, members };
       });
-      if (members.length > 0) {
-        await tx.save();
-      }
-
-      return { kind: "swept" as const, members };
-    });
+    } catch (error: unknown) {
+      notifyOperationFailure(options, scope, error);
+      return;
+    }
 
     if (outcome.kind === "unreadable") {
       notifyUnreadable(options, scope, outcome.declarer, outcome.cause);

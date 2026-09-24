@@ -214,5 +214,61 @@ export const PLUGIN_PRUNE_FIXTURES: FixtureMap = {
         cardinality: "single",
       },
     },
+    "malformed-state": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "(prune)",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "(prune)",
+                reasons: ["unreadable"],
+                cause: new Error(
+                  "state.json at state.json is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+                  {
+                    cause: new SyntaxError(
+                      "Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+                    ),
+                  },
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+        cardinality: "single",
+      },
+    },
+    "lock-held": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "(prune)",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "(prune)",
+                reasons: ["lock held"],
+                cause: new Error(
+                  "Another pi-claude-marketplace operation is in progress for user scope (.state-lock). Retry after it completes.",
+                  { cause: new Error("Lock file is already being held") },
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+        cardinality: "single",
+      },
+    },
   },
 };
