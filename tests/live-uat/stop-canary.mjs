@@ -223,12 +223,12 @@ async function assertPreconditions() {
     );
   }
   const version = parseVersion(versionOut);
-  if (version === undefined || !meetsFloor(version, [0, 80, 5])) {
+  if (version === undefined || !meetsFloor(version, [0, 86, 1])) {
     liveRuntimeRequired(
-      `pi ${versionOut.trim()} is below the required >= 0.80.5 (agent_settled fire-point).`,
+      `pi ${versionOut.trim()} is below the required >= 0.86.1 package peer floor.`,
     );
   }
-  pass(`live pi ${versionOut.trim()} >= 0.80.5, sandbox ${resolved}`);
+  pass(`live pi ${versionOut.trim()} >= 0.86.1, sandbox ${resolved}`);
   return resolved;
 }
 

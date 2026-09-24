@@ -206,7 +206,7 @@ It has two halves:
 
 | Requirement                                | Notes                                                                                                                                                                                   |
 | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pi` CLI **>= 0.80.5** on `PATH`           | `agent_settled` fire-point. Verified against 0.80.10.                                                                                                                                   |
+| `pi` CLI **>= 0.86.1** on `PATH`           | Package peer floor. `agent_settled` first appeared in 0.80.5. The earlier canary run used 0.80.10.                                                                                      |
 | A disposable `PI_CODING_AGENT_DIR` sandbox | Use `$(pwd)/tmp/pi-uat/agent`. The harness refuses to run against any dir outside `tmp/pi-uat` (T-88-08) so the always-block canary never churns a real Pi state dir.                   |
 | A working default provider in the sandbox  | The sandbox's `settings.json` selects the provider/model; a real turn must reach it. `--offline` disables only Pi's _startup_ network ops (marketplace autoupdate), not the model call. |
 

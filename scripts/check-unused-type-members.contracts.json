@@ -647,7 +647,7 @@
       "key": "type",
       "category": "external-input",
       "purpose": "The installed resources_discover event declaration requires this discriminant, and the registered handler is checked against that declaration, so the local mirror has to spell it.",
-      "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:405:5",
+      "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:406:5",
       "necessity": "extensions/pi-claude-marketplace/index.ts:90:5"
     },
     {
@@ -656,7 +656,7 @@
       "key": "reason",
       "category": "external-input",
       "purpose": "The installed resources_discover event declaration requires this slot, and the registered handler is checked against that declaration, so the local mirror has to spell it.",
-      "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:407:5",
+      "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:408:5",
       "necessity": "extensions/pi-claude-marketplace/index.ts:90:5"
     },
     {
@@ -857,7 +857,7 @@
       "key": "themePaths",
       "category": "external-mirror",
       "purpose": "Keeps the local resources_discover result a faithful statement of the installed declaration the peer overload checks the handler against; upstream declares the slot optional, so widening it fails the build while nothing reads it here.",
-      "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:413:5",
+      "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:414:5",
       "checked": "extensions/pi-claude-marketplace/index.ts:90:5"
     },
     {

@@ -186,12 +186,16 @@ Two further facts about the installed name. If a command of that name is already
 
 ## Host engine requirements
 
-**Two peer floors are in play, and they belong to two different packages.**
+The marketplace and the workflow engine each declare a minimum Pi version.
 
-- `pi-claude-marketplace` peers on `@earendil-works/pi-coding-agent >=0.80.5`. This project has not raised its own floor for the workflows bridge, and nothing in this document asks it to.
+- `pi-claude-marketplace` peers on `@earendil-works/pi-coding-agent >=0.86.1`.
 - `@quintinshaw/pi-dynamic-workflows` 3.13.0 peers on `@earendil-works/pi-coding-agent >=0.80.8` and `@earendil-works/pi-tui >=0.80.6` (verified against the published package metadata; the same floors 3.10.1 declared).
 
-A user on a Pi between 0.80.5 and 0.80.7 satisfies this extension's floor and not the engine's. Workflow envelopes install correctly and nothing runs them. That gap is the engine's requirement, not this extension's, and it cannot be closed from here.
+The marketplace requires the higher Pi version because workflow children need their tools. In the tested pairing, Pi 0.85.1 hosted an engine with a Pi 0.87.0 dependency. The children received no tools. Pi 0.86.1 passed the same OpenAI tool test with the unpatched engine. Install Pi 0.86.1 or a newer version before you install this extension.
+
+On 2026-09-23, a saved workflow installed through this bridge ran with Pi 0.86.1 and the published engine 3.13.0. Pi loaded both packages through normal extension discovery. The engine resolved its Pi dependency at 0.87.1. An OpenAI child called `read` and `structured_output`, returned the expected value, and posted it to the parent session. The run then cleared its pending-delivery marker.
+
+Engine 3.13.0 still has two visible limits. If you launch Pi with `--no-extensions -e` to load the engine explicitly, the engine can leave result delivery pending. Load it through Pi's normal package discovery. Also, `/workflows status <id>` can print `Workflow running` for a completed run. Use `/workflows list` to read the persisted status.
 
 Install the engine with:
 

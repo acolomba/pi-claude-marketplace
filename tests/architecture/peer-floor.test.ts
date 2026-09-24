@@ -16,13 +16,13 @@ interface PackageLockJson {
 
 const PEER = "@earendil-works/pi-coding-agent";
 
-test("package.json peerDependencies pins the pi-coding-agent floor at >=0.80.5 (FLOOR-01)", async () => {
+test("package.json peerDependencies pins the pi-coding-agent floor at >=0.86.1 (FLOOR-01)", async () => {
   const raw = await readFile(path.join(REPO_ROOT, PACKAGE_JSON_REL), "utf8");
   const pkg = JSON.parse(raw) as PackageJson;
 
   const range = pkg.peerDependencies?.[PEER];
   assert.ok(range, `peerDependencies["${PEER}"] is missing`);
-  assert.equal(range, ">=0.80.5", `FLOOR-01 violation: expected floor ">=0.80.5", got "${range}"`);
+  assert.equal(range, ">=0.86.1", `FLOOR-01 violation: expected floor ">=0.86.1", got "${range}"`);
 });
 
 test("package-lock.json root peerDependencies stays in sync with package.json for pi-coding-agent (FLOOR-01)", async () => {

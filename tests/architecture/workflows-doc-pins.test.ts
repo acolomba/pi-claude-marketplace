@@ -9,7 +9,7 @@
  *
  * Four claims in that document are NOT prose, and each one rots silently:
  *
- *   1. The floor `>=0.80.5` the document attributes to this project is a copy
+ *   1. The floor `>=0.86.1` the document attributes to this project is a copy
  *      of `package.json`. Bumping the peer range reddens
  *      `tests/architecture/peer-floor.test.ts` (FLOOR-01) and leaves the
  *      document stating a floor the package no longer declares.
