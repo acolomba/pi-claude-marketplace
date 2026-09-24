@@ -1,21 +1,55 @@
 ---
 phase: 12-standalone-prune-with-dry-run
-fixed_at: 2026-09-24T06:14:44Z
+fixed_at: 2026-09-24T12:55:12Z
 review_path: .planning/phases/12-standalone-prune-with-dry-run/12-REVIEW.md
-iteration: 3
-findings_in_scope: 4
-fixed: 4
+iteration: 4
+findings_in_scope: 3
+fixed: 3
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 12: Code Review Fix Report
 
-**Fixed at:** 2026-09-24T06:14:44Z
+**Fixed at:** 2026-09-24T12:55:12Z
 **Source review:** `.planning/phases/12-standalone-prune-with-dry-run/12-REVIEW.md`
-**Iteration:** 3
+**Iteration:** 4
 
-**Summary:** Three Critical findings and one Warning were fixed. No finding was skipped. Earlier fixes remain recorded below.
+**Summary:** Three Critical findings were fixed. No finding was skipped. Earlier fixes remain recorded below.
+
+## Iteration 4 fixed issues
+
+### CR-01: A failed directory publication leaves a partial artifact
+
+**Status:** fixed: requires human verification
+**Commit:** `e35c747b`
+**Files modified:** `prune-rollback.ts`, `prune-rollback.test.ts`, `prune.test.ts`, and `docs/output-catalog.md`.
+
+**Applied fix:** The user chose to preserve every possible replacement. When a directory target is absent, rollback leaves it absent and reports structured partial recovery. It retains the numbered backup and manifest for manual restoration. An identical existing directory remains accepted, and a changed directory remains untouched. Tests cover complete nested backups, repeated rollback, state restoration, and the command notification.
+
+### CR-02: Hard-link publication aliases a restored file to its backup
+
+**Status:** fixed: requires human verification
+**Commit:** `e35c747b`
+**Files modified:** `prune-rollback.ts` and `prune-rollback.test.ts`.
+
+**Applied fix:** Rollback copies each regular-file backup to a private inode, restores its mode, and exclusively links that staged file into the destination. A deterministic write after publication changes the target without changing the retained numbered backup, even when a later MCP collision makes rollback partial.
+
+### CR-03: The process umask changes restored directory permissions
+
+**Status:** fixed: requires human verification
+**Commit:** `e35c747b`
+**Files modified:** `prune-rollback.ts` and `prune-rollback.test.ts`.
+
+**Applied fix:** Rollback does not automatically publish directory artifacts, so process umask cannot change a restored directory's mode. The saved directory remains in the backup for manual restoration. File publication applies the saved mode with `chmod`; a test uses umask `0o077` and checks the exact restored file mode.
+
+## Iteration 4 verification
+
+Checks ran in the shared `features/manifest` linked checkout. The new missing-directory regression failed against automatic publication and passes with manual recovery. Focused rollback (34 cases), prune command (26 cases), standalone integration, and catalog contract/parser tests pass. Direct-pair coverage reaches 100% for `prune-rollback.ts` (102 branches, 19 functions, 390 lines) and `prune.ts` (70 branches, 18 functions, 331 lines). TypeScript typecheck, scoped ESLint, changed-file Prettier, diff whitespace checks, and scoped pre-commit pass. Pre-commit skipped `trufflehog` for the linked checkout's `.git/index` limitation and `npm-format-check` because its global scan includes the untouched operator-owned `.planning/config.json`; changed-file Prettier passed. The sandboxed Fallow agent audit returned a JSON temporary-worktree runtime error, which project instructions treat as non-blocking.
+
+The escalated `fallow audit --base HEAD` passed with no findings. Node's `rename` API has no no-replace option for directories. The user chose manual recovery for missing directory targets so rollback never publishes into that race. The command reports the backup manifest and each directory restore failure; `/reload` is not suggested because persistence did not commit.
+
+## Earlier fix history: iteration 3
 
 ## Iteration 3 fixed issues
 
@@ -167,6 +201,6 @@ The final scoped pre-commit run passed every applicable hook. It skipped the Tru
 
 ---
 
-_Fixed: 2026-09-24T06:14:44Z_
+_Fixed: 2026-09-24T12:55:12Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: 3_
+_Iteration: 4_
