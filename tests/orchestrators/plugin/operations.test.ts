@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHook } from "node:async_hooks";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import https from "node:https";
 import path from "node:path";
 import test from "node:test";
 
@@ -529,6 +530,9 @@ test("the composed prune operation removes an orphan in the default user scope",
   const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   const completionCache = createCompletionCache();
   const lockSpy = t.mock.method(lockfile, "lock");
+  t.mock.method(https, "request", (): never => {
+    throw new Error("prune must not invoke the git transport");
+  });
   const fetchSpy = t.mock.method(globalThis, "fetch", () => {
     throw new Error("prune must stay offline");
   });
@@ -580,6 +584,9 @@ test("the composed prune operation removes only the selected project orphan", as
   const completionCache = createCompletionCache();
   const cacheDropSpy = t.mock.method(completionCache, "dropMarketplaceCache");
   const lockSpy = t.mock.method(lockfile, "lock");
+  t.mock.method(https, "request", (): never => {
+    throw new Error("prune must not invoke the git transport");
+  });
   const fetchSpy = t.mock.method(globalThis, "fetch", () => {
     throw new Error("prune must stay offline");
   });
