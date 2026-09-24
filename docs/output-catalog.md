@@ -1350,7 +1350,7 @@ A plugin operation has failed.
 
 ### Prune rollback needs manual recovery
 
-If rollback finds a changed path, prune keeps the current file and the original in a recovery backup. The backup's `manifest.json` maps each numbered entry to a permitted root and a relative target. Inspect that manifest before retrying. This also applies to shared metadata: the scope state lock does not cover independent writers of `mcp.json` or the agents index, so prune does not replace a changed whole document during rollback. A backup can require a manual merge even when the change came from prune. The command reports each restore failure with a redacted cause and gives the backup directory name. It does not suggest `/reload` because the removal did not commit.
+If rollback finds a changed path, prune keeps the current file and the original in a recovery backup. A missing directory artifact also stays absent and requires manual restoration from that backup. The backup's `manifest.json` maps each numbered entry to a permitted root and a relative target. Inspect that manifest before retrying. This also applies to shared metadata: the scope state lock does not cover independent writers of `mcp.json` or the agents index, so prune does not replace a changed whole document during rollback. A backup can require a manual merge even when the change came from prune. The command reports each restore failure with a redacted cause and gives the backup directory name. It does not suggest `/reload` because the removal did not commit.
 
 <!-- catalog-state: rollback-partial -->
 

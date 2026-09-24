@@ -98,12 +98,12 @@ async function seed(locations: ScopedLocations): Promise<{
   return { member: orphan, skill, command, agent, hook };
 }
 
-test("restores every removed artifact and exact metadata bytes after failed persistence", async () => {
+test("missing directories retain recovery backups while files and state restore", async () => {
   await withHermeticEnvironment("prune-rollback-all-", async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
-    const paths = [fixture.skill, fixture.command, fixture.agent, fixture.hook];
+    const paths = [fixture.command, fixture.agent];
     const metadata = [locations.agentsIndexPath, locations.mcpJsonPath, locations.stateJsonPath];
     const before = await Promise.all([...paths, ...metadata].map((target) => readFile(target)));
     const rollback = await preparePruneRollback(locations, [fixture.member], {
@@ -111,7 +111,7 @@ test("restores every removed artifact and exact metadata bytes after failed pers
     });
 
     // act
-    for (const target of paths) {
+    for (const target of [fixture.skill, ...paths, fixture.hook]) {
       await rm(target, { force: true });
     }
 
@@ -122,14 +122,32 @@ test("restores every removed artifact and exact metadata bytes after failed pers
     const failures = await rollback.rollback();
 
     // assert
-    assert.deepStrictEqual(failures, []);
+    assert.deepStrictEqual(
+      failures.map(({ phase }) => phase),
+      ["skills", "hooks"],
+    );
     assert.deepStrictEqual(
       await Promise.all([...paths, ...metadata].map((target) => readFile(target))),
       before,
     );
+    await assert.rejects(lstat(path.dirname(fixture.skill)), { code: "ENOENT" });
+    await assert.rejects(lstat(path.dirname(fixture.hook)), { code: "ENOENT" });
+    const backupRoot = path.join(locations.extensionRoot, rollback.backupName);
+    const manifest = JSON.parse(await readFile(path.join(backupRoot, "manifest.json"), "utf8")) as {
+      entries: Array<{ phase: string; backup: string | null }>;
+    };
+    for (const { phase, fileName, original } of [
+      { phase: "skills", fileName: "SKILL.md", original: "SKILL.md original\n" },
+      { phase: "hooks", fileName: "hooks.json", original: "hooks.json original\n" },
+    ]) {
+      const entry = manifest.entries.find((saved) => saved.phase === phase);
+      assert.ok(entry?.backup);
+      assert.equal(await readFile(path.join(backupRoot, entry.backup, fileName), "utf8"), original);
+    }
+
     assert.deepStrictEqual(
       (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
-      [],
+      [rollback.backupName],
     );
   });
 });
@@ -257,6 +275,90 @@ test("publication failure keeps the backup and reports an artifact restore failu
   });
 });
 
+test("nested directory backup stays complete across repeated partial rollbacks", async () => {
+  await withHermeticEnvironment("prune-rollback-directory-retry-", async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const skillDir = path.dirname(fixture.skill);
+    await rename(fixture.skill, path.join(skillDir, "a.md"));
+    await writeFile(path.join(skillDir, "z.md"), "last child\n");
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+    });
+    await rm(skillDir, { recursive: true });
+
+    const firstFailures = await rollback.rollback();
+    assert.deepStrictEqual(
+      firstFailures.map(({ phase }) => phase),
+      ["skills"],
+    );
+    await assert.rejects(lstat(skillDir), { code: "ENOENT" });
+
+    const secondFailures = await rollback.rollback();
+    assert.deepStrictEqual(
+      secondFailures.map(({ phase }) => phase),
+      ["skills"],
+    );
+    await assert.rejects(lstat(skillDir), { code: "ENOENT" });
+    const backup = path.join(locations.extensionRoot, rollback.backupName, "0");
+    assert.deepStrictEqual(await readdir(backup), ["a.md", "z.md"]);
+    assert.equal(await readFile(path.join(backup, "a.md"), "utf8"), "SKILL.md original\n");
+    assert.equal(await readFile(path.join(backup, "z.md"), "utf8"), "last child\n");
+  });
+});
+
+test("an in-place edit to a restored file cannot change its retained backup", async () => {
+  await withHermeticEnvironment("prune-rollback-file-alias-", async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const original = await readFile(fixture.command);
+    const independent = Buffer.from("independent command\n");
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+      link: async (from, to) => {
+        await link(from, to);
+        if (to === fixture.command) {
+          await writeFile(to, independent);
+        }
+      },
+    });
+    await rm(fixture.command);
+    await writeFile(locations.mcpJsonPath, "independent metadata\n");
+
+    const failures = await rollback.rollback();
+
+    assert.deepStrictEqual(
+      failures.map(({ phase }) => phase),
+      ["mcp"],
+    );
+    assert.deepStrictEqual(await readFile(fixture.command), independent);
+    assert.deepStrictEqual(
+      await readFile(path.join(locations.extensionRoot, rollback.backupName, "1")),
+      original,
+    );
+  });
+});
+
+test("restored file mode survives the process umask", async () => {
+  await withHermeticEnvironment("prune-rollback-file-mode-", async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    await chmod(fixture.command, 0o764);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+    });
+    await rm(fixture.command);
+    const priorUmask = process.umask(0o077);
+    try {
+      assert.deepStrictEqual(await rollback.rollback(), []);
+    } finally {
+      process.umask(priorUmask);
+    }
+
+    assert.equal((await lstat(fixture.command)).mode & 0o777, 0o764);
+  });
+});
+
 test("retained backup maps two skills to their exact recovery targets", async () => {
   await withHermeticEnvironment("prune-rollback-manifest-", async ({ cwd }) => {
     // arrange
@@ -274,13 +376,6 @@ test("retained backup maps two skills to their exact recovery targets", async ()
     };
     const rollback = await preparePruneRollback(locations, [secondMember], {
       removeBackup: rm,
-      link: async (from, to) => {
-        if (to === secondSkill) {
-          throw new Error("restore refused");
-        }
-
-        await link(from, to);
-      },
     });
     await rm(path.dirname(fixture.skill), { recursive: true });
     await rm(path.dirname(secondSkill), { recursive: true });
@@ -291,7 +386,16 @@ test("retained backup maps two skills to their exact recovery targets", async ()
     // assert
     assert.deepStrictEqual(
       failures.map(({ phase, cause }) => [phase, cause.message]),
-      [["skills", "restore refused"]],
+      [
+        [
+          "skills",
+          `Prune rollback requires manual directory restore at ${path.dirname(fixture.skill)}.`,
+        ],
+        [
+          "skills",
+          `Prune rollback requires manual directory restore at ${path.dirname(secondSkill)}.`,
+        ],
+      ],
     );
     const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
       name.startsWith("prune-backup-"),
@@ -317,7 +421,12 @@ test("retained backup maps two skills to their exact recovery targets", async ()
         },
       ],
     );
-    assert.equal(await readFile(secondSkill, "utf8").catch(() => "missing"), "missing");
+    await assert.rejects(lstat(path.dirname(fixture.skill)), { code: "ENOENT" });
+    await assert.rejects(lstat(path.dirname(secondSkill)), { code: "ENOENT" });
+    assert.equal(
+      await readFile(path.join(locations.extensionRoot, backupName ?? "", "0", "SKILL.md"), "utf8"),
+      "SKILL.md original\n",
+    );
     assert.equal(
       await readFile(path.join(locations.extensionRoot, backupName ?? "", "1", "SKILL.md"), "utf8"),
       "second original\n",
@@ -594,7 +703,7 @@ test("nested symlink content is compared without following its target", async ()
   });
 });
 
-test("rollback publishes a nested symlink without following its target", async () => {
+test("missing directory retains a nested symlink in its backup", async () => {
   await withHermeticEnvironment("prune-rollback-symlink-publish-", async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
@@ -607,8 +716,43 @@ test("rollback publishes a nested symlink without following its target", async (
     });
     await rm(path.dirname(fixture.skill), { recursive: true });
 
-    assert.deepStrictEqual(await rollback.rollback(), []);
-    assert.equal(await readlink(linked), outside);
+    const failures = await rollback.rollback();
+
+    assert.deepStrictEqual(
+      failures.map(({ phase }) => phase),
+      ["skills"],
+    );
+    await assert.rejects(lstat(path.dirname(fixture.skill)), { code: "ENOENT" });
+    assert.equal(
+      await readlink(path.join(locations.extensionRoot, rollback.backupName, "0", "linked.md")),
+      outside,
+    );
+    assert.equal(await readFile(outside, "utf8"), "outside bytes\n");
+  });
+});
+
+test("rollback rejects a symlink substituted into an artifact backup", async () => {
+  await withHermeticEnvironment("prune-rollback-symlink-artifact-", async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const outside = path.join(cwd, "outside.md");
+    await writeFile(outside, "outside bytes\n");
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      removeBackup: rm,
+    });
+    const backup = path.join(locations.extensionRoot, rollback.backupName, "1");
+    await rm(backup);
+    await symlink(outside, backup);
+    await rm(fixture.command);
+
+    const failures = await rollback.rollback();
+
+    assert.deepStrictEqual(
+      failures.map(({ phase }) => phase),
+      ["commands"],
+    );
+    await assert.rejects(lstat(fixture.command), { code: "ENOENT" });
+    assert.equal(await readlink(backup), outside);
     assert.equal(await readFile(outside, "utf8"), "outside bytes\n");
   });
 });

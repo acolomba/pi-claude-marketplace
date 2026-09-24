@@ -1,4 +1,7 @@
+import { constants } from "node:fs";
 import {
+  chmod,
+  copyFile,
   cp,
   link,
   lstat,
@@ -8,7 +11,6 @@ import {
   readdir,
   readlink,
   rm,
-  symlink,
 } from "node:fs/promises";
 import path from "node:path";
 
@@ -131,30 +133,25 @@ async function sameEntry(left: string, right: string): Promise<boolean> {
   return leftStat.mode === rightStat.mode;
 }
 
-async function publishBackupEntry(
+async function assertRestorableFileBackup(
   backup: string,
   target: string,
   ops: PruneRestoreOps,
-): Promise<void> {
+): Promise<Stats> {
   const entry = await (ops.inspectBackup ?? lstat)(backup);
-  if (entry.isFile()) {
-    await (ops.link ?? link)(backup, target);
-    return;
+  if (entry.isDirectory()) {
+    throw new Error(`Prune rollback requires manual directory restore at ${target}.`);
   }
 
   if (entry.isSymbolicLink()) {
-    await symlink(await readlink(backup), target);
-    return;
+    throw new Error(`Prune rollback cannot publish symlink artifact at ${target}.`);
   }
 
-  if (!entry.isDirectory()) {
+  if (!entry.isFile()) {
     throw new Error(`Prune rollback cannot publish unsupported artifact at ${target}.`);
   }
 
-  await mkdir(target, { mode: entry.mode & 0o777 });
-  for (const name of await readdir(backup)) {
-    await publishBackupEntry(path.join(backup, name), path.join(target, name), ops);
-  }
+  return entry;
 }
 
 async function restoreArtifact(saved: SavedPath, ops: PruneRestoreOps): Promise<void> {
@@ -171,9 +168,16 @@ async function restoreArtifact(saved: SavedPath, ops: PruneRestoreOps): Promise<
     throw new Error(`Prune rollback found an occupied artifact at ${saved.target}.`);
   }
 
+  // Directory publication cannot safely exclude a concurrent replacement
+  // with Node's rename API. Keep the complete backup for manual recovery.
+  const entry = await assertRestorableFileBackup(saved.backup, saved.target, ops);
   await mkdir(path.dirname(saved.target), { recursive: true });
+  const stagingRoot = await mkdtemp(path.join(path.dirname(saved.target), ".prune-restore-"));
+  const staged = path.join(stagingRoot, "entry");
   try {
-    await publishBackupEntry(saved.backup, saved.target, ops);
+    await copyFile(saved.backup, staged, constants.COPYFILE_EXCL);
+    await chmod(staged, entry.mode & 0o7777);
+    await (ops.link ?? link)(staged, saved.target);
   } catch (error: unknown) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") {
       throw new Error(`Prune rollback found an occupied artifact at ${saved.target}.`, {
@@ -182,6 +186,8 @@ async function restoreArtifact(saved: SavedPath, ops: PruneRestoreOps): Promise<
     }
 
     throw error;
+  } finally {
+    await rm(stagingRoot, { recursive: true, force: true });
   }
 }
 

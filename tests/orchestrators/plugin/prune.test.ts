@@ -561,7 +561,7 @@ test("actual prune reports a non-Error transaction rejection", async () => {
   });
 });
 
-test("a failed state save restores removed artifacts and original state bytes", async () => {
+test("a failed state save retains a missing skill directory and restores state", async () => {
   await withHermeticEnvironment("prune-owner-save-failure-", async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
@@ -584,7 +584,52 @@ test("a failed state save restores removed artifacts and original state bytes", 
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
-    assert.deepStrictEqual(await readFile(fixture.skills["orphan@mp"] ?? ""), skillBefore);
+    await assert.rejects(stat(path.dirname(fixture.skills["orphan@mp"] ?? "")), {
+      code: "ENOENT",
+    });
+    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
+      name.startsWith("prune-backup-"),
+    );
+    assert.ok(backupName);
+    assert.deepStrictEqual(
+      await readFile(path.join(locations.extensionRoot, backupName, "0", "SKILL.md")),
+      skillBefore,
+    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
+          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
+          "    [skills] (rollback failed)\n" +
+          "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("a failed save without directory artifacts completes rollback", async () => {
+  await withHermeticEnvironment("prune-owner-save-no-directory-", async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    await seedRecord(
+      "project",
+      cwd,
+      JSON.stringify({ name: "mp", plugins: [{ name: "orphan", source: "./orphan" }] }),
+    );
+    const originalState = await readFile(locations.stateJsonPath);
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run, {
+          saveState: () => Promise.reject(new Error("state save failed")),
+        }),
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), originalState);
     assert.deepStrictEqual(
       (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
       [],
@@ -600,7 +645,7 @@ test("a failed state save restores removed artifacts and original state bytes", 
   });
 });
 
-test("a save that writes then rejects restores original state and skill bytes", async () => {
+test("a save that writes then rejects restores state and retains the skill backup", async () => {
   await withHermeticEnvironment("prune-owner-save-after-write-", async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
@@ -626,24 +671,32 @@ test("a save that writes then rejects restores original state and skill bytes", 
 
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
-    assert.deepStrictEqual(await readFile(fixture.skills["orphan@mp"] ?? ""), skillBefore);
+    await assert.rejects(stat(path.dirname(fixture.skills["orphan@mp"] ?? "")), {
+      code: "ENOENT",
+    });
+    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
+      name.startsWith("prune-backup-"),
+    );
+    assert.ok(backupName);
     assert.deepStrictEqual(
-      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
-      [],
+      await readFile(path.join(locations.extensionRoot, backupName, "0", "SKILL.md")),
+      skillBefore,
     );
     assert.deepStrictEqual(notifications, [
       {
         message:
           "A plugin operation has failed.\n\n" +
-          "● (prune) [project]\n  ⊘ (prune) (failed) {unreadable}\n" +
-          "    cause: state save rejected after write",
+          "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
+          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save rejected after write\n` +
+          "    [skills] (rollback failed)\n" +
+          "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.",
         severity: "error",
       },
     ]);
   });
 });
 
-test("a failed save removes state when it did not exist before pruning", async () => {
+test("a failed save removes newly created state and retains the skill backup", async () => {
   await withHermeticEnvironment("prune-owner-save-created-state-", async ({ cwd }) => {
     // arrange
     const locations = locationsFor("project", cwd);
@@ -672,17 +725,25 @@ test("a failed save removes state when it did not exist before pruning", async (
     // assert
     await assert.rejects(stat(locations.stateJsonPath), { code: "ENOENT" });
     await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
-    assert.deepStrictEqual(await readFile(fixture.skills["orphan@mp"] ?? ""), skillBefore);
+    await assert.rejects(stat(path.dirname(fixture.skills["orphan@mp"] ?? "")), {
+      code: "ENOENT",
+    });
+    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
+      name.startsWith("prune-backup-"),
+    );
+    assert.ok(backupName);
     assert.deepStrictEqual(
-      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
-      [],
+      await readFile(path.join(locations.extensionRoot, backupName, "0", "SKILL.md")),
+      skillBefore,
     );
     assert.deepStrictEqual(notifications, [
       {
         message:
           "A plugin operation has failed.\n\n" +
-          "● (prune) [project]\n  ⊘ (prune) (failed) {unreadable}\n" +
-          "    cause: state save rejected after create",
+          "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
+          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save rejected after create\n` +
+          "    [skills] (rollback failed)\n" +
+          "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.",
         severity: "error",
       },
     ]);
@@ -750,6 +811,62 @@ test("an occupied restore target reports rollback partial and retains the backup
   });
 });
 
+test("a missing skill directory reports manual recovery and restores state", async () => {
+  await withHermeticEnvironment("prune-owner-restore-directory-", async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    const fixture = await seedScope("project", cwd, {
+      mp: { orphan: { provenance: "dependency" } },
+    });
+    const skill = fixture.skills["orphan@mp"] ?? "";
+    const originalSkill = await readFile(skill);
+    const originalState = await readFile(locations.stateJsonPath);
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run, {
+          saveState: () => Promise.reject(new Error("state save failed")),
+        }),
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    await assert.rejects(stat(path.dirname(skill)), { code: "ENOENT" });
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), originalState);
+    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
+      name.startsWith("prune-backup-"),
+    );
+    assert.ok(backupName);
+    const backupRoot = path.join(locations.extensionRoot, backupName);
+    const manifest = JSON.parse(await readFile(path.join(backupRoot, "manifest.json"), "utf8")) as {
+      entries: Array<{ phase: string; root: string; target: string; backup: string | null }>;
+    };
+    assert.deepStrictEqual(
+      manifest.entries.filter(({ phase }) => phase === "skills"),
+      [
+        {
+          phase: "skills",
+          root: path.join("pi-claude-marketplace", "resources", "skills"),
+          target: "mp-orphan-skill",
+          backup: "0",
+        },
+      ],
+    );
+    assert.deepStrictEqual(await readFile(path.join(backupRoot, "0", "SKILL.md")), originalSkill);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
+          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
+          "    [skills] (rollback failed)\n" +
+          "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
 test("a concurrent MCP edit survives failed save with its original in recovery backup", async () => {
   await withHermeticEnvironment("prune-owner-mcp-collision-", async ({ cwd }) => {
     // arrange
@@ -780,7 +897,9 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
     // assert
     assert.deepStrictEqual(await readFile(locations.mcpJsonPath), currentMcp);
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
-    assert.deepStrictEqual(await readFile(fixture.skills["orphan@mp"] ?? ""), skillBefore);
+    await assert.rejects(stat(path.dirname(fixture.skills["orphan@mp"] ?? "")), {
+      code: "ENOENT",
+    });
     await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
     const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
       name.startsWith("prune-backup-"),
@@ -797,12 +916,18 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
       await readFile(path.join(locations.extensionRoot, backupName ?? "", "3")),
       originalMcp,
     );
+    assert.deepStrictEqual(
+      await readFile(path.join(locations.extensionRoot, backupName ?? "", "0", "SKILL.md")),
+      skillBefore,
+    );
     assert.deepStrictEqual(notifications, [
       {
         message:
           "A plugin operation has failed.\n\n" +
           "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
           `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
+          "    [skills] (rollback failed)\n" +
+          "      cause: Prune rollback requires manual directory restore at mp-orphan-skill.\n" +
           "    [mcp] (rollback failed)\n" +
           "      cause: Prune rollback found an occupied metadata path at mcp.json.",
         severity: "error",
