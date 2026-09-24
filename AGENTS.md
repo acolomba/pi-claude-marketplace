@@ -18,27 +18,16 @@ Before editing any file, read it first. Before modifying a function, trace its c
 - When writing PR descriptions, use the `simple-english` skill in Plain mode and the `humanizer` skill, if available.
 - Always use `--squash` when merging PRs (`gh pr merge --squash`). The repository does not allow merge commits or rebase merges.
 
-### Broken Windows ledger
+### GSD records
 
-When appending an entry with `gsd-tools windows append`, **prefix the description with the milestone in square brackets**: `--description "[workflows-replay] the thing that is wrong"`.
-
-The ledger entry schema is `{id, kind, phase, file, line, description, status, reason, recorded_at, resolved_at}` -- it has no milestone field, and `phase` holds a bare number. Phase numbers are NOT unique across milestones in GSD (they are unique only within one active `phases/` directory; archiving moves completed phases into `milestones/<name>-phases/` and frees the numbers). This project has reused 101-105 across two milestones already, and v1.19's 108-117 overlap the current workstream's 109-117.
-
-The consequence, seen for real: 20 entries recorded against "phase 115/116/117" belonged to an archived milestone, and nothing in the ledger could distinguish them from the current one's. Attributing them took dating every entry and cross-reading decision IDs. The bracket prefix costs nothing at write time and makes the whole set greppable by milestone.
-
-Do NOT encode the milestone in `--phase` (e.g. `115@workflows-replay`) -- that field is grouped and numerically normalized by the readers. Do NOT hand-edit `.planning/WINDOWS.md` to retrofit old entries: the file carries a rendered table AND a fenced JSON block, the JSON is the source of truth, and a table-only edit is silently lost (this nearly destroyed two operator decisions).
-
-### Threat Flags in SUMMARY.md
-
-Every plan SUMMARY.md carries a `## Threat Flags` section, **even when the answer is "None."** GSD's executor template says to omit the section when the scan found nothing; do not. Write:
+- Prefix each `gsd-tools windows append --description` with the milestone, such as `[workflows-replay]`. Phase numbers can repeat across milestones. Do not put the milestone in `--phase` or hand-edit `.planning/WINDOWS.md`.
+- Include `## Threat Flags` in every plan `SUMMARY.md`, even when the answer is "None":
 
 ```markdown
 ## Threat Flags
 
 None -- no security-relevant surface outside the plan's `<threat_model>` was introduced.
 ```
-
-The reason is what an absent section means to the reader. `/gsd-secure-phase` cross-checks the plan's threat register against the surface the executor flagged, and an absent section is indistinguishable from an executor that never ran the scan. Across phases 109-113 of the workflows-replay milestone, zero of 21 summaries carried the section, so every one of those audits' cross-checks was vacuous -- and all four auditors flagged it independently rather than treating absence as evidence that no new surface appeared. An explicit "None" is a claim the auditor can hold the executor to; silence is not.
 
 ### TypeScript
 
