@@ -1,62 +1,61 @@
 ---
 phase: 12-standalone-prune-with-dry-run
-reviewed: 2026-09-24T13:09:51Z
+reviewed: 2026-09-24T14:07:39Z
 depth: deep
-files_reviewed: 11
+files_reviewed: 17
 files_reviewed_list:
   - docs/output-catalog.md
   - extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/prune.ts
-  - extensions/pi-claude-marketplace/shared/notification-grammar.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts
+  - extensions/pi-claude-marketplace/shared/notification-dispatch.ts
+  - extensions/pi-claude-marketplace/shared/notification-summary.ts
   - extensions/pi-claude-marketplace/shared/notification-types.ts
+  - scripts/check-unused-type-members.contracts.json
   - tests/architecture/catalog-uat/catalog-contract.test.ts
   - tests/architecture/catalog-uat/catalog-parser.test.ts
   - tests/architecture/catalog-uat/fixtures/plugin-prune.ts
-  - tests/integration/standalone-prune.test.ts
+  - tests/architecture/notify-closed-set-locks.test.ts
   - tests/orchestrators/plugin/prune-rollback.test.ts
   - tests/orchestrators/plugin/prune.test.ts
+  - tests/shared/notification-dispatch.test.ts
+  - tests/shared/notification-summary.test.ts
+  - tests/shared/notification-types.test.ts
 findings:
-  critical: 1
+  critical: 0
   warning: 0
   info: 0
-  total: 1
-status: issues_found
+  total: 0
+status: clean
 ---
 
 # Phase 12: Code Review Report
 
-**Reviewed:** 2026-09-24T13:09:51Z
+**Reviewed:** 2026-09-24T14:07:39Z
 **Depth:** deep
-**Files Reviewed:** 11
-**Status:** issues_found
+**Files Reviewed:** 17
+**Status:** clean
 
 ## Summary
 
-The chosen directory recovery behavior is implemented: missing directory targets stay absent, their mapped backups survive repeated partial rollback, file targets are published from separate inodes, and state restoration runs last. One post-commit notification defect remains. A cleanup failure can be reported on a different plugin from the one whose data was left behind.
+Re-reviewed the Phase 12 cleanup attribution fix, its notification types and renderer, the exact output catalog, and the rollback path. The previous CR-01 is resolved. No new bug, security issue, or quality defect was found in the reviewed scope.
 
 ## Narrative Findings (AI reviewer)
 
-## Critical Issues
+No findings. All reviewed files meet the review criteria.
 
-### CR-01: BLOCKER — cleanup failure is attributed to the wrong pruned plugin
+## Evidence
 
-**File:** `/home/acolomba/src/pi-claude-marketplace-manifest/extensions/pi-claude-marketplace/orchestrators/plugin/prune.ts:141-153,167-193`
+- `prune.ts:141-153` retains the member object with each caught cleanup cause. `prune.ts:167-193` applies that cause only to the matching member row. `uninstall.ts:683-707` shows that finalization receives one member at a time and performs that member's cleanup.
+- `prune.test.ts:1172-1217` asserts that a second-member cleanup failure leaves `b`'s data, removes `a`'s data, and places the warning only on `b`. `prune.test.ts:1220-1275` asserts that the same failure combined with lock-release rejection emits two separate causes. The scope-wide warning is dispatched at `prune.ts:325-334`, rendered at `notification-dispatch.ts:249-255`, and classified as warning with a reload hint at `notification-summary.ts:205-206,587-588`.
+- `docs/output-catalog.md:1223-1255` independently documents and pins the committed warning and second-member cleanup output through `fixtures/plugin-prune.ts:30-75` and the catalog contract. The release warning explicitly says prune committed, identifies the scope, and requests `/reload`; the member row shows `b` as uninstalled with its cleanup cause.
+- `prune-rollback.ts:157-192,340-379` leaves missing directory targets absent, retains complete numbered backups and the recovery manifest on partial rollback, and publishes regular files from a separate staged inode. `prune-rollback.test.ts:101-152,278-339,362-432` checks backup contents, repeated recovery, exact manifest target mapping, and that editing a restored file does not alter its retained backup. State restoration runs after artifact and metadata attempts.
+- The focused Node test run passed for prune, rollback, notification dispatch, notification summary, and the catalog contract (five test files). `npx tsc --noEmit` and scoped ESLint passed. The parent workflow reported that the full 7,758-test unit suite and all 15 integration files passed after commit `97f39a60`.
 
-**Issue:** `finalizeCommittedMembers()` discards the member identity when it catches a cleanup error. `notifyCommitted()` then attaches every collected error to `members.find((member) => member.removed)`, the first removed member, regardless of which member's cleanup failed. With two independent orphans `a` and `b`, if cleanup of `b` fails before its data directory is removed, `a` gets the warning and cause while `b` is rendered as an ordinary successful removal. The user is directed to the wrong plugin and receives no indication that `b`'s data remains. State has already committed, so a retry of `prune` will not select `b` again.
-
-**Reproduction:** The existing cleanup test at `tests/orchestrators/plugin/prune.test.ts:1077-1123` fails only `a`, which happens to be the first removed member. Change its injected failure condition at line 1092 to `args.plugin === "b"`: cleanup visits `a` then `b`, `a`'s data is deleted, `b`'s data remains, but the warning and `cause: first cleanup failed` still appear under `a`. The mapping follows directly from the unlabelled `failures.push(error)` and `warningMember = members.find(...)` code paths.
-
-**Fix:** Keep cleanup errors with their member keys, attach each error to that member's row, and report transaction-wide errors such as lock-release failure separately. Add a second-member cleanup failure test that checks both data directories and the exact row receiving the cause. Pin that output in the catalog fixture.
-
-## Verification
-
-- Focused rollback, prune, standalone integration, catalog contract, and catalog parser tests passed.
-- Direct-pair coverage passed at 100% branches, functions, and lines for both `prune-rollback.ts` and `prune.ts`.
-- `npx tsc --noEmit` and scoped ESLint passed. No full project suite was run.
-- Operator-owned dirty files were left untouched. No source or test files were modified.
+No source or test file was changed during this review. Existing operator-owned dirty files were left untouched.
 
 ---
 
-_Reviewed: 2026-09-24T13:09:51Z_
+_Reviewed: 2026-09-24T14:07:39Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: deep_
