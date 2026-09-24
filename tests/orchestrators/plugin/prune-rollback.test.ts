@@ -406,54 +406,88 @@ test("rollback preserves absent artifacts and removes metadata created after the
   });
 });
 
-test("rollback rejects replaced artifact types, names, contents, and modes", async () => {
-  for (const replacement of [
-    "type",
-    "reverse-type",
-    "length",
-    "name",
-    "content",
-    "mode",
-  ] as const) {
-    await withHermeticEnvironment(`prune-rollback-replaced-${replacement}-`, async ({ cwd }) => {
-      // arrange
-      const locations = locationsFor("project", cwd);
-      const fixture = await seed(locations);
-      const rollback = await preparePruneRollback(locations, [fixture.member], {
-        rename,
-        removeBackup: rm,
-      });
-      if (replacement === "type") {
-        await rm(fixture.command);
-        await mkdir(fixture.command);
-      } else if (replacement === "reverse-type") {
-        await rm(path.dirname(fixture.skill), { recursive: true });
-        await writeFile(path.dirname(fixture.skill), "replacement\n");
-      } else if (replacement === "length") {
-        await writeFile(path.join(path.dirname(fixture.skill), "extra.md"), "extra\n");
-      } else if (replacement === "name") {
-        await rename(fixture.skill, path.join(path.dirname(fixture.skill), "OTHER.md"));
-      } else if (replacement === "content") {
-        await writeFile(fixture.skill, "changed\n");
-      } else {
-        await chmod(path.dirname(fixture.skill), 0o700);
-      }
+const replacementCases: readonly {
+  readonly name: string;
+  readonly phase: "commands" | "skills";
+  readonly replace: (fixture: Awaited<ReturnType<typeof seed>>) => Promise<void>;
+}[] = [
+  {
+    name: "directory replaces command file",
+    phase: "commands",
+    replace: async (fixture) => {
+      await rm(fixture.command);
+      await mkdir(fixture.command);
+    },
+  },
+  {
+    name: "file replaces skill directory",
+    phase: "skills",
+    replace: async (fixture) => {
+      await rm(path.dirname(fixture.skill), { recursive: true });
+      await writeFile(path.dirname(fixture.skill), "replacement\n");
+    },
+  },
+  {
+    name: "skill directory gains a file",
+    phase: "skills",
+    replace: async (fixture) => {
+      await writeFile(path.join(path.dirname(fixture.skill), "extra.md"), "extra\n");
+    },
+  },
+  {
+    name: "skill file changes name",
+    phase: "skills",
+    replace: async (fixture) => {
+      await rename(fixture.skill, path.join(path.dirname(fixture.skill), "OTHER.md"));
+    },
+  },
+  {
+    name: "skill file changes content",
+    phase: "skills",
+    replace: async (fixture) => {
+      await writeFile(fixture.skill, "changed\n");
+    },
+  },
+  {
+    name: "skill directory changes mode",
+    phase: "skills",
+    replace: async (fixture) => {
+      await chmod(path.dirname(fixture.skill), 0o700);
+    },
+  },
+];
 
-      // act
-      const failures = await rollback.rollback();
+for (const { name, phase, replace } of replacementCases) {
+  test(`rollback preserves replacement when ${name}`, async () => {
+    await withHermeticEnvironment(
+      `prune-rollback-replaced-${name.replaceAll(" ", "-")}-`,
+      async ({ cwd }) => {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        const fixture = await seed(locations);
+        const rollback = await preparePruneRollback(locations, [fixture.member], {
+          rename,
+          removeBackup: rm,
+        });
+        await replace(fixture);
 
-      // assert
-      assert.equal(failures.length, 1);
-      assert.equal(failures[0]?.phase, replacement === "type" ? "commands" : "skills");
-      assert.match(failures[0]?.cause.message ?? "", /occupied artifact/);
-      assert.equal(
-        (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-"))
-          .length,
-        1,
-      );
-    });
-  }
-});
+        // act
+        const failures = await rollback.rollback();
+
+        // assert
+        assert.equal(failures.length, 1);
+        assert.equal(failures[0]?.phase, phase);
+        assert.match(failures[0]?.cause.message ?? "", /occupied artifact/);
+        assert.equal(
+          (await readdir(locations.extensionRoot)).filter((name) =>
+            name.startsWith("prune-backup-"),
+          ).length,
+          1,
+        );
+      },
+    );
+  });
+}
 
 test("nested symlink content is compared without following its target", async () => {
   await withHermeticEnvironment("prune-rollback-symlink-", async ({ cwd }) => {
@@ -671,35 +705,48 @@ test("state restore refusal keeps the backup and reports state failure", async (
   });
 });
 
-test("failed backup cleanup remains a partial rollback and committed cleanup stays silent", async () => {
-  for (const action of ["rollback", "discard"] as const) {
-    await withHermeticEnvironment(`prune-rollback-cleanup-${action}-`, async ({ cwd }) => {
-      // arrange
-      const locations = locationsFor("project", cwd);
-      const fixture = await seed(locations);
-      const rollback = await preparePruneRollback(locations, [fixture.member], {
-        rename,
-        removeBackup: () => Promise.reject(new Error("backup cleanup refused")),
-      });
-
-      // act & assert
-      if (action === "rollback") {
-        assert.deepStrictEqual(
-          (await rollback.rollback()).map(({ phase, cause }) => ({
-            phase,
-            message: cause.message,
-          })),
-          [{ phase: "backup cleanup", message: "backup cleanup refused" }],
-        );
-      } else {
-        await assert.doesNotReject(rollback.discard());
-      }
-
-      assert.equal(
-        (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-"))
-          .length,
-        1,
-      );
+test("failed rollback cleanup reports partial failure and retains the backup", async () => {
+  await withHermeticEnvironment("prune-rollback-cleanup-rollback-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      rename,
+      removeBackup: () => Promise.reject(new Error("backup cleanup refused")),
     });
-  }
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase, cause }) => ({ phase, message: cause.message })),
+      [{ phase: "backup cleanup", message: "backup cleanup refused" }],
+    );
+    assert.equal(
+      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-"))
+        .length,
+      1,
+    );
+  });
+});
+
+test("failed committed cleanup stays silent and retains the backup", async () => {
+  await withHermeticEnvironment("prune-rollback-cleanup-discard-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      rename,
+      removeBackup: () => Promise.reject(new Error("backup cleanup refused")),
+    });
+
+    // act & assert
+    await assert.doesNotReject(rollback.discard());
+    assert.equal(
+      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-"))
+        .length,
+      1,
+    );
+  });
 });
