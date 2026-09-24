@@ -1,35 +1,28 @@
 ---
-status: testing
+status: complete
 phase: 12-standalone-prune-with-dry-run
 source: [12-VERIFICATION.md]
 started: 2026-09-24T14:42:18Z
-updated: 2026-09-24T14:42:18Z
+updated: 2026-09-24T14:44:44Z
 ---
 
 ## Current Test
 
-number: 1
-name: Real Pi scratch-scope command flow
-expected: |
-  Preview shows only the project orphan as (will uninstall) {dependency pruned}
-  and changes no file. Actual prune shows its (uninstalled) row, removes that
-  record and staged skill, and leaves held and explicit project plugins plus
-  the user scope intact. After /reload, list shows the orphan as available.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
 ### 1. Real Pi scratch-scope command flow
 
 expected: Preview is read-only; actual prune removes only the project orphan; after /reload, list shows the orphan as available and the other plugins as installed.
-result: [pending]
+result: pass
 
 ## Summary
 
 total: 1
-passed: 0
+passed: 1
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
