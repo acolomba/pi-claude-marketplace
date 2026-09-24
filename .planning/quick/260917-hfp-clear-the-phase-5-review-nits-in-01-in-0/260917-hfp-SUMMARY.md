@@ -1,6 +1,5 @@
 ---
 quick_id: 260917-hfp
-status: complete
 phase: quick-260917-hfp
 plan: 01
 subsystem: orchestrators
@@ -8,15 +7,15 @@ tags: [uninstall, prune, reconcile, dependency-index, output-catalog, review-set
 
 requires:
   - phase: 05-prune-on-uninstall
-    provides: the `--prune` sweep, the dependents guard, the D-05-16 reconcile retry loop, and the `05-REVIEW.md` Info findings this task settles
+    provides: "the `--prune` sweep, the dependents guard, the D-05-16 reconcile retry loop, and the `05-REVIEW.md` Info findings this task settles"
 provides:
   - orphan sweep gated on standalone mode (`opts.prune === true && !orchestrated`, D-05-08) with an owner-suite case
-  - `prunedMembers: PrunedMember[]` carrying the sweep's members out of the transaction closure
+  - "`prunedMembers: PrunedMember[]` carrying the sweep's members out of the transaction closure"
   - exported `MarketplaceStateRecord` alias reused by `IndexedRecord` in `dependency-index.ts`
   - reconcile retry loop that exits on `refused.length === 0 || settled === 0` (a PU-5 converge is not progress)
-  - `ApplyReconcileOptions.uninstallPlugin?` injection seam mirroring `gitOps?`
+  - "`ApplyReconcileOptions.uninstallPlugin?` injection seam mirroring `gitOps?`"
   - catalog `prune-partial-failure` prose with the shrunk-or-intact clause attached to the failed member's record
-  - `05-REVIEW-FIX.md` section recording IN-01/02/03/07/08 fixed and IN-04 carried
+  - "`05-REVIEW-FIX.md` section recording IN-01/02/03/07/08 fixed and IN-04 carried"
 affects: [reconcile, uninstall, prune, review-closure]
 
 actuals:

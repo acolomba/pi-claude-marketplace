@@ -3,7 +3,7 @@ phase: "11"
 slug: "cross-marketplace-dependency-allowlist"
 status: validated
 nyquist_compliant: true
-wave_0_complete: false
+wave_0_complete: true
 created: "2026-09-23"
 ---
 
