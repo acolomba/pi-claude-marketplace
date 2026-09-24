@@ -98,33 +98,23 @@ Ejecuta un complemento:
 
 Esta extensión prefija los nombres de comandos y habilidades con el nombre del complemento. Si el nombre ya empieza con el nombre del complemento y `-`, esta extensión elimina esa parte común.
 
-En POSIX, los comandos y los alias interactivos de habilidades usan dos puntos:
+Los comandos usan dos puntos (`:`) en POSIX y un punto (`.`) en Windows:
 
-| Nombre del complemento | Nombre del comando o habilidad | Nombre en Pi |
-| ---------------------- | ------------------------------ | ------------ |
-| `foo`                  | `bar`                          | `/foo:bar`   |
-| `foo`                  | `foo-bar`                      | `/foo:bar`   |
-| `foo`                  | `foo`                          | `/foo:foo`   |
+| Nombre del complemento | Nombre del comando | Nombre en Pi (POSIX) | Nombre en Pi (Windows) |
+| ---------------------- | ------------------ | -------------------- | ---------------------- |
+| `foo`                  | `bar`              | `/foo:bar`           | `/foo.bar`             |
+| `foo`                  | `foo-bar`          | `/foo:bar`           | `/foo.bar`             |
+| `foo`                  | `foo`              | `/foo:foo`           | `/foo.foo`             |
 
-En Windows, los comandos usan un punto (`.`) en lugar de dos puntos (`:`). Los alias interactivos de habilidades conservan los dos puntos:
+Las habilidades usan la forma `/skill:` de Pi y también tienen un alias en las sesiones interactivas:
 
-| Nombre del complemento | Nombre del comando | Nombre en Pi (Windows) |
-| ---------------------- | ------------------ | ---------------------- |
-| `foo`                  | `bar`              | `/foo.bar`             |
-| `foo`                  | `foo-bar`          | `/foo.bar`             |
-| `foo`                  | `foo`              | `/foo.foo`             |
+| Nombre del complemento | Nombre de la habilidad | Forma de Pi      | Alias interactivo |
+| ---------------------- | ---------------------- | ---------------- | ----------------- |
+| `foo`                  | `bar`                  | `/skill:foo-bar` | `/foo:bar`        |
+| `foo`                  | `foo-bar`              | `/skill:foo-bar` | `/foo:bar`        |
+| `foo`                  | `foo`                  | `/skill:foo`     | `/foo:foo`        |
 
-Pi instala las habilidades con nombres que usan guiones en todas las plataformas. También funciona la forma `/skill:`:
-
-| Nombre del complemento | Nombre de la habilidad | Forma de Pi      |
-| ---------------------- | ---------------------- | ---------------- |
-| `foo`                  | `bar`                  | `/skill:foo-bar` |
-| `foo`                  | `foo-bar`              | `/skill:foo-bar` |
-| `foo`                  | `foo`                  | `/skill:foo`     |
-
-Los nombres de habilidades usan letras ASCII minúsculas, números y guiones. Los demás caracteres se convierten en guiones. Un nombre sin letras ASCII ni números recibe un sufijo hash corto. Los nombres de más de 64 caracteres también reciben un sufijo hash. Tras `/reload`, tanto `/foo:bar` como `/foo-bar` ejecutan la habilidad en una sesión interactiva y aparecen en el autocompletado. Si un comando o una plantilla ya usa cualquiera de esos nombres, lo conserva; usa `/skill:foo-bar` para la habilidad.
-
-Al instalar un complemento, esta extensión reescribe las referencias en sus habilidades, comandos, agentes y archivos Markdown copiados con las habilidades. Una referencia a `foo:bar` se convierte en `/skill:foo-bar` si `bar` es una habilidad, o en `/foo:bar` si es un comando (`/foo.bar` en Windows). Si existen ambos, el comando tiene prioridad; `/skill:bar` selecciona la habilidad. También se reescriben las referencias sin barra inicial y los ejemplos dentro de bloques de código. Las referencias desconocidas o a otros complementos se conservan.
+Los alias de habilidades usan dos puntos en todas las plataformas. Si un alias entra en conflicto con un comando, el comando tiene prioridad. Usa `/skill:foo-bar` para ejecutar la habilidad.
 
 Los nombres de los servidores MCP no cambian. Si otra configuración de MCP ya utiliza ese nombre, la instalación o actualización del complemento fallará.
 
