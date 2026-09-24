@@ -138,6 +138,7 @@ export function createPrunePlugin(
       transaction,
     });
     if (outcome.members.length === 0) {
+      notify(options.ctx, options.pi, { kind: "prune-empty", scope });
       return;
     }
 

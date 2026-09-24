@@ -241,6 +241,9 @@ function dispatchInfoMessage(
       // `empty-steady-state` state.
       body = "Pending: next reload will apply 0 actions.";
       break;
+    case "prune-empty":
+      body = `Nothing to prune in ${message.scope} scope: no orphaned dependency installs were found.`;
+      break;
     case "reconcile-applied-cascade":
       // RECON-04: compose the same cascade body the cascade arm renders
       // (per-mp header + per-plugin row via the existing helpers). The

@@ -818,6 +818,12 @@ export interface ReconcilePendingEmptyMessage {
   readonly kind: "reconcile-pending-empty";
 }
 
+/** Scoped informational result for a standalone orphan sweep. */
+export interface PruneEmptyMessage {
+  readonly kind: "prune-empty";
+  readonly scope: Scope;
+}
+
 /** Marketplace-absence failure message. */
 export interface MarketplaceNotAddedMessage {
   readonly kind: "marketplace-not-added";
@@ -843,4 +849,5 @@ export type NotificationMessage =
   | PluginInfoCascadeMessage
   | MarketplaceNotAddedMessage
   | ReconcilePendingEmptyMessage
+  | PruneEmptyMessage
   | ReconcileAppliedCascadeMessage;

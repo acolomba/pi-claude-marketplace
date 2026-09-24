@@ -27,6 +27,7 @@ export type StandaloneKind =
   | "plugin-info-cascade"
   | "marketplace-not-added"
   | "reconcile-pending-empty"
+  | "prune-empty"
   | "reconcile-applied-cascade";
 
 /**
@@ -46,6 +47,7 @@ export function isInfoKind(
     m.kind === "plugin-info-cascade" ||
     m.kind === "marketplace-not-added" ||
     m.kind === "reconcile-pending-empty" ||
+    m.kind === "prune-empty" ||
     m.kind === "reconcile-applied-cascade"
   );
 }
@@ -202,6 +204,7 @@ function computeSeverity(message: NotificationMessage): ComputedSeverity {
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
       case "reconcile-pending-empty":
+      case "prune-empty":
         // DIFF-01 SC #2: the empty-steady-state advisory is read-only / info.
         return undefined;
     }
@@ -394,6 +397,7 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
       case "marketplace-info-cascade":
       case "plugin-info-cascade":
       case "reconcile-pending-empty":
+      case "prune-empty":
         // DIFF-01 SC #2: info-severity / read-only -- no summary semantics.
         return "";
     }
@@ -571,6 +575,7 @@ export function shouldEmitReloadHint(message: NotificationMessage): boolean {
       case "plugin-info-cascade":
       case "marketplace-not-added":
       case "reconcile-pending-empty":
+      case "prune-empty":
       case "reconcile-applied-cascade":
         return false;
     }

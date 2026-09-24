@@ -231,7 +231,7 @@ test("preview without orphans leaves the selected scope absent", async () => {
   });
 });
 
-test("does not save or notify when the selected project scope has no installs", async () => {
+test("reports an empty project sweep without saving state", async () => {
   await withHermeticEnvironment("prune-owner-empty-", async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
     await saveState(locations.extensionRoot, { schemaVersion: 3, marketplaces: {} });
@@ -241,7 +241,9 @@ test("does not save or notify when the selected project scope has no installs", 
     await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
 
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [
+      { message: "Nothing to prune in project scope: no orphaned dependency installs were found." },
+    ]);
   });
 });
 
@@ -349,7 +351,36 @@ test("removes the whole project-scope fixpoint in literal order and leaves held 
     const after = await readFile(project.stateJsonPath);
     await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
     assert.deepStrictEqual(await readFile(project.stateJsonPath), after);
-    assert.equal(notifications.length, 1);
+    assert.deepStrictEqual(notifications[1], {
+      message: "Nothing to prune in project scope: no orphaned dependency installs were found.",
+    });
+  });
+});
+
+test("reports only explicit and held user installs as an empty sweep without saving", async () => {
+  await withHermeticEnvironment("prune-owner-held-empty-", async ({ cwd }) => {
+    const locations = locationsFor("user", cwd);
+    await seedScope("user", cwd, {
+      mp: {
+        holder: { dependencies: ["held@mp"] },
+        held: { provenance: "dependency" },
+      },
+    });
+    const before = await readFile(locations.stateJsonPath);
+    const beforeStat = await stat(locations.stateJsonPath);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd });
+
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
+    assert.equal((await stat(locations.stateJsonPath)).ino, beforeStat.ino);
+    assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), [
+      "held@mp",
+      "holder@mp",
+    ]);
+    assert.deepStrictEqual(notifications, [
+      { message: "Nothing to prune in user scope: no orphaned dependency installs were found." },
+    ]);
   });
 });
 

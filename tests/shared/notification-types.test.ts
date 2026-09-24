@@ -210,6 +210,7 @@ function notificationKindIsExhaustive(message: NotificationMessage): string {
     case "plugin-info-cascade":
     case "marketplace-not-added":
     case "reconcile-pending-empty":
+    case "prune-empty":
     case "reconcile-applied-cascade":
       return message.kind;
   }
@@ -239,6 +240,9 @@ const severity: Severity = "warning";
 void pluginStatusIsExhaustive;
 void marketplaceStatusIsExhaustive;
 void notificationKindIsExhaustive;
+void ({ kind: "prune-empty", scope: "user" } satisfies NotificationMessage);
+// @ts-expect-error a prune empty result must name its selected scope
+void ({ kind: "prune-empty" } satisfies NotificationMessage);
 void installedMessage;
 void skippedMessage;
 void contentReason;

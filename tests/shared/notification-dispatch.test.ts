@@ -5111,6 +5111,24 @@ test("reconcile-pending-empty emits the exact zero-action advisory", (t) => {
   ]);
 });
 
+for (const scope of ["user", "project"] as const) {
+  test(`prune-empty emits the scoped informational sentence for ${scope}`, (t) => {
+    // arrange
+    const ctx = createContext(t);
+    const pi = piWithBothLoaded();
+    const message = { kind: "prune-empty", scope } satisfies NotificationMessage;
+
+    // act
+    notify(ctx as never, pi, message);
+
+    // assert
+    assert.deepStrictEqual(
+      ctx.ui.notify.mock.calls.map((call) => call.arguments),
+      [[`Nothing to prune in ${scope} scope: no orphaned dependency installs were found.`]],
+    );
+  });
+}
+
 test("reconcile applied summarizes mixed failed subjects", (t) => {
   // arrange
   const ctx = createContext(t);

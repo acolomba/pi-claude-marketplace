@@ -407,6 +407,7 @@ for (const message of [
   },
   { kind: "marketplace-not-added", name: "missing" },
   { kind: "reconcile-pending-empty" },
+  { kind: "prune-empty", scope: "user" },
   { kind: "reconcile-applied-cascade", marketplaces: [] },
 ] satisfies readonly NotificationMessage[]) {
   test(`${message.kind} is standalone and suppresses reload`, () => {
