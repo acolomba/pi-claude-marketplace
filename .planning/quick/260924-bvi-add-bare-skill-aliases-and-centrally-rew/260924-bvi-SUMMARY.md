@@ -11,10 +11,10 @@ provides:
 affects: [skill-staging, command-staging, agent-conversion, install, update, reinstall]
 actuals:
   tasks: 3
-  commits: 1
+  commits: 2
 plan_head_before: 7a270503
 requirements-completed: [SK-6, SK-7]
-status: in_progress
+status: complete
 completed: 2026-09-24
 ---
 
@@ -28,7 +28,10 @@ The English and Spanish READMEs, PRD, changelog, package versions, runtime versi
 
 ## Verification
 
-Pending full repository check, pre-commit hooks, and Fallow audits.
+- `TEST_CONCURRENCY=4 npm run check` passed: 6,695 unit tests, 100% unit line, branch, and function coverage; 32 integration tests; all seven type member negative controls.
+- `SKIP=trufflehog pre-commit run --all-files` passed. The TruffleHog exception is required for worktrees because it expects `.git/index` inside the worktree.
+- Fallow's agent audit and release-base audit passed with a non-blocking duplication warning and no dead-code or complexity findings.
+- PR #215 targets `releases/v0.19.2`. Its base and the feature branch both start at the 0.19.1 release commit.
 
 ## Threat Flags
 

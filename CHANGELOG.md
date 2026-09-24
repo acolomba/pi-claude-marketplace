@@ -4,7 +4,7 @@
 
 ## [0.19.2] - 2026-09-24
 
-- Installed plugin skills now complete and run through bare `/name` aliases in interactive Pi sessions. Skill and command references in installed plugin Markdown use their actual Pi names, including Windows command names. Agent mapping notes are no longer needed.
+- Installed plugin skills now complete and run through bare `/name` aliases in interactive Pi sessions. Skill and command references in installed plugin Markdown use their actual Pi names, including Windows command names. Agent mapping notes are no longer needed. (#215)
 
 ## [0.19.1] - 2026-09-24
 
