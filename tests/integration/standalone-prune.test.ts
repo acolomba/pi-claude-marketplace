@@ -168,6 +168,96 @@ test("prune removes an orphan dependency through the registered command", async 
   });
 });
 
+test("prune --dry-run previews the orphan without writing current state", async () => {
+  await withHermeticEnvironment("standalone-prune-preview-", async ({ cwd }) => {
+    await seedScope("user", cwd);
+    const locations = locationsFor("user", cwd);
+    const statePath = path.join(locations.extensionRoot, "state.json");
+    const bytesBefore = await readFile(statePath);
+    const mtimeBefore = (await stat(statePath, { bigint: true })).mtimeNs;
+    const treeBefore = await scopeTree("user", cwd);
+    const { command, ctx, notifications, gitCalls } = registeredCommand(cwd);
+
+    await command.handler("prune --dry-run", ctx);
+
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp [user]\n  ○ orphan (will uninstall) {dependency pruned}" },
+    ]);
+    assert.deepStrictEqual(await readFile(statePath), bytesBefore);
+    assert.equal((await stat(statePath, { bigint: true })).mtimeNs, mtimeBefore);
+    assert.deepStrictEqual(await scopeTree("user", cwd), treeBefore);
+    await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
+    assert.deepStrictEqual(gitCalls.clone, []);
+    assert.deepStrictEqual(gitCalls.fetch, []);
+  });
+});
+
+test("preview and actual prune select the same dependent-first fixpoint", async () => {
+  await withHermeticEnvironment("standalone-prune-parity-", async ({ cwd }) => {
+    const seeded = await seedScope("user", cwd);
+    const locations = locationsFor("user", cwd);
+    const marketplace = seeded.marketplaces.mp;
+    assert.ok(marketplace);
+    const orphanManifest = path.join(
+      marketplace.marketplaceRoot,
+      "plugins",
+      "orphan",
+      ".claude-plugin",
+      "plugin.json",
+    );
+    const leafManifest = path.join(
+      marketplace.marketplaceRoot,
+      "plugins",
+      "leaf",
+      ".claude-plugin",
+      "plugin.json",
+    );
+    await writeFile(orphanManifest, JSON.stringify({ name: "orphan", dependencies: ["leaf"] }));
+    await mkdir(path.dirname(leafManifest), { recursive: true });
+    await writeFile(leafManifest, JSON.stringify({ name: "leaf", version: "1.0.0" }));
+    await writeFile(
+      marketplace.manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: ["app", "orphan", "leaf"].map((name) => ({
+          name,
+          version: "1.0.0",
+          source: `./plugins/${name}`,
+        })),
+      }),
+    );
+    const leafSkill = path.join(locations.skillsTargetDir, "leaf-skill", "SKILL.md");
+    await mkdir(path.dirname(leafSkill), { recursive: true });
+    await writeFile(leafSkill, "---\nname: leaf-skill\n---\nbody\n");
+    await saveState(locations.extensionRoot, {
+      ...seeded,
+      marketplaces: {
+        mp: {
+          ...marketplace,
+          plugins: { ...marketplace.plugins, leaf: pluginRecord("dependency", "leaf-skill") },
+        },
+      },
+    });
+    const before = await scopeTree("user", cwd);
+    const { command, ctx, notifications } = registeredCommand(cwd);
+
+    await command.handler("prune --dry-run", ctx);
+    assert.deepStrictEqual(await scopeTree("user", cwd), before);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [user]\n  ○ orphan (will uninstall) {dependency pruned}\n\n● mp [user]\n  ○ leaf (will uninstall) {dependency pruned}",
+      },
+    ]);
+
+    await command.handler("prune", ctx);
+    assert.deepStrictEqual(notifications[1], {
+      message:
+        "● mp [user]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n● mp [user]\n  ○ leaf v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
+    });
+  });
+});
+
 test("project prune removes only the project orphan", async () => {
   await withHermeticEnvironment("standalone-prune-project-", async ({ cwd }) => {
     await seedScope("user", cwd);

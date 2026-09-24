@@ -400,11 +400,15 @@ function normalizeStoredSource(mpName: string, mp: Record<string, unknown>): voi
  * error or on post-migration schema validation failure (caller logs and
  * surfaces).
  *
- * Async best-effort persist of migrated state happens in the background
- * via persistMigratedState; this function does NOT await it. The IL-3
- * sanctioned warn site in migrate.ts handles persist failures.
+ * By default, migrated state persists in the background via
+ * persistMigratedState; this function does NOT await it. Pass
+ * `persistMigration: false` for a read-only snapshot. The IL-3 sanctioned
+ * warn site in migrate.ts handles persist failures.
  */
-export async function loadState(extensionRoot: string): Promise<ExtensionState> {
+export async function loadState(
+  extensionRoot: string,
+  options: { readonly persistMigration?: boolean } = {},
+): Promise<ExtensionState> {
   const stateJsonPath = stateJsonPathFor(extensionRoot);
 
   let raw: string;
@@ -457,8 +461,7 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
   // `locationsFor` construction in `persistence/locations.ts` byte-for-byte
   // (pinned by a drift-guard test in tests/persistence/state-io.test.ts).
   // We do NOT import `locationsFor` here because the external
-  // `loadState(extensionRoot)` signature MUST stay unchanged for
-  // orchestrator callers.
+  // `loadState` keeps the extension-root path contract for orchestrator callers.
   const configJsonPath = path.join(path.dirname(extensionRoot), "claude-plugins.json");
   const scrubAutoupdate = existsSync(configJsonPath);
   const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
@@ -502,8 +505,8 @@ export async function loadState(extensionRoot: string): Promise<ExtensionState> 
   const state = normalized as ExtensionState;
 
   // ST-4 best-effort async save -- fire-and-forget; the IL-3 sanctioned warn
-  // in persistMigratedState handles failure.
-  if (mutated) {
+  // in persistMigratedState handles failure. Preview explicitly suppresses it.
+  if (mutated && options.persistMigration !== false) {
     void persistMigratedState(stateJsonPath, state);
   }
 

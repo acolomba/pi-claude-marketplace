@@ -55,6 +55,7 @@ export type CatalogVerb =
   | "list"
   | "info"
   | "uninstall"
+  | "prune"
   | "reinstall"
   | "fetch"
   | "enable"
@@ -124,6 +125,13 @@ const PRUNE_FLAG_ENTRY: FlagEntry = {
   complete: true,
 };
 
+const DRY_RUN_FLAG_ENTRY: FlagEntry = {
+  name: "--dry-run",
+  description: "Preview dependency plugins that prune would remove",
+  parse: true,
+  complete: true,
+};
+
 const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
   install: [
     // AG-7 opt-in: `--map-model` surfaces as a completion suggestion.
@@ -187,6 +195,7 @@ const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
     },
   ],
   uninstall: [KEEP_DATA_FLAG_ENTRY, PRUNE_FLAG_ENTRY, WRITE_TARGET_FLAG_ENTRY],
+  prune: [DRY_RUN_FLAG_ENTRY],
   reinstall: [WRITE_TARGET_FLAG_ENTRY],
   fetch: [],
   enable: [WRITE_TARGET_FLAG_ENTRY],
@@ -238,6 +247,9 @@ export const KEEP_DATA_FLAG = KEEP_DATA_FLAG_ENTRY.name;
  * duplicated literal whose desynchronization would silently skip the sweep.
  */
 export const PRUNE_FLAG = PRUNE_FLAG_ENTRY.name;
+
+/** The standalone prune preview flag name. */
+export const DRY_RUN_FLAG = DRY_RUN_FLAG_ENTRY.name;
 
 /**
  * Ordered completion entries (name + description) for a verb -- the entries

@@ -57,6 +57,7 @@ const EXPECTED_CATALOG_VERBS = [
   "list",
   "info",
   "uninstall",
+  "prune",
   "reinstall",
   "fetch",
   "enable",

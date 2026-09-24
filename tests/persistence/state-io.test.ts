@@ -281,6 +281,21 @@ for (const { name, state, expectedState } of [
   });
 }
 
+test("an explicit nonpersisting load normalizes legacy state only in memory", async (t) => {
+  const extensionRoot = await createExtensionRoot(t, "state-io-preview-");
+  const stateJsonPath = path.join(extensionRoot, "state.json");
+  const originalBytes = '{"schemaVersion":1,"marketplaces":{}}';
+  await writeFile(stateJsonPath, originalBytes);
+  const before = await stat(stateJsonPath, { bigint: true });
+
+  const loaded = await loadState(extensionRoot, { persistMigration: false });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  assert.deepStrictEqual(loaded, { schemaVersion: 3, marketplaces: {} });
+  assert.equal(await readFile(stateJsonPath, "utf8"), originalBytes);
+  assert.equal((await stat(stateJsonPath, { bigint: true })).mtimeNs, before.mtimeNs);
+});
+
 test("rejects an unsupported stored schema version without replacing future bytes", async (t) => {
   // arrange
   const extensionRoot = await createExtensionRoot(t, "state-io-future-version-");

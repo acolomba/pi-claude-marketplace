@@ -517,6 +517,7 @@ export interface PluginWillUninstallMessage extends MessageBase {
   readonly status: "will uninstall";
   readonly name: string;
   readonly scope?: Scope;
+  readonly reasons?: readonly ContentReason[];
 }
 
 /** Pending plugin-enable row. */

@@ -832,6 +832,7 @@ function renderPendingRow(
     PluginNotificationMessage,
     { status: "will install" | "will uninstall" | "will enable" | "will disable" }
   >,
+  probe: SoftDepStatus,
   mpScope: Scope,
 ): string {
   const bracket = renderScopeBracket(p.scope, mpScope);
@@ -844,7 +845,7 @@ function renderPendingRow(
         p.partial === true ? "(will partially install)" : "(will install)",
       ]);
     case "will uninstall":
-      return joinTokens([ICON_AVAILABLE, p.name, bracket, "(will uninstall)"]);
+      return pluginRow(ICON_AVAILABLE, p, mpScope, "(will uninstall)", probe);
     case "will enable":
       return joinTokens([ICON_INSTALLED, p.name, bracket, "(will enable)"]);
     case "will disable":
@@ -999,7 +1000,7 @@ function renderPluginRow(
     case "will uninstall":
     case "will enable":
     case "will disable":
-      return renderPendingRow(p, mpScope);
+      return renderPendingRow(p, probe, mpScope);
     case "disabled":
       return renderDisabledRow(p, probe, mpScope);
   }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -182,6 +182,55 @@ test("removes an orphan from the default user scope and reports it", async () =>
   });
 });
 
+test("previews an orphan without writing state or taking a lock", async () => {
+  await withHermeticEnvironment("prune-owner-preview-", async ({ cwd }) => {
+    await seedRecord(
+      "user",
+      cwd,
+      JSON.stringify({ name: "mp", plugins: [{ name: "orphan", source: "./orphan" }] }),
+    );
+    const locations = locationsFor("user", cwd);
+    const before = await readFile(locations.stateJsonPath);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, dryRun: true });
+
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
+    await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp [user]\n  ○ orphan (will uninstall) {dependency pruned}" },
+    ]);
+  });
+});
+
+test("preview refuses an unreadable declarer without a write", async () => {
+  await withHermeticEnvironment("prune-owner-preview-unreadable-", async ({ cwd }) => {
+    await seedRecord("user", cwd, "{");
+    const locations = locationsFor("user", cwd);
+    const before = await readFile(locations.stateJsonPath);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, dryRun: true });
+
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
+    await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
+    assert.match(notifications[0]?.message ?? "", /orphan.*failed.*unreadable/);
+    assert.doesNotMatch(notifications[0]?.message ?? "", /\/reload|\/tmp\//);
+  });
+});
+
+test("preview without orphans leaves the selected scope absent", async () => {
+  await withHermeticEnvironment("prune-owner-preview-empty-", async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project", dryRun: true });
+
+    await assert.rejects(stat(locations.extensionRoot), { code: "ENOENT" });
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
 test("does not save or notify when the selected project scope has no installs", async () => {
   await withHermeticEnvironment("prune-owner-empty-", async ({ cwd }) => {
     const locations = locationsFor("project", cwd);
@@ -237,6 +286,26 @@ test("removes the whole project-scope fixpoint in literal order and leaves held 
     await seedScope("user", cwd, { other: { untouched: { provenance: "dependency" } } });
     const userBefore = await readFile(user.stateJsonPath);
     const { ctx, notifications } = makeCtx(cwd);
+    const preview = makeCtx(cwd);
+    const projectBefore = await readFile(project.stateJsonPath);
+
+    await prune()({
+      ctx: preview.ctx,
+      pi: { getAllTools: () => [] },
+      cwd,
+      scope: "project",
+      dryRun: true,
+    });
+    assert.deepStrictEqual(await readFile(project.stateJsonPath), projectBefore);
+    assert.deepStrictEqual(preview.notifications, [
+      {
+        message:
+          "● alpha [project]\n  ○ a (will uninstall) {dependency pruned}\n\n" +
+          "● beta [project]\n  ○ z (will uninstall) {dependency pruned}\n\n" +
+          "● beta [project]\n  ○ b (will uninstall) {dependency pruned}\n\n" +
+          "● alpha [project]\n  ○ c (will uninstall) {dependency pruned}",
+      },
+    ]);
 
     await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
 

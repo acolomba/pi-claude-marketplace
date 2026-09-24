@@ -3,6 +3,7 @@
 import { createPruneOperation } from "../../../orchestrators/plugin/operations.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
+import { DRY_RUN_FLAG } from "../../flag-catalog.ts";
 
 import { withParsedArgs } from "./shared.ts";
 
@@ -10,7 +11,7 @@ import type { UninstallHooksRouting } from "../../../orchestrators/plugin/uninst
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { CompletionCache } from "../../../shared/completion-cache.ts";
 
-const USAGE = "Usage: /claude:plugin prune [--scope user|project]";
+const USAGE = "Usage: /claude:plugin prune [--scope user|project] [--dry-run]";
 
 /** Registers the no-target command against the standalone prune operation. */
 export function makePruneHandler(
@@ -20,7 +21,8 @@ export function makePruneHandler(
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   const prune = createPruneOperation(hooksRouting, completionCache);
   return withParsedArgs(parseArgs, USAGE, async (parsed, ctx): Promise<void> => {
-    const [first] = parsed.positional;
+    const dryRun = parsed.positional.includes(DRY_RUN_FLAG);
+    const [first] = parsed.positional.filter((token) => token !== DRY_RUN_FLAG);
     if (first !== undefined) {
       notifyUsageError(ctx, {
         message: first.startsWith("-") ? `Unknown option: "${first}".` : "Too many arguments.",
@@ -34,6 +36,7 @@ export function makePruneHandler(
       pi,
       cwd: ctx.cwd,
       ...(parsed.scope !== undefined && { scope: parsed.scope }),
+      ...(dryRun && { dryRun: true }),
     });
   });
 }

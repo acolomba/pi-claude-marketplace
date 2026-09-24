@@ -53,6 +53,21 @@ test("selects the project scope", async () => {
   });
 });
 
+test("--dry-run reads the selected scope without creating its root", async () => {
+  await withHermeticEnvironment("prune-handler-preview-", async ({ cwd }) => {
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(0, 0, {
+      value: cwd,
+      reads: 1,
+    });
+
+    await handler(pi)("--scope project --dry-run", ctx);
+
+    await assert.rejects(stat(locationsFor("project", cwd).extensionRoot), { code: "ENOENT" });
+    assert.deepStrictEqual(notifications, []);
+    verifyBoundary();
+  });
+});
+
 test("rejects an unknown option before touching state", async () => {
   await withHermeticEnvironment("prune-handler-option-", async ({ cwd }) => {
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
@@ -62,7 +77,7 @@ test("rejects an unknown option before touching state", async () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Unknown option: "--keep-data".\n\nUsage: /claude:plugin prune [--scope user|project]',
+          'Unknown option: "--keep-data".\n\nUsage: /claude:plugin prune [--scope user|project] [--dry-run]',
         severity: "error",
       },
     ]);
@@ -79,7 +94,8 @@ test("rejects a positional target", async () => {
 
     assert.deepStrictEqual(notifications, [
       {
-        message: "Too many arguments.\n\nUsage: /claude:plugin prune [--scope user|project]",
+        message:
+          "Too many arguments.\n\nUsage: /claude:plugin prune [--scope user|project] [--dry-run]",
         severity: "error",
       },
     ]);
