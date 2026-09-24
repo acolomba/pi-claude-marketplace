@@ -5,17 +5,17 @@ milestone_name: transitive-dependencies
 current_phase: 12
 current_phase_name: Standalone prune with dry-run
 status: executing
-stopped_at: Phase 12 wave 4 complete
-last_updated: "2026-09-24T02:17:11Z"
+stopped_at: Phase 12 wave 5 complete
+last_updated: "2026-09-24T02:49:17Z"
 last_activity: 2026-09-23
-last_activity_desc: Phase 12 scoped empty result and exact prune flag contract complete
-state_head: 0edc41ade60b4023d3e235d52b94d32382be8012
+last_activity_desc: Phase 12 output catalog and messaging rules complete
+state_head: ec4567d992edaa26e287044150b3fe9fa17adfbb
 progress:
   total_phases: 12
   completed_phases: 11
   total_plans: 55
-  completed_plans: 53
-  percent: 96
+  completed_plans: 54
+  percent: 98
 ---
 
 # Project State
@@ -37,7 +37,7 @@ under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 12 (Standalone prune with dry-run) — EXECUTING
-Plan: 6 of 8 complete
+Plan: 7 of 8 complete
 Status: Executing
 
 **Plan 12-01 complete 2026-09-23:** The registered `prune` command removes
@@ -48,8 +48,9 @@ Plan 12-04 added `(will uninstall) {dependency pruned}` previews with the same
 fixpoint selector. Current, legacy, and missing-state previews leave bytes,
 timestamps, the extension tree, and locks untouched. Plans 12-05 and 12-07
 added the scoped `Nothing to prune` result and pinned `--dry-run` as the only
-prune-specific flag across parsing, help, and completion. Output catalog and
-public docs remain in plans 12-06 and 12-08.
+prune-specific flag across parsing, help, and completion. Plan 12-06 pins seven
+new catalog states and documents the pending-row grammar. Public docs and final
+regression checks remain in plan 12-08.
 
 **Phase 11 closed 2026-09-23**, verified 20/20 functional truths and both
 human wording checks. The validated manifest allowlist controls new foreign
