@@ -16,7 +16,10 @@ import type {
 import type { AutocompleteProvider } from "@earendil-works/pi-tui";
 
 type SessionListener = (event: SessionStartEvent, ctx: ExtensionContext) => void;
-type InputListener = (event: InputEvent, ctx: ExtensionContext) => InputEventResult;
+type InputListener = (
+  event: InputEvent,
+  ctx: ExtensionContext,
+) => InputEventResult | Promise<InputEventResult>;
 type ProviderFactory = Parameters<ExtensionContext["ui"]["addAutocompleteProvider"]>[0];
 
 test("transforms a loaded marketplace skill alias while retaining its arguments", () => {
@@ -59,17 +62,69 @@ test("transforms a loaded marketplace skill alias while retaining its arguments"
 
   // act
   registerSkillAliases(pi);
+  const plain = input.value?.({ type: "input", text: "hello", source: "interactive" }, ctx);
   const response = input.value?.(
     { type: "input", text: "/skill-creator build it", source: "interactive", images },
     ctx,
   );
 
   // assert
+  assert.deepStrictEqual(plain, { action: "continue" });
   assert.deepStrictEqual(response, {
     action: "transform",
     text: "/skill:skill-creator build it",
     images,
   });
+  verify(pi);
+  verify(ctx);
+});
+
+test("transforms a plugin-qualified skill alias and caches the mapping", async () => {
+  // arrange
+  const cwd = "/workspace";
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
+  const session = It.willCapture<SessionListener>("session");
+  const input = It.willCapture<InputListener>("input");
+  when(() => {
+    pi.on("session_start", session);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on("input", input);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .times(4);
+  when(() => pi.getCommands())
+    .thenReturn([])
+    .times(2);
+  let loads = 0;
+  const images: NonNullable<InputEvent["images"]> = [
+    { type: "image", data: "a", mimeType: "image/png" },
+  ];
+
+  // act
+  registerSkillAliases(pi, () => {
+    loads++;
+    return Promise.resolve(new Map([["foo:bar", "foo-bar"]]));
+  });
+  const matched = await input.value?.(
+    { type: "input", text: "/foo:bar build it", source: "interactive", images },
+    ctx,
+  );
+  const unknown = await input.value?.(
+    { type: "input", text: "/foo:missing", source: "interactive" },
+    ctx,
+  );
+
+  // assert
+  assert.deepStrictEqual(matched, { action: "transform", text: "/skill:foo-bar build it", images });
+  assert.deepStrictEqual(unknown, { action: "continue" });
+  assert.strictEqual(loads, 1);
   verify(pi);
   verify(ctx);
 });
@@ -93,7 +148,7 @@ test("leaves a command collision and RPC input unchanged", () => {
     .times(1);
   when(() => ctx.cwd)
     .thenReturn(cwd)
-    .times(1);
+    .times(2);
   when(() => pi.getCommands())
     .thenReturn([
       {
@@ -116,20 +171,37 @@ test("leaves a command collision and RPC input unchanged", () => {
           origin: "top-level",
         },
       },
+      {
+        name: "foo:bar",
+        source: "prompt",
+        sourceInfo: {
+          path: path.join(cwd, ".pi/prompts/foo:bar.md"),
+          source: "project",
+          scope: "project",
+          origin: "top-level",
+        },
+      },
     ])
-    .times(1);
+    .times(2);
 
   // act
-  registerSkillAliases(pi);
+  registerSkillAliases(pi, () => {
+    throw new Error("command input must not load skill state");
+  });
   const rpc = input.value?.({ type: "input", text: "/skill-creator", source: "rpc" }, ctx);
   const collision = input.value?.(
     { type: "input", text: "/skill-creator", source: "interactive" },
+    ctx,
+  );
+  const qualifiedCollision = input.value?.(
+    { type: "input", text: "/foo:bar", source: "interactive" },
     ctx,
   );
 
   // assert
   assert.deepStrictEqual(rpc, { action: "continue" });
   assert.deepStrictEqual(collision, { action: "continue" });
+  assert.deepStrictEqual(qualifiedCollision, { action: "continue" });
   verify(pi);
   verify(ctx);
 });
@@ -199,6 +271,119 @@ test("offers the bare completion for a loaded marketplace skill", async () => {
     items: [{ value: "skill-creator", label: "skill-creator" }],
     prefix: "/skill-creator",
   });
+  verify(pi);
+  verify(ctx);
+  verify(ui);
+});
+
+test("offers plugin-qualified completion without replacing native commands", async () => {
+  // arrange
+  const cwd = "/workspace";
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
+  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "UI" });
+  const session = It.willCapture<SessionListener>("session");
+  const input = It.willCapture<InputListener>("input");
+  const factory = It.willCapture<ProviderFactory>("provider factory");
+  when(() => {
+    pi.on("session_start", session);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on("input", input);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => {
+    ui.addAutocompleteProvider(factory);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .times(1);
+  const base = {
+    getSuggestions: () =>
+      Promise.resolve({ items: [{ value: "foo:command", label: "foo:command" }], prefix: "/foo:" }),
+    applyCompletion: (lines: string[]) => ({ lines, cursorLine: 0, cursorCol: 0 }),
+  } satisfies AutocompleteProvider;
+
+  // act
+  registerSkillAliases(pi, () => Promise.resolve(new Map([["foo:bar", "foo-bar"]])));
+  session.value?.({ type: "session_start", reason: "startup" }, ctx);
+  const suggestions = await factory
+    .value?.(base)
+    .getSuggestions(["/foo:"], 0, 5, { signal: new AbortController().signal });
+
+  // assert
+  assert.deepStrictEqual(suggestions, {
+    items: [
+      { value: "foo:command", label: "foo:command" },
+      { value: "foo:bar", label: "foo:bar" },
+    ],
+    prefix: "/foo:",
+  });
+  verify(pi);
+  verify(ctx);
+  verify(ui);
+});
+
+test("creates a plugin-qualified completion when Pi has none", async () => {
+  // arrange
+  const cwd = "/workspace";
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
+  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "UI" });
+  const session = It.willCapture<SessionListener>("session");
+  const input = It.willCapture<InputListener>("input");
+  const factory = It.willCapture<ProviderFactory>("provider factory");
+  when(() => {
+    pi.on("session_start", session);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on("input", input);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => {
+    ui.addAutocompleteProvider(factory);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .times(2);
+  const base = {
+    getSuggestions: () => Promise.resolve(null),
+    applyCompletion: (lines: string[]) => ({ lines, cursorLine: 0, cursorCol: 0 }),
+  } satisfies AutocompleteProvider;
+
+  // act
+  registerSkillAliases(pi, () => Promise.resolve(new Map([["foo:bar", "foo-bar"]])));
+  session.value?.({ type: "session_start", reason: "startup" }, ctx);
+  const provider = factory.value?.(base);
+  const matched = await provider?.getSuggestions(["/foo:b"], 0, 6, {
+    signal: new AbortController().signal,
+  });
+  const missing = await provider?.getSuggestions(["/foo:missing"], 0, 12, {
+    signal: new AbortController().signal,
+  });
+
+  // assert
+  assert.deepStrictEqual(matched, {
+    items: [{ value: "foo:bar", label: "foo:bar" }],
+    prefix: "/foo:b",
+  });
+  assert.strictEqual(missing, null);
   verify(pi);
   verify(ctx);
   verify(ui);
