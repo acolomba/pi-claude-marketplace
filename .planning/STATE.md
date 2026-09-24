@@ -5,17 +5,17 @@ milestone_name: transitive-dependencies
 current_phase: 12
 current_phase_name: Standalone prune with dry-run
 status: executing
-stopped_at: Phase 12 plan 01 complete
-last_updated: "2026-09-23T23:15:16Z"
+stopped_at: Phase 12 wave 2 complete
+last_updated: "2026-09-24T00:29:31Z"
 last_activity: 2026-09-23
-last_activity_desc: Phase 12 plan 01 standalone prune command complete
-state_head: c8fc580611a1e9dc642ea004c27c62e5ae26a4da
+last_activity_desc: Phase 12 plans 02 and 03 direct regressions complete
+state_head: d163cb787baa8ff967b031f5dca947f97a217490
 progress:
   total_phases: 12
   completed_phases: 11
   total_plans: 55
-  completed_plans: 48
-  percent: 87
+  completed_plans: 50
+  percent: 91
 ---
 
 # Project State
@@ -37,13 +37,15 @@ under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 12 (Standalone prune with dry-run) — EXECUTING
-Plan: 1 of 8 complete
+Plan: 3 of 8 complete
 Status: Executing
 
 **Plan 12-01 complete 2026-09-23:** The registered `prune` command removes
 orphans in one selected scope under a single lock. Project-scope and
-unreadable-declarer cases pass, and named uninstall remains green. The preview,
-empty result, flag contract, and final docs remain in plans 12-02 through 12-08.
+unreadable-declarer cases pass, and named uninstall remains green. Plans 12-02
+and 12-03 added direct fixpoint, failure, factory, and registration coverage.
+The preview, empty result, final flag contract, and docs remain in plans 12-04
+through 12-08.
 
 **Phase 11 closed 2026-09-23**, verified 20/20 functional truths and both
 human wording checks. The validated manifest allowlist controls new foreign
