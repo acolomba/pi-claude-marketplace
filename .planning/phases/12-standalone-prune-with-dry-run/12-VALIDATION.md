@@ -1,16 +1,16 @@
 ---
 phase: "12"
 slug: "standalone-prune-with-dry-run"
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-09-23"
 ---
 
 # Phase 12 — Validation Strategy
 
-> Test targets from `12-RESEARCH.md`. Plan and task IDs are assigned during
-> planning; this draft maps requirements to tests before implementation.
+> Audited against all eight plans, their execution summaries, and the final
+> goal verification report. All mapped requirements have behavioral tests.
 
 ---
 
@@ -45,11 +45,11 @@ created: "2026-09-23"
 
 | Work area | Requirement | Threat Ref | Secure behavior | Test type | Automated command | File Exists | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Full-scope selection and read-only state | PRUNE-06, PRUNE-07 | T-12-01, T-12-02 | No wrong-scope deletion or dry-run write | unit | `node --test tests/orchestrators/plugin/dependency-index.test.ts tests/persistence/state-io.test.ts tests/orchestrators/plugin/prune.test.ts` | New prune test: ❌ W0 | ⬜ pending |
-| Locked removal and member failure | PRUNE-06 | T-12-01, T-12-02 | Fail closed; failed member holds descendants | unit, integration | `node --test tests/orchestrators/plugin/prune.test.ts tests/integration/standalone-prune.test.ts` | ❌ W0 | ⬜ pending |
-| Preview and notification rows | PRUNE-07 | T-12-03 | Preview names intended removals without mutating state | unit, catalog | `node --test tests/shared/notification-grammar.test.ts tests/architecture/catalog-uat/catalog-contract.test.ts tests/architecture/catalog-uat/catalog-parser.test.ts` | New catalog fixture: ❌ W0 | ⬜ pending |
-| Flag surface and completion | FLAG-02 | T-12-01 | Reject unsupported flags and extra operands | unit, architecture | `node --test tests/edge/handlers/plugin/prune.test.ts tests/edge/router.test.ts tests/edge/completions/provider.test.ts tests/architecture/flag-catalog-drift.test.ts` | New handler test: ❌ W0 | ⬜ pending |
-| Offline boundary | PRUNE-06, PRUNE-07 | T-12-02 | Neither prune path fetches network data | architecture | `node --test tests/architecture/no-orchestrator-network.test.ts` | ✅ | ⬜ pending |
+| Full-scope selection and read-only state | PRUNE-06, PRUNE-07 | T-12-01, T-12-02 | No wrong-scope deletion or dry-run write | unit | `node --test tests/orchestrators/plugin/dependency-index.test.ts tests/persistence/state-io.test.ts tests/orchestrators/plugin/prune.test.ts` | ✅ | ✅ green |
+| Locked removal and member failure | PRUNE-06 | T-12-01, T-12-02 | Fail closed; failed member holds descendants | unit, integration | `node --test tests/orchestrators/plugin/prune.test.ts tests/integration/standalone-prune.test.ts` | ✅ | ✅ green |
+| Preview and notification rows | PRUNE-07 | T-12-03 | Preview names intended removals without mutating state | unit, catalog | `node --test tests/shared/notification-grammar.test.ts tests/architecture/catalog-uat/catalog-contract.test.ts tests/architecture/catalog-uat/catalog-parser.test.ts` | ✅ | ✅ green |
+| Flag surface and completion | FLAG-02 | T-12-01 | Reject unsupported flags and extra operands | unit, architecture | `node --test tests/edge/handlers/plugin/prune.test.ts tests/edge/router.test.ts tests/edge/completions/provider.test.ts tests/architecture/flag-catalog-drift.test.ts` | ✅ | ✅ green |
+| Offline boundary | PRUNE-06, PRUNE-07 | T-12-02 | Neither prune path fetches network data | architecture | `node --test tests/architecture/no-orchestrator-network.test.ts` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -57,13 +57,13 @@ created: "2026-09-23"
 
 ## Wave 0 Requirements
 
-- [ ] `tests/orchestrators/plugin/prune.test.ts` — real state and disk cases
+- [x] `tests/orchestrators/plugin/prune.test.ts` — real state and disk cases
   for PRUNE-06/07, including legacy migration and zero-write preview.
-- [ ] `tests/edge/handlers/plugin/prune.test.ts` — exact FLAG-02 parser and
+- [x] `tests/edge/handlers/plugin/prune.test.ts` — exact FLAG-02 parser and
   scope cases.
-- [ ] `tests/integration/standalone-prune.test.ts` — command-to-state
+- [x] `tests/integration/standalone-prune.test.ts` — command-to-state
   transaction and preview checks.
-- [ ] `tests/architecture/catalog-uat/fixtures/plugin-prune.ts` — actual,
+- [x] `tests/architecture/catalog-uat/fixtures/plugin-prune.ts` — actual,
   pending, empty, and error rows.
 
 Existing Node test infrastructure and fixtures need no new dependency.
@@ -80,11 +80,29 @@ that check does not replace the automated state and disk assertions.
 
 ## Validation Sign-Off
 
-- [ ] Every plan task has an automated verification command.
-- [ ] No three consecutive tasks lack automated verification.
-- [ ] Wave 0 creates each new test and catalog fixture above.
-- [ ] No watch-mode flags are used.
-- [ ] Focused feedback fits the 30-second target.
-- [ ] Set `nyquist_compliant: true` after the validation audit confirms coverage.
+- [x] Every plan task has an automated verification command.
+- [x] No three consecutive tasks lack automated verification.
+- [x] Wave 0 creates each new test and catalog fixture above.
+- [x] No watch-mode flags are used.
+- [x] Focused feedback fits the 30-second target.
+- [x] Set `nyquist_compliant: true` after the validation audit confirms coverage.
 
-**Approval:** pending
+**Approval:** validated 2026-09-24
+
+## Validation Audit 2026-09-24
+
+| Metric | Count |
+| --- | ---: |
+| Requirements covered | 3/3 |
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+The final verification report maps PRUNE-06, PRUNE-07, and FLAG-02 to
+behavioral tests and records 27/27 must-haves verified. The direct test pairs
+reached 100% coverage; the full unit suite passed 7,760/7,760 tests, and the
+standalone prune integration suite passed 25/25. The live Pi flow also passed
+the one manual UAT check. The full `npm run check` chain stopped on an
+operator-owned `.planning/config.json` formatting change; unaffected typecheck,
+lint, unit, integration, direct-coverage, and changed-file formatting gates
+passed separately.
