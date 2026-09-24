@@ -6,7 +6,7 @@
   "^1.0.0" })` fixture callback introduced by plan 09-03's commit
   `71dcea21` (`test(09-03): prove the reload-driven install end to end`) is
   `async` but contains no `await` expression.
-  status: fixed (orchestrator commit `14ff68e3`, wave-3 post-merge gate; WINDOWS.md entry #60 marked fixed)
+  status: resolved (orchestrator commit `14ff68e3`, wave-3 post-merge gate; WINDOWS.md entry #60 marked fixed)
   **What:** `npm run lint` (ESLint) reports one error:
   `Async method 'marketplaceTagProbe' has no 'await' expression`. This is
   the only ESLint finding on the tree; it is not caused by plan 09-04's own
@@ -17,8 +17,5 @@
   09-04 Task 3's explicit instruction: "a red step here is a defect of an
   earlier plan and goes back to it, never a pin or an exception added
   here."
-  **Fix (for whoever picks this up):** either drop the unnecessary `async`
-  keyword from the arrow function (it resolves synchronously) or add a
-  no-op `await` inside it -- the callback's return value is already a
-  plain object literal, so `async` was likely copied from a sibling
-  fixture that does await something.
+  **Resolution:** The callback now returns `Promise.resolve(...)` without an
+  `async` keyword. The current typecheck and test suite pass.

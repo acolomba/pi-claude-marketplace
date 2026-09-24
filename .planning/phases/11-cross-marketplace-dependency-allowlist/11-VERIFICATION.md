@@ -1,6 +1,6 @@
 ---
 phase: 11-cross-marketplace-dependency-allowlist
-verified: 2026-09-23T18:54:13Z
+verified: 2026-09-24T17:02:30Z
 status: passed
 human_verified: 2026-09-23T19:10:57Z
 fingerprint_refreshed: 2026-09-23T19:14:48Z
@@ -65,7 +65,7 @@ covered_files:
   - tests/shared/notification-grammar.test.ts
   - tests/shared/notification-types.test.ts
   - tests/shared/notify-reasons.test.ts
-covered_digest: "v1:sha256:55d38fdc4313acaef4158dcb987fb0655c6bc475b259f16f88be08192c73c143"
+covered_digest: "v1:sha256:bea6658d2ba3cd1a7a713f61ef297acf02526b092cd3231bfb887e4363ac8990"
 behavior_unverified: 0
 overrides_applied: 0
 prohibitions_flagged: 2
@@ -193,3 +193,9 @@ No observable truth, required artifact, key link, requirement, or human review i
 
 _Verified: 2026-09-23T18:54:13Z_
 _Verifier: the agent (gsd-verifier)_
+
+## Current-tree re-verification (2026-09-24)
+
+The direct and reload allowlist tests still pass: an added marketplace alone grants no permission, while a recorded dependency still satisfies the declaration. The two live Pi UAT checks in `11-UAT.md` passed.
+
+The current milestone run passed 7,760 unit tests and all 15 integration files. `npm run typecheck`, `npm run lint:type-members`, and the network, notification, and planner architecture tests also passed. The historical truth table and line numbers above record the original verification run. The full `npm run check` still stops on formatting in the operator-owned `.planning/config.json`. No implementation change was needed for this re-verification.

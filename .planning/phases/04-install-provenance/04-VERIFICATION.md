@@ -1,10 +1,10 @@
 ---
 phase: 04-install-provenance
-verified: 2026-09-16T19:40:00Z
+verified: 2026-09-24T17:02:30Z
 status: passed
 score: 9/9 must-haves verified
 covered_files: [".planning/REQUIREMENTS.md", ".planning/phases/04-install-provenance/04-01-PLAN.md", ".planning/phases/04-install-provenance/04-01-SUMMARY.md", ".planning/phases/04-install-provenance/04-02-PLAN.md", ".planning/phases/04-install-provenance/04-02-SUMMARY.md", ".planning/phases/04-install-provenance/04-03-PLAN.md", ".planning/phases/04-install-provenance/04-03-SUMMARY.md", ".planning/phases/04-install-provenance/04-04-PLAN.md", ".planning/phases/04-install-provenance/04-04-SUMMARY.md", ".planning/phases/04-install-provenance/04-05-PLAN.md", ".planning/phases/04-install-provenance/04-05-SUMMARY.md", ".planning/phases/04-install-provenance/04-06-PLAN.md", ".planning/phases/04-install-provenance/04-06-SUMMARY.md", ".planning/phases/04-install-provenance/04-CONTEXT.md", ".planning/phases/04-install-provenance/04-REVIEW-FIX.md", ".planning/phases/04-install-provenance/04-REVIEW.md", "extensions/pi-claude-marketplace/orchestrators/import/execute.ts", "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts", "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts", "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts", "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-record.ts", "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts", "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts", "extensions/pi-claude-marketplace/orchestrators/types.ts", "extensions/pi-claude-marketplace/persistence/migrate.ts", "extensions/pi-claude-marketplace/persistence/state-io.ts", "extensions/pi-claude-marketplace/shared/notification-types.ts", "extensions/pi-claude-marketplace/shared/notify-reasons.ts"]
-covered_digest: "v1:sha256:e25a48cca410b553a4e9d7059c4f6fd67767177b45fe4b8e95e06ee8391137d2"
+covered_digest: "v1:sha256:4a08999dcebd31803939cfc56e07e1c62d68ed177786cbc7bc88bcbe03335bee"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
@@ -120,3 +120,9 @@ None. All five ROADMAP success criteria and all four PROV requirement IDs are ba
 
 _Verified: 2026-09-16T19:40:00Z_
 _Verifier: Claude (gsd-verifier)_
+
+## Current-tree re-verification (2026-09-24)
+
+The provenance, migration, and promotion tests still pass. A later standalone prune path consumes the same explicit/dependency record field without changing its one-way promotion rule.
+
+The current milestone run passed 7,760 unit tests and all 15 integration files. `npm run typecheck`, `npm run lint:type-members`, and the network, notification, and planner architecture tests also passed. The historical truth table and line numbers above record the original verification run. The full `npm run check` still stops on formatting in the operator-owned `.planning/config.json`. No implementation change was needed for this re-verification.

@@ -1,6 +1,6 @@
 ---
 phase: 07-marketplace-repo-tag-resolution
-verified: 2026-09-19T23:45:32Z
+verified: 2026-09-24T17:02:30Z
 status: passed
 score: 8/8 must-haves verified
 covered_files:
@@ -26,7 +26,7 @@ covered_files:
   - extensions/pi-claude-marketplace/platform/git.ts
   - extensions/pi-claude-marketplace/shared/notification-types.ts
   - extensions/pi-claude-marketplace/shared/notify-reasons.ts
-covered_digest: "v1:sha256:eecac11f0fce864166fcd0ec7e0e743f098032211b615f9d83754a4bad9fbf02"
+covered_digest: "v1:sha256:b04958f34f5b5cba0fc14a182a3fafd6c40dc339992b1944c88202b10ab5556f"
 behavior_unverified: 0
 overrides_applied: 0
 ---
@@ -123,3 +123,9 @@ No gaps. All four requirement IDs (TAGS-01, TAGS-02, TAGS-03, DIVG-01) are imple
 
 _Verified: 2026-09-19T23:45:32Z_
 _Verifier: Claude (gsd-verifier)_
+
+## Current-tree re-verification (2026-09-24)
+
+The marketplace tag probe, clone containment, clone GC, and catalog tests still pass. The current allowlist limits new foreign dependencies before the path-source tag resolution runs; same-marketplace tag behavior remains as verified.
+
+The current milestone run passed 7,760 unit tests and all 15 integration files. `npm run typecheck`, `npm run lint:type-members`, and the network, notification, and planner architecture tests also passed. The historical truth table and line numbers above record the original verification run. The full `npm run check` still stops on formatting in the operator-owned `.planning/config.json`. No implementation change was needed for this re-verification.

@@ -1,6 +1,6 @@
 ---
 phase: 01-manifest-read-fidelity
-verified: 2026-09-14T16:05:20Z
+verified: 2026-09-24T17:02:30Z
 status: passed
 score: 5/5 must-haves verified
 covered_files:
@@ -42,7 +42,7 @@ covered_files:
   - tests/domain/plugin-resolver.test.ts
   - tests/orchestrators/plugin/info.test.ts
   - tests/orchestrators/plugin/shared.test.ts
-covered_digest: "v1:sha256:648336ce9d28e34eeeff898d0791fce04ad3d2e396ef13d1abb5e9458d473d0b"
+covered_digest: "v1:sha256:ed5a2abdfcf31af21fe855582f7bd4307adb054e320f6b2f7942ebba27b98416"
 behavior_unverified: 0
 overrides_applied: 0
 decision_coverage:
@@ -193,3 +193,9 @@ No code or evidence gap blocks the phase. The named upstream plugin directories 
 
 _Verified: 2026-09-14T16:05:20Z_
 _Verifier: the agent (gsd-verifier)_
+
+## Current-tree re-verification (2026-09-24)
+
+The bare-manifest and dependency-rendering tests still pass. Both real-plugin UAT cases remain recorded as passed in `01-UAT.md`.
+
+The current milestone run passed 7,760 unit tests and all 15 integration files. `npm run typecheck`, `npm run lint:type-members`, and the network, notification, and planner architecture tests also passed. The historical truth table and line numbers above record the original verification run. The full `npm run check` still stops on formatting in the operator-owned `.planning/config.json`. No implementation change was needed for this re-verification.

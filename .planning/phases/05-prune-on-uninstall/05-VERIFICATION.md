@@ -1,6 +1,6 @@
 ---
 phase: 05-prune-on-uninstall
-verified: 2026-09-17T02:30:00Z
+verified: 2026-09-24T17:02:30Z
 status: passed
 score: 6/6 must-haves verified
 covered_files:
@@ -45,7 +45,7 @@ covered_files:
   - tests/orchestrators/plugin/uninstall.test.ts
   - tests/orchestrators/reconcile/apply.test.ts
   - tests/orchestrators/reconcile/notify.test.ts
-covered_digest: "v1:sha256:ad591ceb1f0063a02f9edba17add051c26b225434c3690f245d04fb44210975a"
+covered_digest: "v1:sha256:c7e3203df13fc7908384d0e3bc3904f4ed4c7ac820f958159df4ca5dd6cedd1b"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
@@ -243,3 +243,9 @@ the four reflects an automated check that failed or a gap in the shipped code.
 
 *Verified: 2026-09-17T02:30:00Z*
 *Verifier: Claude (gsd-verifier)*
+
+## Current-tree re-verification (2026-09-24)
+
+The orphan sweep, explicit-record protection, data preservation, and `--prune` rows still pass. The historical PRUNE-05 refusal in truth 6 was superseded by LOAD-03: uninstall now succeeds when readable dependents remain and reports them; an unreadable declarer still fails closed. `06-VERIFICATION.md` proves the replacement, and `12-UAT.md` proves standalone prune against a live Pi scope. Truths 1–5 remain active; truth 6 is historical.
+
+The current milestone run passed 7,760 unit tests and all 15 integration files. `npm run typecheck`, `npm run lint:type-members`, and the network, notification, and planner architecture tests also passed. The historical truth table and line numbers above record the original verification run. The full `npm run check` still stops on formatting in the operator-owned `.planning/config.json`. No implementation change was needed for this re-verification.

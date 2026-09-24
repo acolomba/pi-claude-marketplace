@@ -1,6 +1,6 @@
 ---
 phase: 08-enablement-parity-for-dependencies
-verified: 2026-09-22T02:30:00Z
+verified: 2026-09-24T17:02:30Z
 status: passed
 score: 13/13 must-haves verified
 covered_files:
@@ -42,7 +42,7 @@ covered_files:
   - tests/orchestrators/plugin/install-cascade.messaging.test.ts
   - tests/orchestrators/plugin/install-cascade.test.ts
   - tests/shared/notification-types.test.ts
-covered_digest: "v1:sha256:6254ab88afda1287d10b2e7749928bb60fc7a318ddda31faf3cacbb0863306b4"
+covered_digest: "v1:sha256:c83157810b10aa7795e7e4932a6108f63d54a45a33192ef42b6843823ebeddb3"
 behavior_unverified: 0
 overrides_applied: 0
 ---
@@ -157,3 +157,9 @@ None. All 13 observable truths derived from ROADMAP Phase 8's four success crite
 
 _Verified: 2026-09-22T02:30:00Z_
 _Verifier: Claude (gsd-verifier)_
+
+## Current-tree re-verification (2026-09-24)
+
+The enable/disable and install cascade tests still pass, including rollback and config isolation. The retired `dependency disabled` token remains absent. Later phases expanded the closed reason set from the historical 60 members to 62; the current closed-set tests pass.
+
+The current milestone run passed 7,760 unit tests and all 15 integration files. `npm run typecheck`, `npm run lint:type-members`, and the network, notification, and planner architecture tests also passed. The historical truth table and line numbers above record the original verification run. The full `npm run check` still stops on formatting in the operator-owned `.planning/config.json`. No implementation change was needed for this re-verification.

@@ -1,5 +1,5 @@
 ---
-status: passed
+status: complete
 phase: 01-manifest-read-fidelity
 source: [01-VERIFICATION.md]
 started: 2026-09-14T16:00:32Z

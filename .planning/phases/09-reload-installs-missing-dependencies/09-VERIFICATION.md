@@ -1,10 +1,10 @@
 ---
 phase: 09-reload-installs-missing-dependencies
-verified: 2026-09-22T18:00:00Z
+verified: 2026-09-24T17:02:30Z
 status: passed
 score: 12/12 must-haves verified
 covered_files: [".planning/BACKLOG.md", ".planning/phases/09-reload-installs-missing-dependencies/09-01-PLAN.md", ".planning/phases/09-reload-installs-missing-dependencies/09-01-SUMMARY.md", ".planning/phases/09-reload-installs-missing-dependencies/09-02-PLAN.md", ".planning/phases/09-reload-installs-missing-dependencies/09-02-SUMMARY.md", ".planning/phases/09-reload-installs-missing-dependencies/09-03-PLAN.md", ".planning/phases/09-reload-installs-missing-dependencies/09-03-SUMMARY.md", ".planning/phases/09-reload-installs-missing-dependencies/09-04-PLAN.md", ".planning/phases/09-reload-installs-missing-dependencies/09-04-SUMMARY.md", ".planning/phases/09-reload-installs-missing-dependencies/09-REVIEW-FIX.md", ".planning/phases/09-reload-installs-missing-dependencies/09-REVIEW.md", "CHANGELOG.md", "docs/dependency-resolution.md", "docs/output-catalog.md", "docs/plugin-enablement.md", "extensions/pi-claude-marketplace/index.ts", "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts", "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts", "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts", "extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts", "extensions/pi-claude-marketplace/orchestrators/reconcile/README.md", "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts", "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts", "extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts", "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts", "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts", "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts", "extensions/pi-claude-marketplace/shared/notification-types.ts", "extensions/pi-claude-marketplace/shared/notify-reasons.ts", "scripts/check-unused-type-members.contracts.json", "tests/architecture/catalog-uat/catalog-contract.test.ts", "tests/architecture/catalog-uat/catalog-parser.test.ts", "tests/architecture/catalog-uat/fixtures/reconcile-applied.ts", "tests/architecture/compat-01-no-expansion.test.ts", "tests/architecture/notify-closed-set-locks.test.ts", "tests/architecture/notify-stamp-coverage.test.ts", "tests/index.test.ts", "tests/integration/reconcile-plan-convergence.test.ts", "tests/orchestrators/plugin/install-cascade.test.ts", "tests/orchestrators/plugin/install-flow.test.ts", "tests/orchestrators/plugin/install-outcome.test.ts", "tests/orchestrators/plugin/operations.test.ts", "tests/orchestrators/reconcile/apply.test.ts", "tests/orchestrators/reconcile/dependency-verdict.test.ts", "tests/orchestrators/reconcile/notify.test.ts", "tests/orchestrators/reconcile/plan.test.ts", "tests/orchestrators/reconcile/types.test.ts", "tests/shared/notification-types.test.ts"]
-covered_digest: "v1:sha256:69df0ae0ebd6cf20d9571f5c0ae32c39dd26b05c2e502c210a84c2b67e34d2c8"
+covered_digest: "v1:sha256:0aa59ed6d2ba7d51788806b2405563900a9981241c22247de63d8857b63a945e"
 behavior_unverified: 0
 overrides_applied: 0
 ---
@@ -112,3 +112,9 @@ None. All 12 must-haves derived from ROADMAP success criteria, PLAN frontmatter 
 
 *Verified: 2026-09-22T18:00:00Z*
 *Verifier: Claude (gsd-verifier)*
+
+## Current-tree re-verification (2026-09-24)
+
+The reload install, convergence, and catalog tests still pass. The `dependency installed` reason remains present without a cause line. Later update and allowlist work expanded the closed reason set from the historical 61 members to 62; the current closed-set tests pass.
+
+The current milestone run passed 7,760 unit tests and all 15 integration files. `npm run typecheck`, `npm run lint:type-members`, and the network, notification, and planner architecture tests also passed. The historical truth table and line numbers above record the original verification run. The full `npm run check` still stops on formatting in the operator-owned `.planning/config.json`. No implementation change was needed for this re-verification.

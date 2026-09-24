@@ -1,6 +1,6 @@
 ---
 phase: 03-dependency-resolution
-verified: 2026-09-15T00:00:00Z
+verified: 2026-09-24T17:02:30Z
 status: passed
 score: 5/5 must-haves verified
 covered_files:
@@ -25,7 +25,7 @@ covered_files:
   - .planning/phases/03-dependency-resolution/03-07-SUMMARY.md
   - .planning/phases/03-dependency-resolution/03-REVIEW-FIX.md
   - .planning/phases/03-dependency-resolution/03-REVIEW.md
-  - CLAUDE.md
+  - AGENTS.md
   - README.es.md
   - README.md
   - docs/dependency-resolution.md
@@ -67,7 +67,7 @@ covered_files:
   - tests/orchestrators/plugin/shared.test.ts
   - tests/platform/git.test.ts
   - tests/shared/notification-types.test.ts
-covered_digest: "v1:sha256:d829ff84ffd638856602c80a8c3fe4d1bc098d6068b518b42d7063c8d026c3bc"
+covered_digest: "v1:sha256:017057ca8af5b0cf25a184322b2c1f4c7c5b3e0162104cde28b7ccf78160c2c9"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
@@ -261,3 +261,9 @@ The phase does not reach `passed` status only because it carries un-closeable li
 
 _Verified: 2026-09-15_
 _Verifier: Claude (gsd-verifier)_
+
+## Current-tree re-verification (2026-09-24)
+
+The install cascade, range, rollback, and network tests still pass. Later work narrows two historical statements: path-source dependencies with no matching tag now install the current copy with a disclosed fallback (TAGS-02), while new cross-marketplace dependencies require the declaring marketplace allowlist (CMP-01). The original no-match failure remains the git-source behavior. These are recorded supersessions, not regressions in the active requirements. The former `CLAUDE.md` coverage path now points to `AGENTS.md`, which carries the current project rules.
+
+The current milestone run passed 7,760 unit tests and all 15 integration files. `npm run typecheck`, `npm run lint:type-members`, and the network, notification, and planner architecture tests also passed. The historical truth table and line numbers above record the original verification run. The full `npm run check` still stops on formatting in the operator-owned `.planning/config.json`. No implementation change was needed for this re-verification.

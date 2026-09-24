@@ -1,6 +1,6 @@
 ---
 phase: 10-constraint-aware-update
-verified: 2026-09-23T03:00:23Z
+verified: 2026-09-24T17:02:30Z
 status: passed
 score: 3/3 must-haves verified
 covered_files:
@@ -70,7 +70,7 @@ covered_files:
   - tests/shared/notification-grammar.test.ts
   - tests/shared/notification-types.test.ts
   - tests/shared/notify-reasons.test.ts
-covered_digest: "v1:sha256:982e2f517afc07f7571da21bcb3c8a5eacdae189cc096d78824a61437cfe390f"
+covered_digest: "v1:sha256:60969e6c601ab90b380e7deb198cbe71a081302c9a047a9fe0a2409e98f579e4"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -196,3 +196,9 @@ No gaps. The current repository head satisfies the phase goal and both mapped re
 
 _Verified: 2026-09-23T03:00:23Z_
 _Verifier: the agent (gsd-verifier)_
+
+## Current-tree re-verification (2026-09-24)
+
+The constraint gate, update preflight, post-fetch guard, and notification tests still pass. The current typecheck and type-member gate also pass. The later cross-marketplace allowlist constrains new dependency acquisition, not the recorded dependent ranges used by this update gate.
+
+The current milestone run passed 7,760 unit tests and all 15 integration files. `npm run typecheck`, `npm run lint:type-members`, and the network, notification, and planner architecture tests also passed. The historical truth table and line numbers above record the original verification run. The full `npm run check` still stops on formatting in the operator-owned `.planning/config.json`. No implementation change was needed for this re-verification.

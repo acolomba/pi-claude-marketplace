@@ -1,5 +1,6 @@
 ---
 quick_id: 260917-hfp
+status: complete
 phase: quick-260917-hfp
 plan: 01
 subsystem: orchestrators

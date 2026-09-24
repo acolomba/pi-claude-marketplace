@@ -1,6 +1,6 @@
 ---
 phase: 02-uninstall-data-disposition-and-the-uninstall-option-seam
-verified: 2026-09-14T00:00:00Z
+verified: 2026-09-24T17:02:30Z
 status: passed
 score: 10/10 must-haves verified
 covered_files:
@@ -27,7 +27,7 @@ covered_files:
   - tests/edge/handlers/shared.test.ts
   - tests/orchestrators/plugin/uninstall.test.ts
   - tests/orchestrators/reconcile/apply.test.ts
-covered_digest: "v1:sha256:f97bf3ce62bd93ae186b49cbcff52fcaa431331ca453143bf78e15b4bd4805cc"
+covered_digest: "v1:sha256:f0ab931ec4b289461ce15fe452c8b9936f59e5b88936463d7878486f3eee971a"
 behavior_unverified: 0
 overrides_applied: 0
 ---
@@ -137,3 +137,9 @@ Three items flagged during code review are deliberately out of this phase's must
 
 *Verified: 2026-09-14*
 *Verifier: Claude (gsd-verifier)*
+
+## Current-tree re-verification (2026-09-24)
+
+The `--keep-data` and default-delete contracts still pass in the uninstall and edge suites. Later prune commands use the same option seam and retain those data rules.
+
+The current milestone run passed 7,760 unit tests and all 15 integration files. `npm run typecheck`, `npm run lint:type-members`, and the network, notification, and planner architecture tests also passed. The historical truth table and line numbers above record the original verification run. The full `npm run check` still stops on formatting in the operator-owned `.planning/config.json`. No implementation change was needed for this re-verification.

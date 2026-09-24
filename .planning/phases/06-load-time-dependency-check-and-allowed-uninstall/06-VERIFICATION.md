@@ -1,6 +1,6 @@
 ---
 phase: 06-load-time-dependency-check-and-allowed-uninstall
-verified: 2026-09-19T10:45:00Z
+verified: 2026-09-24T17:02:30Z
 status: passed
 score: 4/4 must-haves verified
 covered_files:
@@ -62,7 +62,7 @@ covered_files:
   - "tests/persistence/state-io.test.ts"
   - "tests/shared/notification-grammar.test.ts"
   - "tests/shared/notification-types.test.ts"
-covered_digest: "v1:sha256:31a5282728222af38937d0fdebfcadbe4fe7c4c98a436c53835e03d4b050e0e3"
+covered_digest: "v1:sha256:8f4fbad148fd7ac6d23cf242fc397150929b243b4928c7511c72ea2f87a9ac75"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
@@ -168,3 +168,9 @@ No gaps found against the four roadmap success criteria — LOAD-01, LOAD-02, an
 
 _Verified: 2026-09-19T10:45:00Z_
 _Verifier: Claude (gsd-verifier)_
+
+## Current-tree re-verification (2026-09-24)
+
+The current dependency verdict, reconcile, notification, and uninstall suites still pass. The current load-time check retains fail-closed unreadable-declarer handling and the later reload install path reuses its verdict.
+
+The current milestone run passed 7,760 unit tests and all 15 integration files. `npm run typecheck`, `npm run lint:type-members`, and the network, notification, and planner architecture tests also passed. The historical truth table and line numbers above record the original verification run. The full `npm run check` still stops on formatting in the operator-owned `.planning/config.json`. No implementation change was needed for this re-verification.
