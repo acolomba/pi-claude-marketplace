@@ -216,6 +216,7 @@ test("TC-1 offers the whole top-level vocabulary at an empty prefix, in declarat
     { label: "bootstrap", value: "bootstrap " },
     { label: "install", value: "install " },
     { label: "uninstall", value: "uninstall " },
+    { label: "prune", value: "prune " },
     { label: "update", value: "update " },
     { label: "fetch", value: "fetch " },
     { label: "reinstall", value: "reinstall " },
@@ -497,6 +498,24 @@ test("TC-3 prepends the global scope flag before a verb's own completable flags"
       value: "install --local ",
       description:
         "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json",
+    },
+  ]);
+});
+
+test("TC-3 offers only scope and preview flags for standalone prune", async (t) => {
+  // arrange
+  const { completionCache, resolver } = await seedResolver(t, "flags-prune");
+
+  // act
+  const suggestions = await getArgumentCompletions("prune -", resolver, completionCache);
+
+  // assert
+  assert.deepStrictEqual(suggestions, [
+    { label: "--scope", value: "prune --scope ", description: "Scope: user or project" },
+    {
+      label: "--dry-run",
+      value: "prune --dry-run ",
+      description: "Preview dependency plugins that prune would remove",
     },
   ]);
 });

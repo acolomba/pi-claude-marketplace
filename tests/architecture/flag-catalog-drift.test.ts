@@ -277,7 +277,7 @@ const TOP_LEVEL_USAGE_FLAGS: Record<
   },
   info: { documented: [], omitted: ["--fetch"] },
   uninstall: { documented: ["--keep-data", "--local", "--prune"], omitted: [] },
-  prune: { documented: [], omitted: ["--dry-run"] },
+  prune: { documented: ["--dry-run"], omitted: [] },
   reinstall: { documented: [], omitted: ["--local"] },
   fetch: { documented: [], omitted: [] },
   enable: { documented: ["--local"], omitted: [] },
