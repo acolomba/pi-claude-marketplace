@@ -342,8 +342,8 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
   /**
    * LOAD-03: the `name@marketplace` keys of the plugins that still declared
    * the removed plugin, on the `PluginDisabledMessage.cause` precedent.
-   * Standalone prune also uses this slot on one committed member when lock
-   * release or post-commit cleanup fails.
+   * Standalone prune also uses this slot on a committed member when that
+   * member's post-commit cleanup fails.
    * Other uninstall rows omit it.
    *
    * It rides the cause chain because the sentence interpolates plugin
@@ -824,6 +824,13 @@ export interface PruneEmptyMessage {
   readonly scope: Scope;
 }
 
+/** Scope-wide warning after a standalone prune state save succeeded. */
+export interface PruneCommittedWarningMessage {
+  readonly kind: "prune-committed-warning";
+  readonly scope: Scope;
+  readonly cause: Error;
+}
+
 /** Marketplace-absence failure message. */
 export interface MarketplaceNotAddedMessage {
   readonly kind: "marketplace-not-added";
@@ -850,4 +857,5 @@ export type NotificationMessage =
   | MarketplaceNotAddedMessage
   | ReconcilePendingEmptyMessage
   | PruneEmptyMessage
+  | PruneCommittedWarningMessage
   | ReconcileAppliedCascadeMessage;

@@ -163,8 +163,8 @@ const MARKETPLACE_STATUS_ENROLLMENT: Record<MarketplaceStatus, true> = {
   skipped: true,
 };
 
-// Standalone notifications have their own discriminator set. A scoped empty
-// prune result is a member; the cascade's absent kind remains optional.
+// Standalone notifications have their own discriminator set. Scoped prune
+// results and committed warnings are members; the cascade's absent kind remains optional.
 const NOTIFICATION_KIND_ENROLLMENT: Record<
   Exclude<NotificationMessage["kind"], undefined>,
   true
@@ -177,6 +177,7 @@ const NOTIFICATION_KIND_ENROLLMENT: Record<
   "marketplace-not-added": true,
   "reconcile-pending-empty": true,
   "prune-empty": true,
+  "prune-committed-warning": true,
   "reconcile-applied-cascade": true,
 };
 
@@ -301,8 +302,8 @@ test("SNM-02: MarketplaceStatus is the closed 7-entry marketplace-status set", (
   assert.strictEqual(Object.keys(MARKETPLACE_STATUS_ENROLLMENT).length, 7);
 });
 
-test("standalone notification kinds include scoped prune emptiness exactly", () => {
-  assert.strictEqual(Object.keys(NOTIFICATION_KIND_ENROLLMENT).length, 9);
+test("standalone notification kinds include scoped prune outcomes exactly", () => {
+  assert.strictEqual(Object.keys(NOTIFICATION_KIND_ENROLLMENT).length, 10);
 });
 
 /**

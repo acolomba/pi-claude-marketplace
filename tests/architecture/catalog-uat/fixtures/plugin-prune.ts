@@ -31,6 +31,15 @@ export const PLUGIN_PRUNE_FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "warning",
       message: {
+        kind: "prune-committed-warning",
+        scope: "user",
+        cause: new Error("lock release failed after save"),
+      },
+    },
+    "second-member-cleanup-warning": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
         marketplaces: [
           {
             name: "official",
@@ -38,10 +47,24 @@ export const PLUGIN_PRUNE_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "uninstalled",
-                name: "shared-lib",
-                version: "2.0.0",
+                name: "a",
+                version: "1.0.0",
                 reasons: ["dependency pruned"],
-                cause: new Error("lock release failed after save"),
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "b",
+                version: "1.0.0",
+                reasons: ["dependency pruned"],
+                cause: new Error("second cleanup failed"),
                 severity: "warning",
                 needsReload: true,
               },

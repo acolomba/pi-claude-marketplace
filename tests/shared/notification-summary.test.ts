@@ -425,6 +425,23 @@ test("cascade messages are not standalone", () => {
   assert.equal(isInfoKind(message), false);
 });
 
+test("a committed prune warning remains standalone and requests reload", () => {
+  // arrange
+  const message = {
+    kind: "prune-committed-warning",
+    scope: "user",
+    cause: new Error("release failed"),
+  } satisfies NotificationMessage;
+
+  // act & assert
+  assert.equal(isInfoKind(message), true);
+  assert.equal(shouldEmitReloadHint(message), true);
+  assert.deepStrictEqual(composeWithSummary(message, "body"), [
+    "Prune committed; finalization needs attention.\n\nbody",
+    "warning",
+  ]);
+});
+
 /*
  * Summary composition for the payload the dispatcher delivers.
  *

@@ -211,6 +211,7 @@ function notificationKindIsExhaustive(message: NotificationMessage): string {
     case "marketplace-not-added":
     case "reconcile-pending-empty":
     case "prune-empty":
+    case "prune-committed-warning":
     case "reconcile-applied-cascade":
       return message.kind;
   }
@@ -243,6 +244,13 @@ void notificationKindIsExhaustive;
 void ({ kind: "prune-empty", scope: "user" } satisfies NotificationMessage);
 // @ts-expect-error a prune empty result must name its selected scope
 void ({ kind: "prune-empty" } satisfies NotificationMessage);
+void ({
+  kind: "prune-committed-warning",
+  scope: "project",
+  cause: new Error("release failed"),
+} satisfies NotificationMessage);
+// @ts-expect-error a committed prune warning must carry its failure cause
+void ({ kind: "prune-committed-warning", scope: "project" } satisfies NotificationMessage);
 void installedMessage;
 void skippedMessage;
 void contentReason;

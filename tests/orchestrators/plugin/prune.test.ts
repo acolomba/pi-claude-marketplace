@@ -1063,10 +1063,57 @@ test("a lock-release rejection reports committed removal and completes cleanup",
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "A plugin operation needs attention.\n\n" +
           "● mp [project]\n" +
-          "  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n" +
-          "    cause: lock release failed after save\n\n" +
+          "  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n" +
+          "/reload to pick up changes",
+      },
+      {
+        message:
+          "Prune committed; finalization needs attention.\n\n" +
+          "Prune committed in project scope.\n" +
+          "  cause: lock release failed after save\n\n" +
+          "/reload to pick up changes",
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
+test("an undefined release rejection still reports the committed scope", async () => {
+  await withHermeticEnvironment("prune-owner-release-undefined-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seedScope("project", cwd, {
+      mp: { orphan: { provenance: "dependency" } },
+    });
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run).then(() => {
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- Model a foreign promise that rejects without an Error.
+          return Promise.reject(undefined);
+        }),
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), []);
+    await assert.rejects(stat(fixture.data["orphan@mp"] ?? ""), { code: "ENOENT" });
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n" +
+          "/reload to pick up changes",
+      },
+      {
+        message:
+          "Prune committed; finalization needs attention.\n\n" +
+          "Prune committed in project scope.\n" +
+          "  cause: undefined\n\n" +
           "/reload to pick up changes",
         severity: "warning",
       },
@@ -1122,6 +1169,111 @@ test("post-commit cleanup failure reports committed members and continues cleanu
   });
 });
 
+test("cleanup failure on the second member warns only that member and keeps its data", async () => {
+  await withHermeticEnvironment("prune-owner-second-cleanup-after-save-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seedScope("project", cwd, {
+      mp: {
+        a: { provenance: "dependency" },
+        b: { provenance: "dependency" },
+      },
+    });
+    const cleaned: string[] = [];
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      runPostCommitCleanup: async (args) => {
+        cleaned.push(args.plugin);
+        if (args.plugin === "b") {
+          throw new Error("second cleanup failed");
+        }
+
+        await REAL_UNINSTALL_TRANSACTION.runPostCommitCleanup(args);
+      },
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(cleaned, ["a", "b"]);
+    assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), []);
+    await assert.rejects(stat(fixture.data["a@mp"] ?? ""), { code: "ENOENT" });
+    assert.equal(await readFile(fixture.data["b@mp"] ?? "", "utf8"), "data\n");
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n\n" +
+          "● mp [project]\n" +
+          "  ○ a v1.0.0 (uninstalled) {dependency pruned}\n\n" +
+          "● mp [project]\n" +
+          "  ○ b v1.0.0 (uninstalled) {dependency pruned}\n" +
+          "    cause: second cleanup failed\n\n" +
+          "/reload to pick up changes",
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
+test("lock-release and second-member cleanup failures keep separate causes", async () => {
+  await withHermeticEnvironment("prune-owner-release-second-cleanup-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seedScope("project", cwd, {
+      mp: {
+        a: { provenance: "dependency" },
+        b: { provenance: "dependency" },
+      },
+    });
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run).then(() =>
+          Promise.reject(new Error("lock release failed after save")),
+        ),
+      runPostCommitCleanup: async (args) => {
+        if (args.plugin === "b") {
+          throw new Error("second cleanup failed");
+        }
+
+        await REAL_UNINSTALL_TRANSACTION.runPostCommitCleanup(args);
+      },
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), []);
+    await assert.rejects(stat(fixture.data["a@mp"] ?? ""), { code: "ENOENT" });
+    assert.equal(await readFile(fixture.data["b@mp"] ?? "", "utf8"), "data\n");
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n\n" +
+          "● mp [project]\n" +
+          "  ○ a v1.0.0 (uninstalled) {dependency pruned}\n\n" +
+          "● mp [project]\n" +
+          "  ○ b v1.0.0 (uninstalled) {dependency pruned}\n" +
+          "    cause: second cleanup failed\n\n" +
+          "/reload to pick up changes",
+        severity: "warning",
+      },
+      {
+        message:
+          "Prune committed; finalization needs attention.\n\n" +
+          "Prune committed in project scope.\n" +
+          "  cause: lock release failed after save\n\n" +
+          "/reload to pick up changes",
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
 test("a post-save failure preserves the original cause when every member failed", async () => {
   await withHermeticEnvironment("prune-owner-release-all-failed-", async ({ cwd }) => {
     // arrange
@@ -1156,12 +1308,23 @@ test("a post-save failure preserves the original cause when every member failed"
       await readFile(fixture.skills["orphan@mp"] ?? "", "utf8"),
       "---\nname: mp-orphan-skill\n---\nbody\n",
     );
-    assert.equal(notifications[0]?.severity, "warning");
-    assert.match(notifications[0]?.message ?? "", /orphan v1\.0\.0 \(failed\)/);
-    assert.match(
-      notifications[0]?.message ?? "",
-      /agent content changed; release failed after save/,
-    );
-    assert.match(notifications[0]?.message ?? "", /\/reload to pick up changes/);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n\n" +
+          "● mp [project]\n" +
+          "  ⊘ orphan v1.0.0 (failed) {source mismatch}\n" +
+          "    cause: agent content changed",
+        severity: "warning",
+      },
+      {
+        message:
+          "Prune committed; finalization needs attention.\n\n" +
+          "Prune committed in project scope.\n" +
+          "  cause: release failed after save\n\n" +
+          "/reload to pick up changes",
+        severity: "warning",
+      },
+    ]);
   });
 });

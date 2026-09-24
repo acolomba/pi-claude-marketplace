@@ -5129,6 +5129,34 @@ for (const scope of ["user", "project"] as const) {
   });
 }
 
+test("prune-committed-warning reports a saved scope and requests reload", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const pi = piWithBothLoaded();
+  const message = {
+    kind: "prune-committed-warning",
+    scope: "project",
+    cause: new Error("lock release failed after save"),
+  } satisfies NotificationMessage;
+
+  // act
+  notify(ctx as never, pi, message);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        "Prune committed; finalization needs attention.\n\n" +
+          "Prune committed in project scope.\n" +
+          "  cause: lock release failed after save\n\n" +
+          "/reload to pick up changes",
+        "warning",
+      ],
+    ],
+  );
+});
+
 test("reconcile applied summarizes mixed failed subjects", (t) => {
   // arrange
   const ctx = createContext(t);

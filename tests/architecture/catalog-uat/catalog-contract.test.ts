@@ -144,10 +144,11 @@ const EXPECTED_SECTION_COUNT = 21;
 // scoped empty, independent member failure, and unreadable-declarer output.
 // CR-01: malformed state and held-lock failures add two command-scoped rows.
 // CR-02: a partial restore adds one command-scoped recovery row.
-// A committed prune with failed lock release adds one warning row.
+// A committed prune with failed lock release adds one scope-wide warning.
 // Shared-metadata and combined lock-release failures add two recovery rows.
-const EXPECTED_STATE_COUNT = 243;
-const EXPECTED_UTF8_BYTES = 35_702;
+// A second member's failed cleanup adds one warning attributed to that member.
+const EXPECTED_STATE_COUNT = 244;
+const EXPECTED_UTF8_BYTES = 35_900;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -438,7 +439,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 21 fixture modules to 243 exact documented states", async () => {
+test("catalog contract matches all 21 fixture modules to 244 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

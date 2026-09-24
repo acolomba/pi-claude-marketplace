@@ -1222,16 +1222,34 @@ The standalone command sweeps orphaned dependency installs in one scope. Actual 
 
 ### Removal committed but lock release failed
 
-The state save and removal have committed. Prune completes post-commit cleanup, reports the failure on one committed member, and still requests `/reload`.
+The state save and removal have committed. Prune completes post-commit cleanup and reports the lock-release failure in a separate scope-wide warning. Both notifications request `/reload`.
 
 <!-- catalog-state: committed-warning -->
+
+```text
+Prune committed; finalization needs attention.
+
+Prune committed in user scope.
+  cause: lock release failed after save
+
+/reload to pick up changes
+```
+
+### The second orphan's cleanup fails
+
+The state save removed both records. Cleanup removed `a`'s data, but left `b`'s data. The warning belongs to `b`; `a` remains a clean committed removal. Retrying prune cannot select `b` because its install record is gone.
+
+<!-- catalog-state: second-member-cleanup-warning -->
 
 ```text
 A plugin operation needs attention.
 
 ● official [user]
-  ○ shared-lib v2.0.0 (uninstalled) {dependency pruned}
-    cause: lock release failed after save
+  ○ a v1.0.0 (uninstalled) {dependency pruned}
+
+● official [user]
+  ○ b v1.0.0 (uninstalled) {dependency pruned}
+    cause: second cleanup failed
 
 /reload to pick up changes
 ```

@@ -17,7 +17,7 @@ import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
 import { finalizePrunedMembers, sweepOrphans } from "./uninstall.ts";
 
 import type { PruneRestoreFailure } from "./prune-rollback.ts";
-import type { UninstallHooksRouting, UninstallTransaction } from "./uninstall.ts";
+import type { PrunedMember, UninstallHooksRouting, UninstallTransaction } from "./uninstall.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -140,13 +140,13 @@ function notifyOperationFailure(options: PrunePluginOptions, scope: Scope, error
 
 async function finalizeCommittedMembers(
   args: Parameters<typeof finalizePrunedMembers>[0],
-): Promise<unknown[]> {
-  const failures: unknown[] = [];
+): Promise<readonly { readonly member: PrunedMember; readonly cause: unknown }[]> {
+  const failures: { readonly member: PrunedMember; readonly cause: unknown }[] = [];
   for (const member of args.members) {
     try {
       await finalizePrunedMembers({ ...args, members: [member] });
     } catch (error: unknown) {
-      failures.push(error);
+      failures.push({ member, cause: error });
     }
   }
 
@@ -157,43 +157,41 @@ function notifyCommitted(
   options: PrunePluginOptions,
   scope: Scope,
   members: Awaited<ReturnType<typeof sweepOrphans>>,
-  postCommitFailures: readonly unknown[],
+  cleanupFailures: readonly { readonly member: PrunedMember; readonly cause: unknown }[],
 ): void {
   if (members.length === 0) {
     notify(options.ctx, options.pi, { kind: "prune-empty", scope });
     return;
   }
 
-  const warningCause =
-    postCommitFailures.length > 0
-      ? new Error(postCommitFailures.map(errorMessage).join("; "))
-      : undefined;
-  const warningMember = members.find((member) => member.removed) ?? members[0];
   notifyWithContext(
     options.ctx,
     options.pi,
     UNINSTALL_CONTEXT,
-    members.map((member) => ({
-      name: member.marketplace,
-      scope,
-      plugins: [
-        warningCause !== undefined && member === warningMember
-          ? {
-              ...member.row,
-              severity: "warning" as const,
-              needsReload: true,
-              cause: redactCauseChain(
-                new Error(
-                  [member.row.cause, warningCause]
-                    .filter((cause) => cause !== undefined)
-                    .map(errorMessage)
-                    .join("; "),
-                ),
-              ) as unknown as Error,
-            }
-          : member.row,
-      ],
-    })),
+    members.map((member) => {
+      const cleanupFailure = cleanupFailures.find((failure) => failure.member === member);
+      return {
+        name: member.marketplace,
+        scope,
+        plugins: [
+          cleanupFailure !== undefined
+            ? {
+                ...member.row,
+                severity: "warning" as const,
+                needsReload: true,
+                cause: redactCauseChain(
+                  new Error(
+                    [member.row.cause, cleanupFailure.cause]
+                      .filter((cause) => cause !== undefined)
+                      .map(errorMessage)
+                      .join("; "),
+                  ),
+                ) as unknown as Error,
+              }
+            : member.row,
+        ],
+      };
+    }),
     undefined,
     "single",
   );
@@ -251,7 +249,7 @@ export function createPrunePlugin(
       | { readonly kind: "unreadable"; readonly declarer: string; readonly cause: Error }
       | { readonly kind: "swept"; readonly members: Awaited<ReturnType<typeof sweepOrphans>> };
     let savedMembers: Awaited<ReturnType<typeof sweepOrphans>> | undefined;
-    const postCommitFailures: unknown[] = [];
+    let postCommitFailure: { readonly cause: unknown } | undefined;
     try {
       outcome = await transaction.withLockedStateTransaction(locations, async (tx) => {
         const snapshot = await buildScopeDeclarationIndex({ state: tx.state, locations });
@@ -306,7 +304,7 @@ export function createPrunePlugin(
         return;
       }
 
-      postCommitFailures.push(error);
+      postCommitFailure = { cause: error };
       outcome = { kind: "swept", members: savedMembers };
     }
 
@@ -315,17 +313,24 @@ export function createPrunePlugin(
       return;
     }
 
-    postCommitFailures.push(
-      ...(await finalizeCommittedMembers({
-        members: outcome.members,
-        hooksRouting,
-        completionCache,
-        locations,
+    const cleanupFailures = await finalizeCommittedMembers({
+      members: outcome.members,
+      hooksRouting,
+      completionCache,
+      locations,
+      scope,
+      keepData: false,
+      transaction,
+    });
+    notifyCommitted(options, scope, outcome.members, cleanupFailures);
+    if (postCommitFailure !== undefined) {
+      notify(options.ctx, options.pi, {
+        kind: "prune-committed-warning",
         scope,
-        keepData: false,
-        transaction,
-      })),
-    );
-    notifyCommitted(options, scope, outcome.members, postCommitFailures);
+        cause:
+          redactCauseChain(postCommitFailure.cause) ??
+          new Error(errorMessage(postCommitFailure.cause)),
+      });
+    }
   };
 }
