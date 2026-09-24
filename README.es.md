@@ -114,15 +114,15 @@ En Windows, los comandos usan un punto (`.`) en lugar de dos puntos (`:`):
 | `foo`                  | `foo-bar`          | `/foo.bar`             |
 | `foo`                  | `foo`              | `/foo.foo`             |
 
-Las habilidades usan guiones en todas las plataformas. Ejecútalas con `/skill:`:
+Las habilidades usan guiones en todas las plataformas. En una sesión interactiva, puedes ejecutarlas por nombre después de `/reload`. También funciona la forma `/skill:` de Pi:
 
-| Nombre del complemento | Nombre de la habilidad | Nombre en Pi     |
-| ---------------------- | ---------------------- | ---------------- |
-| `foo`                  | `bar`                  | `/skill:foo-bar` |
-| `foo`                  | `foo-bar`              | `/skill:foo-bar` |
-| `foo`                  | `foo`                  | `/skill:foo`     |
+| Nombre del complemento | Nombre de la habilidad | Nombre interactivo | Forma de Pi      |
+| ---------------------- | ---------------------- | ------------------ | ---------------- |
+| `foo`                  | `bar`                  | `/foo-bar`         | `/skill:foo-bar` |
+| `foo`                  | `foo-bar`              | `/foo-bar`         | `/skill:foo-bar` |
+| `foo`                  | `foo`                  | `/foo`             | `/skill:foo`     |
 
-Los nombres de habilidades usan letras ASCII minúsculas, números y guiones. Los demás caracteres se convierten en guiones. Un nombre sin letras ASCII ni números recibe un sufijo hash corto. Los nombres de más de 64 caracteres también reciben un sufijo hash. En una sesión interactiva, `/foo-bar` también ejecuta la habilidad instalada y aparece en el autocompletado tras `/reload`. Si un comando o una plantilla ya usa `/foo-bar`, conserva ese nombre; usa `/skill:foo-bar` para la habilidad.
+Los nombres de habilidades usan letras ASCII minúsculas, números y guiones. Los demás caracteres se convierten en guiones. Un nombre sin letras ASCII ni números recibe un sufijo hash corto. Los nombres de más de 64 caracteres también reciben un sufijo hash. El nombre interactivo aparece en el autocompletado tras `/reload`. Si un comando o una plantilla ya usa ese nombre, lo conserva; usa `/skill:foo-bar` para la habilidad.
 
 Al instalar un complemento, esta extensión reescribe las referencias en sus habilidades, comandos, agentes y archivos Markdown copiados con las habilidades. Una referencia a `foo:bar` se convierte en `/skill:foo-bar` si `bar` es una habilidad, o en `/foo:bar` si es un comando (`/foo.bar` en Windows). Si existen ambos, el comando tiene prioridad; `/skill:bar` selecciona la habilidad. También se reescriben las referencias sin barra inicial y los ejemplos dentro de bloques de código. Las referencias desconocidas o a otros complementos se conservan.
 

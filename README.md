@@ -114,15 +114,15 @@ On Windows, commands use a dot (`.`) instead of a colon (`:`):
 | `foo`       | `foo-bar`    | `/foo.bar`        |
 | `foo`       | `foo`        | `/foo.foo`        |
 
-Skills use hyphens on every platform. Run them with `/skill:`:
+Skills use hyphens on every platform. In an interactive session, you can run them by name after `/reload`. Pi's `/skill:` form also works:
 
-| Plugin name | Skill name | Pi name          |
-| ----------- | ---------- | ---------------- |
-| `foo`       | `bar`      | `/skill:foo-bar` |
-| `foo`       | `foo-bar`  | `/skill:foo-bar` |
-| `foo`       | `foo`      | `/skill:foo`     |
+| Plugin name | Skill name | Interactive name | Pi skill form    |
+| ----------- | ---------- | ---------------- | ---------------- |
+| `foo`       | `bar`      | `/foo-bar`       | `/skill:foo-bar` |
+| `foo`       | `foo-bar`  | `/foo-bar`       | `/skill:foo-bar` |
+| `foo`       | `foo`      | `/foo`           | `/skill:foo`     |
 
-Skill names use lowercase ASCII letters, digits, and hyphens. Other characters become hyphens. A name with no ASCII letters or digits gets a short hash suffix. Names longer than 64 characters also get a hash suffix. In an interactive session, `/foo-bar` also runs the installed skill and appears in slash completion after `/reload`. If a command or prompt template already uses `/foo-bar`, it keeps that name; use `/skill:foo-bar` for the skill.
+Skill names use lowercase ASCII letters, digits, and hyphens. Other characters become hyphens. A name with no ASCII letters or digits gets a short hash suffix. Names longer than 64 characters also get a hash suffix. The interactive name appears in slash completion after `/reload`. If a command or prompt template already uses that name, it keeps the name; use `/skill:foo-bar` for the skill.
 
 When installing a plugin, this extension rewrites references in its skills, commands, agents, and copied skill Markdown files. A reference to `foo:bar` becomes `/skill:foo-bar` if `bar` is a skill, or `/foo:bar` if it is a command (`/foo.bar` on Windows). If both exist, the command takes priority; `/skill:bar` selects the skill. References without a leading slash and examples in code fences are rewritten too. Unknown and other-plugin references stay as written.
 
