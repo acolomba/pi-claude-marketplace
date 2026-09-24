@@ -34,6 +34,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
+import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
 import { BridgeStagingError } from "../../shared/errors-bridges.ts";
@@ -179,6 +180,10 @@ export async function prepareStageCommands(
     pluginName,
     resolved,
   });
+  const referenceNames = input.referenceNames ?? {
+    skills: [],
+    commands: discovered.map((command) => command.generatedName),
+  };
 
   // Materialization gate (symmetry with skills bridge). D-07: surface
   // discoverWarnings even on noop so duplicate-generated-name skips
@@ -251,6 +256,7 @@ export async function prepareStageCommands(
           pluginData: pluginDataDir,
           projectDir: locations.scope === "project" ? cwd : undefined,
         });
+        content = rewriteMarkdownReferences(content, pluginName, referenceNames);
         await writeFile(stagedFile, content, "utf8");
 
         // PARSE-02 / D-86-04: re-parse the STAGED bytes as a Pi-acceptability

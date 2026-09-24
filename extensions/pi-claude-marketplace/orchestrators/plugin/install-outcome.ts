@@ -660,6 +660,7 @@ async function runInstallLedgerBody(
         pluginRoot: c.resolved.pluginRoot,
         pluginDataDir: c.pluginDataDir,
         resolved: c.resolved,
+        referenceNames: generatedNames,
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: c.cwd,
       });
@@ -704,6 +705,7 @@ async function runInstallLedgerBody(
         pluginRoot: c.resolved.pluginRoot,
         pluginDataDir: c.pluginDataDir,
         resolved: c.resolved,
+        referenceNames: generatedNames,
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: c.cwd,
       });
@@ -746,6 +748,7 @@ async function runInstallLedgerBody(
         pluginDataDir: c.pluginDataDir,
         agentsDirs: c.agentsDirs,
         knownSkills: c.stagedSkillNames,
+        referenceNames: generatedNames,
         // AG-7 opt-in: `--map-model` on /claude:plugin install threads
         // the flag down to here. When the user did not pass the flag
         // we explicitly default to false so generated agents omit

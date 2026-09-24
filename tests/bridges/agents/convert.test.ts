@@ -289,14 +289,8 @@ provenance:
     - agent-level \`hooks\` is not converted -- dropped (Claude Code ignores it for plugin agents too; plugin-level hooks/hooks.json still installs).
 ---
 
-## Pi coding agent skill legend
-
-These instructions reference Claude skills by their original names. In this Pi session:
-
-- \`spec-tree:review-changes\` → skill \`spec-tree-review-changes\` (available on demand)
-
 Review /plugins/spec-tree and /data/spec-tree for /workspace.
-Use spec-tree:review-changes.
+Use /skill:spec-tree-review-changes.
 Keep \${CLAUDE_SKILL_DIR} literal.
 `,
       sourceHash: "converted-hash",
@@ -830,14 +824,12 @@ Review files.
     assert.deepStrictEqual(agent.droppedTools, []);
   });
 
-  test("deduplicates body tokens in first-occurrence order, including fenced code", () => {
+  test("rewrites repeated references and fenced examples without a legend", () => {
     // arrange
-    const expectedLegend = `## Pi coding agent skill legend
-
-These instructions reference Claude skills by their original names. In this Pi session:
-
-- \`spec-tree:review-changes\` → skill \`spec-tree-review-changes\` (available on demand)
-- \`spec-tree:other\` → skill \`spec-tree-other\` (available on demand)`;
+    const expectedBody =
+      "Use /skill:spec-tree-review-changes twice: /skill:spec-tree-review-changes.\n" +
+      "Run /spec-tree:review.\n" +
+      "```\npi skill /skill:spec-tree-other\n```\n";
 
     // act
     const agent = convertAgent({
@@ -845,6 +837,10 @@ These instructions reference Claude skills by their original names. In this Pi s
       pluginRoot: "/plugins/spec-tree",
       pluginDataDir: "/data/spec-tree",
       knownSkills: ["spec-tree-review-changes", "spec-tree-other"],
+      referenceNames: {
+        skills: ["spec-tree-review-changes", "spec-tree-other"],
+        commands: ["spec-tree:review"],
+      },
       discovered: {
         sourceName: "reviewer",
         generatedName: "pi-claude-marketplace-spec-tree-reviewer",
@@ -853,6 +849,7 @@ These instructions reference Claude skills by their original names. In this Pi s
         raw: { description: "Reviews files", tools: "Read" },
         body:
           "Use spec-tree:review-changes twice: spec-tree:review-changes.\n" +
+          "Run /spec-tree:review.\n" +
           "```\npi skill spec-tree:other\n```\n",
       },
       sourceHash: "converted-hash",
@@ -860,10 +857,8 @@ These instructions reference Claude skills by their original names. In this Pi s
     });
 
     // assert
-    assert.match(
-      agent.fileContent,
-      new RegExp(expectedLegend.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
-    );
+    assert.strictEqual(agent.fileContent.endsWith(expectedBody), true);
+    assert.strictEqual(agent.fileContent.includes("Pi coding agent skill legend"), false);
     assert.deepStrictEqual(agent.warnings, []);
   });
 

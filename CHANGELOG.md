@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.19.2] - 2026-09-24
+
+- Installed plugin skills now complete and run through `/plugin:skill` aliases in interactive Pi sessions. Commands take priority when an alias has the same name. Skill and command references in installed plugin Markdown use their actual Pi names, including Windows command names. Agent mapping notes are no longer needed. (#215)
+
 ## [0.19.1] - 2026-09-24
 
 - Plugin skills now install with Pi-valid hyphenated names on every platform. Skill and agent references to Claude's `plugin:skill` names resolve to those installed names. This fixes #211 and corrects the name mapping in both READMEs. Thanks to @CharonRyui. (#214)

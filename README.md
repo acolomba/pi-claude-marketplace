@@ -98,31 +98,23 @@ Run a plugin:
 
 This extension prefixes command and skill names with the plugin name. If the name already starts with the plugin name and `-`, this extension removes that common part.
 
-Commands use a colon on POSIX:
+Commands use a colon (`:`) on POSIX and a dot (`.`) on Windows:
 
-| Plugin name | Command name | Pi name    |
-| ----------- | ------------ | ---------- |
-| `foo`       | `bar`        | `/foo:bar` |
-| `foo`       | `foo-bar`    | `/foo:bar` |
-| `foo`       | `foo`        | `/foo:foo` |
+| Plugin name | Command name | Pi name (POSIX) | Pi name (Windows) |
+| ----------- | ------------ | --------------- | ----------------- |
+| `foo`       | `bar`        | `/foo:bar`      | `/foo.bar`        |
+| `foo`       | `foo-bar`    | `/foo:bar`      | `/foo.bar`        |
+| `foo`       | `foo`        | `/foo:foo`      | `/foo.foo`        |
 
-On Windows, commands use a dot (`.`) instead of a colon (`:`):
+Skills use Pi's `/skill:` form and also have an alias in interactive sessions:
 
-| Plugin name | Command name | Pi name (Windows) |
-| ----------- | ------------ | ----------------- |
-| `foo`       | `bar`        | `/foo.bar`        |
-| `foo`       | `foo-bar`    | `/foo.bar`        |
-| `foo`       | `foo`        | `/foo.foo`        |
+| Plugin name | Skill name | Pi skill form    | Interactive alias |
+| ----------- | ---------- | ---------------- | ----------------- |
+| `foo`       | `bar`      | `/skill:foo-bar` | `/foo:bar`        |
+| `foo`       | `foo-bar`  | `/skill:foo-bar` | `/foo:bar`        |
+| `foo`       | `foo`      | `/skill:foo`     | `/foo:foo`        |
 
-Skills use hyphens on every platform. Run them with `/skill:`:
-
-| Plugin name | Skill name | Pi name          |
-| ----------- | ---------- | ---------------- |
-| `foo`       | `bar`      | `/skill:foo-bar` |
-| `foo`       | `foo-bar`  | `/skill:foo-bar` |
-| `foo`       | `foo`      | `/skill:foo`     |
-
-Skill names use lowercase ASCII letters, digits, and hyphens. Other characters become hyphens. A name with no ASCII letters or digits gets a short hash suffix. Names longer than 64 characters also get a hash suffix. References such as `foo:bar` inside a skill or agent resolve to the installed name `foo-bar`.
+Skill aliases use a colon on every platform. If an alias conflicts with a command, the command takes precedence. Use `/skill:foo-bar` to invoke the skill.
 
 MCP server names do not change. If another MCP configuration already uses that name, the plugin install or update fails.
 
