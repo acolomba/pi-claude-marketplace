@@ -3,7 +3,8 @@
 import { createPruneOperation } from "../../../orchestrators/plugin/operations.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
-import { DRY_RUN_FLAG } from "../../flag-catalog.ts";
+import { DRY_RUN_FLAG, passThroughFlagNames, SCOPE_TARGET_FLAG } from "../../flag-catalog.ts";
+import { extractLocalFlag } from "../shared.ts";
 
 import { withParsedArgs } from "./shared.ts";
 
@@ -12,6 +13,7 @@ import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi
 import type { CompletionCache } from "../../../shared/completion-cache.ts";
 
 const USAGE = "Usage: /claude:plugin prune [--scope user|project] [--dry-run]";
+const CONSUMED_FLAGS = { consumeLongFlags: passThroughFlagNames("prune") };
 
 /** Registers the no-target command against the standalone prune operation. */
 export function makePruneHandler(
@@ -20,23 +22,33 @@ export function makePruneHandler(
   completionCache: CompletionCache,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   const prune = createPruneOperation(hooksRouting, completionCache);
-  return withParsedArgs(parseArgs, USAGE, async (parsed, ctx): Promise<void> => {
-    const dryRun = parsed.positional.includes(DRY_RUN_FLAG);
-    const [first] = parsed.positional.filter((token) => token !== DRY_RUN_FLAG);
-    if (first !== undefined) {
+  return async (args, ctx): Promise<void> => {
+    const scanned = extractLocalFlag(args, ctx, USAGE, CONSUMED_FLAGS);
+    if (scanned === undefined) {
+      return;
+    }
+
+    if (scanned.local) {
       notifyUsageError(ctx, {
-        message: first.startsWith("-") ? `Unknown option: "${first}".` : "Too many arguments.",
+        message: `Unknown flag: "${SCOPE_TARGET_FLAG}".`,
         usage: USAGE,
       });
       return;
     }
 
-    await prune({
-      ctx,
-      pi,
-      cwd: ctx.cwd,
-      ...(parsed.scope !== undefined && { scope: parsed.scope }),
-      ...(dryRun && { dryRun: true }),
-    });
-  });
+    await withParsedArgs(parseArgs, USAGE, async (parsed, parsedCtx): Promise<void> => {
+      if (parsed.positional.length > 0) {
+        notifyUsageError(parsedCtx, { message: "Too many arguments.", usage: USAGE });
+        return;
+      }
+
+      await prune({
+        ctx: parsedCtx,
+        pi,
+        cwd: parsedCtx.cwd,
+        ...(parsed.scope !== undefined && { scope: parsed.scope }),
+        ...(scanned.consumedFlags.has(DRY_RUN_FLAG) && { dryRun: true }),
+      });
+    })(scanned.residualArgs, ctx);
+  };
 }

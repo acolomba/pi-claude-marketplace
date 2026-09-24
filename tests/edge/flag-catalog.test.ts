@@ -31,6 +31,7 @@ import test from "node:test";
 
 import {
   completionFlagEntries,
+  DRY_RUN_FLAG,
   isCatalogVerb,
   KEEP_DATA_FLAG,
   parseFlagNames,
@@ -200,6 +201,19 @@ test("passThroughFlagNames drops the scope target and keeps the uninstall preser
 
   // assert
   assert.deepStrictEqual(passThroughNames, expectedPassThroughNames);
+});
+
+test("the standalone prune preview flag is the sole consumed prune flag", () => {
+  // arrange
+  const expectedPassThroughNames = [DRY_RUN_FLAG];
+
+  // act
+  const passThroughNames = passThroughFlagNames("prune");
+  const parseNames = parseFlagNames("prune");
+
+  // assert
+  assert.deepStrictEqual(passThroughNames, expectedPassThroughNames);
+  assert.deepStrictEqual(parseNames, new Set([DRY_RUN_FLAG]));
 });
 
 test("WR-01 / D-05-10: KEEP_DATA_FLAG and PRUNE_FLAG are the very names uninstall passes through to its handler", () => {
