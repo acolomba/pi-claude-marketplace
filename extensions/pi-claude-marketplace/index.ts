@@ -7,6 +7,7 @@ import {
   readHooksJson,
 } from "./bridges/hooks/index.ts";
 import { registerClaudeMarketplaceTools, registerClaudePluginCommand } from "./edge/register.ts";
+import { registerSkillAliases } from "./edge/skill-aliases.ts";
 import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
 import { DEFAULT_GIT_OPS } from "./orchestrators/marketplace/shared.ts";
 import { createPluginUpdateOperations } from "./orchestrators/plugin/update-flow.ts";
@@ -204,4 +205,5 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     pluginUpdateOperations.updatePlugins,
   );
   registerClaudeMarketplaceTools(pi);
+  registerSkillAliases(pi);
 }

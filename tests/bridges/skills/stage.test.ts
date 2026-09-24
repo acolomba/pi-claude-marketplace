@@ -256,7 +256,7 @@ describe("prepareStageSkills", () => {
     );
   });
 
-  test("SKTK-01: rewrites same-plugin references and keeps fenced examples verbatim", async (t) => {
+  test("rewrites same-plugin references including fenced examples", async (t) => {
     // arrange
     const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
       t,
@@ -306,13 +306,72 @@ describe("prepareStageSkills", () => {
     assert.deepStrictEqual(
       alphaBytes,
       Buffer.from(
-        '---\nname: acme-alpha\ndescription: "Wraps acme-tool for cleanup"\n---\n\n' +
-          "Run acme-tool before acme:ghost.\n\n```text\nacme:acme-tool stays verbatim\n```\n",
+        '---\nname: acme-alpha\ndescription: "Wraps /skill:acme-tool for cleanup"\n---\n\n' +
+          "Run /skill:acme-tool before acme:ghost.\n\n```text\n/skill:acme-tool stays verbatim\n```\n",
       ),
     );
   });
 
-  test("SKTK-01: rewrites references in a degraded skill's preserved body", async (t) => {
+  test("rewrites command references in a skill and its supporting Markdown", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-cross-references-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const helperDirectory = path.join(skillsDirectory, "helper");
+    await mkdir(helperDirectory, { recursive: true });
+    await writeFile(
+      path.join(helperDirectory, "SKILL.md"),
+      "---\nname: helper\ndescription: Helper\n---\nRun /acme:review.\n",
+    );
+    await writeFile(path.join(helperDirectory, "notes.md"), "Then use acme:review.\n");
+    const outsideFile = path.join(pluginRoot, "outside.md");
+    await writeFile(outsideFile, "Run acme:review.\n");
+    await symlink(outsideFile, path.join(helperDirectory, "linked.md"));
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+
+    // act
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+      referenceNames: { skills: ["acme-helper"], commands: ["acme:review"] },
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const skill = await readFile(
+      path.join(prepared.stagingRoot, "acme-helper", "SKILL.md"),
+      "utf8",
+    );
+    const notes = await readFile(
+      path.join(prepared.stagingRoot, "acme-helper", "notes.md"),
+      "utf8",
+    );
+
+    // assert
+    assert.strictEqual(
+      skill,
+      "---\nname: acme-helper\ndescription: Helper\n---\nRun /acme:review.\n",
+    );
+    assert.strictEqual(notes, "Then use /acme:review.\n");
+    assert.strictEqual(await readFile(outsideFile, "utf8"), "Run acme:review.\n");
+  });
+
+  test("rewrites references in a degraded skill's preserved body", async (t) => {
     // arrange
     const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
       t,
@@ -367,7 +426,7 @@ describe("prepareStageSkills", () => {
       Buffer.from(
         "---\nname: acme-broken\n" +
           "description: Source frontmatter could not be parsed.\n" +
-          "disable-model-invocation: true\n---\n\nRun acme-tool after the break.",
+          "disable-model-invocation: true\n---\n\nRun /skill:acme-tool after the break.",
       ),
     );
   });

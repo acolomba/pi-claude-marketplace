@@ -133,6 +133,7 @@ export async function prepareStagePluginAgents(
       pluginRoot,
       pluginDataDir,
       knownSkills: knownSkills ?? [],
+      referenceNames: input.referenceNames,
       discovered: d,
       sourceHash: d.sourceHash,
       mapModel: mapModel ?? false,

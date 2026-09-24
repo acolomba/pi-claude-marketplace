@@ -11,14 +11,15 @@
 // Model, tool, and thinking mappings are user contracts; owner tests assert
 // their exact converted output.
 
-import { resolveSkillReference, skillReferencePattern } from "../../domain/skill-tokens.ts";
+import { resolveSkillReference, rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
 import { emitGeneratedAgentFile } from "./frontmatter.ts";
 
-import type { GeneratedToolsFields, SkillLegendEntry } from "./frontmatter.ts";
+import type { GeneratedToolsFields } from "./frontmatter.ts";
 import type { ConvertedAgent, DiscoveredAgent, RawAgentFrontmatter } from "./types.ts";
+import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 
 /**
  * Source frontmatter fields the converter actively consumes. Anything else
@@ -132,53 +133,6 @@ function splitCsv(value: string | undefined): string[] {
       return trimmed;
     })
     .filter((part) => part !== "");
-}
-
-/**
- * AGSK-04 / D-82-06 / D-82-07: detect `<pluginName>:<skill>` tokens in the
- * emitted body and build the legend entries.
- *
- * The whole body is scanned verbatim, fenced code blocks included
- * (D-82-07: the legend is aggregated at the top and nothing is rewritten
- * inline, so code-block matches are safe and useful). The lookbehind
- * rejects tokens embedded in a longer word (`other-spec-tree:x` is not a
- * `spec-tree:` reference, and `.` sits in the boundary class so a dotted
- * plugin-name prefix `other.spec-tree:x` is not one either); the
- * candidate class accepts interior dots but excludes sentence
- * punctuation. Only candidates resolving into
- * knownSkills get an entry (D-82-06); cross-plugin and unknown tokens get
- * none. Entries dedupe by full token, first occurrence wins.
- */
-function detectSkillTokens(
-  body: string,
-  pluginName: string,
-  knownSkills: readonly string[],
-): SkillLegendEntry[] {
-  const known = new Set(knownSkills);
-  const tokenRe = skillReferencePattern(pluginName);
-  const seen = new Set<string>();
-  const entries: SkillLegendEntry[] = [];
-  for (const match of body.matchAll(tokenRe)) {
-    const token = match[0];
-    const candidate = match[1];
-    if (candidate === undefined || seen.has(token)) {
-      continue;
-    }
-
-    seen.add(token);
-    const resolution = resolveSkillReference(pluginName, token, known);
-    if (resolution.kind === "malformed") {
-      hookDebugLog(
-        `generatedSkillName rejected body-scan candidate "${candidate}" for token "${token}": ${resolution.reason}`,
-      );
-    }
-
-    if (resolution.kind === "known") {
-      entries.push({ token, generatedName: resolution.generatedName });
-    }
-  }
-
-  return entries;
 }
 
 function dedupePreservingOrder(values: readonly string[]): string[] {
@@ -438,6 +392,7 @@ export function convertAgent(input: {
   pluginRoot: string;
   pluginDataDir: string;
   knownSkills: readonly string[];
+  referenceNames?: InstalledReferenceNames | undefined;
   discovered: DiscoveredAgent;
   sourceHash: string;
   /**
@@ -461,6 +416,7 @@ export function convertAgent(input: {
     pluginRoot,
     pluginDataDir,
     knownSkills,
+    referenceNames,
     discovered,
     sourceHash,
     mapModel: mapModelFlag,
@@ -525,11 +481,12 @@ export function convertAgent(input: {
     projectDir,
   });
 
-  // 7.5 AGSK-04: detect same-plugin skill tokens in the emitted body and
-  //     build the legend. Empty when the body references none -- the
-  //     emitter then keeps the byte-identical no-legend layout
-  //     (reference-gated).
-  const legend = detectSkillTokens(substitutedBody, pluginName, knownSkills);
+  // Resolve references against the names that this install stages.
+  const convertedBody = rewriteMarkdownReferences(
+    substitutedBody,
+    pluginName,
+    referenceNames ?? { skills: knownSkills, commands: [] },
+  );
 
   // 8. Hand off to the frontmatter emitter for final assembly. From here on,
   //    parser-safety (YAML quote-flipping, newline normalization, field
@@ -553,8 +510,7 @@ export function convertAgent(input: {
       droppedTools: toolsResult.dropped,
       warnings,
     },
-    body: substitutedBody,
-    legend,
+    body: convertedBody,
   });
 
   const result: ConvertedAgent = {

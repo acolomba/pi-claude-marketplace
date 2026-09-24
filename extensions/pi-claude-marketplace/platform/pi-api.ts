@@ -60,6 +60,7 @@ export type {
   ToolCallEventResult,
   ToolResultEvent,
 } from "@earendil-works/pi-coding-agent";
+export type { AutocompleteProvider } from "@earendil-works/pi-tui";
 
 import type { AgentEndEvent } from "@earendil-works/pi-coding-agent";
 

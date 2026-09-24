@@ -105,6 +105,10 @@ export interface ReinstallReplacement {
 
 /** Inputs required to stage and atomically replace every reinstall bridge. */
 export interface ReplaceReinstalledPluginInput {
+  readonly referenceNames?: {
+    readonly skills: readonly string[];
+    readonly commands: readonly string[];
+  };
   readonly locations: ScopedLocations;
   readonly cwd: string;
   readonly marketplace: string;
@@ -321,6 +325,7 @@ async function prepareAllHandles(
       pluginRoot: input.installable.pluginRoot,
       pluginDataDir: input.pluginDataDir,
       resolved: input.installable,
+      referenceNames: input.referenceNames,
       previousSkillNames: input.oldRecord.resources.skills,
       cwd: input.cwd,
     });
@@ -330,6 +335,7 @@ async function prepareAllHandles(
       pluginRoot: input.installable.pluginRoot,
       pluginDataDir: input.pluginDataDir,
       resolved: input.installable,
+      referenceNames: input.referenceNames,
       previousCommandNames: input.oldRecord.resources.prompts,
       cwd: input.cwd,
     });
@@ -341,6 +347,7 @@ async function prepareAllHandles(
       pluginDataDir: input.pluginDataDir,
       agentsDirs: input.agentsDirs,
       knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
+      referenceNames: input.referenceNames,
       cwd: input.cwd,
     });
     handles.mcp = await operations.prepareStageMcpServers({

@@ -1083,7 +1083,7 @@ test("updatePlugins preserves a generated skill preload in the staged agent", as
         "utf8",
       );
       assert.match(agent, /^skills: hello-tool$/m);
-      assert.match(agent, /^- `hello:tool` → skill `hello-tool` \(available on demand\)$/m);
+      assert.match(agent, /^Use \/skill:hello-tool\.$/m);
       assert.deepEqual(notifications, [
         {
           message:
@@ -1136,7 +1136,7 @@ test("updateSinglePlugin preserves a generated skill preload from its path sourc
     );
     assert.equal(outcome.partition, "updated");
     assert.match(agent, /^skills: hello-tool$/m);
-    assert.match(agent, /^- `hello:tool` → skill `hello-tool` \(available on demand\)$/m);
+    assert.match(agent, /^Use \/skill:hello-tool\.$/m);
   });
 });
 

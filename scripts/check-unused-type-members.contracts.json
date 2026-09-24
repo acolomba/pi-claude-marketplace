@@ -2,28 +2,28 @@
   "schemaVersion": 1,
   "contracts": [
     {
-      "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:528:51",
+      "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:529:51",
       "owner": "replacement",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within AgentsReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:528:22"
+      "filter": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:529:22"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:577:45",
+      "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:578:45",
       "owner": "requireAgentsReplacementInternals.replacement",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within AgentsReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:577:16"
+      "filter": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:578:16"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:589:46",
+      "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:590:46",
       "owner": "rollbackAgentsReplacementInternal.prepared",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within PreparedAgentsStaging by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:589:13"
+      "filter": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:590:13"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:75:32",
@@ -34,52 +34,52 @@
       "filter": "extensions/pi-claude-marketplace/bridges/agents/stage.ts:75:3"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/agents/types.ts:163:55",
+      "id": "extensions/pi-claude-marketplace/bridges/agents/types.ts:165:55",
       "owner": "AgentsReplacementNoop.prepared",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within PreparedAgentsStaging by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/agents/types.ts:163:22"
+      "filter": "extensions/pi-claude-marketplace/bridges/agents/types.ts:165:22"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:458:53",
+      "id": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:464:53",
       "owner": "replacement",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within CommandsReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:458:22"
+      "filter": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:464:22"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:505:47",
+      "id": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:511:47",
       "owner": "requireCommandsReplacementInternals.replacement",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within CommandsReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:505:16"
+      "filter": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:511:16"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:517:48",
+      "id": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:523:48",
       "owner": "rollbackCommandsReplacementInternal.prepared",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within PreparedCommandsStaging by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:517:13"
+      "filter": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:523:13"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:74:34",
+      "id": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:75:34",
       "owner": "commandsReplacementInternals",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within CommandsReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:74:3"
+      "filter": "extensions/pi-claude-marketplace/bridges/commands/stage.ts:75:3"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/commands/types.ts:120:57",
+      "id": "extensions/pi-claude-marketplace/bridges/commands/types.ts:122:57",
       "owner": "CommandsReplacementNoop.prepared",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within PreparedCommandsStaging by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/commands/types.ts:120:22"
+      "filter": "extensions/pi-claude-marketplace/bridges/commands/types.ts:122:22"
     },
     {
       "id": "extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:86:37",
@@ -130,44 +130,44 @@
       "filter": "extensions/pi-claude-marketplace/bridges/mcp/types.ts:94:22"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:517:51",
+      "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:555:51",
       "owner": "replacement",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within SkillsReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:517:22"
+      "filter": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:555:22"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:564:45",
+      "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:602:45",
       "owner": "requireSkillsReplacementInternals.replacement",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within SkillsReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:564:16"
+      "filter": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:602:16"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:576:46",
+      "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:614:46",
       "owner": "rollbackSkillsReplacementInternal.prepared",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within PreparedSkillsStaging by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:576:13"
+      "filter": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:614:13"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:66:32",
+      "id": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:67:32",
       "owner": "skillsReplacementInternals",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within SkillsReplacement by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:66:3"
+      "filter": "extensions/pi-claude-marketplace/bridges/skills/stage.ts:67:3"
     },
     {
-      "id": "extensions/pi-claude-marketplace/bridges/skills/types.ts:116:55",
+      "id": "extensions/pi-claude-marketplace/bridges/skills/types.ts:118:55",
       "owner": "SkillsReplacementNoop.prepared",
       "key": "kind",
       "category": "type-selection",
       "purpose": "Selects within PreparedSkillsStaging by kind, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/bridges/skills/types.ts:116:22"
+      "filter": "extensions/pi-claude-marketplace/bridges/skills/types.ts:118:22"
     },
     {
       "id": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:29:48",
@@ -410,12 +410,12 @@
       "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts:58:29"
     },
     {
-      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1000:3",
+      "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1003:3",
       "owner": "FailedRunPhasesResult",
       "key": "ok",
       "category": "type-refinement",
       "purpose": "Narrows ok at this position, so the compiler admits only the shape this entry point handles.",
-      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:999:30"
+      "refines": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1002:30"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts:108:78",
@@ -634,30 +634,30 @@
       "symbol": "extensions/pi-claude-marketplace/persistence/locations.ts:25:7"
     },
     {
-      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:122:56",
+      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:123:56",
       "owner": "AssistantMessage",
       "key": "role",
       "category": "type-selection",
       "purpose": "Selects within AgentMessage by role, so this position accepts one variant group rather than the whole union.",
-      "filter": "extensions/pi-claude-marketplace/platform/pi-api.ts:122:32"
+      "filter": "extensions/pi-claude-marketplace/platform/pi-api.ts:123:32"
     },
     {
-      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:98:3",
+      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:99:3",
       "owner": "ResourcesDiscoverEvent",
       "key": "type",
       "category": "external-input",
       "purpose": "The installed resources_discover event declaration requires this discriminant, and the registered handler is checked against that declaration, so the local mirror has to spell it.",
       "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:405:5",
-      "necessity": "extensions/pi-claude-marketplace/index.ts:90:5"
+      "necessity": "extensions/pi-claude-marketplace/index.ts:91:5"
     },
     {
-      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:100:3",
+      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:101:3",
       "owner": "ResourcesDiscoverEvent",
       "key": "reason",
       "category": "external-input",
       "purpose": "The installed resources_discover event declaration requires this slot, and the registered handler is checked against that declaration, so the local mirror has to spell it.",
       "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:407:5",
-      "necessity": "extensions/pi-claude-marketplace/index.ts:90:5"
+      "necessity": "extensions/pi-claude-marketplace/index.ts:91:5"
     },
     {
       "id": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts:215:43",
@@ -724,22 +724,22 @@
       "filter": "extensions/pi-claude-marketplace/shared/notify-context.ts:66:46"
     },
     {
-      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:104:3",
+      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:105:3",
       "owner": "ResourcesDiscoverResult",
       "key": "skillPaths",
       "category": "external-output",
       "purpose": "The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/index.ts:169:11",
-      "boundary": "extensions/pi-claude-marketplace/index.ts:168:9"
+      "origin": "extensions/pi-claude-marketplace/index.ts:170:11",
+      "boundary": "extensions/pi-claude-marketplace/index.ts:169:9"
     },
     {
-      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:105:3",
+      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:106:3",
       "owner": "ResourcesDiscoverResult",
       "key": "promptPaths",
       "category": "external-output",
       "purpose": "The resources_discover handler builds this slot and returns it to the installed ExtensionHandler declaration, which is what reads it; nothing in this project reads it back.",
-      "origin": "extensions/pi-claude-marketplace/index.ts:170:11",
-      "boundary": "extensions/pi-claude-marketplace/index.ts:168:9"
+      "origin": "extensions/pi-claude-marketplace/index.ts:171:11",
+      "boundary": "extensions/pi-claude-marketplace/index.ts:169:9"
     },
     {
       "id": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:196:3",
@@ -852,13 +852,13 @@
       "counterpart": "extensions/pi-claude-marketplace/domain/components/hooks/partition.ts:22:45"
     },
     {
-      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:106:3",
+      "id": "extensions/pi-claude-marketplace/platform/pi-api.ts:107:3",
       "owner": "ResourcesDiscoverResult",
       "key": "themePaths",
       "category": "external-mirror",
       "purpose": "Keeps the local resources_discover result a faithful statement of the installed declaration the peer overload checks the handler against; upstream declares the slot optional, so widening it fails the build while nothing reads it here.",
       "upstream": "node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:413:5",
-      "checked": "extensions/pi-claude-marketplace/index.ts:90:5"
+      "checked": "extensions/pi-claude-marketplace/index.ts:91:5"
     },
     {
       "id": "extensions/pi-claude-marketplace/edge/handlers/tools.ts:138:3",

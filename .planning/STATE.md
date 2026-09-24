@@ -2,10 +2,10 @@
 gsd_state_version: "1.0"
 milestone: test-backlog
 status: "test-backlog milestone shipped — PR #202"
-stopped_at: Issue #211 fix committed; 0.19.1 release PR pending
-last_updated: "2026-09-24T03:49:22Z"
-last_activity: 2026-09-23
-last_activity_desc: quick task 260923-vk3 completed for issue #211
+stopped_at: 0.19.2 skill alias and reference rewrite release PR pending
+last_updated: "2026-09-24T12:56:01Z"
+last_activity: 2026-09-24
+last_activity_desc: quick task 260924-bvi in progress for 0.19.2
 state_head: a0015aa3a2991a143e9dd3ed9dcfa25df91c35f4
 milestone_name: test-backlog
 progress:
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 Phase: Milestone test-backlog complete
 Plan: —
 Status: test-backlog milestone shipped — PR #202
-Last activity: 2026-09-23 — Completed quick task 260923-vk3 for issue #211
+Last activity: 2026-09-24 — Working on quick task 260924-bvi for 0.19.2
 
 ### test-backlog closeout: `override_closeout`
 
@@ -128,17 +128,19 @@ hit the same wall; convert it rather than re-disclosing it.
 | 260920-qx0 | Reject `--local` on the merged-read marketplace verbs (info, list, update) | 2026-09-20 | f2fbd402 | complete | [260920-qx0-remove-local-from-marketplace-info](./quick/260920-qx0-remove-local-from-marketplace-info/) |
 | 260921-t5t | Suppress success-count lines for empty cascades and non-bulk operations | 2026-09-21 | ffdecc5f | shipped in PR #209 | [260921-t5t-when-a-command-returns-an-empty-result-a](./quick/260921-t5t-when-a-command-returns-an-empty-result-a/) |
 | 260923-vk3 | Restore Pi-valid skill names and prepare 0.19.1 | 2026-09-23 | 4a710359 | complete | [260923-vk3-fix-issue-211-generate-pi-valid-skill-na](./quick/260923-vk3-fix-issue-211-generate-pi-valid-skill-na/) |
+| 260924-bvi | Add bare skill aliases and rewrite plugin Markdown references | 2026-09-24 | pending | in progress | [260924-bvi-add-bare-skill-aliases-and-centrally-rew](./quick/260924-bvi-add-bare-skill-aliases-and-centrally-rew/) |
 
 ## Session Continuity
 
-**Last session:** 2026-09-23
-**Stopped at:** Issue #211 fix committed; 0.19.1 release PR pending
+**Last session:** 2026-09-24
+**Stopped at:** 0.19.2 release PR preparation
 **Resume file:** None
 
-**Current work:** The issue #211 fix is committed on
-`features/issue-211-v0190`, based on `v0.19.0`. The release branch is
-`releases/v0.19.1` at the same tag. Push both branches, open the release PR,
-then tag its squash-merge commit as `v0.19.1`.
+**Current work:** Skill aliases and cross-artifact reference rewriting are on
+`features/skill-aliases`, based on the 0.19.1 release commit. The release
+branch `releases/v0.19.2` starts at that same commit and excludes unrelated
+workflow work on main. Open the release PR against that branch after the gates
+pass. Tag its squash-merge commit as `v0.19.2` after merge.
 Earlier milestone continuity is preserved in
 `inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 

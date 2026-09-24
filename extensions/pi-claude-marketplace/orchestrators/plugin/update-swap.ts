@@ -230,6 +230,7 @@ async function prepareUpdateHandles(
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
   agentsDirs: readonly string[],
+  referenceNames: { readonly skills: readonly string[]; readonly commands: readonly string[] },
 ): Promise<PrepHandles> {
   const { plugin, marketplace, cwd, locations } = args;
   const { installable, record } = preflight;
@@ -243,6 +244,7 @@ async function prepareUpdateHandles(
       pluginRoot: installable.pluginRoot,
       pluginDataDir,
       resolved: installable,
+      referenceNames,
       previousSkillNames: record.resources.skills,
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
@@ -253,6 +255,7 @@ async function prepareUpdateHandles(
       pluginRoot: installable.pluginRoot,
       pluginDataDir,
       resolved: installable,
+      referenceNames,
       previousCommandNames: record.resources.prompts,
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
@@ -265,6 +268,7 @@ async function prepareUpdateHandles(
       pluginDataDir,
       agentsDirs,
       knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
+      referenceNames,
       // AG-7 opt-in: forward the direct-path `--map-model` setting. The
       // cascade entrypoint never sets `args.mapModel`, so cascade re-
       // installs always resolve to false (omit `model:`).
@@ -1035,6 +1039,7 @@ export async function swapPluginUpdate(
     args,
     preflight,
     generatedNames.agentsDirs,
+    generatedNames,
   );
 
   // ─── Phase 2a: pre-commit intent-mark (TR-04) ─────────────────────────────
