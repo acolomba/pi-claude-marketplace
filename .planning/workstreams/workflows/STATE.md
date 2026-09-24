@@ -5,9 +5,9 @@ milestone_name: Workflow Bridge Replay onto main
 current_plan: none
 status: Awaiting next milestone
 stopped_at: milestone workflows-replay archived (2026-09-21)
-last_updated: "2026-09-23T13:24:55.087Z"
+last_updated: "2026-09-24T00:43:03.000Z"
 last_activity: 2026-09-23
-last_activity_desc: "Completed quick task 260923-b1z: scoped PR #205 babysit review"
+last_activity_desc: "Completed quick task 260923-qwz: Pi 0.86.1 workflow compatibility"
 state_head: dbcc1a20bc363c4a38c618f11276ec4384ecb8a1
 progress:
   total_phases: 9
@@ -38,7 +38,7 @@ closed the three gaps the bridge originally shipped with. The code sits on
 Phase: Milestone workflows-replay complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-09-23 — Completed quick task 260923-b1z: scoped PR #205 babysit review
+Last activity: 2026-09-23 — Completed quick task 260923-qwz: Pi 0.86.1 workflow compatibility
 
 Archived 2026-09-21 as one milestone of nine phases (109-117), per the decision
 recorded under Decisions. The archive ran only after the debt the audit graded
@@ -102,6 +102,7 @@ reference ambiguous when the two branches are read side by side.
 |---|-------------|------|--------|-----------|
 | 260909-ox9 | Re-derive the stale `PluginNotificationMessage` enumeration in the messaging style guide | 2026-09-09 | `a39ba7a4` | [260909-ox9-re-derive-the-stale-pluginnotificationme](./quick/260909-ox9-re-derive-the-stale-pluginnotificationme/) |
 | 260923-b1z | Re-run PR #205 babysit review only on files changed after the prior pass | 2026-09-23 | `e8e185d7` | [260923-b1z-re-run-pr-205-babysit-review-only-on-fil](./quick/260923-b1z-re-run-pr-205-babysit-review-only-on-fil/) |
+| 260923-qwz | Raise Pi minimum to 0.86.1 and verify the unpatched workflow engine | 2026-09-23 | `f85d7eb9` | [260923-qwz-raise-pi-minimum-to-0-86-1-and-verify-un](./quick/260923-qwz-raise-pi-minimum-to-0-86-1-and-verify-un/) |
 
 Closes the last open deferred item filed by the degradation-and-documentation
 phase. The union listing was deleted rather than corrected — it was the second
