@@ -1,8 +1,8 @@
 ---
 phase: 12-standalone-prune-with-dry-run
-fixed_at: 2026-09-24T05:50:05Z
+fixed_at: 2026-09-24T06:14:44Z
 review_path: .planning/phases/12-standalone-prune-with-dry-run/12-REVIEW.md
-iteration: 2
+iteration: 3
 findings_in_scope: 4
 fixed: 4
 skipped: 0
@@ -11,11 +11,51 @@ status: all_fixed
 
 # Phase 12: Code Review Fix Report
 
-**Fixed at:** 2026-09-24T05:50:05Z
+**Fixed at:** 2026-09-24T06:14:44Z
 **Source review:** `.planning/phases/12-standalone-prune-with-dry-run/12-REVIEW.md`
-**Iteration:** 2
+**Iteration:** 3
 
-**Summary:** Three Critical findings and one Warning were fixed across three commits. No finding was skipped. The earlier two-finding review and its fixes remain recorded below.
+**Summary:** Three Critical findings and one Warning were fixed. No finding was skipped. Earlier fixes remain recorded below.
+
+## Iteration 3 fixed issues
+
+### CR-01: Preserve independent edits to shared metadata
+
+**Status:** fixed: requires human verification
+**Commit:** `7060c032`
+**Files modified:** `prune-rollback.ts`, `prune.ts`, their paired tests, `docs/output-catalog.md`, and catalog fixtures and tests.
+
+**Applied fix:** Rollback no longer treats a post-sweep read as proof that prune owns a shared document. If `mcp.json` or the agents index differs from the snapshot, rollback leaves it in place, retains the original backup and manifest, and reports partial recovery. This deliberately requires manual merging when prune itself changed shared metadata: the scope state lock does not coordinate independent writers. Tests cover an MCP edit after a cascade that owns no MCP resources, an edit during rollback observation, absent metadata, and a damaged backup.
+
+### CR-02: Publish restored artifacts without replacing another entry
+
+**Status:** fixed: requires human verification
+**Commit:** `7060c032`
+**Files modified:** `prune-rollback.ts` and `prune-rollback.test.ts`.
+
+**Applied fix:** Regular files use same-filesystem hard-link publication, symlinks use exclusive symlink creation, and directories are reserved with exclusive `mkdir` before child entries are published. A collision at publication leaves the independent entry and recovery backup in place. A deterministic test creates a replacement at the file publication boundary and checks both sets of bytes.
+
+### CR-03: Check the full replacement and backup state
+
+**Status:** fixed
+**Commit:** `7060c032`
+**Files modified:** `prune-rollback.test.ts`.
+
+**Applied fix:** Each of the six replacement cases verifies the replacement kind, bytes or directory inventory, and mode where relevant. Each case reads the original from the path named by the recovery manifest.
+
+### WR-01: Keep rollback details through lock-release wrapping
+
+**Status:** fixed: requires human verification
+**Commit:** `7060c032`
+**Files modified:** `prune.ts`, `prune.test.ts`, `docs/output-catalog.md`, and catalog fixtures and tests.
+
+**Applied fix:** Notification lookup follows the error cause chain with cycle protection to recover structured rollback failures while preserving the complete outer release error. A real state-guard test combines a partial MCP rollback with lock-release rejection. The catalog pins the exact combined message.
+
+## Iteration 3 verification
+
+Checks ran in the shared `features/manifest` linked checkout. Focused suites passed: 30 rollback tests, 24 prune tests, 25 registered-command integration tests, and the 243-state catalog contract at 35,702 UTF-8 bytes. Direct-pair coverage reached 100% for `prune-rollback.ts` (104 branches, 19 functions, 384 lines) and `prune.ts` (71 branches, 18 functions, 331 lines). Changed-file Prettier, scoped ESLint, TypeScript typecheck, and diff whitespace checks passed. The final scoped pre-commit run passed with `trufflehog` skipped for the linked checkout's `.git/index` limitation and `npm-format-check` skipped because its global scan fails on the untouched operator-owned `.planning/config.json`; changed-file Prettier passed. The sandboxed `fallow audit` returned a JSON runtime error while creating its temporary worktree, which the project instructions treat as non-blocking. The escalated `fallow audit --base HEAD` passed with no findings. The full project suite is reserved for post-fix verification.
+
+## Earlier fix history: iteration 2
 
 ## Iteration 2 fixed issues
 
@@ -127,6 +167,6 @@ The final scoped pre-commit run passed every applicable hook. It skipped the Tru
 
 ---
 
-_Fixed: 2026-09-24T05:50:05Z_
+_Fixed: 2026-09-24T06:14:44Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: 2_
+_Iteration: 3_
