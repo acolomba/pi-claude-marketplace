@@ -5,17 +5,17 @@ milestone_name: transitive-dependencies
 current_phase: 12
 current_phase_name: Standalone prune with dry-run
 status: executing
-stopped_at: Phase 12 wave 5 complete
-last_updated: "2026-09-24T02:49:17Z"
+stopped_at: Phase 12 plans complete; review and verification pending
+last_updated: "2026-09-24T03:57:30Z"
 last_activity: 2026-09-23
-last_activity_desc: Phase 12 output catalog and messaging rules complete
-state_head: ec4567d992edaa26e287044150b3fe9fa17adfbb
+last_activity_desc: Phase 12 eight plans complete; review and verification pending
+state_head: 229f9cea04863657eee38dc3c1e7132aae8ac09f
 progress:
   total_phases: 12
   completed_phases: 11
   total_plans: 55
-  completed_plans: 54
-  percent: 98
+  completed_plans: 55
+  percent: 100
 ---
 
 # Project State
@@ -37,7 +37,7 @@ under `.planning/milestones/v1.19-*`.
 ## Current Position
 
 Phase: 12 (Standalone prune with dry-run) — EXECUTING
-Plan: 7 of 8 complete
+Plan: 8 of 8 complete
 Status: Executing
 
 **Plan 12-01 complete 2026-09-23:** The registered `prune` command removes
@@ -49,8 +49,12 @@ fixpoint selector. Current, legacy, and missing-state previews leave bytes,
 timestamps, the extension tree, and locks untouched. Plans 12-05 and 12-07
 added the scoped `Nothing to prune` result and pinned `--dry-run` as the only
 prune-specific flag across parsing, help, and completion. Plan 12-06 pins seven
-new catalog states and documents the pending-row grammar. Public docs and final
-regression checks remain in plan 12-08.
+new catalog states and documents the pending-row grammar. Plan 12-08 updates
+public docs and closes PRUNE-CMD-01. The final focused suite, 13 direct source
+pairs, 7,702 unit tests at full aggregate coverage, and 15 integration files
+pass. The chained check stops only on the operator-owned `.planning/config.json`
+formatting drift; each downstream gate passes separately. Code review and
+phase verification remain.
 
 **Phase 11 closed 2026-09-23**, verified 20/20 functional truths and both
 human wording checks. The validated manifest allowlist controls new foreign

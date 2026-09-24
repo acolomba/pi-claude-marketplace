@@ -532,7 +532,7 @@ Plans:
 3. `prune` accepts exactly `--dry-run` as its extra flag beside the shared scope flags; the flag-catalog drift guard (`tests/architecture/flag-catalog-drift.test.ts`) pins that set, and FLAG-01's `uninstall` set is untouched. No confirmation prompt and no `-y` (REQUIREMENTS Out of Scope). (FLAG-02)
 4. BACKLOG `PRUNE-CMD-01` is closed; its `{orphaned}` inventory marker on `list` / `info` is excluded and dropped, as decided in discuss.
 
-**Plans**: 7/8 plans executed
+**Plans**: 8/8 plans executed
 
 Plans:
 
@@ -543,7 +543,7 @@ Plans:
 - [x] 12-05-PLAN.md
 - [x] 12-06-PLAN.md
 - [x] 12-07-PLAN.md
-- [ ] 12-08-PLAN.md
+- [x] 12-08-PLAN.md
 
 **Notes.** Owners: `edge/router.ts` (new subcommand + completions), `edge/flag-catalog.ts` (amend the FLAG-01 drift guard deliberately — a new `prune` entry, not a change to `uninstall`'s), `orchestrators/plugin/uninstall.ts` (extract the sweep so `prune` reaches it without a primary). `--dry-run` must not open the write lock for nothing: plan the read-only path through the same `pruneOrphans` predicate.
 
@@ -588,7 +588,7 @@ plugin names — so plan these phases with the UI gate skipped.
 | 9. Reload installs missing declared dependencies | v1.20 | 4/4 | Complete    | 2026-09-22 |
 | 10. Constraint-aware update | v1.20 | 4/4 | Complete    | 2026-09-22 |
 | 11. Cross-marketplace dependency allowlist | v1.20 | 7/7 | Complete    | 2026-09-23 |
-| 12. Standalone prune with dry-run | v1.20 | 7/8 | In Progress | — |
+| 12. Standalone prune with dry-run | v1.20 | 8/8 | In Progress | — |
 
 ## Carried Forward
 
