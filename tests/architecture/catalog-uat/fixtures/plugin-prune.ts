@@ -330,5 +330,74 @@ export const PLUGIN_PRUNE_FIXTURES: FixtureMap = {
         cardinality: "single",
       },
     },
+    "rollback-mcp-changed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "(prune)",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "(prune)",
+                reasons: ["rollback partial"],
+                cause: new Error(
+                  "Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying.",
+                  { cause: new Error("state save failed") },
+                ),
+                rollbackPartial: [
+                  {
+                    phase: "mcp",
+                    cause: new Error("Prune rollback found an occupied metadata path at mcp.json."),
+                  },
+                ],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+        cardinality: "single",
+      },
+    },
+    "rollback-partial-release-failed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "(prune)",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "(prune)",
+                reasons: ["rollback partial"],
+                cause: new Error(
+                  "Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. (lock release also failed: lock release failed)",
+                  {
+                    cause: new Error(
+                      "Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying.",
+                      { cause: new Error("state save failed") },
+                    ),
+                  },
+                ),
+                rollbackPartial: [
+                  {
+                    phase: "mcp",
+                    cause: new Error("Prune rollback found an occupied metadata path at mcp.json."),
+                  },
+                ],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+        cardinality: "single",
+      },
+    },
   },
 };

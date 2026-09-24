@@ -811,6 +811,93 @@ test("a concurrent MCP edit survives failed save with its original in recovery b
   });
 });
 
+test("an MCP edit after a cascade with no MCP resources survives failed persistence", async () => {
+  await withHermeticEnvironment("prune-owner-mcp-after-cascade-", async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    await seedScope("project", cwd, { mp: { orphan: { provenance: "dependency" } } });
+    const original = Buffer.from('{ "mcpServers": { "original": 1 } }\n');
+    const independent = Buffer.from('{ "mcpServers": { "original": 1, "independent": 2 } }\n');
+    await writeFile(locations.mcpJsonPath, original);
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      cascadeUnstagePlugin: async (...args) => {
+        const outcome = await REAL_UNINSTALL_TRANSACTION.cascadeUnstagePlugin(...args);
+        await writeFile(locations.mcpJsonPath, independent);
+        return outcome;
+      },
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run, {
+          saveState: () => Promise.reject(new Error("state save failed")),
+        }),
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    assert.deepStrictEqual(await readFile(locations.mcpJsonPath), independent);
+    assert.match(notifications[0]?.message ?? "", /\{rollback partial\}/);
+    assert.match(notifications[0]?.message ?? "", /\[mcp\] \(rollback failed\)/);
+    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
+      name.startsWith("prune-backup-"),
+    );
+    assert.ok(backupName);
+    const manifest = JSON.parse(
+      await readFile(path.join(locations.extensionRoot, backupName, "manifest.json"), "utf8"),
+    ) as { entries: Array<{ phase: string; backup: string | null }> };
+    const entry = manifest.entries.find(({ phase }) => phase === "mcp");
+    assert.ok(entry?.backup);
+    assert.deepStrictEqual(
+      await readFile(path.join(locations.extensionRoot, backupName, entry.backup)),
+      original,
+    );
+  });
+});
+
+test("rollback details survive a simultaneous lock-release failure", async (t) => {
+  await withHermeticEnvironment("prune-owner-rollback-release-", async ({ cwd }) => {
+    const locations = locationsFor("project", cwd);
+    await seedScope("project", cwd, { mp: { orphan: { provenance: "dependency" } } });
+    await writeFile(locations.mcpJsonPath, '{ "mcpServers": { "original": 1 } }\n');
+    const originalLock = lockfile.lock;
+    t.mock.method(lockfile, "lock", async (...args: Parameters<typeof lockfile.lock>) => {
+      const release = await originalLock(...args);
+      return async (): Promise<void> => {
+        await release();
+        throw new Error("lock release failed");
+      };
+    });
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run, {
+          saveState: async () => {
+            await writeFile(
+              locations.mcpJsonPath,
+              '{ "mcpServers": { "original": 1, "independent": 2 } }\n',
+            );
+            throw new Error("state save failed");
+          },
+        }),
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    const message = notifications[0]?.message ?? "";
+    assert.equal(notifications[0]?.severity, "error");
+    assert.match(message, /\{rollback partial\}/);
+    assert.match(message, /\[mcp\] \(rollback failed\)/);
+    assert.match(message, /prune-backup-[\w-]+\/manifest\.json/);
+    assert.match(message, /state save failed/);
+    assert.match(message, /lock release also failed: lock release failed/);
+    assert.doesNotMatch(message, /\/tmp\//);
+    assert.equal(
+      await readFile(locations.mcpJsonPath, "utf8"),
+      '{ "mcpServers": { "original": 1, "independent": 2 } }\n',
+    );
+  });
+});
+
 test("a lock-release rejection reports committed removal and completes cleanup", async () => {
   await withHermeticEnvironment("prune-owner-release-after-save-", async ({ cwd }) => {
     // arrange

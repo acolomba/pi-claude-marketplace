@@ -1,7 +1,7 @@
 // A standalone, same-scope orphan sweep. Actual removals share one locked
 // snapshot; preview selects from one nonpersisting read.
 
-import { rename, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 
 import { pruneOrphans } from "../../domain/dependency-orphans.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -43,6 +43,21 @@ class PruneRollbackError extends Error {
   }
 }
 
+function findRollbackError(error: unknown): PruneRollbackError | undefined {
+  const seen = new Set<Error>();
+  let current = error;
+  while (current instanceof Error && !seen.has(current)) {
+    if (current instanceof PruneRollbackError) {
+      return current;
+    }
+
+    seen.add(current);
+    current = current.cause;
+  }
+
+  return undefined;
+}
+
 /** Reports a declaration read failure without exposing an absolute path. */
 function notifyUnreadable(
   options: PrunePluginOptions,
@@ -81,9 +96,10 @@ function notifyUnreadable(
 /** Reports a prune operation failure without attributing it to a declaration. */
 function notifyOperationFailure(options: PrunePluginOptions, scope: Scope, error: unknown): void {
   const cause = redactCauseChain(error) ?? new Error(errorMessage(error));
+  const rollbackError = findRollbackError(error);
   const rollbackPartial =
-    error instanceof PruneRollbackError
-      ? error.failures.map((failure) => ({
+    rollbackError !== undefined
+      ? rollbackError.failures.map((failure) => ({
           phase: failure.phase,
           // Every failure has an Error; the redactor returns undefined only for nullish input.
           cause: redactCauseChain(failure.cause) as unknown as Error,
@@ -251,7 +267,7 @@ export function createPrunePlugin(
         const candidates = snapshot.candidates.filter((candidate) => order.includes(candidate.key));
         const backup =
           candidates.length > 0
-            ? await preparePruneRollback(locations, candidates, { rename, removeBackup: rm })
+            ? await preparePruneRollback(locations, candidates, { removeBackup: rm })
             : undefined;
         let members: Awaited<ReturnType<typeof sweepOrphans>>;
         try {
@@ -263,10 +279,6 @@ export function createPrunePlugin(
             cascade: transaction.cascadeUnstagePlugin,
             transaction,
           });
-          if (backup !== undefined) {
-            await backup.markUnstaged();
-          }
-
           if (members.length > 0) {
             await tx.save();
             savedMembers = members;

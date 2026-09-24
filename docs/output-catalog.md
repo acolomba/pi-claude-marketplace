@@ -1350,7 +1350,7 @@ A plugin operation has failed.
 
 ### Prune rollback needs manual recovery
 
-If rollback finds a changed path, prune keeps the current file and the original in a recovery backup. The backup's `manifest.json` maps each numbered entry to a permitted root and a relative target. Inspect that manifest before retrying. The command reports each restore failure with a redacted cause and gives the backup directory name. It does not suggest `/reload` because the removal did not commit.
+If rollback finds a changed path, prune keeps the current file and the original in a recovery backup. The backup's `manifest.json` maps each numbered entry to a permitted root and a relative target. Inspect that manifest before retrying. This also applies to shared metadata: the scope state lock does not cover independent writers of `mcp.json` or the agents index, so prune does not replace a changed whole document during rollback. A backup can require a manual merge even when the change came from prune. The command reports each restore failure with a redacted cause and gives the backup directory name. It does not suggest `/reload` because the removal did not commit.
 
 <!-- catalog-state: rollback-partial -->
 
@@ -1362,6 +1362,38 @@ A plugin operation has failed.
     cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed
     [skills] (rollback failed)
       cause: Prune rollback found an occupied artifact at mp-orphan-skill.
+```
+
+### Shared metadata changed during rollback
+
+The current `mcp.json` remains available, and the original bytes remain in the numbered recovery backup. An independent writer can edit this file between any two prune operations, including while rollback checks it.
+
+<!-- catalog-state: rollback-mcp-changed -->
+
+```text
+A plugin operation has failed.
+
+● (prune) [project]
+  ⊘ (prune) (failed) {rollback partial}
+    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed
+    [mcp] (rollback failed)
+      cause: Prune rollback found an occupied metadata path at mcp.json.
+```
+
+### Rollback and lock release both fail
+
+The rollback child remains visible when lock release adds an outer error. The cause line also reports the lock-release failure.
+
+<!-- catalog-state: rollback-partial-release-failed -->
+
+```text
+A plugin operation has failed.
+
+● (prune) [project]
+  ⊘ (prune) (failed) {rollback partial}
+    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. (lock release also failed: lock release failed) -> Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed
+    [mcp] (rollback failed)
+      cause: Prune rollback found an occupied metadata path at mcp.json.
 ```
 
 ______________________________________________________________________
