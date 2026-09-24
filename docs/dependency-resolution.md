@@ -195,6 +195,26 @@ Each removed dependency shows its own `(uninstalled) {dependency pruned}` row un
 
 A reload never prunes. An orphaned dependency stays installed until you run `--prune`, because its install record says that it arrived through another plugin (see [Where a dependency lands](#where-a-dependency-lands)). This matches Claude Code, which keeps orphaned dependencies on disk in case you reinstall a plugin that needs them.
 
+## Pruning without uninstalling a named plugin
+
+Run `prune` to remove orphaned dependency installs without uninstalling a named plugin first. The command selects the user scope by default. Use `--scope project` to select the project scope.
+
+```text
+/claude:plugin prune
+/claude:plugin prune --scope project
+```
+
+Only records installed as dependencies qualify. A record stays if any installed plugin in the same scope declares it, even when that plugin is disabled. A plugin installed by name also stays. The sweep repeats until no more records qualify. Each removed dependency has an `(uninstalled) {dependency pruned}` row under its marketplace.
+
+Run `prune --dry-run` to see the current candidates. The preview writes nothing to files or state. Each candidate has a `(will uninstall) {dependency pruned}` row. The preview reports candidates in the same order as a successful actual sweep of that snapshot. It does not reserve those candidates. A later actual command checks the current state again, so concurrent changes or a failed removal can change its rows.
+
+```text
+/claude:plugin prune --dry-run
+/claude:plugin prune --scope project --dry-run
+```
+
+If no dependency qualifies, both commands report `Nothing to prune in user scope: no orphaned dependency installs were found.` for the default scope. The result is informational. Neither command needs a plugin name, while `uninstall <plugin> --prune` first removes the named plugin. When that uninstall finds no dependency to prune, it prints only the named plugin's plain uninstall row. A reload never prunes; run either explicit command to remove orphans.
+
 ## The load-time check
 
 A dependency can go missing after the install that brought it in. You can uninstall it, disable it, or move it to another version. Every reload therefore re-reads what each installed plugin in the scope declares and checks it against what the scope has now.

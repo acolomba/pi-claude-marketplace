@@ -517,3 +517,48 @@ test("DIVG-01 the plugin-declares section names the sha divergence from upstream
     );
   }
 });
+
+test("PRUNE-06 and PRUNE-07 docs name standalone actual and preview behavior", async () => {
+  // arrange
+  const readme = await readFile(path.join(REPO_ROOT, "README.md"), "utf8");
+
+  // act
+  const guide = await readDocSection("## Pruning without uninstalling a named plugin");
+
+  // assert
+  for (const doc of [readme, guide]) {
+    for (const anchor of [
+      "/claude:plugin prune",
+      "/claude:plugin prune --scope project",
+      "/claude:plugin prune --dry-run",
+      "/claude:plugin prune --scope project --dry-run",
+      "user scope by default",
+      "same scope",
+      "disabled",
+      "installed by name",
+      "repeats until no more",
+      "(uninstalled) {dependency pruned}",
+      "(will uninstall) {dependency pruned}",
+      "Nothing to prune in user scope: no orphaned dependency installs were found.",
+      "current state",
+      "writes nothing",
+    ]) {
+      assert.ok(doc.includes(anchor), `prune documentation no longer states ${anchor}`);
+    }
+  }
+});
+
+test("PRUNE-06 docs keep allowed uninstall, uninstall pruning, and explicit reload semantics", async () => {
+  // arrange
+  const readme = await readFile(path.join(REPO_ROOT, "README.md"), "utf8");
+  const guide = await readFile(path.join(REPO_ROOT, DOC_REL), "utf8");
+
+  // act & assert
+  assert.ok(readme.includes("You can uninstall a plugin that another installed plugin needs."));
+  assert.ok(readme.includes("{dependents unsatisfied}"));
+  assert.ok(!readme.includes("refuses to uninstall a plugin that another installed plugin"));
+  assert.ok(readme.includes("A reload never prunes orphaned dependencies."));
+  assert.ok(guide.includes("`uninstall <plugin> --prune` first removes the named plugin"));
+  assert.ok(guide.includes("only the named plugin's plain uninstall row"));
+  assert.ok(guide.includes("A reload never prunes; run either explicit command"));
+});

@@ -3150,17 +3150,16 @@ dependencies' records at render time (network-free, NFR-5), a reason naming
 which dependency degrades it, and the catalog rows that follow. Interacts
 with `--partial` consent on the promotion arm (WR-03 in `04-REVIEW.md`).
 
-## PRUNE-CMD-01: standalone `/claude:plugin prune` with `--dry-run`
+## ~~PRUNE-CMD-01: standalone `/claude:plugin prune` with `--dry-run`~~ -- CLOSED
 
-Surfaced during the v1.20 Phase 5 discussion (2026-09-16). Upstream has
-`claude plugin prune` (alias `autoremove`, `--dry-run`, `-y`) as the way to
-list and remove orphaned auto-installed dependencies without uninstalling
-anything, and `list`/`info` show no orphan marker either. Phase 5 ships only
-`uninstall --prune`; a user cannot see what would be pruned without running
-it. Scope when picked up: the standalone verb (no `-y`: D-02-05), a
-`--dry-run` that renders the would-be-pruned rows without removing them, and
-an `{orphaned}` inventory marker on `list`/`info` rows — a new closed-set
-token with the full catalog amendment.
+Closed 2026-09-23 by Phase 12. The delivered `prune` command removes orphaned
+dependency installs without uninstalling a named plugin. Its `--dry-run` flag
+shows the current candidates without removing them. Pi has no confirmation
+prompt or `-y` flag (D-02-05).
+
+D-12-03 drops the proposed `{orphaned}` marker on `list` and `info`. The preview
+command supplies the orphan inventory, and Claude Code shows no marker on those
+surfaces. The marker is not a separate backlog item.
 
 ## PRUNE-GUARD-MR-01: `marketplace remove` bypasses the dependents guard
 
