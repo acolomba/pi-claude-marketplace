@@ -45,7 +45,7 @@
 //   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
 //     never -- `notifyUsageError` writes straight to the channel;
 //   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` TWICE, on every scope and fixture combination.
+//     `pi.getAllTools()` THREE times, on every scope and fixture combination.
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -69,14 +69,11 @@
 // the offline `(will install)` row beside it is what says the workflow answered
 // from disk.
 //
-// D-08-A03: this pair reads COMPLETE. It used to carry one uncovered branch, at
-// the `?? ""` fallback on the first positional, which existed only because
-// `noUncheckedIndexedAccess` (tsconfig.json:12) types a dense index read as
-// possibly undefined. Destructuring removed the read rather than the guard:
+// D-08-A03: this pair reads COMPLETE. `noUncheckedIndexedAccess`
+// (tsconfig.json:12) types a dense index read as possibly undefined, and
 // `const [first] = parsed.positional` already yields `string | undefined`, so
 // `if (first !== undefined)` narrows it with no fallback literal, no non-null
-// assertion and no type assertion. The uncovered arm is gone because the code
-// that produced it is gone.
+// assertion and no type assertion.
 //
 // Which pairs fall short is recorded in one place, `scripts/test-coverage-direct.pin.json`,
 // and a pair absent from it reads complete. This one is absent from it.
@@ -232,7 +229,7 @@ for (const { args, expectedMessage, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const expectedListings = await bothTreeListings(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -298,7 +295,7 @@ test("previews a planned install of a cold git source without opening a connecti
     configBytes("mp", "./mp-src", ["far@mp", "near@mp"]),
   );
   const expectedListings = await bothTreeListings(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: workspace.cwd,
     reads: 1,
   });

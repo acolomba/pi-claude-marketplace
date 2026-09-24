@@ -56,7 +56,7 @@ export interface UpdatedRowSeverity {
  * threaded onto one form while a caller short-circuits past it on the other
  * (CR-01).
  *
- * The partition carries three INDEPENDENT degradation axes and the row names
+ * The partition carries four INDEPENDENT degradation axes and the row names
  * whichever are present:
  *
  *  - FSTAT-07 / D-66-04, the DROPPED-kind axis: a `--partial` update whose
@@ -76,16 +76,24 @@ export interface UpdatedRowSeverity {
  *    without `asyncRewake: true`. One token per plugin regardless of N orphan
  *    handlers, and it moves NO severity channel -- the config bug names itself
  *    in the brace while the update itself was carried out in full.
+ *  - WLIF-06, the STALE-COMMAND axis: the new version withdrew or renamed a
+ *    workflow the record named, and the host exposes no unregister call, so the
+ *    command that envelope registered stays live until a reload. One token per
+ *    plugin regardless of how many names were retired, and it sits LAST inside
+ *    the brace on both row forms -- the tail position the closed set itself
+ *    gives it -- so a reader meets it in the same place on every surface.
  *
- * An update can do all three at once, and the row then carries every token in
+ * An update can do all four at once, and the row then carries every token in
  * ONE brace in the install row's established emit order -- orphan rewake, then
  * malformed kinds, then dropped kinds (`docs/output-catalog.md`,
- * `enable-orphan-rewake`). A clean update composes no reasons and keeps the
- * caller's severity, so its row is byte-identical to before (NREG-01).
+ * `enable-orphan-rewake`), then the stale-command token. A clean update composes
+ * no reasons and keeps the caller's severity, so its row is byte-identical to
+ * before (NREG-01).
  *
  * CMC-13 / MSG-SD-3: `dependencies` carries the declared kinds that drive the
- * renderer-time `{requires pi-subagents}` / `{requires pi-mcp}` markers on BOTH
- * forms (WR-03); the renderer narrows on membership plus the notify-time probe.
+ * renderer-time `{requires pi-subagents}` / `{requires pi-mcp}` /
+ * `{requires pi-dynamic-workflows}` markers on BOTH forms (WR-03); the renderer
+ * narrows on membership plus the notify-time probe.
  *
  * D-03/D-06: a realized update transition always reloads Pi resources, and
  * `partially-installed` is a realized transition too.
@@ -102,7 +110,17 @@ export function updatedRowFromOutcome(
     ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
     ...malformed,
   ];
-  const dependencies = outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp);
+  // WLIF-06: the tail token on both row forms, and the second axis that moves
+  // the severity channel. Computed by the producing verb, never here -- the
+  // composer holds no pre-update record to take a difference against.
+  const stale: readonly ContentReason[] =
+    outcome.staleWorkflowCommand === true ? (["stale workflow command"] as const) : [];
+  const raised = malformed.length > 0 || stale.length > 0;
+  const dependencies = outcomeDependencies(
+    outcome.declaresAgents,
+    outcome.declaresMcp,
+    outcome.declaresWorkflows,
+  );
   const dropped = outcome.partialDegrade;
   if (dropped !== undefined && dropped.kinds.length > 0) {
     return {
@@ -111,12 +129,13 @@ export function updatedRowFromOutcome(
       scope: rowScope,
       version: outcome.toVersion,
       dependencies,
-      reasons: [...written, ...narrowUnsupportedKinds(dropped.kinds)],
-      severity: malformed.length > 0 ? "warning" : baseSeverity.partiallyInstalled,
+      reasons: [...written, ...narrowUnsupportedKinds(dropped.kinds), ...stale],
+      severity: raised ? "warning" : baseSeverity.partiallyInstalled,
       needsReload: true,
     };
   }
 
+  const cleanFormReasons: readonly ContentReason[] = [...written, ...stale];
   return {
     status: "updated",
     name: outcome.name,
@@ -126,10 +145,14 @@ export function updatedRowFromOutcome(
     dependencies,
     // Optional spread, not a required key: an unaffected row renders the legacy
     // brace-less bytes because the key is ABSENT, not `undefined` (NREG-01).
-    ...(written.length > 0 && { reasons: written }),
-    // Only the MALFORMED axis moves the severity channel: an orphan rewake is a
-    // config bug the row names, not a shortfall in what the update carried out.
-    severity: malformed.length > 0 ? "warning" : baseSeverity.updated,
+    ...(cleanFormReasons.length > 0 && { reasons: cleanFormReasons }),
+    // Two axes move the severity channel, for two different reasons. The
+    // MALFORMED axis names a component the update wrote in degraded form; the
+    // STALE-COMMAND axis names a shortfall in what the update achieved -- it was
+    // carried out, but the desired state is not reached until the reload. An
+    // orphan rewake moves nothing: it is a config bug the row names, not a
+    // shortfall in what the update carried out.
+    severity: raised ? "warning" : baseSeverity.updated,
     needsReload: true,
   };
 }
@@ -138,10 +161,18 @@ export function updatedRowFromOutcome(
  * Derive the v2 Dependency[] tuple from the outcome's declared kinds. File-
  * private: both row forms take it from the one composer above, so no caller can
  * hand-derive a third spelling of the same tuple (IN-05).
+ *
+ * WDEP-02: `workflows` spreads LAST, so an update that declares agents and mcp
+ * renders the same two-marker brace whether or not it also declares workflows.
  */
-function outcomeDependencies(declaresAgents: boolean, declaresMcp: boolean): readonly Dependency[] {
+function outcomeDependencies(
+  declaresAgents: boolean,
+  declaresMcp: boolean,
+  declaresWorkflows: boolean,
+): readonly Dependency[] {
   return [
     ...(declaresAgents ? (["agents"] as const) : []),
     ...(declaresMcp ? (["mcp"] as const) : []),
+    ...(declaresWorkflows ? (["workflows"] as const) : []),
   ];
 }

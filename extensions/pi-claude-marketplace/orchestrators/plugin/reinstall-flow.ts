@@ -756,6 +756,7 @@ async function runLockedReinstall(
       pluginDataDir,
       oldRecord: oldSnapshot,
       agentsDirs: generated.agentsDirs,
+      workflowNames: generated.workflows,
     },
     transaction.replaceOperations,
   );
@@ -773,6 +774,7 @@ async function runLockedReinstall(
       installable,
       handles: replacement.handles,
       hookEntries: replacement.hookEntries,
+      placedWorkflowNames: replacement.placedWorkflowNames,
     });
 
     // WB-01 / A7: deep-equal short-circuit preserves RECON-05

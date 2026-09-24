@@ -286,6 +286,8 @@ interface PluginTree {
   readonly orphanRewakeHooks?: boolean;
   /** `.lsp.json` convention file -- a component kind the resolver cannot support. */
   readonly lsp?: boolean;
+  /** A single well-formed `workflows/` script (ENBL-07's stagedWorkflows signal). */
+  readonly workflow?: boolean;
   /** DFEN-04: stamp `defaultEnabled` on the plugin's MARKETPLACE ENTRY. */
   readonly entryDefaultEnabled?: boolean;
 }
@@ -354,6 +356,13 @@ async function writePluginTree(
       JSON.stringify({ servers: { ts: { command: "tsserver" } } }),
     );
   }
+
+  if (tree.workflow === true) {
+    await writeUnder(
+      path.join(pluginRoot, "workflows", "greet.js"),
+      'export const meta = { name: "greet", description: "greets" };\n',
+    );
+  }
 }
 
 /** Lay down the plugin trees and the marketplace manifest that declares them. */
@@ -415,6 +424,7 @@ function pluginRecord(seed: RecordSeed): PluginRecord {
       agents: [...(seed.agents ?? [])],
       mcpServers: [...(seed.mcpServers ?? [])],
       hooks: [...(seed.hooks ?? [])],
+      workflows: [],
     },
     enabled: seed.enabled ?? true,
     installedAt: RECORDED_AT,
@@ -624,7 +634,7 @@ describe("applyReconcile", () => {
     await seedState(project, seeded);
     await writeUnder(project.configJsonPath, "{");
     const stateBytes = await readFile(project.stateJsonPath, "utf8");
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -667,7 +677,7 @@ describe("applyReconcile", () => {
     await seedState(project, seeded);
     await writeUnder(project.configJsonPath, "{");
     await writeUnder(project.configLocalJsonPath, JSON.stringify({ schemaVersion: 1, plugins: 7 }));
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -706,7 +716,7 @@ describe("applyReconcile", () => {
     });
     await writeUnder(project.configJsonPath, configBytes({ marketplaces: {} }));
     await writeUnder(project.configLocalJsonPath, JSON.stringify({ schemaVersion: 1, plugins: 7 }));
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -756,7 +766,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -800,7 +810,7 @@ describe("applyReconcile", () => {
     t.after(async () => {
       await release();
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -843,7 +853,7 @@ describe("applyReconcile", () => {
       },
     });
     await denyWrites(project.scopeRoot);
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -900,7 +910,7 @@ describe("applyReconcile", () => {
         lastReconciledExtensionVersion: EXTENSION_VERSION,
         marketplaces: {},
       });
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
       const { gitOps, clonedUrls } = createOfflineGitOps();
 
       // act
@@ -960,7 +970,7 @@ describe("applyReconcile", () => {
       allowedRemoteUrls: ["https://github.com/acme/remote.git"],
       cloneError: unreachable,
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
 
     // act
     await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
@@ -1017,7 +1027,7 @@ describe("applyReconcile", () => {
       path.join(project.skillsTargetDir, "hello-tool", "SKILL.md"),
       "---\nname: hello-tool\n---\n\nbody\n",
     );
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1086,7 +1096,7 @@ describe("applyReconcile", () => {
       JSON.stringify({ PreToolUse: [] }),
     );
     await denyWrites(path.join(project.extensionRoot, "hooks", "stuck"));
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1156,7 +1166,7 @@ describe("applyReconcile", () => {
       JSON.stringify({ PreToolUse: [] }),
     );
     await denyWrites(path.join(project.extensionRoot, "hooks", "stuck"));
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1217,7 +1227,7 @@ describe("applyReconcile", () => {
       path.join(project.skillsTargetDir, "hello-tool", "SKILL.md"),
       "---\nname: hello-tool\n---\n\nbody\n",
     );
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const ownerRuntime = createHooksRuntime();
     const peerRuntime = createHooksRuntime();
@@ -1394,7 +1404,7 @@ describe("applyReconcile", () => {
     const completionCache = createCompletionCache();
     const pluginCachePath = await project.pluginCacheFile("mp");
     await mkdir(pluginCachePath, { recursive: true });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1505,7 +1515,7 @@ describe("applyReconcile", () => {
         JSON.stringify({ PreToolUse: [] }),
       );
       await denyWrites(path.join(project.extensionRoot, "hooks", "zulu"));
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
       const { gitOps, clonedUrls } = createOfflineGitOps();
 
       // act
@@ -1558,7 +1568,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1575,6 +1585,7 @@ describe("applyReconcile", () => {
       mcpServers: [],
       prompts: [],
       skills: ["hello:tool"],
+      workflows: [],
     });
     assert.equal(record?.enabled, true);
     assert.equal(await readFile(project.configJsonPath, "utf8"), declaration);
@@ -1623,7 +1634,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1682,7 +1693,7 @@ describe("applyReconcile", () => {
       },
     };
     await seedState(project, initialState);
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1733,7 +1744,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1796,7 +1807,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const ownerRuntime = createHooksRuntime();
     const peerRuntime = createHooksRuntime();
@@ -1856,7 +1867,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1906,7 +1917,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1925,8 +1936,8 @@ describe("applyReconcile", () => {
         message:
           "2 post-install warnings surfaced from reconcile installs.\n" +
           "\n" +
-          '[bot0] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["pi-claude-marketplace-duo-bot0"].tools (e.g. read,bash,mcp:<server>) in Pi settings.\n' +
-          '[bot1] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["pi-claude-marketplace-duo-bot1"].tools (e.g. read,bash,mcp:<server>) in Pi settings.',
+          '[bot0] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["duo:bot0"].tools (e.g. read,bash,mcp:<server>) in Pi settings.\n' +
+          '[bot1] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["duo:bot1"].tools (e.g. read,bash,mcp:<server>) in Pi settings.',
         severity: "warning",
       },
     ]);
@@ -1961,7 +1972,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2022,7 +2033,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2097,7 +2108,7 @@ describe("applyReconcile", () => {
           }),
         },
       });
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
       const { gitOps, clonedUrls } = createOfflineGitOps();
 
       // act
@@ -2158,7 +2169,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2182,6 +2193,14 @@ describe("applyReconcile", () => {
       name: "declares both companions when the ledger stages an agent and a server",
       tree: { agents: ["with-tools"], mcpServer: true, skill: "clean" },
       row: "  ● hello v1.0.0 (installed) {requires pi-subagents, requires pi-mcp}",
+      severity: undefined,
+      summary: "",
+      tally: "Reconcile: 1 success",
+    },
+    {
+      name: "declares the workflows companion when the ledger stages a script",
+      tree: { workflow: true, skill: "clean" },
+      row: "  ● hello v1.0.0 (installed) {requires pi-dynamic-workflows}",
       severity: undefined,
       summary: "",
       tally: "Reconcile: 1 success",
@@ -2245,7 +2264,7 @@ describe("applyReconcile", () => {
           }),
         },
       });
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
       const { gitOps, clonedUrls } = createOfflineGitOps();
 
       // act
@@ -2300,7 +2319,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2350,7 +2369,7 @@ describe("applyReconcile", () => {
       },
     };
     await seedState(project, seeded);
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2421,7 +2440,7 @@ describe("applyReconcile", () => {
       JSON.stringify({ PreToolUse: [] }),
     );
     await denyWrites(path.join(project.extensionRoot, "hooks", "zulu"));
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2492,7 +2511,7 @@ describe("applyReconcile", () => {
         },
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2550,7 +2569,7 @@ describe("applyReconcile", () => {
     });
     await writeUnder(path.join(project.scopeRoot, "unrelated.txt"), "project bytes\n");
     await writeUnder(path.join(user.scopeRoot, "unrelated.txt"), "user bytes\n");
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const startedAt = Date.now();
 
@@ -2662,7 +2681,7 @@ describe("applyReconcile", () => {
       allowedRemoteUrls: ["https://github.com/acme/proj.git", "https://github.com/acme/user.git"],
       fixtureSourceDir: fixture.marketplaceRoot,
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
 
     // act
     await applyReconcile({ ctx, pi, cwd, gitOps });
@@ -2709,7 +2728,7 @@ describe("applyReconcile", () => {
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2754,7 +2773,7 @@ describe("applyReconcile", () => {
     };
     await seedState(user, userState);
     const userStateBytes = await readFile(user.stateJsonPath, "utf8");
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2850,7 +2869,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2862,7 +2881,9 @@ describe("applyReconcile", () => {
         message:
           "● mp [project]\n" +
           "  ● fresh (installed)\n" +
-          "  ● promoted v1.0.0 (installed)\n" +
+          // WCONV-03: the promotion row says why it appeared; the fresh install
+          // beside it has no such brace, which is the whole point of the marker.
+          "  ● promoted v1.0.0 (installed) {components now supported}\n" +
           "\n" +
           "Reconcile: 2 successes",
       },
@@ -2942,7 +2963,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2962,7 +2983,7 @@ describe("applyReconcile", () => {
         message:
           "1 post-install warning surfaced from reconcile installs.\n" +
           "\n" +
-          '[bot0] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["pi-claude-marketplace-quiet-bot0"].tools (e.g. read,bash,mcp:<server>) in Pi settings.',
+          '[bot0] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["quiet:bot0"].tools (e.g. read,bash,mcp:<server>) in Pi settings.',
         severity: "warning",
       },
     ]);
@@ -2991,7 +3012,7 @@ describe("applyReconcile", () => {
       },
     });
     const applyWithRace = applyAfterSelectedStateRace(project, "{ half written");
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -3045,7 +3066,7 @@ describe("applyReconcile", () => {
       },
     });
     const applyWithRace = applyAfterSelectedStateRace(project, "{ half written");
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const completionCache = createCompletionCache();
     const pluginCachePath = await project.pluginCacheFile("mp");
@@ -3148,7 +3169,7 @@ describe("applyReconcile", () => {
       },
     };
     const applyWithReader = createApplyReconcile(reader);
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
     const completionCache = createCompletionCache();

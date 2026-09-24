@@ -1,6 +1,6 @@
 import { UPDATE_CONTEXT } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts";
 import { notifyUpdateNoOpWithContext } from "../../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
-import { piWithBothLoaded } from "../mock-pi.ts";
+import { piWithAllLoaded, piWithBothLoaded } from "../mock-pi.ts";
 
 import type { NotificationMessage } from "../../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { FixtureMap } from "../fixture-types.ts";
@@ -312,6 +312,38 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
                 to: "1.0.1",
                 dependencies: [],
                 reasons: ["malformed skill"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WLIF-06: the new version withdrew or renamed a workflow the old one
+    // declared. The FOURTH independent axis on this partition, last in the
+    // brace, and the second one that moves the severity channel -- for a
+    // different reason than the malformed axis: this is a shortfall in what the
+    // update achieved, not a component it wrote in degraded form.
+    "update-stale-workflow-command": {
+      pi: piWithAllLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "updated",
+                severity: "warning",
+                needsReload: true,
+                name: "alpha",
+                from: "1.0.0",
+                to: "1.0.1",
+                dependencies: [],
+                reasons: ["stale workflow command"],
               },
             ],
           },

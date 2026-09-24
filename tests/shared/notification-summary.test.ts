@@ -7,6 +7,7 @@ import {
   emitUpdateNoOpCascade,
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import {
+  composeRetainedWorkflowsAdvisories,
   composeTally,
   composeWithSummary,
   foldTallyAndHint,
@@ -719,5 +720,21 @@ test("reconcile applied fold suppresses reload while preserving severity and tal
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     "A plugin operation has failed.\n\n● official [user]\n  alpha (failed)\n\nReconcile: 1 failure",
     "error",
+  ]);
+});
+
+test("WR-05: composeRetainedWorkflowsAdvisories states the count when known and omits it when not", () => {
+  // act
+  const lines = composeRetainedWorkflowsAdvisories([
+    { name: "alpha", envelopeCount: 1 },
+    { name: "beta", envelopeCount: 3 },
+    { name: "gamma" },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "    retained workflow staging: alpha (1 envelope) under the workflows staging directory",
+    "    retained workflow staging: beta (3 envelopes) under the workflows staging directory",
+    "    retained workflow staging: gamma under the workflows staging directory",
   ]);
 });

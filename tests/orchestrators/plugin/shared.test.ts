@@ -23,6 +23,7 @@ import {
   resolveInstalledPluginTarget,
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
+  retiresWorkflowCommand,
   selectDeclaringConfigWriteTarget,
   splitStagingWarnings,
   surfaceDiscoveryWarnings,
@@ -77,6 +78,7 @@ function makePluginRecord(opts: {
       agents: [...(opts.agents ?? [])],
       mcpServers: [...(opts.mcpServers ?? [])],
       hooks: [...(opts.hooks ?? [])],
+      workflows: [],
     },
     enabled: opts.enabled ?? true,
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -129,7 +131,7 @@ function makeMaterializablePlugin(
     supported: [],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: [], commands: [], agents: [...agents] },
+    componentPaths: { skills: [], commands: [], agents: [...agents], workflows: [] },
     mcpServers: {},
     defaultEnabled: true,
   };
@@ -252,6 +254,15 @@ function assertLocationsEquivalent(
   );
 }
 
+// WR-01: the `partition?: never` refusal keeps the update / reinstall outcome
+// shapes out of `enableRowDependencies`. Those shapes spell the same facts as
+// `declaresAgents` / `declaresMcp` / `declaresWorkflows`, so without the refusal
+// they match the all-optional signal shape structurally and silently return an
+// empty array for every update. This pin fails to compile the day the refusal is
+// dropped.
+// @ts-expect-error a partition-discriminated outcome is refused by the signal shape
+void enableRowDependencies({ partition: "updated", stagedWorkflows: true });
+
 describe("enableRowDependencies", () => {
   test("returns no dependencies when the ledger staged neither companion kind", () => {
     // arrange
@@ -273,6 +284,39 @@ describe("enableRowDependencies", () => {
 
     // assert
     assert.deepStrictEqual(dependencies, ["agents", "mcp"]);
+  });
+
+  test("WDEP-02: returns the workflows dependency when the ledger staged a workflow", () => {
+    // arrange
+    const signals = { stagedWorkflows: true } as const;
+
+    // act
+    const dependencies = enableRowDependencies(signals);
+
+    // assert
+    assert.deepStrictEqual(dependencies, ["workflows"]);
+  });
+
+  test("WDEP-02: returns workflows LAST when all three companion kinds were staged", () => {
+    // arrange
+    const signals = { stagedAgents: true, stagedMcpServers: true, stagedWorkflows: true } as const;
+
+    // act
+    const dependencies = enableRowDependencies(signals);
+
+    // assert
+    assert.deepStrictEqual(dependencies, ["agents", "mcp", "workflows"]);
+  });
+
+  test("WDEP-02: a ledger that staged no workflow declares no host-engine dependency", () => {
+    // arrange
+    const signals = { stagedAgents: true, stagedWorkflows: false } as const;
+
+    // act
+    const dependencies = enableRowDependencies(signals);
+
+    // assert
+    assert.deepStrictEqual(dependencies, ["agents"]);
   });
 });
 
@@ -1563,6 +1607,7 @@ describe("applyPartialCascadeFold", () => {
         agents: ["drop-agent", "keep-agent"],
         mcpServers: ["drop-mcp", "keep-mcp"],
         hooks: ["drop-hook", "keep-hook"],
+        workflows: [],
       },
     };
     const dropped = {
@@ -1571,6 +1616,7 @@ describe("applyPartialCascadeFold", () => {
       agents: ["drop-agent", "missing-agent"],
       hooks: ["drop-hook", "missing-hook"],
       mcpServers: ["drop-mcp", "missing-mcp"],
+      workflows: [],
     };
 
     // act
@@ -1584,6 +1630,7 @@ describe("applyPartialCascadeFold", () => {
         agents: ["keep-agent"],
         mcpServers: ["keep-mcp"],
         hooks: ["keep-hook"],
+        workflows: [],
       },
     });
     assert.deepStrictEqual(dropped, {
@@ -1592,6 +1639,47 @@ describe("applyPartialCascadeFold", () => {
       agents: ["drop-agent", "missing-agent"],
       hooks: ["drop-hook", "missing-hook"],
       mcpServers: ["drop-mcp", "missing-mcp"],
+      workflows: [],
+    });
+  });
+
+  test("subtracts the dropped workflow envelope and leaves the other four axes alone", () => {
+    // arrange -- the workflows axis is NOT compile-forced here: `dropped` is a
+    // structural parameter, so an argument carrying an extra axis satisfies a
+    // narrower shape and the filter can go missing in silence. This case is
+    // what fails when the filter line is absent.
+    const installed = {
+      resources: {
+        skills: ["keep-skill"],
+        prompts: ["keep-command"],
+        agents: ["keep-agent"],
+        mcpServers: ["keep-mcp"],
+        hooks: ["keep-hook"],
+        workflows: ["sample:drop", "sample:keep"],
+      },
+    };
+    const dropped = {
+      skills: [],
+      commands: [],
+      agents: [],
+      hooks: [],
+      mcpServers: [],
+      workflows: ["sample:drop", "sample:never-recorded"],
+    };
+
+    // act
+    applyPartialCascadeFold(installed, dropped);
+
+    // assert
+    assert.deepStrictEqual(installed, {
+      resources: {
+        skills: ["keep-skill"],
+        prompts: ["keep-command"],
+        agents: ["keep-agent"],
+        mcpServers: ["keep-mcp"],
+        hooks: ["keep-hook"],
+        workflows: ["sample:keep"],
+      },
     });
   });
 });
@@ -1612,7 +1700,6 @@ describe("emitMarketplaceNotAdded", () => {
     });
 
     // assert
-    assert.ok(failure !== undefined);
     assert.equal(failure.status, "failed");
     assert.equal(failure.reason, "marketplace not added");
     assert.ok(failure.error instanceof MarketplaceNotFoundError);
@@ -1639,7 +1726,6 @@ describe("emitMarketplaceNotAdded", () => {
     });
 
     // assert
-    assert.ok(failure !== undefined);
     assert.equal(failure.status, "failed");
     assert.equal(failure.reason, "marketplace not added");
     assert.ok(failure.error instanceof MarketplaceNotFoundError);
@@ -1651,14 +1737,14 @@ describe("emitMarketplaceNotAdded", () => {
     verify(pi);
   });
 
-  test("emits the exact scoped standalone row and returns undefined", () => {
+  test("emits the exact scoped standalone row and still answers with the typed failure", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
     const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
     when(() => pi.getAllTools())
       .thenReturn([])
-      .twice();
+      .times(3);
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -1681,7 +1767,12 @@ describe("emitMarketplaceNotAdded", () => {
     });
 
     // assert
-    assert.equal(failure, undefined);
+    // WR-01: the standalone arm emits the row AND answers with the same typed
+    // failure the orchestrated arm builds; the standalone entrypoints discard it.
+    assert.equal(failure.status, "failed");
+    assert.equal(failure.reason, "marketplace not added");
+    assert.ok(failure.error instanceof MarketplaceNotFoundError);
+    assert.deepStrictEqual(failure.error.scopes, ["user"]);
     verify(ctx);
     verify(ui);
     verify(pi);
@@ -1694,7 +1785,7 @@ describe("emitMarketplaceNotAdded", () => {
     const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
     when(() => pi.getAllTools())
       .thenReturn([])
-      .twice();
+      .times(3);
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -1717,7 +1808,10 @@ describe("emitMarketplaceNotAdded", () => {
     });
 
     // assert
-    assert.equal(failure, undefined);
+    assert.equal(failure.status, "failed");
+    assert.equal(failure.reason, "marketplace not added");
+    assert.ok(failure.error instanceof MarketplaceNotFoundError);
+    assert.deepStrictEqual(failure.error.scopes, ["project", "user"]);
     verify(ctx);
     verify(ui);
     verify(pi);
@@ -1858,7 +1952,7 @@ describe("surfaceDiscoveryWarnings", () => {
       .once();
     when(() => {
       ui.notify(
-        'Plugin "alpha" installed; 1 declared component was skipped.\n\nCould not read alpha-skill',
+        'Plugin "alpha" installed; 1 declared component has a note.\n\nCould not read alpha-skill',
         "warning",
       );
     })
@@ -1887,7 +1981,7 @@ describe("surfaceDiscoveryWarnings", () => {
       .once();
     when(() => {
       ui.notify(
-        'Plugin "alpha" updated; 2 declared components were skipped.\n\nfirst warning\nsecond warning',
+        'Plugin "alpha" updated; 2 declared components have notes.\n\nfirst warning\nsecond warning',
         "warning",
       );
     })
@@ -1906,3 +2000,24 @@ describe("surfaceDiscoveryWarnings", () => {
     verify(ui);
   });
 });
+
+for (const { previousNames, placedNames, expected } of [
+  { previousNames: ["alpha:greet"], placedNames: [], expected: true },
+  { previousNames: ["alpha:greet", "alpha:wave"], placedNames: ["alpha:greet"], expected: true },
+  { previousNames: [], placedNames: [], expected: false },
+  { previousNames: ["alpha:greet"], placedNames: ["alpha:greet"], expected: false },
+  {
+    previousNames: ["alpha:greet"],
+    placedNames: ["alpha:greet", "alpha:wave"],
+    expected: false,
+  },
+] satisfies readonly {
+  previousNames: readonly string[];
+  placedNames: readonly string[];
+  expected: boolean;
+}[]) {
+  test(`WLIF-06: retiresWorkflowCommand(${JSON.stringify(previousNames)}, ${JSON.stringify(placedNames)}) is ${expected}`, () => {
+    // act & assert
+    assert.strictEqual(retiresWorkflowCommand(previousNames, placedNames), expected);
+  });
+}

@@ -543,12 +543,14 @@ function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstall
  * through the shared `narrowUnsupportedKinds` seam, exactly as on the
  * `plugin-installed` / `plugin-backfilled` arms.
  *
- * SEV-01 / WR-06: `dependencies` is DERIVED on both arms from the ledger's
- * staged-agent / staged-MCP verdicts through the same `enableRowDependencies`
- * seam the standalone enable row uses, so the `{requires pi-subagents}` /
- * `{requires pi-mcp}` markers fire on a projected re-enable exactly as they do
- * on the sibling install arm. A re-enable that staged neither renders
- * byte-identically to before (NREG-01).
+ * SEV-01 / WDEP-02 / WR-06: `dependencies` is DERIVED on both arms from the
+ * ledger's staged-agent / staged-MCP / staged-workflow verdicts through the
+ * same `enableRowDependencies` seam the standalone enable row uses, so the
+ * `{requires pi-subagents}` / `{requires pi-mcp}` /
+ * `{requires pi-dynamic-workflows}` markers fire on a projected re-enable
+ * exactly as they do on the sibling install arm. A re-enable that staged none
+ * of the three composes an empty array, which elides the brace entirely
+ * (NREG-01).
  *
  * SURF-05 / WARN-01: the row also carries the ledger's other two degradation
  * signals in `install-flow.ts`'s emit order -- `{orphan rewake}`, then the per-kind
@@ -600,11 +602,15 @@ function enabledRowFromOutcome(
 /**
  * Build the row for a load-time backfill.
  *
+ * WCONV-03: every backfilled row carries at least one reason. The row exists
+ * because a reload the user did not initiate re-materialized the record, so it
+ * leads with `{components now supported}` on BOTH arms and can never render
+ * byte-identically to a fresh install.
+ *
  * WR-04: the backfill runs the same class of ledger as the install and enable
  * arms, so it names the same two degradation signals in `install-flow.ts`'s emit
  * order -- `{orphan rewake}`, then the per-kind `{malformed skill}` /
  * `{malformed command}` tokens, then (on the degraded arm) the dropped kinds.
- * A backfill that reports neither renders byte-identically to before (NREG-01).
  *
  * Severity: a backfill is a benign promotion (re-materializing now-supported
  * components), NOT a new degradation, so a still-degraded arm stays `info` per
@@ -612,12 +618,29 @@ function enabledRowFromOutcome(
  * here. A MALFORMED component takes the `warning` raise on either arm: it is a
  * degrade this backfill's own ledger just produced, exactly as on the
  * `plugin-installed` and `plugin-enabled` arms (WARN-01 / D-86-03).
+ *
+ * The SEV-01 soft-dep raise does NOT fire on this row, and that is a property of
+ * the projection rather than a stance this arm takes. `companionSeverity` needs a
+ * `SoftDepStatus`, and no reconcile outcome carries one -- `applyPluginOutcomeToBlock`
+ * is pure over outcomes and takes no probe -- so no arm in this file can compute
+ * it. A backfilled row that staged a workflow into a session with no host
+ * workflow engine therefore renders `{requires pi-dynamic-workflows}` at `info`
+ * where the standalone install row renders the same fact at `warning`. The
+ * sibling `enabledRowFromOutcome` above diverges identically and for the same
+ * reason. Closing that gap means threading a probe into the projection, not
+ * editing this line -- so read the divergence as a bounded projection-wide
+ * property, not an oversight on this arm.
  */
 function backfilledRowFromOutcome(
   outcome: PluginBackfilledOutcome,
 ): PluginInstalledMessage | PluginPartiallyInstalledMessage {
   const malformed = malformedReasonsForKinds(outcome.degradedKinds);
   const reasons: ContentReason[] = [
+    // WCONV-03: the convergence marker, first in the brace. Both returns read
+    // this one array, so the emit order is fixed here once: this token, then
+    // orphan rewake, then the malformed tokens, then (degraded arm only) the
+    // dropped kinds, then the soft-dep markers `composeReasons` appends last.
+    "components now supported",
     ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
     ...malformed,
   ];
@@ -628,7 +651,9 @@ function backfilledRowFromOutcome(
       name: outcome.plugin,
       ...(outcome.version !== undefined && { version: outcome.version }),
       dependencies: outcome.dependencies,
-      ...(reasons.length > 0 && { reasons }),
+      // WCONV-03: unconditional, because the prelude above always places the
+      // convergence marker -- this arm has no brace-less shape to guard for.
+      reasons,
       severity,
       needsReload: true,
     };
@@ -639,11 +664,11 @@ function backfilledRowFromOutcome(
     name: outcome.plugin,
     ...(outcome.version !== undefined && { version: outcome.version }),
     dependencies: outcome.dependencies,
-    // SEV-05 / D-69-04: populate the factual `{reasons}` brace from the
-    // re-resolved dropped-component kinds through the SAME shared
-    // `narrowUnsupportedKinds` seam the install/list/info surfaces use -- no
-    // per-state reasons mechanism. An empty set renders brace-less
-    // (byte-identical to a no-dropped-kinds backfill).
+    // SEV-05 / D-69-04: append the factual dropped-component kinds to the
+    // prelude through the SAME shared `narrowUnsupportedKinds` seam the
+    // install/list/info surfaces use -- no per-state reasons mechanism. They
+    // land after the convergence marker, so a row with no dropped kinds differs
+    // from a fully-promoted one only by its status token.
     reasons: [...reasons, ...narrowUnsupportedKinds(outcome.unsupported)],
     severity,
     needsReload: true,

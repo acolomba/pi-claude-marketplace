@@ -1,5 +1,10 @@
 import { narrowUnsupportedKinds } from "../../../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
-import { piWithBothLoaded, piWithNothingLoaded } from "../mock-pi.ts";
+import {
+  piWithAllLoaded,
+  piWithBothLoaded,
+  piWithNothingLoaded,
+  piWithoutWorkflowEngine,
+} from "../mock-pi.ts";
 
 import type { FixtureMap } from "../fixture-types.ts";
 
@@ -176,11 +181,12 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
       },
     },
 
-    // BFILL-01 / SEV-05 / D-69-04: a load-time backfill promotion row carries
-    // the re-resolved dropped-component kinds as a factual {reasons} brace
-    // through the shared narrowUnsupportedKinds seam (lspServers -> lsp). The
-    // marketplace was already added, so its header is bare (no status token).
-    // SEV-03 / A3: a benign promotion stays info -- no expectedSeverity.
+    // BFILL-01 / WCONV-03 / SEV-05 / D-69-04: a load-time backfill promotion row
+    // leads its brace with the convergence marker, then carries the re-resolved
+    // dropped-component kinds through the shared narrowUnsupportedKinds seam
+    // (lspServers -> lsp). The marketplace was already added, so its header is
+    // bare (no status token). SEV-03 / A3: a benign promotion stays info -- no
+    // expectedSeverity.
     "backfill-partially-installed": {
       pi: piWithBothLoaded(),
       message: {
@@ -197,7 +203,7 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
                 name: "hello",
                 version: "1.0.0",
                 dependencies: [],
-                reasons: narrowUnsupportedKinds(["lspServers"]),
+                reasons: ["components now supported", ...narrowUnsupportedKinds(["lspServers"])],
                 severity: "info",
                 needsReload: true,
               },
@@ -207,10 +213,10 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
       },
     },
 
-    // SEV-05 / D-69-04: a backfill partially-installed row whose dropped-kind set is
-    // empty renders brace-less -- byte-identical to the pre-SEV-05 form (the
-    // change is additive; rows without reasons do not gain a brace).
-    "backfill-partially-installed-no-reasons": {
+    // WCONV-03 / SEV-05 / D-69-04: a backfill partially-installed row whose
+    // dropped-kind set is empty still braces the convergence marker alone. A
+    // backfilled row has no brace-less shape.
+    "backfill-partially-installed-marker-only": {
       pi: piWithBothLoaded(),
       message: {
         kind: "reconcile-applied-cascade",
@@ -226,7 +232,71 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
                 name: "hello",
                 version: "1.0.0",
                 dependencies: [],
-                reasons: [],
+                reasons: ["components now supported"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WCONV-03 / D-69-04: the FULLY PROMOTED arm -- a record whose supported set
+    // grew re-resolved clean, so the row takes the `installed` byte form a fresh
+    // install renders and the convergence marker is the only thing separating
+    // the two. Probe with every companion loaded, so no soft-dep marker fires
+    // and this state isolates the marker. SEV-03 / A3: a benign promotion stays
+    // info -- no expectedSeverity.
+    "backfill-installed": {
+      pi: piWithAllLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "hello",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["components now supported"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WCONV-03 / WDEP-04 / D-16-15: the same fully promoted row in a session
+    // with no host workflow engine -- the real population's likely first render.
+    // Two tokens, ONE brace, and the composed order is what this state pins: the
+    // convergence marker is caller-placed and leads, the soft-dep marker is
+    // appended by `composeReasons` and trails. Severity stays info: this
+    // projection applies no companion raise on either arm.
+    "backfill-installed-workflow-engine-absent": {
+      pi: piWithoutWorkflowEngine(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "hello",
+                version: "1.0.0",
+                dependencies: ["workflows"],
+                reasons: ["components now supported"],
                 severity: "info",
                 needsReload: true,
               },

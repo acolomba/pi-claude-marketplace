@@ -148,8 +148,12 @@ const NOTIFICATION_TYPES_REL: (typeof SCOPE_FENCE_TARGETS)[number] =
 const REMOTE_GLYPH = "\u25CC";
 const PARTIALLY_AVAILABLE_GLYPH = "\u2296";
 
-/** A soft-dep probe with both companions loaded, so no marker joins a row. */
-const BOTH_COMPANIONS_LOADED = { piSubagentsLoaded: true, piMcpAdapterLoaded: true };
+/** A soft-dep probe with every companion loaded, so no marker joins a row. */
+const ALL_COMPANIONS_LOADED = {
+  piSubagentsLoaded: true,
+  piMcpAdapterLoaded: true,
+  workflowEngineLoaded: true,
+};
 
 /**
  * The members one closed vocabulary declares, in declaration order.
@@ -255,7 +259,9 @@ const EXPECTED_REASONS = [
   "installs disabled",
   "marketplace in user scope",
   "marketplace in project scope",
-  "workflows",
+  "stale workflow command",
+  "requires pi-dynamic-workflows",
+  "components now supported",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [
@@ -337,7 +343,7 @@ test("COMPAT-01: the reason vocabulary holds exactly its inherited members, in o
   assert.deepStrictEqual(
     declaredReasons,
     expected,
-    "COMPAT-01: no reason token may be added, removed, or renamed. The order is catalog-stable: a new token appends at the tail and arrives with its catalog row, renderer arm, and fixture in the same change.",
+    "COMPAT-01: no reason token may be renamed. The order is catalog-stable: a new token appends at the tail and arrives with its catalog row, renderer arm, and fixture in the same change. A token may be removed ONLY when its component kind moves from the unsupported set to the supported set, and only when the removal arrives with its catalog rows in the same change.",
   );
 });
 
@@ -452,13 +458,13 @@ test("COMPAT-01: the two module-private glyphs reach the output on their own row
   const rows = [
     renderRemoteRow(
       { status: "remote", name: "alpha", version: "1.0.0" },
-      BOTH_COMPANIONS_LOADED,
+      ALL_COMPANIONS_LOADED,
       "user",
       undefined,
     ),
     renderPartiallyAvailableRow(
       { status: "partially-available", name: "alpha", version: "1.0.0", reasons: ["lsp"] },
-      BOTH_COMPANIONS_LOADED,
+      ALL_COMPANIONS_LOADED,
       "user",
     ),
   ];
@@ -484,7 +490,7 @@ test("COMPAT-01: the two module-private glyphs reach the info row through their 
 
   // act
   const infoRows = (["remote", "partially-available"] as const).map(
-    (status) => renderPluginInfo(infoMessageFor(status), BOTH_COMPANIONS_LOADED).split("\n")[1],
+    (status) => renderPluginInfo(infoMessageFor(status), ALL_COMPANIONS_LOADED).split("\n")[1],
   );
 
   // assert

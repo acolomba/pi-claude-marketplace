@@ -37,6 +37,7 @@ function pluginRecord(version: string, enabled = true): PluginRecord {
       agents: ["hello:bot"],
       mcpServers: ["hello:server"],
       hooks: ["hello"],
+      workflows: [],
     },
     enabled,
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -153,6 +154,7 @@ test("classifies a missing marketplace without reading a manifest", async (t) =>
     reasons: ["not in manifest"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
 });
 
@@ -178,6 +180,7 @@ test("distinguishes an undeclared target from a declared uninstalled target", as
     reasons: ["not in manifest"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
   assert.deepStrictEqual(uninstalledOutcome, {
     partition: "skipped",
@@ -186,6 +189,7 @@ test("distinguishes an undeclared target from a declared uninstalled target", as
     reasons: ["not installed"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
 });
 
@@ -206,6 +210,7 @@ test("retains the recorded version when the refreshed manifest drops the plugin"
     reasons: ["not in manifest"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
 });
 
@@ -226,6 +231,7 @@ test("returns an exact unchanged outcome for an enabled current plugin", async (
     toVersion: "2.0.0",
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
   assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), before);
 });
@@ -350,6 +356,7 @@ test("refreshes a disabled pin without materializing its recorded resources", as
     reasons: ["already disabled"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
   const refreshed = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
   assert.strictEqual(refreshed?.version, "2.0.0");
@@ -380,6 +387,7 @@ test("does not rewrite an unchanged disabled pin", async (t) => {
     toVersion: "2.0.0",
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
   assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), before);
 });
@@ -492,6 +500,7 @@ test("classifies a clone transport failure without exposing a raw throw", async 
     reasons: ["network unreachable"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   });
 });
 

@@ -11,8 +11,8 @@
 // NOT runPhases -- the heterogeneous-undo flow D-02 precedent):
 //
 //  (prepare): sequential bridge prepare* into tmp (skills -> commands
-//  -> agents -> mcp). Any throw triggers abort of already-prepared handles
-//  + structured cleanup-failure descriptors.
+//  -> agents -> mcp -> workflows). Any throw triggers abort of
+//  already-prepared handles + structured cleanup-failure descriptors.
 //
 //  (state-guard swap with old-resource snapshot): inside
 //  `withStateGuard` re-read the plugin record, ST-9 stale-version check,
@@ -21,9 +21,9 @@
 //
 //  Phase 3a (physical replace, aggregate failures, continue across bridges):
 //  call each bridge's commitPrepared* in skills -> commands -> agents -> mcp
-//  order. D-03 specifies CONTINUE across bridge failures (not fail-fast)
-//  so the partial-replace state is fully observed. Failures aggregate
-//  into Phase3Failure[].
+//  -> workflows order. D-03 specifies CONTINUE across bridge failures (not
+//  fail-fast) so the partial-replace state is fully observed. Failures
+//  aggregate into Phase3Failure[].
 //
 //  Phase 3b (compose recovery hint or success): if any failures, wrap in
 //  PluginUpdatePhase3Error with RECOVERY_PLUGIN_REINSTALL_PREFIX hint.
@@ -557,6 +557,7 @@ async function updateSinglePluginWith(
       // the soft-dep marker (MSG-SD-3), so the value is `false`.
       declaresAgents: false,
       declaresMcp: false,
+      declaresWorkflows: false,
     };
     return { ...base, reasons: reasonsFromTypedError(err) };
   }

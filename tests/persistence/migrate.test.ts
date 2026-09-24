@@ -71,6 +71,7 @@ test("normalizes a complete legacy marketplace in place", () => {
           agents: [],
           mcpServers: [],
           hooks: [],
+          workflows: [],
         },
         installedAt: "2026-01-02T03:04:05.000Z",
         updatedAt: "2026-02-03T04:05:06.000Z",
@@ -136,6 +137,7 @@ test("preserves optional fields when autoupdate scrubbing is closed", () => {
               agents: ["agents/plugin-two.json"],
               mcpServers: ["plugin-two-server"],
               hooks: ["hooks/plugin-two.json"],
+              workflows: [],
             },
             hookEntries: [{ event: "SessionStart", command: "./start.sh" }],
             enabled: false,
@@ -172,6 +174,7 @@ test("preserves optional fields when autoupdate scrubbing is closed", () => {
               agents: ["agents/plugin-two.json"],
               mcpServers: ["plugin-two-server"],
               hooks: ["hooks/plugin-two.json"],
+              workflows: [],
             },
             hookEntries: [{ event: "SessionStart", command: "./start.sh" }],
             enabled: false,
@@ -221,6 +224,7 @@ test("replays a normalized marketplace as an exact fixed point", () => {
           agents: ["agents/plugin-three.json"],
           mcpServers: [],
           hooks: [],
+          workflows: [],
         },
         enabled: true,
         installedAt: "2026-05-06T07:08:09.000Z",
@@ -257,6 +261,7 @@ test("replays a normalized marketplace as an exact fixed point", () => {
               agents: ["agents/plugin-three.json"],
               mcpServers: [],
               hooks: [],
+              workflows: [],
             },
             enabled: true,
             installedAt: "2026-05-06T07:08:09.000Z",
@@ -521,7 +526,7 @@ test("creates required resources when a legacy plugin omits the collection", () 
           "plugin-four": {
             version: "1.0.0",
             enabled: true,
-            resources: { agents: [], mcpServers: [], hooks: [] },
+            resources: { agents: [], mcpServers: [], hooks: [], workflows: [] },
           },
         },
       },
@@ -538,6 +543,90 @@ test("creates required resources when a legacy plugin omits the collection", () 
     schemaVersion: 1,
     marketplaces: expectedMigration.marketplaces,
   });
+});
+
+test("fills the workflows inventory on a legacy record that predates the field", () => {
+  // arrange
+  // WLIF-01: `resources.workflows` is required by `STATE_VALIDATOR.Check`, so a
+  // record written before the field existed must be filled BEFORE validation
+  // runs -- exactly as `agents`, `mcpServers` and `hooks` are. No schemaVersion
+  // bump: the `hooks` axis set that precedent.
+  const extensionRoot = path.join(path.sep, "extension-root");
+  const legacyState = {
+    schemaVersion: 1,
+    marketplaces: {
+      theta: {
+        name: "theta",
+        manifestPath: "/custom/theta/marketplace.json",
+        marketplaceRoot: "/custom/theta",
+        plugins: {
+          "plugin-six": {
+            version: "1.0.0",
+            enabled: true,
+            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+          },
+        },
+      },
+    },
+  };
+
+  // act
+  const migration = migrateLegacyMarketplaceRecords(legacyState, extensionRoot, true);
+
+  // assert
+  assert.strictEqual(migration.mutated, true);
+  assert.deepStrictEqual(legacyState.marketplaces.theta.plugins["plugin-six"].resources, {
+    skills: [],
+    prompts: [],
+    agents: [],
+    mcpServers: [],
+    hooks: [],
+    workflows: [],
+  });
+});
+
+test("leaves a record that already carries its workflows inventory untouched", () => {
+  // arrange
+  // The default-fill must be idempotent: a second load of an already-migrated
+  // state file must not report a mutation, or every load rewrites state.json.
+  const extensionRoot = path.join(path.sep, "extension-root");
+  const migratedState = {
+    schemaVersion: 2,
+    marketplaces: {
+      iota: {
+        name: "iota",
+        scope: "user",
+        source: { kind: "path", raw: "./iota", logical: "./iota" },
+        addedFromCwd: "/work",
+        manifestPath: "/custom/iota/marketplace.json",
+        marketplaceRoot: "/custom/iota",
+        plugins: {
+          "plugin-seven": {
+            version: "1.0.0",
+            enabled: true,
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: ["plugin-seven:build"],
+            },
+          },
+        },
+      },
+    },
+  };
+
+  // act
+  const migration = migrateLegacyMarketplaceRecords(migratedState, extensionRoot, true);
+
+  // assert
+  assert.strictEqual(migration.mutated, false);
+  assert.deepStrictEqual(
+    migratedState.marketplaces.iota.plugins["plugin-seven"].resources.workflows,
+    ["plugin-seven:build"],
+  );
 });
 
 test("replaces a null resource collection with required empty arrays", () => {
@@ -570,7 +659,7 @@ test("replaces a null resource collection with required empty arrays", () => {
           "plugin-five": {
             version: "2.0.0",
             enabled: null,
-            resources: { agents: [], mcpServers: [], hooks: [] },
+            resources: { agents: [], mcpServers: [], hooks: [], workflows: [] },
           },
         },
       },

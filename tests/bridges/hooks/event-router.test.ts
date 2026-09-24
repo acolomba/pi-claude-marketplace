@@ -216,6 +216,7 @@ test(
                 agents: [],
                 mcpServers: [],
                 hooks: ["user-hooks"],
+                workflows: [],
               },
               enabled: true,
               installedAt: "2026-08-31T10:00:00.000Z",
@@ -250,6 +251,7 @@ test(
                 agents: [],
                 mcpServers: [],
                 hooks: ["project-hooks"],
+                workflows: [],
               },
               enabled: true,
               installedAt: "2026-08-31T10:00:00.000Z",
@@ -681,6 +683,7 @@ function makeStoredPlugin(input: {
       agents: [],
       mcpServers: [],
       hooks: [...input.hooks],
+      workflows: [],
     },
     enabled: input.enabled ?? true,
     installedAt: "2026-08-31T10:00:00.000Z",
@@ -1671,6 +1674,7 @@ test(
                 agents: [],
                 mcpServers: [],
                 hooks: ["stale-owner"],
+                workflows: [],
               },
               enabled: true,
               installedAt: "2026-09-08T00:00:00.000Z",
@@ -2274,6 +2278,7 @@ test("session_start contains a lazy project cwd failure and still delegates safe
     executor,
   });
   const sessionStart = registeredHandler(registrations, "session_start");
+  // A throwing getter is the only way to make a later read of `ctx.cwd` fail.
   Object.defineProperty(context, "cwd", {
     configurable: true,
     get(): string {

@@ -238,6 +238,14 @@ export function reinstalledRowFromOutcome(
   rowScope: Scope | undefined,
 ): PluginReinstalledMessage {
   const malformed = malformedReasonsForKinds(outcome.degradedKinds);
+  // WLIF-06: the tail token. The reinstall's new source did not re-place a
+  // workflow the record named, so the command that envelope registered is still
+  // live -- the host cannot unregister it, and only a reload drops it. Raises
+  // the row to `warning`: the reinstall was carried out, but the desired state
+  // is not reached until that reload.
+  const stale: readonly ContentReason[] =
+    outcome.staleWorkflowCommand === true ? (["stale workflow command"] as const) : [];
+  const reasons: readonly ContentReason[] = [...malformed, ...stale];
   return {
     status: "reinstalled",
     name: outcome.name,
@@ -248,9 +256,9 @@ export function reinstalledRowFromOutcome(
     // the `v<version>` token either way.
     ...(outcome.version !== "" && { version: outcome.version }),
     ...(rowScope !== undefined && { scope: rowScope }),
-    ...(malformed.length > 0 && { reasons: malformed }),
+    ...(reasons.length > 0 && { reasons }),
     // D-03/D-06: realized reinstall transition -> reloads Pi resources.
-    severity: malformed.length > 0 ? "warning" : "info",
+    severity: reasons.length > 0 ? "warning" : "info",
     needsReload: true,
   };
 }
@@ -343,12 +351,22 @@ function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
 }
 
 /**
- * Map a `ReinstallReinstalledOutcome`'s `declaresAgents` / `declaresMcp`
- * predicate flags to the `Dependency[]` tuple consumed by
+ * Map a `ReinstallReinstalledOutcome`'s `declaresAgents` / `declaresMcp` /
+ * `declaresWorkflows` predicate flags to the `Dependency[]` tuple consumed by
  * `PluginReinstalledMessage.dependencies` per SNM-06. The
  * renderer's per-row soft-dep probe iterates this array to emit
- * `{requires pi-subagents}` / `{requires pi-mcp}` markers when the
- * companion extension is unloaded (MSG-SD-1..2).
+ * `{requires pi-subagents}` / `{requires pi-mcp}` /
+ * `{requires pi-dynamic-workflows}` markers when the companion extension is
+ * unloaded (MSG-SD-1..2).
+ *
+ * WDEP-02: `workflows` pushes LAST, so a reinstall that declares agents and mcp
+ * renders the same two-marker brace whether or not it also declares workflows.
+ *
+ * WDEP-04 / SEV-01: the reinstall row stamps the marker but takes NO
+ * `companionSeverity` raise, matching the `agents` and `mcp` markers on this
+ * same row. That asymmetry against install / update / enable is deliberate and
+ * byte-pinned by the catalog's reinstall soft-dep state, which carries no
+ * attention summary line; do not "repair" it by adding a raise here.
  */
 function dependenciesFromOutcome(outcome: ReinstallReinstalledOutcome): readonly Dependency[] {
   const deps: Dependency[] = [];
@@ -358,6 +376,10 @@ function dependenciesFromOutcome(outcome: ReinstallReinstalledOutcome): readonly
 
   if (outcome.declaresMcp) {
     deps.push("mcp");
+  }
+
+  if (outcome.declaresWorkflows) {
+    deps.push("workflows");
   }
 
   return Object.freeze(deps);

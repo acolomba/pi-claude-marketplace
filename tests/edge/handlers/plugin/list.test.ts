@@ -63,7 +63,7 @@
 //   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
 //     never -- `notifyUsageError` writes straight to the channel;
 //   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` TWICE, on every filter and scope combination.
+//     `pi.getAllTools()` THREE times, on every filter and scope combination.
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -202,7 +202,14 @@ async function recordMarketplace(
   for (const name of installed) {
     plugins[name] = buildInstalledPluginRecord(
       { version },
-      { skills: [`${name}-tool`], prompts: [], agents: [], mcpServers: [], hooks: [] },
+      {
+        skills: [`${name}-tool`],
+        prompts: [],
+        agents: [],
+        mcpServers: [],
+        hooks: [],
+        workflows: [],
+      },
     );
   }
 
@@ -412,7 +419,7 @@ for (const { args, expectedBlocks, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -458,7 +465,7 @@ for (const { args, expectedBlocks, label } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -545,7 +552,7 @@ for (const { anchor, args, expectedBlocks, label } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -604,7 +611,7 @@ for (const { args, expectedBlocks, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -663,7 +670,7 @@ for (const { args, expectedBlocks, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: workspace.cwd,
       reads: 1,
     });

@@ -163,7 +163,7 @@ test("adds the canonical marketplace and enables autoupdate on a clean user scop
   const { cwd, locations } = await createHermeticUserScope(t, "clean");
   t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-02-03T04:05:06.000Z") });
   const marketplaceRoot = await locations.sourceCloneDir("claude-plugins-official");
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 4);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 6);
   const { gitOps, clonedUrls } = createBootstrapGitOps();
   const completionCache = createCompletionCache();
   const peerCompletionCache = createCompletionCache();
@@ -229,7 +229,7 @@ test("adds the canonical marketplace and enables autoupdate on a clean user scop
 test("converges on a second bootstrap without changing the recorded state or the tree", async (t) => {
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "repeat");
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(3, 6);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(3, 9);
   const { gitOps, clonedUrls } = createBootstrapGitOps();
   const completionCache = createCompletionCache();
 
@@ -266,7 +266,7 @@ test("reports an idempotent autoupdate when the marketplace is already bootstrap
   await seedAddedMarketplace(locations, cwd, true);
   const seededState = await readFile(locations.stateJsonPath, "utf8");
   const seededConfig = await readFile(locations.configJsonPath, "utf8");
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
   const { gitOps, clonedUrls } = createBootstrapGitOps();
   const completionCache = createCompletionCache();
 
@@ -290,7 +290,7 @@ test("flips autoupdate on when the marketplace is added but autoupdate is off", 
   const { cwd, locations } = await createHermeticUserScope(t, "half");
   await seedAddedMarketplace(locations, cwd, false);
   const seededState = await readFile(locations.stateJsonPath, "utf8");
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
   const { gitOps, clonedUrls } = createBootstrapGitOps();
   const completionCache = createCompletionCache();
 
@@ -323,7 +323,7 @@ test("preserves the committed add when the real autoupdate child rejects its con
   const { cwd, locations } = await createHermeticUserScope(t, "autoupdate-failure");
   t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-02-03T04:05:06.000Z") });
   const marketplaceRoot = await locations.sourceCloneDir("claude-plugins-official");
-  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 4);
+  const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 6);
   const { gitOps, clonedUrls } = createBootstrapGitOps();
   const ownedCache = createCompletionCache();
   const malformedConfig = "{ malformed";
@@ -376,7 +376,7 @@ test("writes into the user scope only and leaves the project scope absent", asyn
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "user-only");
   const projectLocations = locationsFor("project", cwd);
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(2, 4);
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(2, 6);
   const { gitOps } = createBootstrapGitOps();
   const completionCache = createCompletionCache();
 

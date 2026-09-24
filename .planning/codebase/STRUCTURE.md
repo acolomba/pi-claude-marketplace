@@ -23,7 +23,6 @@ pi-claude-marketplace/
 │   ├── e2e/                            # 6 tests — exercises upstream refs (PI_CM_E2E_REF)
 │   ├── edge/                           # 27 tests
 │   ├── fixtures/                       # shared fixture data, no .test.ts files
-│   ├── helpers/                        # 1 test + test-only helper modules (mocks, source-scan)
 │   ├── integration/                    # 10 tests
 │   ├── live-uat/                       # standalone .mjs UAT drivers, no .test.ts files
 │   ├── orchestrators/                  # 49 tests across plugin/, marketplace/, import/, reconcile/
@@ -100,7 +99,7 @@ pi-claude-marketplace/
 **Testing:**
 - `tests/architecture/import-boundaries.test.ts`: ESLint-zone assertion + directed-edge grep cycle gate
 - `tests/architecture/no-orchestrator-network.test.ts`: NFR-5 network-boundary source-grep gate
-- `tests/helpers/source-scan.ts`: shared grep/comment-stripping helpers used by architecture tests
+- `tests/architecture/source-scan.ts`: shared grep/comment-stripping helpers used by architecture tests
 
 ## Naming Conventions
 

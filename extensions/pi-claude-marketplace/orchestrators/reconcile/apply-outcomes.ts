@@ -79,10 +79,10 @@ export interface MpRemovePartialOutcome extends OutcomeBase {
 
 /**
  * Plugin install success outcome. `version` mirrors the resolved install
- * version (when known); `dependencies` is the closed-set
- * `("agents" | "mcp")[]` derived from `InstallPluginOutcome.declaresAgents`
- * / `declaresMcp` so the renderer's `PluginInstalledMessage` arm fires soft-
- * dep markers correctly when companion extensions are unloaded.
+ * version (when known); `dependencies` is the closed-set `Dependency[]`
+ * derived from `InstallPluginOutcome.declaresAgents` / `declaresMcp` /
+ * `declaresWorkflows` so the renderer's `PluginInstalledMessage` arm fires
+ * soft-dep markers correctly when companion extensions are unloaded.
  *
  * WR-04: the two ledger-degradation signals are INHERITED from the shared shape
  * rather than re-declared here, so all three ledger-driven arms (install,
@@ -113,8 +113,9 @@ export interface PluginInstalledOutcome
 }
 
 /**
- * Plugin re-materialized in place by load-time backfill (BFILL-01). A
- * partially-installed plugin is re-resolved offline (NFR-5) and its now-fuller
+ * Plugin re-materialized in place by load-time backfill (BFILL-01). A recorded
+ * plugin -- any recorded plugin, not only a partially-installed one (WCONV-01) --
+ * is re-resolved offline (NFR-5) and its now-fuller
  * supported set is materialized via the reinstall primitive; this outcome folds
  * the promotion into the single applied cascade (D-68-04 / RECON-04). `version`
  * mirrors the unchanged recorded version (a promotion is NOT an upgrade);
@@ -144,8 +145,9 @@ export interface PluginBackfilledOutcome
    * `partially-available` arm's component list) so the `(partially-installed)` projection
    * can populate a factual `{reasons}` brace through the shared
    * `narrowUnsupportedKinds` seam -- exactly as the `install` success row does.
-   * Empty on a fully-promoted (`installable`) backfill, where the row drops to
-   * the brace-less `(installed)` projection.
+   * Empty on a fully-promoted (`installable`) backfill, where the row takes the
+   * `(installed)` projection and its brace carries the WCONV-03 convergence
+   * marker alone.
    */
   readonly unsupported: readonly string[];
 }
@@ -429,10 +431,17 @@ export function classifyReadPassThrow(err: unknown): ContentReason {
   return narrowProbeError(err);
 }
 
-/** Derive the closed-set Dependency[] from InstallPluginOutcome flags. */
+/**
+ * Derive the closed-set Dependency[] from InstallPluginOutcome flags.
+ *
+ * WDEP-02: `workflows` pushes LAST, so a projection that declares agents and
+ * mcp renders the same two-marker brace whether or not it also declares
+ * workflows.
+ */
 export function dependenciesFromInstall(outcome: {
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
+  readonly declaresWorkflows: boolean;
 }): readonly Dependency[] {
   const deps: Dependency[] = [];
   if (outcome.declaresAgents) {
@@ -441,6 +450,10 @@ export function dependenciesFromInstall(outcome: {
 
   if (outcome.declaresMcp) {
     deps.push("mcp");
+  }
+
+  if (outcome.declaresWorkflows) {
+    deps.push("workflows");
   }
 
   return deps;

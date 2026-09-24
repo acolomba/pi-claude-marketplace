@@ -35,8 +35,8 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const CATALOG_PATH = path.join(REPO_ROOT, "docs/output-catalog.md");
 const EXPECTED_MODULE_COUNT = 20;
 const EXPECTED_SECTION_COUNT = 20;
-const EXPECTED_STATE_COUNT = 190;
-const EXPECTED_UTF8_BYTES = 23_605;
+const EXPECTED_STATE_COUNT = 205;
+const EXPECTED_UTF8_BYTES = 26_619;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
@@ -295,11 +295,11 @@ test("catalog contract rejects duplicate fixture tuples and empty sections", () 
 
   assert.throws(
     () => mergeFixtureMaps([one, one]),
-    /Duplicate catalog fixture tuple: section::state/u,
+    new Error("Duplicate catalog fixture tuple: section::state"),
   );
   assert.throws(
     () => mergeFixtureMaps([{ section: {} }]),
-    /Catalog fixture section must not be empty: section/u,
+    new Error("Catalog fixture section must not be empty: section"),
   );
 });
 
@@ -325,7 +325,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 190 exact documented states", async () => {
+test("catalog contract matches all 20 fixture modules to 205 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

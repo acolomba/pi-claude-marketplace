@@ -6,6 +6,7 @@
 // surface).
 
 import { commandNamespaceSeparator } from "../platform/os.ts";
+import { errorMessage, UnsafeGeneratedNameError } from "../shared/errors.ts";
 
 /**
  * RN-2: validate that a name is safe to use as a path basename / generated
@@ -122,7 +123,8 @@ export function generatedSkillName(plugin: string, source: string): string {
  * exists to remove a stutter, and a head that is nothing but the stutter has
  * no command name left underneath it.
  *
- * `generatedSkillName` still rejects an empty elided suffix. Agent names
+ * Commands only. `generatedWorkflowName` applies the same rule to the same
+ * join. `generatedSkillName` still rejects an empty elided suffix. Agent names
  * preserve the complete source name without elision.
  */
 export function generatedCommandName(plugin: string, source: string): string {
@@ -164,4 +166,191 @@ export function generatedAgentName(plugin: string, source: string): string {
   const generated = `pi-claude-marketplace-${plugin}-${source}`;
   assertSafeName(generated);
   return generated;
+}
+
+/**
+ * Declared agent name generator (RN-1 / AG-1a).
+ *
+ * Format: `<plugin>:<agent>` -- the name the agent DECLARES in its frontmatter,
+ * as distinct from `generatedAgentName`, which names the file on disk and
+ * carries the AG-5 ownership marker. Two consumers read this field and both
+ * take it verbatim: pi-subagents as the agent's `localName`, and the host
+ * workflow engine as its `agentType` registry key. A workflow script authored
+ * against Claude Code addresses a plugin agent as `<plugin>:<agent>`, so any
+ * other shape makes every `agent({ agentType })` call in a bridged workflow
+ * resolve to nothing and silently fall back to default tools and model.
+ *
+ * The separator is a literal `:` on every platform rather than
+ * `commandNamespaceSeparator()`. That helper exists because command and skill
+ * names BECOME filenames, and Windows cannot spell `:` in one. This name never
+ * reaches the filesystem, so the colon is safe everywhere -- and a Windows dot
+ * here would miss the agentType the script names just as the old flat form did.
+ *
+ * The complete source name is preserved without elision, exactly as
+ * `generatedAgentName` preserves it, so bot and acme-bot stay distinct
+ * within plugin acme.
+ */
+export function declaredAgentName(plugin: string, source: string): string {
+  assertSafeName(plugin);
+  assertSafeName(source);
+  const declared = `${plugin}:${source}`;
+  assertSafeName(declared);
+  return declared;
+}
+
+/**
+ * Workflow name generator (RN-1 / WNAM-06).
+ *
+ * Format: `<plugin>:<workflow>` -- the same colon separator command names use.
+ * The `<plugin>-` prefix is elided from `source` (acme + acme-audit ->
+ * acme:audit, NOT acme:acme-audit).
+ *
+ * `source` is the workflow's `meta.name`, not its file stem: the two diverge in
+ * real plugins, and the declared name is the one the host engine answers to.
+ *
+ * Workflow discovery is flat and non-recursive (WBRG-02), so this takes the
+ * single-segment shape of `generatedSkillName` rather than
+ * `generatedCommandName`'s `/`-separated path handling. Sharing a helper with
+ * the command generator would mean pulling its nested-path handling into a
+ * caller that can never produce that shape.
+ *
+ * D-141-02: an elision that would empty the head does not fire, exactly as it
+ * does not for `generatedCommandName`'s identically-joined name. A `meta.name`
+ * of "acme-" in plugin "acme" therefore yields "acme:acme-", not the bare
+ * "acme:" -- a name whose command half is empty. The elision exists to remove a
+ * stutter, and a name that is nothing but the stutter has nothing left under it.
+ *
+ * Only the WHOLE name is screened by the dot, empty and whitespace rules,
+ * because the whole name is the only thing the engine judges. Screening `source`
+ * or the elided remainder for those would refuse names the engine accepts: it
+ * rejects a saved name that IS "." but not one that merely ENDS in it, so a
+ * `meta.name` of "." makes "acme:.", which its own `isSafeSavedWorkflowName`
+ * admits and its own `sourcePath` writes as the one-segment file "acme:..json".
+ * The path separator and control-character screens do still catch a defect the
+ * join cannot fix, and `assertSafeName(generated)` sees each of them in the
+ * joined name.
+ *
+ * Every failure of the NAME leaves as `UnsafeGeneratedNameError`, never as the
+ * bare `Error` the RN-2 validators throw. `domain/workflow-script.ts` turns
+ * exactly this failure into one file's `refused` verdict, and the typed class is
+ * what lets it -- and this module's own tests -- discriminate by `instanceof`
+ * instead of by an exact message string, which is the error contract every other
+ * domain failure follows.
+ *
+ * One screen deliberately EXCEEDS the engine: a name carrying a lone surrogate
+ * is refused. That is not a parity excess in any useful sense -- such a name
+ * cannot round-trip through a path at all, so the engine's own save/load pair
+ * silently collapses two of them onto one file. See the comment at the check.
+ *
+ * The `plugin` check stays OUTSIDE that conversion and keeps its bare `Error`:
+ * an unsafe plugin name disqualifies every script in the plugin at once, so it
+ * is not one file's fault and must never be rendered as one file's refusal.
+ */
+export function generatedWorkflowName(plugin: string, source: string): string {
+  assertSafeName(plugin);
+
+  const prefix = `${plugin}-`;
+  const stripped = source.startsWith(prefix) ? source.slice(prefix.length) : source;
+  const elided = stripped === "" ? source : stripped;
+  const generated = `${plugin}:${elided}`;
+
+  // The one emptiness rule that survives as a check on the part: the join always
+  // carries "<plugin>:", so a `source` of nothing at all still produces a
+  // non-empty name that every whole-name screen below would admit.
+  if (source.trim() === "") {
+    throw new UnsafeGeneratedNameError(generated, "Workflow name must be a non-empty string.");
+  }
+
+  // The conversion wraps one RN-2 call and nothing else, so what it can relabel
+  // is bounded by one pure string validator. The engine-parity gate below raises
+  // the typed class itself rather than being round-tripped through this catch.
+  try {
+    assertSafeName(generated);
+  } catch (error) {
+    throw new UnsafeGeneratedNameError(generated, errorMessage(error));
+  }
+
+  assertSafeSavedWorkflowName(generated);
+
+  // The one screen this gate adds to the engine's, kept OUT of the mirror above
+  // so that function stays a faithful replica. A lone surrogate has no UTF-8
+  // encoding, so Node substitutes U+FFFD when it turns a name into a path:
+  // "acme:\uD800.json" and "acme:\uDC00.json" are ONE file on disk, and the
+  // second write destroys the first without an error. The engine screens only
+  // \p{Cc} and \p{Cf}, so its own `sourcePath` -- which writes `${name}.json` --
+  // cannot keep the two apart either, and neither can
+  // `domain/workflow-script.ts`'s collision gate, which compares names as exact
+  // strings and correctly sees two. Refusing the name is the only point at
+  // which the collapse is visible. `/u` matches CODE POINTS, so a well-formed
+  // astral pair is a single non-surrogate code point and passes.
+  if (/\p{Cs}/u.test(generated)) {
+    throw new UnsafeGeneratedNameError(
+      generated,
+      `Generated workflow name "${generated}" must not contain unpaired surrogates.`,
+    );
+  }
+
+  return generated;
+}
+
+/**
+ * WNAM-06 / SC-4: replicate the host engine's `isSafeSavedWorkflowName`
+ * (`@quintinshaw/pi-dynamic-workflows` 3.10.1, `dist/workflow-saved.js`) for a
+ * name this module has already generated.
+ *
+ * Four of the engine's six clauses live here: the 128-character cap, the
+ * trim-equality rule, the whitespace/separator/NUL screen, and the
+ * control-and-format screen. The other two are satisfied by the SHAPE of what
+ * `generatedWorkflowName` produces rather than by a check: a `<plugin>:<name>`
+ * join is never the empty string and can never be exactly "." or "..", because
+ * the plugin half is itself a non-empty RN-2 name and the colon always follows
+ * it. Neither clause is replicated as a test on the joined name, because a test
+ * that can never fire would read as a rule the generator has to obey.
+ *
+ * The last two screens overlap `assertSafeName` without being covered by it.
+ * That validator refuses only code points below 0x20 plus 0x7f, so a plain
+ * space at 0x20 and every `\p{Cf}` code point pass it while the engine refuses
+ * the name -- which in practice is an envelope on disk that never registers as
+ * a command. Both patterns carry `/u` so the property escapes match code points
+ * the way the engine's do.
+ *
+ * Matching the engine exactly is the goal, never exceeding it: a gate stricter
+ * than the engine refuses a name the engine would accept, and only the lax
+ * direction self-corrects when a later engine relaxes a rule. That is a rule
+ * about THIS function. `generatedWorkflowName` carries one deliberate screen
+ * the engine has no counterpart for, and keeps it out here so this stays a
+ * replica a reader can diff against `dist/workflow-saved.js`.
+ *
+ * This wraps rather than widens `assertSafeName`, which skills, commands and
+ * agents all share and none of which wants a 128-character cap or a whitespace
+ * ban. Only `generatedWorkflowName` calls this.
+ */
+function assertSafeSavedWorkflowName(name: string): void {
+  if (name.length > 128) {
+    throw new UnsafeGeneratedNameError(
+      name,
+      `Generated workflow name "${name}" must be at most 128 characters (got ${name.length}).`,
+    );
+  }
+
+  if (name.trim() !== name) {
+    throw new UnsafeGeneratedNameError(
+      name,
+      `Generated workflow name "${name}" must not have leading or trailing whitespace.`,
+    );
+  }
+
+  if (/[\s/\\\0]/u.test(name)) {
+    throw new UnsafeGeneratedNameError(
+      name,
+      `Generated workflow name "${name}" must not contain whitespace, path separators, or NUL.`,
+    );
+  }
+
+  if (/[\p{Cc}\p{Cf}]/u.test(name)) {
+    throw new UnsafeGeneratedNameError(
+      name,
+      `Generated workflow name "${name}" must not contain control or format characters.`,
+    );
+  }
 }

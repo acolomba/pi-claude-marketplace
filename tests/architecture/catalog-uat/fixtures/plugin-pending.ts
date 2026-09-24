@@ -1,6 +1,14 @@
-import { piWithBothLoaded } from "../mock-pi.ts";
+import { piWithAllLoaded, piWithBothLoaded } from "../mock-pi.ts";
 
 import type { FixtureMap } from "../fixture-types.ts";
+
+/**
+ * WR-06: the retained workflow staging advisory line, shared by the two pending
+ * fixtures that carry it. One constant for both arms is the byte-identity claim
+ * made testable: the arms differ only in the body the line is appended to.
+ */
+const RETAINED_WORKFLOW_STAGING_ADVISORY =
+  "    retained workflow staging: 9f1c4d2a-3b7e (2 envelopes) under the workflows staging directory";
 
 /** Catalog fixtures for the plugin pending command surface. */
 export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
@@ -10,6 +18,17 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
       // Dedicated standalone variant; the renderer hard-codes the advisory
       // body line so the byte form cannot drift from the catalog state.
       message: { kind: "reconcile-pending-empty" },
+    },
+    // WR-06: the retained workflow staging advisory on the standalone arm. The
+    // line carries the tree's directory NAME and its envelope count and
+    // interpolates no absolute path (T-53-02-02), which is also what makes it
+    // pinnable by byte equality at all.
+    "empty-steady-state-retained-workflow-staging": {
+      pi: piWithAllLoaded(),
+      message: {
+        kind: "reconcile-pending-empty",
+        advisories: [RETAINED_WORKFLOW_STAGING_ADVISORY],
+      },
     },
     // WILL-01 / D-65.1-02: marketplace add is immediate (no `will add` token);
     // the child install is the reload-deferred work, rendered under a bare
@@ -52,6 +71,22 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
             plugins: [{ status: "will uninstall", name: "old-plugin" }],
           },
         ],
+      },
+    },
+    // WR-06: the SAME advisory constant on the cascade arm. Both fixtures read
+    // one constant, so a catalog block that drifted from its sibling would fail
+    // byte equality here rather than shipping two spellings of one fact.
+    "plugin-pending-uninstall-retained-workflow-staging": {
+      pi: piWithAllLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [{ status: "will uninstall", name: "old-plugin" }],
+          },
+        ],
+        advisories: [RETAINED_WORKFLOW_STAGING_ADVISORY],
       },
     },
     // WILL-03 / D-65.1-03: removing a marketplace that still has installed

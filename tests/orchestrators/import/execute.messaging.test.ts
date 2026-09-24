@@ -65,6 +65,7 @@ test("renders an installed row with optional fields omitted", () => {
   const probe = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   } satisfies SoftDepStatus;
   const expectedRow = "● alpha-plugin (installed)";
 
@@ -108,6 +109,7 @@ test("renders installed reasons before missing dependency markers", () => {
   const probe = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   } satisfies SoftDepStatus;
   const expectedRow =
     "● beta-plugin [user] v1.2.3 (installed) {orphan rewake, malformed skill, requires pi-subagents, requires pi-mcp}";
@@ -132,6 +134,7 @@ test("omits loaded dependency markers from an installed row", () => {
   const probe = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   } satisfies SoftDepStatus;
   const expectedRow = "● gamma-plugin (installed)";
 
@@ -165,6 +168,7 @@ test("renders a skipped row with a compact hash version", () => {
   const probe = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   } satisfies SoftDepStatus;
   const expectedRow = "⊘ delta-plugin v#2ea95f8 (skipped) {already installed}";
 
@@ -202,6 +206,7 @@ test("renders a failed row without composing its cause trailer", () => {
   const probe = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   } satisfies SoftDepStatus;
   const expectedRow = "⊘ epsilon-plugin [user] v3.0.0 (failed) {not in manifest}";
 
@@ -225,6 +230,7 @@ test("renders a source-mismatch failure with optional fields omitted", () => {
   const probe = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   } satisfies SoftDepStatus;
   const expectedRow = "⊘ zeta-plugin (failed) {source mismatch}";
 
@@ -263,6 +269,7 @@ test("renders an unavailable row without a scope bracket", () => {
   const probe = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   } satisfies SoftDepStatus;
   const expectedRow = "⊘ eta-plugin v4.0.0 (unavailable) {no longer installable}";
 

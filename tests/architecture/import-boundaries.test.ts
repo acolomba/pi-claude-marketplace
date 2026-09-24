@@ -163,7 +163,7 @@ function assertZoneContract(state: RestrictedPathsState | null): void {
  * `deadCode` to production reachability, and production mode excludes the test
  * and script trees, so the bare run is blind to a cycle that lives entirely
  * outside the entry graph. Measured in this repository, with
- * `tests/architecture/x.ts` and `y.ts` importing each other: the bare run
+ * `x.ts` and `y.ts` under `tests/architecture/` importing each other: the bare run
  * reports "No issues found" and exits 0, while `--no-production
  * --circular-deps --re-export-cycles` names the cycle and exits 1.
  * `fallow-production-mode.test.ts` carries that pair as a planted-offender

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 21
-waived_count: 18
-fixed_count: 19
-total_count: 58
-last_updated: 2026-09-18T20:55:54.554Z
+open_count: 22
+waived_count: 27
+fixed_count: 35
+total_count: 84
+last_updated: 2026-09-22T13:20:31.198Z
 ---
 
 # Broken Windows Ledger
@@ -73,6 +73,32 @@ last_updated: 2026-09-18T20:55:54.554Z
 | 56 | 07 | deviation | tests/scripts/check-coverage-risk-fixtures.ts |  | The production CRAP policy corpus (classify, grade, below, twins, unicode fixtures with anchors, complexities and statement counts written from the source text) lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list | open |  | 2026-09-18T16:56:44.890Z |  |
 | 57 | 07 | deviation | scripts/coverage-acceptance.mjs |  | 07-07 Task 1 touched five files outside the plan's list (Rule 2, T-07-07-01): scripts/coverage-acceptance.mjs (new), scripts/coverage-unit.mjs, scripts/coverage-validate.mjs, scripts/coverage-capture.manifest.mjs and tests/scripts/check-coverage-risk-fixtures.ts, so the accepted-bundle readback recomputes the recorded population and denominators and refuses copied counts (summary-mismatch) | open |  | 2026-09-18T18:18:32.642Z |  |
 | 58 | 07 | deviation | tests/architecture/pre-commit-hooks.ts |  | 07-08 Task 1 touched five files outside the plan's list: scripts/coverage-capture.mjs (--plain mode the plan names as its example), tests/architecture/pre-commit-hooks.ts (new; the hook reader moved out of unused-type-member-gate.test.ts so both gates share one parser), tests/architecture/unused-type-member-gate.test.ts, tests/architecture/unit-suite-glob-completeness.test.ts and tests/scripts/coverage-capture.test.ts (both scraped the unit glob out of package.json and now read the one authoritative selection); no production source changed | open |  | 2026-09-18T20:55:54.554Z |  |
+| 59 | 114 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts | 125 | [workflows-replay] enable and update rows raise severity to warning for an absent host workflow engine but render no {requires pi-dynamic-workflows} marker: enableRowDependencies and update-row.ts::outcomeDependencies do not yet push "workflows" | fixed |  | 2026-09-08T05:17:30.752Z | 2026-09-08T06:07:43.302Z |
+| 60 | 114 | deviation | README.md |  | [workflows-replay] both README taglines still list five component kinds and omit workflows; the Features and Prerequisites lists were updated but the tagline was out of the plan's scope | fixed |  | 2026-09-08T07:41:37.490Z | 2026-09-08T08:05:26.612Z |
+| 61 | 114 | unmet-truth | docs/workflows-compatibility.md | 23 | [workflows-replay] the compatibility doc cites 15 exact line ranges inside @quintinshaw/pi-dynamic-workflows 3.10.1, a package this repo does not vendor, so no gate can detect that an engine upgrade has moved them; the doc now states the pin explicitly and this entry names it as the subject WPIN-01's machine-checkable re-read has to cover | waived | Carried by BACKLOG.md WPIN-01 (the deferred requirement, moved there at archive): nothing cheaper than vendoring can detect a moved line range, and vendoring is out of scope. | 2026-09-08T08:05:03.125Z | 2026-09-21T15:05:10.463Z |
+| 62 | 115 | lint-warning | .planning/HANDOFF.json |  | [workflows-replay] .planning/HANDOFF.json fails prettier, so npm run check stops at format:check before its test steps (pre-existing at 9a1c0180) | fixed |  | 2026-09-09T04:15:17.661Z | 2026-09-09T04:22:45.271Z |
+| 63 | 115 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts | 1453 | [workflows-replay] surfaceDiscoveryWarnings heads a gate warning with '1 declared component was skipped', contradicting the gate line's 'was installed'; newly reachable via D-115-05 | fixed |  | 2026-09-09T04:15:18.020Z | 2026-09-09T07:58:46.692Z |
+| 64 | 115 | unmet-truth | extensions/pi-claude-marketplace/shared/path-safety.ts | 13 | [workflows-replay] PathContainmentError interpolates the untrusted resolved child path raw into its message, so escaping a caller's label cannot close the forgery; five bridges share the class and measured 58 assertPathInside call sites of which 15 pass a non-constant label, several manifest-derived (plugin source path, git-subdir path) -- the fix is one line in the shared class, the follow-up audit covers 15 labels | waived | Carried to BACKLOG.md PCERR-01: five bridges and 58 call sites share PathContainmentError; scope the message change before touching it. | 2026-09-09T08:38:50.166Z | 2026-09-21T15:05:09.801Z |
+| 65 | 115 | unrun-verify | .planning/workstreams/workflows/phases/114-degradation-and-documentation/114-VERIFICATION.md | 1 | [workflows-replay] a VERIFICATION covered_files list naming REQUIREMENTS.md makes its phase permanently un-completable: phase.complete rewrites that file as its final act, so completing the phase invalidates the verification that authorized it. Phase 114 has been stuck at verification:stale since 2026-09-08 for this reason; phase 115 hit it and was cleared by dropping REQUIREMENTS.md and WINDOWS.md from its covered set. Phases 110-113 are immune only because they emit no covered_files at all. Same class for any ledger a later pass owns. | waived | Misattributed evidence, superseded by the corrected entry that follows. The defect itself is real and was observed directly on phase 115: phase.complete rewrote the active REQUIREMENTS.md, a covered file, and flipped that phase's verification from passed to stale. The claim that phase 114 was stuck for the same reason is WRONG -- 114 is stale because six files it genuinely grades (docs/output-catalog.md, docs/workflows-compatibility.md, orchestrators/plugin/install.ts, orchestrators/plugin/shared.ts, tests/architecture/catalog-uat.test.ts, tests/orchestrators/plugin/install.test.ts) were changed by phase 115's work. That is correct staleness needing re-verification, not a digest problem. | 2026-09-09T13:21:34.003Z | 2026-09-09T13:23:49.408Z |
+| 66 | 115 | unrun-verify | .planning/workstreams/workflows/phases/115-install-time-admission-gate-warnings/115-VERIFICATION.md | 1 | [workflows-replay] a VERIFICATION covered_files list that names a file a LATER pass rewrites makes its phase permanently un-completable. Observed directly on phase 115: gsd-tools phase.complete rewrote the active REQUIREMENTS.md, turning six Pending rows to Complete, and that flipped the phase's own verification from passed to stale -- completing a phase invalidates the verification that authorized it, and re-verifying never escapes. Cleared here by dropping REQUIREMENTS.md and WINDOWS.md from the covered set and recomputing via verification fingerprint; BACKLOG.md stays because criterion 5 grades it. Phases 110-113 are immune only because they emit no covered_files at all, so the exposure grows as more verifiers emit one. NOT the reason phase 114 is stale -- see waived entry 38. | waived | Carried to BACKLOG.md VSTALE-01 (with #80): the covered_files inclusion rule is one decision for every phase in the workstream and can flip completion state, so it is its own task after the archive. The four stale phases at close were re-derived, not re-listed. | 2026-09-09T13:24:02.268Z | 2026-09-21T15:05:08.569Z |
+| 67 | 116 | deviation | docs/output-catalog.md |  | [workflows-replay] catalog state id backfill-partially-installed-no-reasons now under-describes its row: it carries the components-now-supported marker, so it is not brace-less; rename deferred to 116-03 which owns the catalog corpus | fixed |  | 2026-09-09T15:07:24.389Z | 2026-09-21T15:04:50.777Z |
+| 68 | 116 | deviation | tests/orchestrators/reconcile/backfill.test.ts | 1445 | [workflows-replay] the ENBL-08 case 'skips a disabled record whose supported set grew' does not gate the filter it names: with isRecordedButDisabled deleted it stays GREEN, because reinstall's own refusal of a disabled record yields a skipped partition and no row either way. Measured 2026-09-09 by deleting the filter (2 of 34 cases redden, and this is not one of them). It correctly pins the second layer, but its title claims the first. Rename or re-aim; 116-02 added the measured-zero pair that does gate the filter. | fixed |  | 2026-09-09T15:45:15.791Z | 2026-09-10T15:14:28.239Z |
+| 69 | 116 | unmet-truth | tests/orchestrators/reconcile/backfill.test.ts |  | [workflows-replay] ENBL-08: skips a disabled record whose supported set grew stays GREEN when the isRecordedButDisabled filter it names is deleted -- reinstall's own refusal produces the same missing row, so the case gates the second layer, not the filter in its title. Measured in 116-02's control: 2 of 34 cases redden and this is not one of them. | fixed |  | 2026-09-09T16:21:30.222Z | 2026-09-10T15:14:28.547Z |
+| 70 | 116 | unmet-truth | tests/orchestrators/reconcile/backfill.test.ts | 557 | [workflows-replay] two ungated line-number citations drifted and were caught only by the security audit re-reading the sites: T-116-02's mitigation and 116-04-SUMMARY section 7 cite the WR-01 control at backfill.test.ts:529, but 529 is inside the D-68-03/WCONV-02 case and the control is at :557; WINDOWS entry 41 cites :1445 for the ENBL-08 case, which is at :1582. Same class as the compatibility doc's ungated engine line citations (entry 34) -- a line number in prose that no gate reads rots silently. | fixed |  | 2026-09-09T16:39:28.798Z | 2026-09-10T15:14:28.844Z |
+| 71 | 116 | todo | extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts | 175 | [workflows-replay] scanForceInstalledBackfills and hasForceInstalledPlugin still assert the filter this phase deleted -- hasForceInstalledPlugin's own doc comment now has to open by contradicting its name. Code review WR-03 proposed renaming; skipped because 116-CONTEXT locks 'Names are left alone'. Half that lock's rationale did not survive measurement: the proposed replacements contain no 'force', so partial-vocabulary-guard.test.ts cannot fire on them. The surviving half -- rename is churn beyond what WCONV-01..03 ask for -- is why it stayed skipped. Operator call for a later phase. | fixed |  | 2026-09-09T17:51:43.533Z | 2026-09-10T17:34:24.535Z |
+| 72 | 117 | unrun-verify | .planning/workstreams/workflows/milestones/workflows-phases/105-workflow-degradation-and-documentation/105-VERIFICATION.md | 91 | [workflows-replay] The W1/W2/W3 storage assertions were never driven against a live engine and their driver (tests/live-uat/workflow-storage-canary.mjs) was never re-landed on this branch, so the storage half of the host-engine route has no live coverage here. Re-landing it is a recorded deferred idea (D-117-01), not scope of WEVID-01/WEVID-02/WDOCS-02. | waived | Carried to BACKLOG.md WSTOR-01: needs a scratch engine (npm install --prefix + PI_WORKFLOW_ENGINE_ROOT) this close did not have; re-land the storage canary and drive it with a negative control. | 2026-09-09T19:27:52.900Z | 2026-09-21T15:05:10.144Z |
+| 73 | 117 | unmet-truth | tests/live-uat/stop-canary.mjs |  | [workflows-replay] stop-canary.mjs:193 and manifest-absence-canary.mjs:142 guard PI_CODING_AGENT_DIR with agentDir.includes(path.join("tmp","pi-uat")) — a substring test on the un-normalized value, not containment. A path such as $(pwd)/tmp/pi-uat/../../../somewhere carries the substring, survives existsSync, and is then created and used as agent state outside the sandbox. workflow-agent-failure-canary.mjs was fixed in place (resolve both sides, require a path separator after the root); the two siblings share the pattern and were left alone as out of phase scope. | fixed |  | 2026-09-09T20:11:19.722Z | 2026-09-10T17:34:24.885Z |
+| 74 | 105 | unmet-truth | docs/messaging-style-guide.md | 90 | [workflows-replay] The Computed reload-hint trailer bullet (line 90) says notify() emits the trailer iff a plugin status is in {installed, updated, reinstalled, uninstalled}, or is 'disabled' on a cascade dispatched with the disable-cascade kind. shouldEmitReloadHint does neither: per RLD-02 / RLD-05 / D-07 it OR-reduces the caller-stamped per-row needsReload over the flattened marketplace and plugin rows, with a kind-level short-circuit that returns false for every info surface and for reconcile-applied-cascade (RECON-04) even though those rows stamp needsReload:true. Its own comment says 'no status-token or cascade-kind inference'. The PLUGIN_STATUSES bullet (line 37) repeats the same stale mechanism: 'the reload-hint distinction is carried by the cascade's disable-cascade kind, not by the token'. needsReload occurs 34 times in shared/notify.ts and once in the guide, in the RLD-04 sentence this task added. Left out of MSGDOC-01 scope because it is a mechanism claim rather than an enumeration defect; correcting it needs its own measurement of the needsReload plumbing across the producers that stamp it. | waived | Carried to BACKLOG.md RLHINT-01: measure the needsReload plumbing across its producers, then restate the guide at the grade that holds and pin it. | 2026-09-09T22:31:31.534Z | 2026-09-21T15:05:09.494Z |
+| 75 | 111 | unmet-truth | extensions/pi-claude-marketplace/bridges/workflows/stage.ts | 414 | [workflows-replay] the staging root gets a symlink-anchored containment check and its sibling saved directory does not. stage.ts:215 anchors assertPathInside one level ABOVE the staging segment precisely so a symlink planted at that segment is lstat'ed; commitPreparedWorkflows then calls mkdir(workflowsSavedDir, {recursive:true}) at stage.ts:414 with nothing anchored above it, and workflowArtifactPath (locations.ts:362-378) trusts workflowsSavedDir as its own boundary. A symlink at ~/.pi/workflows/saved or at projects/<key>/saved would be followed. Practical significance is low - planting it needs write access to the user's home, outside the careless-or-malicious-plugin-author model at path-safety.ts:70-74 - but the reasoning at stage.ts:207-214 was applied to one of two sibling directories and reads as deliberate. Found by the retroactive phase-111 security audit; not a register row, so it was never counted in threats_open. | fixed |  | 2026-09-10T02:05:16.541Z | 2026-09-21T15:04:51.112Z |
+| 76 | 113 | unmet-truth | .planning/workstreams/workflows/phases/111-workflows-bridge/111-01-PLAN.md | 206 | [workflows-replay] three threat mitigations name a regression gate that was never built. T-111-03 (111-01-PLAN.md:206) says a bare path join is kept out of the workflows bridge by 'a source assertion in the acceptance criteria' - no such criterion exists in either plan, and no architecture test scans the bridge for it (no-probe-in-workflows-bridge.test.ts covers probe surface only). T-113-08 promises 'a grep gate pins the callback's presence' - grep -rn onPlaced tests/architecture/ returns 0. T-113-20 promises 'a grep gate pins the absence of write calls in the module', which cannot exist as worded because the same module hosts the destructive sweep and imports rm. All three properties were verified TRUE at HEAD by direct read, so nothing is broken today; none is guarded against reintroduction. A durable gate belongs beside assertNoForbiddenSurface in tests/architecture/source-scan.ts. Found by the retroactive phase-111 and phase-113 security audits. | fixed |  | 2026-09-10T02:05:16.905Z | 2026-09-10T14:59:05.218Z |
+| 77 | 112 | unmet-truth | extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts | 148 | [workflows-replay] the staging sweep's containment refusal is silent, and the comment above it says otherwise. workflows-staging-gc.ts:148-154 states the refusal is 'still loud'; the WR-01 fix turned the propagating throw into a per-entry leak string (:155-164), and BOTH call sites then discard the leak array in a bare catch {} - install.ts:1740-1744 and uninstall.ts:478-482 - so a symlinked staging segment is refused with no user-visible signal on either path. The tampering vector is fully closed either way (rm never runs on a refused entry, proven by two symlink tests asserting external trees survive); what is wrong is the stated observability. Three planning artifacts still assert the superseded propagate behavior: 112-04-PLAN.md:389, 112-04-SUMMARY.md:101, and 112-VERIFICATION.md:32's citation of it. Found by the retroactive phase-112 security audit. | fixed |  | 2026-09-10T02:05:17.280Z | 2026-09-10T17:34:25.230Z |
+| 78 | 113 | todo | .planning/workstreams/workflows/phases |  | [workflows-replay] not one SUMMARY across phases 109-113 carries a '## Threat Flags' section - 21 summaries, zero sections. The section is ABSENT rather than empty, so the executor's new-attack-surface channel produced nothing for any security audit to cross-check against, and every register's completeness rests entirely on register_authored_at_plan_time:true. All four auditors independently flagged this and none treated the absence as evidence that no new surface appeared; each verified mitigations by reading the implementation instead. Mitigating factor for these five phases: the new surface was independently enumerated by the code-review iterations, and each finding mapped onto a register row. The fix is a template change so the section is emitted even when the answer is None. | fixed |  | 2026-09-10T02:05:17.644Z | 2026-09-21T15:04:51.444Z |
+| 79 | 113 | todo | extensions/pi-claude-marketplace/orchestrators/plugin/update.ts | 1992 | [workflows-replay] the commit-SUCCEEDED arm records the prepare's staged names, and it is the arm that reasons about a post-success failure. update.ts:1992-1994 sets sRecord.resources.workflows from handles.workflows.result.stagedNames when args.workflows.committed is true, and from previousWorkflowNames + the commit-reported placedNames otherwise. The stated rationale for the succeeded arm is that on a commit which ran, what it staged is the truth - but a staging-cleanup leak is a recorded failure over a commit that fully succeeded, and the comment directly above that line reasons about exactly that case (envelopes left in .previous/ rather than at their targets, producing a false stale-workflow-command stamp on the next update and phantom entries on info). So the arm whose premise is 'the commit ran, therefore the intent is the truth' is the same arm that handles the case where the commit ran and the placement did not survive. Surfaced while writing the WLIF-02 architecture gate: the gate could not be written to the property as originally promised (never source from the prepare) because that property is false by design on this arm, which is what exposed the question. Not changed here - it is behavior rather than coverage, and deciding it needs the leak path measured rather than read. | waived | Carried to BACKLOG.md WLREC-01: a source read cannot settle which names the succeeded arm should record on a staging-cleanup leak; drive the leak path and observe. | 2026-09-10T13:23:19.387Z | 2026-09-21T15:05:09.176Z |
+| 80 | 114 | unmet-truth | .planning/workstreams/workflows/phases/114-degradation-and-documentation/114-VERIFICATION.md |  | [workflows-replay] the covered_files inclusion rule is inconsistent, so which later edits stale a phase is partly luck. Phase 114's list carried 114-CONTEXT.md, 114-REVIEW.md and 114-REVIEW-FIX.md while omitting 114-PATTERNS.md, 114-RESEARCH.md, 114-SECURITY.md, 114-VALIDATION.md and deferred-items.md. deferred-items.md moved during the messaging quick task and the staleness signal never saw it; docs/messaging-style-guide.md was caught only because it happened to be in the list. Two entries were added by the third re-verification pass, but the general rule was left alone because changing it changes what staleness means for every phase in the workstream. Related to #39, which records the other half of the same defect: a covered_files list naming a file a LATER pass rewrites makes its phase permanently un-completable. Together they say the list is both too narrow to detect all drift and too broad to stay stable. Deciding it needs a rule stated once and applied to every phase, not a per-phase judgement call. | waived | Carried to BACKLOG.md VSTALE-01 (with #66): the too-narrow half of the same covered_files rule question. | 2026-09-10T14:45:10.435Z | 2026-09-21T15:05:08.869Z |
+| 81 | 113 | unmet-truth | tests/architecture |  | [workflows-replay] one of the three promised-but-unbuilt regression gates is still unbuilt: the abort-path call-site enumeration. Entry #49 recorded three, and two were built on 2026-09-10 - tests/architecture/workflows-update-placed-names.test.ts for the onPlaced source, and tests/architecture/no-write-in-workflows-staging-scan.test.ts for the read-only scan, each planted and observed red before being trusted. The third has no gate. T-111-03 (111-01-PLAN.md:206) claims a source assertion keeps a bare path join out of the workflows bridge, and separately the removed grep threshold on abortPreparedWorkflows guarded that no unwind path omits the workflows arm. Both properties hold at HEAD by direct read, and update.test.ts#WLIF-02 would catch the single-function regression - what neither catches is a SECOND function-level entry point into the abort flow that skips the workflows arm on a different failure branch. The operator chose the two gates and not a third; recorded so the absence stays visible rather than dissolving into a closed entry. | waived | Accepted residual, decided at 116: two gates chosen (update.test.ts#WLIF-02 and the removed grep threshold's replacement), not a third. What stays ungated is a SECOND function-level entry point skipping the workflows arm on a different failure branch. Listed so the absence stays visible. | 2026-09-10T14:59:05.576Z | 2026-09-21T15:05:10.770Z |
+| 82 | 116 | unmet-truth | extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts | 404 | [workflows-replay] one cause reaches the cascade under two different reason tokens depending on which layer catches it. A held state lock during a backfill re-materialize is reported to the user as 'unreadable', not 'lock held'. reinstallPlugin catches StateLockHeldError and routes it through handleSinglePluginFailure -> reasonsFromTypedError, which knows only PluginShapeError, ManualRecoveryError and errno codes, so it falls through narrowReason's last-resort return at reinstall.messaging.ts:404 to 'unreadable'. maybeBackfillPlugin's failed arm then prefers outcome.reasons[0] over classifyOrchestratorThrow, which DOES map StateLockHeldError to 'lock held' at apply-outcomes.ts:380. So applyBackfillForScopeIsolated's own WR-02 wrapper says 'lock held' while the re-materialize path says 'unreadable' for the same cause, both from the same closed ContentReason set. narrowReason's own comment for the already-disabled arm states the principle this breaks: falling through to unreadable makes the row claim the cascade could not read the plugin, which is false - nothing was unreadable, another operation held the lock, and the operator loses the one word that would tell them to retry. Found while building the ENBL-08 lock-collision twin; the test pins 'unreadable' as OBSERVED not endorsed, with the mechanism in its assert block, so it reddens loudly if someone fixes this. | fixed |  | 2026-09-10T15:14:27.879Z | 2026-09-21T15:04:50.412Z |
+| 83 | 117 | deviation | extensions/pi-claude-marketplace/domain/name.ts | 163 | [workflows-live-uat] a bridged plugin agent is unaddressable as a workflow agentType, so every workflow agent() call that names one silently degrades. generatedAgentName builds "pi-claude-marketplace-<plugin>-<agent>"; the host engine keys its registry on the frontmatter name (agent-registry.ts:117-133 at 3.13.0) and upstream Claude Code namespaces plugin agents as "<plugin>:<agent>". Measured 2026-09-22 driving code-modernization:modernize-harden-scan against a scoped legacy/demo slice: the engine logged [INFO] unknown agentType "code-modernization:security-auditor"; using default tools/model five times, once per finder, and completed. The bound tool allowlist (read,find,grep,bash), model and systemPromptMode: replace are all dropped with no warning to the user. The sibling generator in the same file, generatedWorkflowName at name.ts:171+, already uses the colon form, so the divergence is internal as well as upstream. | fixed |  | 2026-09-22T12:10:09.555Z | 2026-09-22T13:20:31.198Z |
+| 84 | 117 | unrun-verify | tests/live-uat/README.md |  | [workflows-live-uat] the bridge-to-engine path is proven end to end but workflow OUTPUT quality is not, and the blocker is the sandbox rather than the bridge. Measured 2026-09-22, engine 3.13.0, pi 0.85.1, tmp/pi-uat sandbox: code-modernization:modernize-harden-scan ran to status completed in 16.5s with all five Find-phase agents done, the staged envelope loaded from the user saved store, the Claude-authored script parsed unmodified, log()/dedup/refutation stages ran and the script return value came back as JSON. It returned zero findings because every subagent declined to call any tool -- each emitted "structured_output recovered from prose extraction (the model never called the tool)" and then asserted in prose that no filesystem was available, which is false: agent.ts:818 defaults to createCodingTools(cwd) when the invocation passes none. A one-agent negative control that only asked for one file name field failed identically with SCHEMA_NONCOMPLIANCE at 217 output tokens, so the cause is not code-modernization, the six envelopes or this bridge. Sandbox has only openai-codex authed; gpt-5.5 and gpt-5.6-terra both failed this way and gpt-5.3-codex-spark hung past 200s without writing a run record, so the openai-codex-responses API path cannot be isolated from the engine subagent layer here. Closing this needs a second provider (an Anthropic key in tmp/pi-uat/agent) and one re-run; until then the Verify phase and the adversarial second pass are unobserved. | open |  | 2026-09-22T12:10:21.345Z |  |
 
 ````json
 [
@@ -796,6 +822,320 @@ last_updated: 2026-09-18T20:55:54.554Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-18T20:55:54.554Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 59,
+    "kind": "deviation",
+    "phase": "114",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts",
+    "line": 125,
+    "description": "[workflows-replay] enable and update rows raise severity to warning for an absent host workflow engine but render no {requires pi-dynamic-workflows} marker: enableRowDependencies and update-row.ts::outcomeDependencies do not yet push \"workflows\"",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-08T05:17:30.752Z",
+    "resolved_at": "2026-09-08T06:07:43.302Z"
+  },
+  {
+    "id": 60,
+    "kind": "deviation",
+    "phase": "114",
+    "file": "README.md",
+    "line": null,
+    "description": "[workflows-replay] both README taglines still list five component kinds and omit workflows; the Features and Prerequisites lists were updated but the tagline was out of the plan's scope",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-08T07:41:37.490Z",
+    "resolved_at": "2026-09-08T08:05:26.612Z"
+  },
+  {
+    "id": 61,
+    "kind": "unmet-truth",
+    "phase": "114",
+    "file": "docs/workflows-compatibility.md",
+    "line": 23,
+    "description": "[workflows-replay] the compatibility doc cites 15 exact line ranges inside @quintinshaw/pi-dynamic-workflows 3.10.1, a package this repo does not vendor, so no gate can detect that an engine upgrade has moved them; the doc now states the pin explicitly and this entry names it as the subject WPIN-01's machine-checkable re-read has to cover",
+    "status": "waived",
+    "reason": "Carried by BACKLOG.md WPIN-01 (the deferred requirement, moved there at archive): nothing cheaper than vendoring can detect a moved line range, and vendoring is out of scope.",
+    "recorded_at": "2026-09-08T08:05:03.125Z",
+    "resolved_at": "2026-09-21T15:05:10.463Z"
+  },
+  {
+    "id": 62,
+    "kind": "lint-warning",
+    "phase": "115",
+    "file": ".planning/HANDOFF.json",
+    "line": null,
+    "description": "[workflows-replay] .planning/HANDOFF.json fails prettier, so npm run check stops at format:check before its test steps (pre-existing at 9a1c0180)",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-09T04:15:17.661Z",
+    "resolved_at": "2026-09-09T04:22:45.271Z"
+  },
+  {
+    "id": 63,
+    "kind": "deviation",
+    "phase": "115",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts",
+    "line": 1453,
+    "description": "[workflows-replay] surfaceDiscoveryWarnings heads a gate warning with '1 declared component was skipped', contradicting the gate line's 'was installed'; newly reachable via D-115-05",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-09T04:15:18.020Z",
+    "resolved_at": "2026-09-09T07:58:46.692Z"
+  },
+  {
+    "id": 64,
+    "kind": "unmet-truth",
+    "phase": "115",
+    "file": "extensions/pi-claude-marketplace/shared/path-safety.ts",
+    "line": 13,
+    "description": "[workflows-replay] PathContainmentError interpolates the untrusted resolved child path raw into its message, so escaping a caller's label cannot close the forgery; five bridges share the class and measured 58 assertPathInside call sites of which 15 pass a non-constant label, several manifest-derived (plugin source path, git-subdir path) -- the fix is one line in the shared class, the follow-up audit covers 15 labels",
+    "status": "waived",
+    "reason": "Carried to BACKLOG.md PCERR-01: five bridges and 58 call sites share PathContainmentError; scope the message change before touching it.",
+    "recorded_at": "2026-09-09T08:38:50.166Z",
+    "resolved_at": "2026-09-21T15:05:09.801Z"
+  },
+  {
+    "id": 65,
+    "kind": "unrun-verify",
+    "phase": "115",
+    "file": ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-VERIFICATION.md",
+    "line": 1,
+    "description": "[workflows-replay] a VERIFICATION covered_files list naming REQUIREMENTS.md makes its phase permanently un-completable: phase.complete rewrites that file as its final act, so completing the phase invalidates the verification that authorized it. Phase 114 has been stuck at verification:stale since 2026-09-08 for this reason; phase 115 hit it and was cleared by dropping REQUIREMENTS.md and WINDOWS.md from its covered set. Phases 110-113 are immune only because they emit no covered_files at all. Same class for any ledger a later pass owns.",
+    "status": "waived",
+    "reason": "Misattributed evidence, superseded by the corrected entry that follows. The defect itself is real and was observed directly on phase 115: phase.complete rewrote the active REQUIREMENTS.md, a covered file, and flipped that phase's verification from passed to stale. The claim that phase 114 was stuck for the same reason is WRONG -- 114 is stale because six files it genuinely grades (docs/output-catalog.md, docs/workflows-compatibility.md, orchestrators/plugin/install.ts, orchestrators/plugin/shared.ts, tests/architecture/catalog-uat.test.ts, tests/orchestrators/plugin/install.test.ts) were changed by phase 115's work. That is correct staleness needing re-verification, not a digest problem.",
+    "recorded_at": "2026-09-09T13:21:34.003Z",
+    "resolved_at": "2026-09-09T13:23:49.408Z"
+  },
+  {
+    "id": 66,
+    "kind": "unrun-verify",
+    "phase": "115",
+    "file": ".planning/workstreams/workflows/phases/115-install-time-admission-gate-warnings/115-VERIFICATION.md",
+    "line": 1,
+    "description": "[workflows-replay] a VERIFICATION covered_files list that names a file a LATER pass rewrites makes its phase permanently un-completable. Observed directly on phase 115: gsd-tools phase.complete rewrote the active REQUIREMENTS.md, turning six Pending rows to Complete, and that flipped the phase's own verification from passed to stale -- completing a phase invalidates the verification that authorized it, and re-verifying never escapes. Cleared here by dropping REQUIREMENTS.md and WINDOWS.md from the covered set and recomputing via verification fingerprint; BACKLOG.md stays because criterion 5 grades it. Phases 110-113 are immune only because they emit no covered_files at all, so the exposure grows as more verifiers emit one. NOT the reason phase 114 is stale -- see waived entry 38.",
+    "status": "waived",
+    "reason": "Carried to BACKLOG.md VSTALE-01 (with #80): the covered_files inclusion rule is one decision for every phase in the workstream and can flip completion state, so it is its own task after the archive. The four stale phases at close were re-derived, not re-listed.",
+    "recorded_at": "2026-09-09T13:24:02.268Z",
+    "resolved_at": "2026-09-21T15:05:08.569Z"
+  },
+  {
+    "id": 67,
+    "kind": "deviation",
+    "phase": "116",
+    "file": "docs/output-catalog.md",
+    "line": null,
+    "description": "[workflows-replay] catalog state id backfill-partially-installed-no-reasons now under-describes its row: it carries the components-now-supported marker, so it is not brace-less; rename deferred to 116-03 which owns the catalog corpus",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-09T15:07:24.389Z",
+    "resolved_at": "2026-09-21T15:04:50.777Z"
+  },
+  {
+    "id": 68,
+    "kind": "deviation",
+    "phase": "116",
+    "file": "tests/orchestrators/reconcile/backfill.test.ts",
+    "line": 1445,
+    "description": "[workflows-replay] the ENBL-08 case 'skips a disabled record whose supported set grew' does not gate the filter it names: with isRecordedButDisabled deleted it stays GREEN, because reinstall's own refusal of a disabled record yields a skipped partition and no row either way. Measured 2026-09-09 by deleting the filter (2 of 34 cases redden, and this is not one of them). It correctly pins the second layer, but its title claims the first. Rename or re-aim; 116-02 added the measured-zero pair that does gate the filter.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-09T15:45:15.791Z",
+    "resolved_at": "2026-09-10T15:14:28.239Z"
+  },
+  {
+    "id": 69,
+    "kind": "unmet-truth",
+    "phase": "116",
+    "file": "tests/orchestrators/reconcile/backfill.test.ts",
+    "line": null,
+    "description": "[workflows-replay] ENBL-08: skips a disabled record whose supported set grew stays GREEN when the isRecordedButDisabled filter it names is deleted -- reinstall's own refusal produces the same missing row, so the case gates the second layer, not the filter in its title. Measured in 116-02's control: 2 of 34 cases redden and this is not one of them.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-09T16:21:30.222Z",
+    "resolved_at": "2026-09-10T15:14:28.547Z"
+  },
+  {
+    "id": 70,
+    "kind": "unmet-truth",
+    "phase": "116",
+    "file": "tests/orchestrators/reconcile/backfill.test.ts",
+    "line": 557,
+    "description": "[workflows-replay] two ungated line-number citations drifted and were caught only by the security audit re-reading the sites: T-116-02's mitigation and 116-04-SUMMARY section 7 cite the WR-01 control at backfill.test.ts:529, but 529 is inside the D-68-03/WCONV-02 case and the control is at :557; WINDOWS entry 41 cites :1445 for the ENBL-08 case, which is at :1582. Same class as the compatibility doc's ungated engine line citations (entry 34) -- a line number in prose that no gate reads rots silently.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-09T16:39:28.798Z",
+    "resolved_at": "2026-09-10T15:14:28.844Z"
+  },
+  {
+    "id": 71,
+    "kind": "todo",
+    "phase": "116",
+    "file": "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts",
+    "line": 175,
+    "description": "[workflows-replay] scanForceInstalledBackfills and hasForceInstalledPlugin still assert the filter this phase deleted -- hasForceInstalledPlugin's own doc comment now has to open by contradicting its name. Code review WR-03 proposed renaming; skipped because 116-CONTEXT locks 'Names are left alone'. Half that lock's rationale did not survive measurement: the proposed replacements contain no 'force', so partial-vocabulary-guard.test.ts cannot fire on them. The surviving half -- rename is churn beyond what WCONV-01..03 ask for -- is why it stayed skipped. Operator call for a later phase.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-09T17:51:43.533Z",
+    "resolved_at": "2026-09-10T17:34:24.535Z"
+  },
+  {
+    "id": 72,
+    "kind": "unrun-verify",
+    "phase": "117",
+    "file": ".planning/workstreams/workflows/milestones/workflows-phases/105-workflow-degradation-and-documentation/105-VERIFICATION.md",
+    "line": 91,
+    "description": "[workflows-replay] The W1/W2/W3 storage assertions were never driven against a live engine and their driver (tests/live-uat/workflow-storage-canary.mjs) was never re-landed on this branch, so the storage half of the host-engine route has no live coverage here. Re-landing it is a recorded deferred idea (D-117-01), not scope of WEVID-01/WEVID-02/WDOCS-02.",
+    "status": "waived",
+    "reason": "Carried to BACKLOG.md WSTOR-01: needs a scratch engine (npm install --prefix + PI_WORKFLOW_ENGINE_ROOT) this close did not have; re-land the storage canary and drive it with a negative control.",
+    "recorded_at": "2026-09-09T19:27:52.900Z",
+    "resolved_at": "2026-09-21T15:05:10.144Z"
+  },
+  {
+    "id": 73,
+    "kind": "unmet-truth",
+    "phase": "117",
+    "file": "tests/live-uat/stop-canary.mjs",
+    "line": null,
+    "description": "[workflows-replay] stop-canary.mjs:193 and manifest-absence-canary.mjs:142 guard PI_CODING_AGENT_DIR with agentDir.includes(path.join(\"tmp\",\"pi-uat\")) — a substring test on the un-normalized value, not containment. A path such as $(pwd)/tmp/pi-uat/../../../somewhere carries the substring, survives existsSync, and is then created and used as agent state outside the sandbox. workflow-agent-failure-canary.mjs was fixed in place (resolve both sides, require a path separator after the root); the two siblings share the pattern and were left alone as out of phase scope.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-09T20:11:19.722Z",
+    "resolved_at": "2026-09-10T17:34:24.885Z"
+  },
+  {
+    "id": 74,
+    "kind": "unmet-truth",
+    "phase": "105",
+    "file": "docs/messaging-style-guide.md",
+    "line": 90,
+    "description": "[workflows-replay] The Computed reload-hint trailer bullet (line 90) says notify() emits the trailer iff a plugin status is in {installed, updated, reinstalled, uninstalled}, or is 'disabled' on a cascade dispatched with the disable-cascade kind. shouldEmitReloadHint does neither: per RLD-02 / RLD-05 / D-07 it OR-reduces the caller-stamped per-row needsReload over the flattened marketplace and plugin rows, with a kind-level short-circuit that returns false for every info surface and for reconcile-applied-cascade (RECON-04) even though those rows stamp needsReload:true. Its own comment says 'no status-token or cascade-kind inference'. The PLUGIN_STATUSES bullet (line 37) repeats the same stale mechanism: 'the reload-hint distinction is carried by the cascade's disable-cascade kind, not by the token'. needsReload occurs 34 times in shared/notify.ts and once in the guide, in the RLD-04 sentence this task added. Left out of MSGDOC-01 scope because it is a mechanism claim rather than an enumeration defect; correcting it needs its own measurement of the needsReload plumbing across the producers that stamp it.",
+    "status": "waived",
+    "reason": "Carried to BACKLOG.md RLHINT-01: measure the needsReload plumbing across its producers, then restate the guide at the grade that holds and pin it.",
+    "recorded_at": "2026-09-09T22:31:31.534Z",
+    "resolved_at": "2026-09-21T15:05:09.494Z"
+  },
+  {
+    "id": 75,
+    "kind": "unmet-truth",
+    "phase": "111",
+    "file": "extensions/pi-claude-marketplace/bridges/workflows/stage.ts",
+    "line": 414,
+    "description": "[workflows-replay] the staging root gets a symlink-anchored containment check and its sibling saved directory does not. stage.ts:215 anchors assertPathInside one level ABOVE the staging segment precisely so a symlink planted at that segment is lstat'ed; commitPreparedWorkflows then calls mkdir(workflowsSavedDir, {recursive:true}) at stage.ts:414 with nothing anchored above it, and workflowArtifactPath (locations.ts:362-378) trusts workflowsSavedDir as its own boundary. A symlink at ~/.pi/workflows/saved or at projects/<key>/saved would be followed. Practical significance is low - planting it needs write access to the user's home, outside the careless-or-malicious-plugin-author model at path-safety.ts:70-74 - but the reasoning at stage.ts:207-214 was applied to one of two sibling directories and reads as deliberate. Found by the retroactive phase-111 security audit; not a register row, so it was never counted in threats_open.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-10T02:05:16.541Z",
+    "resolved_at": "2026-09-21T15:04:51.112Z"
+  },
+  {
+    "id": 76,
+    "kind": "unmet-truth",
+    "phase": "113",
+    "file": ".planning/workstreams/workflows/phases/111-workflows-bridge/111-01-PLAN.md",
+    "line": 206,
+    "description": "[workflows-replay] three threat mitigations name a regression gate that was never built. T-111-03 (111-01-PLAN.md:206) says a bare path join is kept out of the workflows bridge by 'a source assertion in the acceptance criteria' - no such criterion exists in either plan, and no architecture test scans the bridge for it (no-probe-in-workflows-bridge.test.ts covers probe surface only). T-113-08 promises 'a grep gate pins the callback's presence' - grep -rn onPlaced tests/architecture/ returns 0. T-113-20 promises 'a grep gate pins the absence of write calls in the module', which cannot exist as worded because the same module hosts the destructive sweep and imports rm. All three properties were verified TRUE at HEAD by direct read, so nothing is broken today; none is guarded against reintroduction. A durable gate belongs beside assertNoForbiddenSurface in tests/architecture/source-scan.ts. Found by the retroactive phase-111 and phase-113 security audits.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-10T02:05:16.905Z",
+    "resolved_at": "2026-09-10T14:59:05.218Z"
+  },
+  {
+    "id": 77,
+    "kind": "unmet-truth",
+    "phase": "112",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts",
+    "line": 148,
+    "description": "[workflows-replay] the staging sweep's containment refusal is silent, and the comment above it says otherwise. workflows-staging-gc.ts:148-154 states the refusal is 'still loud'; the WR-01 fix turned the propagating throw into a per-entry leak string (:155-164), and BOTH call sites then discard the leak array in a bare catch {} - install.ts:1740-1744 and uninstall.ts:478-482 - so a symlinked staging segment is refused with no user-visible signal on either path. The tampering vector is fully closed either way (rm never runs on a refused entry, proven by two symlink tests asserting external trees survive); what is wrong is the stated observability. Three planning artifacts still assert the superseded propagate behavior: 112-04-PLAN.md:389, 112-04-SUMMARY.md:101, and 112-VERIFICATION.md:32's citation of it. Found by the retroactive phase-112 security audit.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-10T02:05:17.280Z",
+    "resolved_at": "2026-09-10T17:34:25.230Z"
+  },
+  {
+    "id": 78,
+    "kind": "todo",
+    "phase": "113",
+    "file": ".planning/workstreams/workflows/phases",
+    "line": null,
+    "description": "[workflows-replay] not one SUMMARY across phases 109-113 carries a '## Threat Flags' section - 21 summaries, zero sections. The section is ABSENT rather than empty, so the executor's new-attack-surface channel produced nothing for any security audit to cross-check against, and every register's completeness rests entirely on register_authored_at_plan_time:true. All four auditors independently flagged this and none treated the absence as evidence that no new surface appeared; each verified mitigations by reading the implementation instead. Mitigating factor for these five phases: the new surface was independently enumerated by the code-review iterations, and each finding mapped onto a register row. The fix is a template change so the section is emitted even when the answer is None.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-10T02:05:17.644Z",
+    "resolved_at": "2026-09-21T15:04:51.444Z"
+  },
+  {
+    "id": 79,
+    "kind": "todo",
+    "phase": "113",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts",
+    "line": 1992,
+    "description": "[workflows-replay] the commit-SUCCEEDED arm records the prepare's staged names, and it is the arm that reasons about a post-success failure. update.ts:1992-1994 sets sRecord.resources.workflows from handles.workflows.result.stagedNames when args.workflows.committed is true, and from previousWorkflowNames + the commit-reported placedNames otherwise. The stated rationale for the succeeded arm is that on a commit which ran, what it staged is the truth - but a staging-cleanup leak is a recorded failure over a commit that fully succeeded, and the comment directly above that line reasons about exactly that case (envelopes left in .previous/ rather than at their targets, producing a false stale-workflow-command stamp on the next update and phantom entries on info). So the arm whose premise is 'the commit ran, therefore the intent is the truth' is the same arm that handles the case where the commit ran and the placement did not survive. Surfaced while writing the WLIF-02 architecture gate: the gate could not be written to the property as originally promised (never source from the prepare) because that property is false by design on this arm, which is what exposed the question. Not changed here - it is behavior rather than coverage, and deciding it needs the leak path measured rather than read.",
+    "status": "waived",
+    "reason": "Carried to BACKLOG.md WLREC-01: a source read cannot settle which names the succeeded arm should record on a staging-cleanup leak; drive the leak path and observe.",
+    "recorded_at": "2026-09-10T13:23:19.387Z",
+    "resolved_at": "2026-09-21T15:05:09.176Z"
+  },
+  {
+    "id": 80,
+    "kind": "unmet-truth",
+    "phase": "114",
+    "file": ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-VERIFICATION.md",
+    "line": null,
+    "description": "[workflows-replay] the covered_files inclusion rule is inconsistent, so which later edits stale a phase is partly luck. Phase 114's list carried 114-CONTEXT.md, 114-REVIEW.md and 114-REVIEW-FIX.md while omitting 114-PATTERNS.md, 114-RESEARCH.md, 114-SECURITY.md, 114-VALIDATION.md and deferred-items.md. deferred-items.md moved during the messaging quick task and the staleness signal never saw it; docs/messaging-style-guide.md was caught only because it happened to be in the list. Two entries were added by the third re-verification pass, but the general rule was left alone because changing it changes what staleness means for every phase in the workstream. Related to #39, which records the other half of the same defect: a covered_files list naming a file a LATER pass rewrites makes its phase permanently un-completable. Together they say the list is both too narrow to detect all drift and too broad to stay stable. Deciding it needs a rule stated once and applied to every phase, not a per-phase judgement call.",
+    "status": "waived",
+    "reason": "Carried to BACKLOG.md VSTALE-01 (with #66): the too-narrow half of the same covered_files rule question.",
+    "recorded_at": "2026-09-10T14:45:10.435Z",
+    "resolved_at": "2026-09-21T15:05:08.869Z"
+  },
+  {
+    "id": 81,
+    "kind": "unmet-truth",
+    "phase": "113",
+    "file": "tests/architecture",
+    "line": null,
+    "description": "[workflows-replay] one of the three promised-but-unbuilt regression gates is still unbuilt: the abort-path call-site enumeration. Entry #49 recorded three, and two were built on 2026-09-10 - tests/architecture/workflows-update-placed-names.test.ts for the onPlaced source, and tests/architecture/no-write-in-workflows-staging-scan.test.ts for the read-only scan, each planted and observed red before being trusted. The third has no gate. T-111-03 (111-01-PLAN.md:206) claims a source assertion keeps a bare path join out of the workflows bridge, and separately the removed grep threshold on abortPreparedWorkflows guarded that no unwind path omits the workflows arm. Both properties hold at HEAD by direct read, and update.test.ts#WLIF-02 would catch the single-function regression - what neither catches is a SECOND function-level entry point into the abort flow that skips the workflows arm on a different failure branch. The operator chose the two gates and not a third; recorded so the absence stays visible rather than dissolving into a closed entry.",
+    "status": "waived",
+    "reason": "Accepted residual, decided at 116: two gates chosen (update.test.ts#WLIF-02 and the removed grep threshold's replacement), not a third. What stays ungated is a SECOND function-level entry point skipping the workflows arm on a different failure branch. Listed so the absence stays visible.",
+    "recorded_at": "2026-09-10T14:59:05.576Z",
+    "resolved_at": "2026-09-21T15:05:10.770Z"
+  },
+  {
+    "id": 82,
+    "kind": "unmet-truth",
+    "phase": "116",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts",
+    "line": 404,
+    "description": "[workflows-replay] one cause reaches the cascade under two different reason tokens depending on which layer catches it. A held state lock during a backfill re-materialize is reported to the user as 'unreadable', not 'lock held'. reinstallPlugin catches StateLockHeldError and routes it through handleSinglePluginFailure -> reasonsFromTypedError, which knows only PluginShapeError, ManualRecoveryError and errno codes, so it falls through narrowReason's last-resort return at reinstall.messaging.ts:404 to 'unreadable'. maybeBackfillPlugin's failed arm then prefers outcome.reasons[0] over classifyOrchestratorThrow, which DOES map StateLockHeldError to 'lock held' at apply-outcomes.ts:380. So applyBackfillForScopeIsolated's own WR-02 wrapper says 'lock held' while the re-materialize path says 'unreadable' for the same cause, both from the same closed ContentReason set. narrowReason's own comment for the already-disabled arm states the principle this breaks: falling through to unreadable makes the row claim the cascade could not read the plugin, which is false - nothing was unreadable, another operation held the lock, and the operator loses the one word that would tell them to retry. Found while building the ENBL-08 lock-collision twin; the test pins 'unreadable' as OBSERVED not endorsed, with the mechanism in its assert block, so it reddens loudly if someone fixes this.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-10T15:14:27.879Z",
+    "resolved_at": "2026-09-21T15:04:50.412Z"
+  },
+  {
+    "id": 83,
+    "kind": "deviation",
+    "phase": "117",
+    "file": "extensions/pi-claude-marketplace/domain/name.ts",
+    "line": 163,
+    "description": "[workflows-live-uat] a bridged plugin agent is unaddressable as a workflow agentType, so every workflow agent() call that names one silently degrades. generatedAgentName builds \"pi-claude-marketplace-<plugin>-<agent>\"; the host engine keys its registry on the frontmatter name (agent-registry.ts:117-133 at 3.13.0) and upstream Claude Code namespaces plugin agents as \"<plugin>:<agent>\". Measured 2026-09-22 driving code-modernization:modernize-harden-scan against a scoped legacy/demo slice: the engine logged [INFO] unknown agentType \"code-modernization:security-auditor\"; using default tools/model five times, once per finder, and completed. The bound tool allowlist (read,find,grep,bash), model and systemPromptMode: replace are all dropped with no warning to the user. The sibling generator in the same file, generatedWorkflowName at name.ts:171+, already uses the colon form, so the divergence is internal as well as upstream.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-22T12:10:09.555Z",
+    "resolved_at": "2026-09-22T13:20:31.198Z",
+    "milestone": null
+  },
+  {
+    "id": 84,
+    "kind": "unrun-verify",
+    "phase": "117",
+    "file": "tests/live-uat/README.md",
+    "line": null,
+    "description": "[workflows-live-uat] the bridge-to-engine path is proven end to end but workflow OUTPUT quality is not, and the blocker is the sandbox rather than the bridge. Measured 2026-09-22, engine 3.13.0, pi 0.85.1, tmp/pi-uat sandbox: code-modernization:modernize-harden-scan ran to status completed in 16.5s with all five Find-phase agents done, the staged envelope loaded from the user saved store, the Claude-authored script parsed unmodified, log()/dedup/refutation stages ran and the script return value came back as JSON. It returned zero findings because every subagent declined to call any tool -- each emitted \"structured_output recovered from prose extraction (the model never called the tool)\" and then asserted in prose that no filesystem was available, which is false: agent.ts:818 defaults to createCodingTools(cwd) when the invocation passes none. A one-agent negative control that only asked for one file name field failed identically with SCHEMA_NONCOMPLIANCE at 217 output tokens, so the cause is not code-modernization, the six envelopes or this bridge. Sandbox has only openai-codex authed; gpt-5.5 and gpt-5.6-terra both failed this way and gpt-5.3-codex-spark hung past 200s without writing a run record, so the openai-codex-responses API path cannot be isolated from the engine subagent layer here. Closing this needs a second provider (an Anthropic key in tmp/pi-uat/agent) and one re-run; until then the Verify phase and the adversarial second pass are unobserved.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-22T12:10:21.345Z",
     "resolved_at": null,
     "milestone": null
   }

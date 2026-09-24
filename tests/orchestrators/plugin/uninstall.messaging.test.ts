@@ -34,6 +34,7 @@ test("renders a complete cross-scope uninstalled transition row", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -69,6 +70,7 @@ test("renders a failed uninstall row without leaking its cause into the row body
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act

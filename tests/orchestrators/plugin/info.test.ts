@@ -31,6 +31,7 @@ import assert from "node:assert/strict";
 import { createHook } from "node:async_hooks";
 import * as fs from "node:fs";
 import { mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
+import { createRequire, syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import test from "node:test";
 
@@ -289,7 +290,7 @@ function makeCtx(expectedNotifications = 1): {
     .times(expectedNotifications);
   when(() => pi.getAllTools())
     .thenReturn([])
-    .times(expectedNotifications * 2);
+    .times(expectedNotifications * 3);
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       notifications.push(severity === undefined ? { message } : { message, severity });
@@ -351,6 +352,7 @@ interface SeedPathMarketplaceOpts {
         agents?: readonly string[];
         mcpServers?: readonly string[];
         hooks?: readonly string[];
+        workflows?: readonly string[];
       };
       /** Persisted hook entries; omission exercises the legacy file fallback. */
       hookEntries?: readonly { event: string; matcher?: string }[];
@@ -393,6 +395,7 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
       mcpServers: [...(override?.mcpServers ?? [])],
       prompts: [...(override?.prompts ?? [])],
       skills: [...(override?.skills ?? [`${name}-skill`])],
+      workflows: [...(override?.workflows ?? [])],
     });
   }
 
@@ -1430,6 +1433,7 @@ test("BOUND-01: a manifest READ FAILURE with an installed record present still r
                 agents: [],
                 mcpServers: [],
                 hooks: [],
+                workflows: [],
               },
               enabled: true,
               installedAt: "2026-01-01T00:00:00.000Z",
@@ -1840,6 +1844,7 @@ test("NFR-5 end-to-end: github-source marketplace record resolves plugin info fr
                 agents: [],
                 mcpServers: [],
                 hooks: [],
+                workflows: [],
               },
               enabled: true,
               installedAt: "2026-01-01T00:00:00.000Z",
@@ -4035,12 +4040,12 @@ test("D-100-08 / ENBL-17: bare info (no --scope) with a disabled record in one s
 // SURF-01 / D-63-04 / D-63-07: `info <plugin>` for an installable plugin
 // with `hooks/hooks.json` renders the multi-line `hooks:` block. The
 // block slots alphabetically between `commands` and `mcp` (driven by
-// the 5-tuple `COMPONENT_KINDS`). Tool events render as
+// the `COMPONENT_KINDS` tuple). Tool events render as
 // `<event>(<matcher>)`; non-tool events render as bare `<event>`.
 // Declaration order from the parsed file is preserved.
 //
 // The byte-form of the `hooks:` block itself is locked end-to-end in
-// `tests/shared/notify-v2.test.ts` (renderer unit tests). These
+// `tests/shared/notification-dispatch.test.ts` (the SURF-02 / D-63-04 renderer unit case). These
 // orchestrator-level fixtures verify the integration: the info.ts
 // re-parse from disk produces the `HookSummaryEntry[]` that flows into
 // the renderer at the correct alphabetical slot.
@@ -7247,6 +7252,572 @@ test("an available path plugin renders sorted dependencies after its inventory",
           "● mp [user] <no autoupdate>\n" +
           "  ○ alpha v1.0.0 (available)\n" +
           "    dependencies: bravo@mp, zulu@mp",
+      },
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WFLW-04: the `workflows:` line on the resolved component arm.
+//
+// The names are the generated `<plugin>:<name>` of every ADMITTED script, read
+// out of the script bodies by the discovery pass rather than off a directory
+// listing -- a workflow command is named by its own `meta.name`.
+// ---------------------------------------------------------------------------
+
+const WORKFLOW_NAMED_ALPHA = 'export const meta = { name: "alpha", description: "alphas" };\n';
+const WORKFLOW_NAMED_ZETA = 'export const meta = { name: "zeta", description: "zetas" };\n';
+const WORKFLOW_NAMELESS = 'export const meta = { description: "quiet" };\n';
+const WORKFLOW_NO_META = "export function help() {\n  return 1;\n}\n";
+
+async function seedWorkflowScripts(
+  mpRoot: string,
+  pluginDir: string,
+  scripts: Record<string, string>,
+): Promise<void> {
+  const workflowsDir = path.join(mpRoot, pluginDir, "workflows");
+  await mkdir(workflowsDir, { recursive: true });
+  for (const [fileName, source] of Object.entries(scripts)) {
+    await writeFile(path.join(workflowsDir, fileName), source, "utf8");
+  }
+}
+
+test("WFLW-04: an installed plugin lists its admitted workflows, sorted, after its skills, and reports a nameless one as a skip", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedFooInstalled(home, cwd);
+    // `quiet.js` declares no readable name, so no envelope is written for it
+    // and it is absent from the line; its own advisory row reports why.
+    await seedWorkflowScripts(mpRoot, "foo", {
+      "alpha.js": WORKFLOW_NAMED_ALPHA,
+      "zeta.js": WORKFLOW_NAMED_ZETA,
+      "quiet.js": WORKFLOW_NAMELESS,
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message:
+          "● mp [user] <no autoupdate>\n" +
+          "  ● foo v1.2.3 (installed)\n" +
+          "    Foo plugin\n" +
+          "    agents: a1\n" +
+          "    commands: c1\n" +
+          "    skills: s1\n" +
+          "    workflows: foo:alpha, foo:zeta\n" +
+          '    note: workflow script "quiet.js" in "workflows" will not be installed: ' +
+          "quiet.js declares no string-literal `meta.name`, so there is no command to install",
+      },
+    ]);
+  });
+});
+
+test("WFLW-04: a plugin whose workflow scripts are all unadmitted renders no workflows line", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedWorkflowScripts(mpRoot, "foo", { "helper.js": WORKFLOW_NO_META });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert -- no `workflows:` line, because nothing was admitted. The script
+    // is not silently dropped: its own advisory line reports it.
+    assert.deepEqual(notifications, [
+      {
+        message:
+          EXPECTED_FOO_INSTALLED_INFO +
+          "\n" +
+          '    note: workflow script "helper.js" in "workflows" will not be installed: ' +
+          "helper.js declares no `meta`, so there is nothing to install",
+      },
+    ]);
+  });
+});
+
+test("NFR-10: a declared workflows path escaping the plugin root folds to the not-resolved marker", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- the escaping `workflows` string makes the resolver report the
+    // plugin structurally unavailable, so the row re-derives its component paths
+    // leniently from the raw manifest strings. That string survives the
+    // re-derivation, and the containment assertion inside discovery refuses it
+    // a second time rather than walking out of the plugin root.
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "alpha",
+            source: "./alpha",
+            version: "1.0.0",
+            workflows: "../../escape",
+          },
+        ],
+      },
+      installablePluginDirs: ["alpha"],
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert -- the command reports the refusal on the row; it does not throw,
+    // and it lists nothing from outside the plugin root.
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      "● mp [user] <no autoupdate>\n" +
+        "  ⊘ alpha v1.0.0 (unavailable) {unsupported source, unreadable}\n" +
+        "    components: not resolved",
+    );
+  });
+});
+
+test("WFLW-04: a manifest-absent record renders its persisted workflow inventory, sorted", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- the names are seeded out of alphabetical order, so a rendered
+    // sorted list proves the arm sorts rather than echoing the record.
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        alpha: { version: "1.0.0", resources: { workflows: ["alpha:release", "alpha:changelog"] } },
+      },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    skills: alpha-skill",
+          "    workflows: alpha:changelog, alpha:release",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("WFLW-04: a manifest-absent record with an empty workflow inventory renders no workflows line", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", resources: { workflows: [] } } },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("WFLW-04: the lenient component map carries the conventional workflows directory beside a declared one", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- a malformed hooks file makes the plugin structurally
+    // unavailable, which is the arm that carries no `componentPaths` and so
+    // re-derives them from the raw manifest strings. The declared `extra-flows`
+    // and the conventional `workflows` must BOTH be walked, so the row lists a
+    // script from each.
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0", workflows: "extra-flows" }],
+      },
+      installablePluginDirs: ["alpha"],
+    });
+    await seedWorkflowScripts(mpRoot, "alpha", { "zeta.js": WORKFLOW_NAMED_ZETA });
+    const extraDir = path.join(mpRoot, "alpha", "extra-flows");
+    await mkdir(extraDir, { recursive: true });
+    await writeFile(
+      path.join(extraDir, "extra.js"),
+      'export const meta = { name: "extra", description: "extras" };\n',
+      "utf8",
+    );
+    await mkdir(path.join(mpRoot, "alpha", "hooks"), { recursive: true });
+    await writeFile(path.join(mpRoot, "alpha", "hooks", "hooks.json"), "{ not valid json", "utf8");
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊘ alpha v1.0.0 (unavailable) {unsupported hooks}",
+          "    workflows: alpha:extra, alpha:zeta",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WR-09: the preview-tense advisories reach the user.
+//
+// The tense parameter with no reader would ship five phrases nothing produces
+// an audience for. These cases pin the channel: the lines render, they render
+// last, they carry no absolute path, and they come from the SAME discovery
+// pass that produced the names beside them.
+// ---------------------------------------------------------------------------
+
+test("WR-09: a refused workflow script renders one preview-tense advisory line last", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedFooInstalled(home, cwd, { dependencies: ["helper@utils-mp"] });
+    await seedWorkflowScripts(mpRoot, "foo", {
+      "roll.js":
+        'export const meta = { name: "roll", description: "rolls" };\n' +
+        "export function run() {\n  return Math.random();\n}\n",
+      "zeta.js": WORKFLOW_NAMED_ZETA,
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert -- the advisory follows the `dependencies:` line, and it says what
+    // WOULD happen: this plugin is installed, but that script is not.
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● foo v1.2.3 (installed)",
+          "    Foo plugin",
+          "    agents: a1",
+          "    commands: c1",
+          "    skills: s1",
+          "    workflows: foo:zeta",
+          "    dependencies: helper@utils-mp",
+          '    note: workflow script "roll.js" in "workflows" will be refused: roll.js calls ' +
+            "`Math.random`, which the workflow engine refuses as nondeterministic",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("WR-09: a plugin whose workflow scripts are all admitted renders no advisory line", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedWorkflowScripts(mpRoot, "foo", { "zeta.js": WORKFLOW_NAMED_ZETA });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert -- byte-identical to the same row before the channel existed,
+    // plus the `workflows:` line the admitted script earns.
+    assert.deepEqual(notifications, [
+      { message: EXPECTED_FOO_INSTALLED_INFO + "\n    workflows: foo:zeta" },
+    ]);
+  });
+});
+
+test("NFR-9: an advisory naming the walked directory renders it reduced to its basename", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- the discovery pass embeds the ABSOLUTE directory it walked, so
+    // an unreduced advisory would both disclose the resolved home path and make
+    // the row's bytes vary by machine.
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedWorkflowScripts(mpRoot, "foo", { "helper.js": WORKFLOW_NO_META });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    const message = notifications[0]!.message;
+    assert.ok(
+      message.includes('workflow script "helper.js" in "workflows" will not be installed'),
+      `expected the walked directory reduced to its basename; got:\n${message}`,
+    );
+    assert.ok(
+      !message.includes(path.join(mpRoot, "foo", "workflows")),
+      `expected no absolute component directory in the row; got:\n${message}`,
+    );
+  });
+});
+
+test("WR-09: the workflow names and the advisories come from one discovery pass", async (t) => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- one admitted script and one refused script in the SAME
+    // directory. A second pass would have to re-read both bodies, so faulting
+    // every read after the first proves there is only one.
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedWorkflowScripts(mpRoot, "foo", {
+      "roll.js":
+        'export const meta = { name: "roll", description: "rolls" };\n' +
+        "export function run() {\n  return Math.random();\n}\n",
+      "zeta.js": WORKFLOW_NAMED_ZETA,
+    });
+    let zetaReads = 0;
+    const zetaPath = path.join(mpRoot, "foo", "workflows", "zeta.js");
+    const filesystemPromises = createRequire(import.meta.url)(
+      "node:fs/promises",
+    ) as typeof import("node:fs/promises");
+    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
+    t.mock.method(
+      filesystemPromises,
+      "readFile",
+      async (...args: Parameters<typeof originalReadFile>) => {
+        if (args[0] === zetaPath) {
+          zetaReads += 1;
+        }
+
+        return originalReadFile(...args);
+      },
+    );
+    syncBuiltinESMExports();
+    t.after(() => {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    assert.equal(zetaReads, 1, "the admitted script's body is read exactly once");
+    const message = notifications[0]!.message;
+    assert.ok(message.includes("    workflows: foo:zeta"));
+    assert.ok(
+      message.includes('    note: workflow script "roll.js" in "workflows" will be refused'),
+    );
+  });
+});
+
+test("WFLW-04: the state-only arm carries no advisory line, because it runs no discovery", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- a workflow inventory on the record, and a defective script on
+    // disk that a discovery pass would report. The manifest no longer declares
+    // the plugin, so no discovery runs and no advisory can exist.
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", resources: { workflows: ["alpha:greet"] } } },
+      installablePluginDirs: ["alpha"],
+    });
+    await seedWorkflowScripts(mpRoot, "alpha", { "helper.js": WORKFLOW_NO_META });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    skills: alpha-skill",
+          "    workflows: alpha:greet",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WGATE-01 / WGATE-03: the engine-gate advisory on the read-only surface.
+//
+// A script the host engine will refuse is ADMITTED: the install writes its
+// envelope and registers its command, and the refusal only happens when the
+// engine loads it. So the author cannot learn it from anything the install
+// prints about disposal -- they learn it here, before they decide, in the
+// future tense this surface owes them.
+// ---------------------------------------------------------------------------
+
+/** Admitted, and refused by the engine at its check 9: no `meta.description`. */
+const WORKFLOW_GATE_NO_DESCRIPTION = 'export const meta = { name: "greet" };\n';
+
+/** The same command name, well-formed, so the gate is the only difference. */
+const WORKFLOW_NAMED_GREET = 'export const meta = { name: "greet", description: "greets" };\n';
+
+/** Admitted name, refused by the determinism screen before any gate is read. */
+const WORKFLOW_REFUSED_SEED =
+  'export const meta = { name: "roll", description: "rolls" };\n' +
+  "export const seed = Math.random();\n";
+
+/**
+ * The advisory `WORKFLOW_GATE_NO_DESCRIPTION` earns, written out rather than
+ * composed from the bridge's phrase tables: a test that asked the producer for
+ * its own expected string would agree with any wording it produced.
+ */
+const EXPECTED_GATE_NOTE_CHECK_9 =
+  'workflow script "greet.js" in "workflows" would be installed but the engine will refuse to ' +
+  "load it: the engine refuses at its check 9 -- `meta.description` must be a non-empty string, " +
+  "and `meta.model` (a string) and `meta.phases` (an array of objects each carrying a string " +
+  "`title`) must match those shapes wherever they are declared";
+
+/** One `info` run over `foo` carrying exactly one workflow script. */
+function runFooInfoWithGreetScript(source: string): Promise<NotifyRecord[]> {
+  return withHermeticHome(async ({ home, cwd }) => {
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedWorkflowScripts(mpRoot, "foo", { "greet.js": source });
+    const { ctx, pi, notifications } = makeCtx();
+
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    return notifications;
+  });
+}
+
+test("WGATE-01: info names the engine check that will refuse an admitted script, in the future tense", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- `greet.js` declares a readable name and no description, so it
+    // is admitted, it is listed on the `workflows:` line beside a well-formed
+    // sibling, and the engine will refuse to load it.
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedWorkflowScripts(mpRoot, "foo", {
+      "greet.js": WORKFLOW_GATE_NO_DESCRIPTION,
+      "zeta.js": WORKFLOW_NAMED_ZETA,
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message:
+          EXPECTED_FOO_INSTALLED_INFO +
+          "\n    workflows: foo:greet, foo:zeta" +
+          `\n    note: ${EXPECTED_GATE_NOTE_CHECK_9}`,
+      },
+    ]);
+  });
+});
+
+test("WGATE-03: the gate note is the only byte an info row gains, at the same severity", async () => {
+  // arrange + act -- two runs over one manifest shape, differing only in
+  // whether the script on disk declares a description. Both scripts are
+  // admitted under the same generated name, so the `workflows:` line is equal
+  // and the note is the only byte the gate can move.
+  const gated = await runFooInfoWithGreetScript(WORKFLOW_GATE_NO_DESCRIPTION);
+  const ungated = await runFooInfoWithGreetScript(WORKFLOW_NAMED_GREET);
+
+  // assert -- the gate-free row first, so the comparison below is against a
+  // stated baseline rather than against whatever the other run produced.
+  assert.deepEqual(ungated, [
+    { message: `${EXPECTED_FOO_INSTALLED_INFO}\n    workflows: foo:greet` },
+  ]);
+  // One record with no `severity` key is how this harness records an `info`
+  // notification: `ctx.ui.notify` was called with no second argument.
+  assert.equal(gated.length, 1);
+  assert.deepEqual(Object.keys(gated[0]!), ["message"]);
+  const gatedLines = gated[0]!.message.split("\n");
+  assert.deepEqual(
+    gatedLines.filter((line) => line.startsWith("    note: ")),
+    [`    note: ${EXPECTED_GATE_NOTE_CHECK_9}`],
+  );
+  assert.deepEqual(
+    gatedLines.filter((line) => !line.startsWith("    note: ")).join("\n"),
+    ungated[0]!.message,
+  );
+});
+
+test("NFR-9: the gate note names the workflows directory by name and discloses no home path", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- the discovery pass embeds the ABSOLUTE directory it walked, so
+    // an unreduced note would disclose the resolved home path and make the row's
+    // bytes vary by machine.
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedWorkflowScripts(mpRoot, "foo", { "greet.js": WORKFLOW_GATE_NO_DESCRIPTION });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    const message = notifications[0]!.message;
+    assert.ok(
+      message.includes(`    note: ${EXPECTED_GATE_NOTE_CHECK_9}`),
+      `expected the gate note with the directory reduced to its name; got:\n${message}`,
+    );
+    assert.ok(
+      !message.includes(home),
+      `expected no path from the temporary home in the row; got:\n${message}`,
+    );
+  });
+});
+
+test("WGATE-01: a gate note takes its place among the other advisories, in directory-entry order", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- one gate-tripping script, one helper the pass skips, and one
+    // script the determinism screen refuses. Nothing places a gate note
+    // anywhere special, and pinning the order is what makes a future sort a
+    // failure rather than a silent reordering.
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedWorkflowScripts(mpRoot, "foo", {
+      "greet.js": WORKFLOW_GATE_NO_DESCRIPTION,
+      "helper.js": WORKFLOW_NO_META,
+      "roll.js": WORKFLOW_REFUSED_SEED,
+      "zeta.js": WORKFLOW_NAMED_ZETA,
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          EXPECTED_FOO_INSTALLED_INFO,
+          "    workflows: foo:greet, foo:zeta",
+          `    note: ${EXPECTED_GATE_NOTE_CHECK_9}`,
+          '    note: workflow script "helper.js" in "workflows" will not be installed: ' +
+            "helper.js declares no `meta`, so there is nothing to install",
+          '    note: workflow script "roll.js" in "workflows" will be refused: roll.js calls ' +
+            "`Math.random`, which the workflow engine refuses as nondeterministic",
+        ].join("\n"),
       },
     ]);
   });

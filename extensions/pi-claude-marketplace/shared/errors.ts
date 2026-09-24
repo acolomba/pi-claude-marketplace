@@ -59,7 +59,7 @@ function* causeChain(err: unknown): Generator {
 }
 
 export type CleanupLifecycle = "prepare" | "abort" | "commit" | "rollback";
-export type CleanupArtifact = "skills" | "commands" | "agents" | "mcp";
+export type CleanupArtifact = "skills" | "commands" | "agents" | "mcp" | "workflows";
 
 /** Immutable diagnostic for one terminal artifact-cleanup failure. */
 export interface CleanupFailure {
@@ -479,7 +479,8 @@ export class StateLockHeldError extends Error {
  *
  * Wraps the heterogeneous-undo phase-3a failures from update-swap.ts's
  * hand-rolled 3-phase sequence. `failures` carries one entry per bridge
- * (`skills` | `commands` | `agents` | `hooks` | `mcp`) whose `commit*` threw. The
+ * (`skills` | `commands` | `agents` | `hooks` | `mcp` | `workflows`) whose
+ * `commit*` threw. The
  * constructor's `message` argument typically embeds the
  * RECOVERY_PLUGIN_REINSTALL_PREFIX-composed recovery hint; the
  * `Error.cause` (passed via the options bag) carries the chained
@@ -491,7 +492,7 @@ export class StateLockHeldError extends Error {
  * error resolves (`update-flow.ts`'s `rollbackPartialCauseSlot`).
  */
 export interface Phase3Failure {
-  readonly phase: "skills" | "commands" | "agents" | "hooks" | "mcp";
+  readonly phase: "skills" | "commands" | "agents" | "hooks" | "mcp" | "workflows";
   readonly msg: string;
   readonly cleanupFailures?: readonly CleanupFailure[];
 }
@@ -743,5 +744,65 @@ export class AggregateResourcesDiscoverError extends Error {
     });
     this.name = "AggregateResourcesDiscoverError";
     this.failures = Object.freeze([...failures]);
+  }
+}
+
+/**
+ * WNAM-06: `generatedWorkflowName` could not produce a usable command name from
+ * the plugin name and the name the script supplies.
+ *
+ * A typed class rather than the bare `Error` the RN-2 validators throw, because
+ * `domain/workflow-script.ts` converts exactly this failure into a per-file
+ * `refused` verdict and must let every other throwable through. An unqualified
+ * `catch` there would report a `TypeError` from our own defect to the user as an
+ * accusation against the plugin, and nothing would surface the defect. Narrowing
+ * on `instanceof` is also the error contract every other domain failure follows,
+ * which a bare `Error` forces callers to break by matching on message text.
+ *
+ * `attemptedName` is the join that failed, carried as data so a consumer never
+ * recovers it by parsing `message`.
+ */
+export class UnsafeGeneratedNameError extends Error {
+  readonly attemptedName: string;
+  constructor(attemptedName: string, detail: string) {
+    super(detail);
+    this.name = "UnsafeGeneratedNameError";
+    this.attemptedName = attemptedName;
+  }
+}
+
+/** One generated workflow command name claimed by more than one source script. */
+export interface WorkflowNameCollision {
+  readonly generatedName: string;
+  readonly fileNames: readonly string[];
+}
+
+/**
+ * WNAM-05: two workflow scripts in one plugin resolve to the same generated
+ * command name.
+ *
+ * The clash lives in the declared `meta.name`, so neither file name reveals it
+ * and keeping the first silently would be the misnaming WNAM-05 exists to
+ * prevent. `collisions` carries the offenders as data because the install
+ * surface renders each one through `notify()`; recovering them by parsing the
+ * message would be the message-substring coupling the typed-error convention
+ * exists to forbid.
+ */
+export class WorkflowNameCollisionError extends Error {
+  readonly collisions: readonly WorkflowNameCollision[];
+  constructor(collisions: readonly WorkflowNameCollision[]) {
+    const details = collisions
+      .map((collision) => {
+        const claimants = collision.fileNames.map((fileName) => `"${fileName}"`).join(", ");
+
+        return `"${collision.generatedName}" <- [${claimants}]`;
+      })
+      .join("\n  ");
+
+    super(
+      `Generated workflow name collision detected. Rename the meta.name of one of the source scripts:\n  ${details}`,
+    );
+    this.name = "WorkflowNameCollisionError";
+    this.collisions = Object.freeze([...collisions]);
   }
 }

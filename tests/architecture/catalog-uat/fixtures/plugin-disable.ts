@@ -1,4 +1,4 @@
-import { piWithBothLoaded } from "../mock-pi.ts";
+import { piWithAllLoaded, piWithBothLoaded } from "../mock-pi.ts";
 
 import type { FixtureMap } from "../fixture-types.ts";
 
@@ -25,6 +25,33 @@ export const PLUGIN_DISABLE_FIXTURES: FixtureMap = {
                 needsReload: true,
                 name: "foo-plugin",
                 version: "1.2.3",
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WLIF-06: the cascade reported dropping a workflow envelope, so the command
+    // it registered stays registered until a reload. Read from
+    // `cascade.dropped.workflows` and never from the record's retained
+    // inventory, which ENBL-18 deliberately keeps populated across a disable.
+    "disable-stale-workflow-command": {
+      pi: piWithAllLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "disabled",
+                severity: "warning",
+                needsReload: true,
+                name: "foo-plugin",
+                version: "1.2.3",
+                reasons: ["stale workflow command"],
               },
             ],
           },
@@ -87,9 +114,7 @@ export const PLUGIN_DISABLE_FIXTURES: FixtureMap = {
     },
   },
 
-  // -------------------------------------------------------------------------
   // Manual recovery anchors -- per-plugin manual-recovery row inside a block.
-  // -------------------------------------------------------------------------
   "manual-recovery-anchors": {
     "per-plugin-manual-recovery": {
       pi: piWithBothLoaded(),

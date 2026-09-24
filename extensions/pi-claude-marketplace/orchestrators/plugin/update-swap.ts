@@ -11,8 +11,8 @@
 // NOT runPhases -- the heterogeneous-undo flow D-02 precedent):
 //
 //  (prepare): sequential bridge prepare* into tmp (skills -> commands
-//  -> agents -> mcp). Any throw triggers abort of already-prepared handles
-//  + structured cleanup-failure descriptors.
+//  -> agents -> mcp -> workflows). Any throw triggers abort of
+//  already-prepared handles + structured cleanup-failure descriptors.
 //
 //  (state-guard swap with old-resource snapshot): inside
 //  `withStateGuard` re-read the plugin record, ST-9 stale-version check,
@@ -21,9 +21,9 @@
 //
 //  Phase 3a (physical replace, aggregate failures, continue across bridges):
 //  call each bridge's commitPrepared* in skills -> commands -> agents -> mcp
-//  order. D-03 specifies CONTINUE across bridge failures (not fail-fast)
-//  so the partial-replace state is fully observed. Failures aggregate
-//  into Phase3Failure[].
+//  -> workflows order. D-03 specifies CONTINUE across bridge failures (not
+//  fail-fast) so the partial-replace state is fully observed. Failures
+//  aggregate into Phase3Failure[].
 //
 //  Phase 3b (compose recovery hint or success): if any failures, wrap in
 //  PluginUpdatePhase3Error with RECOVERY_PLUGIN_REINSTALL_PREFIX hint.
@@ -85,6 +85,11 @@ import {
   commitPreparedSkills,
   prepareStageSkills,
 } from "../../bridges/skills/index.ts";
+import {
+  abortPreparedWorkflows,
+  commitPreparedWorkflows,
+  prepareStageWorkflows,
+} from "../../bridges/workflows/index.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -110,6 +115,7 @@ import {
   assertNoCrossPluginConflicts,
   maybeWritePluginConfigBack,
   removePluginRecord,
+  retiresWorkflowCommand,
   splitStagingWarnings,
 } from "./shared.ts";
 import { UPDATE_CONTEXT } from "./update.messaging.ts";
@@ -118,6 +124,7 @@ import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
+import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
@@ -173,6 +180,11 @@ interface PrepHandles {
   commands: PreparedCommandsStaging;
   agents: PreparedAgentsStaging;
   mcp: PreparedMcpStaging;
+  /**
+   * WLIF-02: the sixth bridge. Last in prepare order, so first to unwind --
+   * see `abortHandles`.
+   */
+  workflows: PreparedWorkflowsStaging;
 }
 
 export interface UpdatePhase3Failure extends Phase3Failure {
@@ -230,6 +242,7 @@ async function prepareUpdateHandles(
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
   agentsDirs: readonly string[],
+  workflowNames: readonly string[],
 ): Promise<PrepHandles> {
   const { plugin, marketplace, cwd, locations } = args;
   const { installable, record } = preflight;
@@ -244,6 +257,7 @@ async function prepareUpdateHandles(
       pluginDataDir,
       resolved: installable,
       previousSkillNames: record.resources.skills,
+      knownWorkflowNames: workflowNames,
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
     });
@@ -282,6 +296,18 @@ async function prepareUpdateHandles(
       pluginData: pluginDataDir,
       sourcePath: `${installable.pluginRoot}#mcpServers`,
     });
+    handles.workflows = await prepareStageWorkflows({
+      locations,
+      pluginName: plugin,
+      resolved: installable,
+      // WR-01: the RECORDED inventory, never a re-discovery of the pre-update
+      // tree. Workflow envelopes are the only artifacts this extension writes
+      // outside every scope root, so the install record is the one thing that
+      // can name them -- and supplying that list is what makes the bridge's
+      // displace-and-restore path and its WR-06 ownership pre-check reachable
+      // at all.
+      previousWorkflowNames: record.resources.workflows,
+    });
   } catch (err) {
     throw errorWithCleanupFailures(err, await abortPartialHandles(ops, handles, "prepare"));
   }
@@ -307,7 +333,17 @@ function collectUpdateWarnings(handles: PrepHandles, cascade: boolean): readonly
     agents: handles.agents.result.warnings,
     mcp: handles.mcp.result.warnings,
   });
-  return Object.freeze([...discovery, ...(cascade ? bridge : [])]);
+  // WLIF-02: the workflow prepare's warnings join the DISCOVERY half, and they
+  // join it HERE rather than through `splitStagingWarnings`. They describe the
+  // plugin's declared scripts -- a fact a standalone user needs -- not a
+  // hygiene note only the cascade forwards. The shared classifier is left at
+  // four members on purpose: a fifth would drag every other consumer of it
+  // into this change.
+  return Object.freeze([
+    ...discovery,
+    ...handles.workflows.result.warnings,
+    ...(cascade ? bridge : []),
+  ]);
 }
 
 async function abortPartialHandles(
@@ -353,8 +389,17 @@ async function abortHandles(
   ops: RemovalOps,
   handles: PrepHandles,
 ): Promise<readonly CleanupFailure[]> {
-  abortPreparedMcp(handles.mcp);
   const failures: CleanupFailure[] = [];
+  // WLIF-02: unwind in the REVERSE of the prepare order -- workflows, mcp,
+  // agents, commands, skills.
+  appendCleanupFailure(
+    failures,
+    "abort",
+    "workflows",
+    workflowsCleanupPath(handles.workflows),
+    await abortPreparedWorkflows(handles.workflows),
+  );
+  abortPreparedMcp(handles.mcp);
   appendCleanupFailure(
     failures,
     "abort",
@@ -391,6 +436,10 @@ function agentsCleanupPath(handle: PreparedAgentsStaging): string {
   return handle.kind === "staged" ? handle.stagingDir : "agents staging";
 }
 
+function workflowsCleanupPath(handle: PreparedWorkflowsStaging): string {
+  return handle.kind === "staged" ? handle.stagingRoot : "workflows staging";
+}
+
 function appendCleanupFailure(
   failures: CleanupFailure[],
   phase: CleanupLifecycle,
@@ -423,9 +472,14 @@ function appendCleanupFailure(
 //    staleness.
 //  - PHASE3_FAILURE_PHASES + Phase3Phase: closed-set tuple for the per-bridge
 //    finalize gating. `Phase3Failure.phase` is already declared as the closed
-//    union `"skills" | "commands" | "agents" | "hooks" | "mcp"` in
-//    shared/errors.ts, so the tuple here is a runtime mirror of the type for
+//    union `"skills" | "commands" | "agents" | "hooks" | "mcp" | "workflows"`
+//    in shared/errors.ts, so the tuple here is a runtime mirror of the type for
 //    explicit Set<Phase3Phase> construction inside `finalizeUpdateRecord`.
+//
+//    WLIF-02: the `workflows` member is produced by `commitUpdateWorkflows`
+//    and read by `applyPerBridgeResources`, which narrows
+//    `resources.workflows` on the commit's own verdict rather than on this
+//    set (WR-01) -- the set gates the FIVE other bridges' inventories.
 //
 // The intent-mark marker is internal-only: shared/notification-grammar.ts and
 // shared/notification-summary.ts do not read `compatibility.notes`; the only
@@ -437,7 +491,14 @@ const UPDATE_IN_PROGRESS_NOTE = "update-in-progress";
 
 // D-63-01: hooks slot lands between agents and mcp -- mirrors install-outcome.ts
 // runPhases literal-array order.
-const PHASE3_FAILURE_PHASES = ["skills", "commands", "agents", "hooks", "mcp"] as const;
+const PHASE3_FAILURE_PHASES = [
+  "skills",
+  "commands",
+  "agents",
+  "hooks",
+  "mcp",
+  "workflows",
+] as const;
 type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
 
 /**
@@ -463,12 +524,15 @@ type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
  * truthful current view during the intent-mark window; `finalizeUpdateRecord`
  * rewrites them on the all-success branch.
  *
- * No mutation to `sRecord.version`, `sRecord.resources`, `sRecord.resolvedSource`,
- * or `sRecord.updatedAt` -- those are the finalize step's responsibility.
+ * No mutation to `sRecord.version`, `sRecord.resolvedSource`, or
+ * `sRecord.updatedAt` -- those are the finalize step's responsibility.
+ * `sRecord.resources.workflows` is the ONE exception, and CR-02 below says
+ * why.
  */
 async function markUpdateInProgress(
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
+  handles: PrepHandles,
 ): Promise<void> {
   const { plugin, marketplace, locations } = args;
   const { fromVersion } = preflight;
@@ -500,6 +564,49 @@ async function markUpdateInProgress(
       supported: [...sRecord.compatibility.supported],
       unsupported: [...sRecord.compatibility.unsupported],
     };
+
+    // CR-02: `resources.workflows` is the ONE inventory this window widens, to
+    // the union of the names already recorded and the names about to be
+    // committed. Every other inventory names artifacts under a scope root,
+    // where a later sweep can still find one the record forgot; workflow
+    // envelopes live outside every scope root, so this array is the only thing
+    // that can name them at all.
+    //
+    // Over-naming is the safe direction FOR A NAME THIS PLUGIN OWNS, and that
+    // is why the union is written BEFORE the commit rather than after it:
+    // removal and re-staging are both ENOENT-tolerant (NFR-3), so an owned name
+    // that never landed costs a no-op, while a name that landed unrecorded
+    // costs the file -- permanently.
+    //
+    // CR-01: it is NOT the safe direction for a name whose target already holds
+    // content this plugin does not own, so those names are excluded here. The
+    // record is the sole ownership claim on an envelope: `unstagePluginWorkflows`
+    // unlinks by recorded name with no content check, and
+    // `displacePreviousTargets` moves every recorded name aside BEFORE
+    // `assertTargetsUnoccupied` runs, so a recorded name is never
+    // ownership-checked again. Recording a foreign name would therefore route a
+    // later uninstall, disable, update, enable or reinstall straight around the
+    // commit's occupancy refusal and delete the user's own file. The failure-exit
+    // narrow in `applyPerBridgeResources` cannot be relied on to undo it: a crash
+    // between this write and finalize -- the window the intent mark exists to
+    // survive -- leaves the union standing with nothing to re-narrow it.
+    //
+    // `unownedNames` is a prepare-time probe, so the exclusion is not exhaustive
+    // in either direction, and both residuals are bounded:
+    //  - A target occupied AFTER the probe is still refused by the commit, and
+    //    the failure exit drops the name on the ordinary (non-crash) path.
+    //  - A probed-foreign name the commit nevertheless places (the occupier
+    //    vanished in between) is recorded by the success exit from `stagedNames`.
+    //    Only a crash in that same window leaves it unrecorded, and an orphan
+    //    envelope of our own content is a smaller loss than a deleted file of
+    //    someone else's.
+    const unowned = new Set(handles.workflows.result.unownedNames);
+    sRecord.resources.workflows = [
+      ...new Set([
+        ...sRecord.resources.workflows,
+        ...handles.workflows.result.stagedNames.filter((name) => !unowned.has(name)),
+      ]),
+    ];
   });
 }
 
@@ -530,6 +637,12 @@ function applyPerBridgeResources(
     readonly failedPhases: ReadonlySet<Phase3Phase>;
     readonly installable: MaterializablePlugin;
     readonly hookEntries: readonly HookSummaryEntry[] | undefined;
+    /** CR-03: the PRE-update inventory, read off `preflight.record`. The
+     * record this function mutates was already widened to the intent-mark
+     * union, so it cannot supply this. */
+    readonly previousWorkflowNames: readonly string[];
+    /** CR-03 / WR-01: what the workflows commit reported. */
+    readonly workflows: WorkflowsCommitReport;
   },
 ): void {
   const { plugin, handles, failedPhases, installable, hookEntries } = args;
@@ -558,6 +671,28 @@ function applyPerBridgeResources(
       sRecord.hookEntries = [...hookEntries];
     }
   }
+
+  // CR-03: the ONE arm whose failure branch is not a no-op, and the narrow half
+  // of the two-window policy CR-02 opened.
+  //
+  // On a commit that ran, the truth is exactly what it staged. On a commit that
+  // threw it is the PRE-update inventory plus whatever the commit reported
+  // placing -- never the prepared names, which name targets a refusal never
+  // reached. Leaving the intent-mark union standing instead is not acceptable
+  // either: it would keep naming envelopes the commit never wrote.
+  //
+  // WR-01: the discriminant is the commit's OWN verdict, not
+  // `failedPhases.has("workflows")`. The two disagree on exactly one path -- a
+  // staging-cleanup leak, which is a recorded failure over a commit that fully
+  // succeeded. Reading the failure set there would re-record every previous
+  // name the commit just retired, and those envelopes are in the leaked
+  // `.previous/` tree rather than at their targets, so the record would name
+  // files that are not there: `retiresWorkflowCommand` stamps a false
+  // `{stale workflow command}` on the next update, and `info` lists the phantom
+  // entries verbatim.
+  sRecord.resources.workflows = args.workflows.committed
+    ? [...handles.workflows.result.stagedNames]
+    : [...new Set([...args.previousWorkflowNames, ...args.workflows.placedNames])];
 }
 
 /**
@@ -669,6 +804,7 @@ async function finalizeUpdateRecord(
   handles: PrepHandles,
   phase3aFailures: readonly Phase3Failure[],
   hookEntries: readonly HookSummaryEntry[] | undefined,
+  workflows: WorkflowsCommitReport,
 ): Promise<{ readonly invalidConfigWriteBack: boolean }> {
   const { plugin, marketplace, locations } = args;
   const { installable } = preflight;
@@ -703,6 +839,8 @@ async function finalizeUpdateRecord(
       failedPhases,
       installable,
       hookEntries,
+      previousWorkflowNames: preflight.record.resources.workflows,
+      workflows,
     });
 
     if (allSucceeded) {
@@ -790,16 +928,94 @@ async function commitUpdateHooks(
 }
 
 /**
+ * CR-03 / WR-01: what the workflows commit reported, in the two terms the
+ * record write is built from.
+ *
+ * `committed` and "no failure was recorded" are deliberately separate: a
+ * staging-cleanup leak is recorded as a `phase: "workflows"` failure -- it is
+ * a real leak and the row must say so -- yet the commit itself succeeded and
+ * every envelope is at its target. Keying the record off the failure set would
+ * conflate the two and re-record the previous names the commit just retired.
+ */
+interface WorkflowsCommitReport {
+  readonly committed: boolean;
+  /**
+   * The names sitting at their target path as a result of THIS commit, as the
+   * bridge reported them -- never the prepared names.
+   */
+  readonly placedNames: readonly string[];
+}
+
+/**
+ * WLIF-02 / CR-03: the workflows slot of phase 3a.
+ *
+ * Its own function because it answers TWO questions no other arm has to: did
+ * the commit fail, and which names did it leave at their targets. The
+ * placed-name answer comes from the bridge's `onPlaced` callback, which fires
+ * exactly once -- on the success path AND before the throw on every failure
+ * path. A refusal, an inspection failure inside the occupancy check, and a
+ * fully-reversed rollback all place NOTHING, so a caller deriving the record
+ * from the PREPARED names would name an envelope that is not there -- and on
+ * the refusal path would name the foreign file the commit declined to replace.
+ *
+ * Returns an `UpdatePhase3Failure` rather than throwing: the commit RETURNS a
+ * staging-cleanup leak instead of throwing it, and this arm is not one of the
+ * `RemovalOps`-ported bridges, so its leak is wrapped directly in a plain
+ * `Error` rather than folded into a `CleanupFailure`.
+ */
+async function commitUpdateWorkflows(prepared: PreparedWorkflowsStaging): Promise<{
+  readonly failure: UpdatePhase3Failure | undefined;
+  /**
+   * WR-01: whether the COMMIT itself completed -- false only when it threw.
+   * A staging-cleanup leak is a recorded failure and still leaves every
+   * envelope at its target, so `failure !== undefined` and `!committed` are
+   * different questions and the record write reads this one.
+   */
+  readonly committed: boolean;
+  readonly placedNames: readonly string[];
+}> {
+  let placedNames: readonly string[] = [];
+  try {
+    const leak = await commitPreparedWorkflows(prepared, {
+      // One assignment that cannot throw. The commit invokes this on its
+      // failure paths too, so anything raising here would mask the real cause.
+      onPlaced: (names) => {
+        placedNames = names;
+      },
+    });
+    if (leak === undefined) {
+      return { failure: undefined, committed: true, placedNames };
+    }
+
+    return {
+      failure: {
+        phase: "workflows",
+        msg: `workflows staging cleanup leak: ${leak}`,
+        cause: new Error(leak),
+      },
+      committed: true,
+      placedNames,
+    };
+  } catch (err) {
+    return {
+      failure: { phase: "workflows", msg: errorMessage(err), cause: err as Error },
+      committed: false,
+      placedNames,
+    };
+  }
+}
+
+/**
  * Phase 3a: physical replace, aggregating failures across bridges.
  *
  * D-03 discipline: CONTINUE across bridge-commit failures (not fail-fast) so
  * the partial-replace state is fully observed. `Phase3Failure` entries carry
  * per-bridge cause references; the caller wraps them in the aggregate error.
  *
- * The five commits run in skills -> commands -> agents -> hooks -> mcp order,
- * matching install's PI-9 ledger order. Each commit is independently atomic
- * at the OS level (rename for skills/commands/agents, atomicWriteJson for
- * mcp, write-or-remove for hooks).
+ * The six commits run in skills -> commands -> agents -> hooks -> mcp ->
+ * workflows order, matching install's PI-9 ledger order. Each commit is
+ * independently atomic at the OS level (rename for skills/commands/agents/
+ * workflows, atomicWriteJson for mcp, write-or-remove for hooks).
  */
 async function commitUpdatePhase3a(
   ops: RemovalOps,
@@ -809,6 +1025,9 @@ async function commitUpdatePhase3a(
 ): Promise<{
   readonly failures: UpdatePhase3Failure[];
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
+  /** CR-03 / WR-01: what the workflows commit reported. The record write is
+   * the only consumer. */
+  readonly workflows: WorkflowsCommitReport;
 }> {
   const failures: UpdatePhase3Failure[] = [];
 
@@ -882,7 +1101,16 @@ async function commitUpdatePhase3a(
     failures.push({ phase: "mcp", msg: errorMessage(err), cause: err as Error });
   }
 
-  return { failures, hookEntries };
+  const workflows = await commitUpdateWorkflows(handles.workflows);
+  if (workflows.failure !== undefined) {
+    failures.push(workflows.failure);
+  }
+
+  return {
+    failures,
+    hookEntries,
+    workflows: { committed: workflows.committed, placedNames: workflows.placedNames },
+  };
 }
 
 function commitCleanupFailure(
@@ -926,6 +1154,15 @@ function composePhase3FailureOutcome(
   const { plugin } = args;
   const recoveryHint = `${RECOVERY_PLUGIN_REINSTALL_PREFIX} "${plugin}".`;
   const aggregateMsg = `Plugin "${plugin}" update failed during physical replace. ${recoveryHint}`;
+  // CR-01: phase-3 failure text is NOT path-redacted, in `msg` or along the
+  // `cause` chain. These strings ARE the manual-recovery instructions: the
+  // workflows commit deliberately leaves the only copy of a displaced envelope
+  // on disk under a random staging UUID and names both endpoints so an operator
+  // can move it back by hand (`bridges/workflows/stage.ts`). A target and its
+  // displaced copy share a basename by construction, so collapsing paths to
+  // basenames renders the two endpoints as the same file name and the
+  // instruction unactionable -- and the staging-leak line degrades to a bare
+  // UUID with no parent.
   const aggregate = new PluginUpdatePhase3Error(aggregateMsg, failures, {
     cause: failures[0].cause,
   });
@@ -953,10 +1190,11 @@ function composePhase3FailureOutcome(
       msg: f.msg,
       ...(f.cleanupFailures !== undefined && { cleanupFailures: f.cleanupFailures }),
     })),
-    // declaresAgents / declaresMcp are required `boolean`. `(failed)` rows
-    // do not render the soft-dep marker.
+    // declaresAgents / declaresMcp / declaresWorkflows are required `boolean`.
+    // `(failed)` rows do not render the soft-dep marker.
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   };
 }
 
@@ -1013,8 +1251,8 @@ export async function swapPluginUpdate(
   // ─── : prepare into tmp ────────────────────────────────────────────
   //
   // Bridge prepare* writes only under <extensionRoot>/<bridge>-staging/<uuid>/.
-  // Sequential ordering -- skills -> commands -> agents -> mcp -- matches
-  //  D-03 PU-1 order, but mcp's "prepare" is in-memory only (it
+  // Sequential ordering -- skills -> commands -> agents -> mcp -> workflows --
+  // matches D-03 PU-1 order, but mcp's "prepare" is in-memory only (it
   // materializes the merged doc; commit writes mcp.json atomically).
   //
   // PI-6 cross-plugin guard: re-check generated names against the SAME-SCOPE
@@ -1035,6 +1273,7 @@ export async function swapPluginUpdate(
     args,
     preflight,
     generatedNames.agentsDirs,
+    generatedNames.workflows,
   );
 
   // ─── Phase 2a: pre-commit intent-mark (TR-04) ─────────────────────────────
@@ -1051,7 +1290,7 @@ export async function swapPluginUpdate(
   // are the post-phase-3a `finalizeUpdateRecord` step's responsibility.
 
   try {
-    await markUpdateInProgress(args, preflight);
+    await markUpdateInProgress(args, preflight, handles);
   } catch (err) {
     // Intent-mark failure (typically ST-9 stale-version): abort all prep
     // handles + rethrow.
@@ -1060,12 +1299,11 @@ export async function swapPluginUpdate(
 
   // ─── Phase 3a: physical replace; aggregate failures across bridges ────────
 
-  const { failures: phase3aFailures, hookEntries } = await commitUpdatePhase3a(
-    removalOps,
-    args,
-    preflight,
-    handles,
-  );
+  const {
+    failures: phase3aFailures,
+    hookEntries,
+    workflows: workflowsCommit,
+  } = await commitUpdatePhase3a(removalOps, args, preflight, handles);
 
   // ─── Phase 2b: finalize state (TR-04) ─────────────────────────────────────
   //
@@ -1095,6 +1333,7 @@ export async function swapPluginUpdate(
       handles,
       phase3aFailures,
       hookEntries,
+      workflowsCommit,
     );
     invalidConfigWriteBack = finalizeResult.invalidConfigWriteBack;
   } catch (finalizeErr) {
@@ -1144,6 +1383,18 @@ export async function swapPluginUpdate(
   // renders the record's degraded state one command later over a row that
   // claimed a clean update.
   const degradedKinds = collectDegradedKinds(handles);
+  // WLIF-06: the retirement gate, computed here beside the other outcome
+  // signals rather than at the shared row composer -- the composer is called by
+  // both update cascades and neither of them holds `preflight.record`, which is
+  // the pre-update inventory the difference is taken against. `stagedNames` is
+  // what this re-stage PREPARED, which is what it placed at this point: the
+  // phase-3 failure guard above has already returned, so a commit that placed
+  // any less never reaches here. A version that withdrew or renamed a workflow
+  // leaves its old generated name in the difference.
+  const staleWorkflowCommand = retiresWorkflowCommand(
+    preflight.record.resources.workflows,
+    handles.workflows.result.stagedNames,
+  );
   const updateWarnings = collectUpdateWarnings(handles, args.cascade);
   await dropPluginCompletionCache(args);
   if (isDirectUpdate(args) && invalidConfigWriteBack) {
@@ -1159,9 +1410,13 @@ export async function swapPluginUpdate(
     stagedMcpServerNames,
     declaresAgents: stagedAgentNames.length > 0,
     declaresMcp: stagedMcpServerNames.length > 0,
+    declaresWorkflows: handles.workflows.result.stagedNames.length > 0,
     // Spread only when non-empty: a clean update's outcome keeps the key ABSENT
     // rather than present-and-empty, so its shape is unchanged (NREG-01).
     ...(degradedKinds.length > 0 && { degradedKinds }),
+    // WLIF-06: same NREG-01 spread rule -- an update that retired nothing keeps
+    // the key absent, so its row renders the bytes it rendered before.
+    ...(staleWorkflowCommand && { staleWorkflowCommand: true }),
     // SURF-05 / D-63-08 / WR-01: the update re-materializes `hooks/hooks.json`,
     // so it can introduce a handler declaring `rewakeMessage` / `rewakeSummary`
     // without `asyncRewake: true` exactly as install, enable and backfill can.

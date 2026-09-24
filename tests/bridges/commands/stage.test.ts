@@ -66,6 +66,7 @@ function resolvedFor(
       skills: [],
       commands: [...commandPaths],
       agents: [],
+      workflows: [],
     },
     mcpServers: {},
     defaultEnabled: true,
@@ -159,8 +160,8 @@ test("stages recursive commands with exact names, records, substitutions, and pr
 test("stages a source led by a byte-order mark without the marker or a duplicated fence", async (t) => {
   // arrange
   // FMBOM-01: a marker raises no gate-1 throw, so no CMD-01 degrade fires and
-  // the marker would ride into the staged prompt, where a peer at the
-  // `>=0.80.5` floor drops the whole block at load time. The assertion reads
+  // the marker would ride into the staged prompt, where Pi's loader drops
+  // the whole block at load time. The assertion reads
   // the COMMITTED bytes, not a parse result: the installed peer tolerates a
   // leading marker in its own parser, so a parse-only check would pass without
   // the strip.

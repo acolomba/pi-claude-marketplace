@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 
+import { workflowProjectKey } from "../../extensions/pi-claude-marketplace/domain/workflow-project-key.ts";
 import {
   type ScopedLocations,
   locationsFor,
@@ -35,12 +36,16 @@ const LOCATION_KEYS = [
   "hooksDir",
   "cacheDir",
   "marketplaceNamesCacheFile",
+  "workflowsHomeDir",
+  "workflowsSavedDir",
+  "workflowsStagingDir",
   "pluginDataDir",
   "marketplaceDataDir",
   "sourceCloneDir",
   "pluginCloneDir",
   "sourcesStagingDir",
   "pluginCacheFile",
+  "workflowArtifactPath",
 ] as const;
 
 function fixedLocationBundle(locations: ScopedLocations) {
@@ -75,6 +80,56 @@ function restoreAgentDirectory(hadAgentDirectory: boolean, agentDirectory: strin
   } else {
     delete process.env.PI_CODING_AGENT_DIR;
   }
+}
+
+/**
+ * Relocate the home directory `os.homedir()` reads, and hand the new home back
+ * so the caller never re-reads the global it just wrote: a caller reading
+ * `process.env.HOME` back needs a `?? ""` to satisfy `strictNullChecks`, and
+ * that fallback turns a broken precondition into a silent cwd-relative probe
+ * instead of a failure.
+ *
+ * The previous value is saved and its restoration registered before anything
+ * is mutated, so a failing assertion cannot leave the variable relocated. A
+ * variable that was absent is deleted rather than reassigned, because
+ * `process.env` stringifies every assignment and an absent variable restored by
+ * assignment would come back as the four letters `undefined`.
+ *
+ * WPTH-04: call this BEFORE `locationsFor`. The factory evaluates the workflow
+ * home eagerly and freezes the result, so a bundle built before the relocation
+ * points at the developer's real `~/.pi/workflows/` and the case still passes
+ * while writing there.
+ */
+async function hermeticHome(t: TestContext, label: string): Promise<string> {
+  const home = await mkdtemp(path.join(os.tmpdir(), `locations-home-${label}-`));
+  const previousHome = process.env.HOME;
+
+  t.after(async () => {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+
+    await rm(home, { recursive: true, force: true, maxRetries: 3 });
+  });
+  process.env.HOME = home;
+  return home;
+}
+
+async function temporaryDirectory(t: TestContext, label: string): Promise<string> {
+  const directory = await mkdtemp(path.join(os.tmpdir(), `locations-${label}-`));
+
+  t.after(async () => {
+    await rm(directory, { recursive: true, force: true, maxRetries: 3 });
+  });
+  return directory;
+}
+
+/** Pure containment predicate; the boundary itself does not count as inside. */
+function isInsideDirectory(parent: string, child: string): boolean {
+  const relative = path.relative(parent, child);
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
 test("returns the complete frozen user location bundle and restores the agent directory", (t) => {
@@ -296,20 +351,20 @@ for (const { title, parentFor, linkSegments, childSegments, invoke, label } of [
 ] as const) {
   test(title, async (t) => {
     // arrange
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "locations-symlink-"));
-    t.after(() => fs.rm(directory, { recursive: true, force: true }));
+    const directory = await mkdtemp(path.join(os.tmpdir(), "locations-symlink-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
     const projectRoot = path.join(directory, "project");
     const outsideRoot = path.join(directory, "outside");
     const locations = locationsFor("project", projectRoot);
     const parent = parentFor(locations);
     const linkPath = path.join(parent, ...linkSegments);
     const child = path.join(parent, ...childSegments);
-    await fs.mkdir(path.dirname(linkPath), { recursive: true });
-    await fs.mkdir(outsideRoot);
-    await fs.writeFile(path.join(outsideRoot, "sentinel.txt"), "outside sentinel\n");
-    await fs.symlink(outsideRoot, linkPath);
-    const outsideTreeBefore = await fs.readdir(outsideRoot);
-    const outsideBytesBefore = await fs.readFile(path.join(outsideRoot, "sentinel.txt"));
+    await mkdir(path.dirname(linkPath), { recursive: true });
+    await mkdir(outsideRoot);
+    await writeFile(path.join(outsideRoot, "sentinel.txt"), "outside sentinel\n");
+    await symlink(outsideRoot, linkPath);
+    const outsideTreeBefore = await readdir(outsideRoot);
+    const outsideBytesBefore = await readFile(path.join(outsideRoot, "sentinel.txt"));
     const expectedError = {
       name: "SymlinkRefusedError",
       message: `${label} contains symlink ${linkPath} -> ${outsideRoot} (parent: ${parent}, target: ${child}).`,
@@ -341,9 +396,9 @@ for (const { title, parentFor, linkSegments, childSegments, invoke, label } of [
       },
       expectedError,
     );
-    assert.deepStrictEqual(await fs.readdir(outsideRoot), outsideTreeBefore);
+    assert.deepStrictEqual(await readdir(outsideRoot), outsideTreeBefore);
     assert.deepStrictEqual(
-      await fs.readFile(path.join(outsideRoot, "sentinel.txt")),
+      await readFile(path.join(outsideRoot, "sentinel.txt")),
       outsideBytesBefore,
     );
   });
@@ -464,3 +519,274 @@ for (const {
     });
   });
 }
+
+test("derives every user-scope workflows path from the home directory", async (t) => {
+  // arrange
+  const home = await hermeticHome(t, "user-values");
+  const projectDirectory = await temporaryDirectory(t, "user-cwd");
+  const workflowsHome = path.join(home, ".pi", "workflows");
+  const expectedWorkflowsPaths = {
+    workflowsHomeDir: workflowsHome,
+    workflowsSavedDir: path.join(workflowsHome, "saved"),
+    workflowsStagingDir: path.join(workflowsHome, ".pi-claude-marketplace-staging"),
+  };
+
+  // act
+  const locations = locationsFor("user", projectDirectory);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      workflowsHomeDir: locations.workflowsHomeDir,
+      workflowsSavedDir: locations.workflowsSavedDir,
+      workflowsStagingDir: locations.workflowsStagingDir,
+    },
+    expectedWorkflowsPaths,
+  );
+});
+
+test("WPTH-01 branches only the saved directory on scope", async (t) => {
+  // arrange
+  const home = await hermeticHome(t, "project-saved");
+  const projectDirectory = await temporaryDirectory(t, "project-cwd");
+  // The project key is obtained from its own module rather than transcribed:
+  // this case asserts where the key LANDS, and the derivation itself is pinned
+  // by a literal parity table in that module's own owner test. A second copy of
+  // those literals here would give the derivation two sources of truth.
+  const expectedProjectValues = {
+    workflowsSavedDir: path.join(
+      home,
+      ".pi",
+      "workflows",
+      "projects",
+      workflowProjectKey(projectDirectory),
+      "saved",
+    ),
+    homeMatchesUserScope: true,
+    stagingMatchesUserScope: true,
+  };
+
+  // act
+  const userLocations = locationsFor("user", projectDirectory);
+  const projectLocations = locationsFor("project", projectDirectory);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      workflowsSavedDir: projectLocations.workflowsSavedDir,
+      homeMatchesUserScope: projectLocations.workflowsHomeDir === userLocations.workflowsHomeDir,
+      stagingMatchesUserScope:
+        projectLocations.workflowsStagingDir === userLocations.workflowsStagingDir,
+    },
+    expectedProjectValues,
+  );
+});
+
+test("WPTH-02 roots the saved directory under the home and never under the project", async (t) => {
+  // arrange
+  await hermeticHome(t, "home-derived");
+  // A project directory distinct from the relocated home is what makes the
+  // home derivation observable: with one directory serving as both, these
+  // assertions pass just as happily for a project-derived saved directory.
+  const projectDirectory = await temporaryDirectory(t, "home-derived-cwd");
+
+  // act
+  const locations = locationsFor("project", projectDirectory);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      underProjectDirectory: isInsideDirectory(projectDirectory, locations.workflowsSavedDir),
+      legacyProjectPath:
+        locations.workflowsSavedDir === path.join(projectDirectory, ".pi", "workflows", "saved"),
+    },
+    { underProjectDirectory: false, legacyProjectPath: false },
+  );
+});
+
+test("WPTH-05 keeps the staging directory outside every scope and extension root", async (t) => {
+  // arrange
+  const hadAgentDirectory = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
+  const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
+  t.after(() => {
+    restoreAgentDirectory(hadAgentDirectory, previousAgentDirectory);
+  });
+  await hermeticHome(t, "staging-invariant");
+  const firstAgentDirectory = await temporaryDirectory(t, "staging-agent-first");
+  const secondAgentDirectory = await temporaryDirectory(t, "staging-agent-second");
+  const firstProjectDirectory = await temporaryDirectory(t, "staging-cwd-first");
+  const secondProjectDirectory = await temporaryDirectory(t, "staging-cwd-second");
+
+  // act
+  process.env.PI_CODING_AGENT_DIR = firstAgentDirectory;
+  const userLocations = locationsFor("user", firstProjectDirectory);
+  process.env.PI_CODING_AGENT_DIR = secondAgentDirectory;
+  const projectLocations = locationsFor("project", secondProjectDirectory);
+  restoreAgentDirectory(hadAgentDirectory, previousAgentDirectory);
+
+  // assert
+  // Two bundles under one home but with differing agent directories and
+  // project directories. A refactor that rerouted staging under the extension
+  // root would break both the equality and the containment booleans; a
+  // rename-fails assertion would not, because whether the two roots land on
+  // one filesystem is a property of the machine, not of the code.
+  assert.deepStrictEqual(
+    {
+      stagingIsIdentical:
+        userLocations.workflowsStagingDir === projectLocations.workflowsStagingDir,
+      insideUserScopeRoot: isInsideDirectory(
+        userLocations.scopeRoot,
+        userLocations.workflowsStagingDir,
+      ),
+      insideUserExtensionRoot: isInsideDirectory(
+        userLocations.extensionRoot,
+        userLocations.workflowsStagingDir,
+      ),
+      insideProjectScopeRoot: isInsideDirectory(
+        projectLocations.scopeRoot,
+        projectLocations.workflowsStagingDir,
+      ),
+      insideProjectExtensionRoot: isInsideDirectory(
+        projectLocations.extensionRoot,
+        projectLocations.workflowsStagingDir,
+      ),
+    },
+    {
+      stagingIsIdentical: true,
+      insideUserScopeRoot: false,
+      insideUserExtensionRoot: false,
+      insideProjectScopeRoot: false,
+      insideProjectExtensionRoot: false,
+    },
+  );
+});
+
+test("keeps the staging directory adjacent to the saved directory", async (t) => {
+  // arrange
+  const home = await hermeticHome(t, "adjacency");
+  const projectDirectory = await temporaryDirectory(t, "adjacency-cwd");
+  const expectedAdjacency = {
+    stagingParent: path.join(home, ".pi", "workflows"),
+    savedUnderWorkflowHome: true,
+  };
+
+  // act
+  const locations = locationsFor("project", projectDirectory);
+
+  // assert
+  // Weak on its own: it restates the composer, so it guards a careless edit
+  // rather than standing in for the cross-configuration invariant above.
+  assert.deepStrictEqual(
+    {
+      stagingParent: path.dirname(locations.workflowsStagingDir),
+      savedUnderWorkflowHome: isInsideDirectory(
+        locations.workflowsHomeDir,
+        locations.workflowsSavedDir,
+      ),
+    },
+    expectedAdjacency,
+  );
+});
+
+test("composes a workflow artifact path from a safe generated name", async (t) => {
+  // arrange
+  const home = await hermeticHome(t, "artifact-path");
+  const projectDirectory = await temporaryDirectory(t, "artifact-cwd");
+  const generatedName = "acme:deploy";
+  const expectedArtifactPath = path.join(home, ".pi", "workflows", "saved", "acme:deploy.json");
+  const locations = locationsFor("user", projectDirectory);
+
+  // act
+  const artifactPath = await locations.workflowArtifactPath(generatedName);
+
+  // assert
+  assert.strictEqual(artifactPath, expectedArtifactPath);
+});
+
+for (const { title, unsafeName, expectedMessage } of [
+  {
+    title: "an empty generated name",
+    unsafeName: "",
+    expectedMessage: 'workflowArtifactPath workflow name "" must be a non-empty string.',
+  },
+  {
+    title: "a whitespace-only generated name",
+    unsafeName: " ",
+    expectedMessage: 'workflowArtifactPath workflow name " " must be a non-empty string.',
+  },
+  {
+    title: "the current-directory generated name",
+    unsafeName: ".",
+    expectedMessage: 'workflowArtifactPath workflow name "." must not be "." or "..".',
+  },
+  {
+    title: "the parent-directory generated name",
+    unsafeName: "..",
+    expectedMessage: 'workflowArtifactPath workflow name ".." must not be "." or "..".',
+  },
+  {
+    title: "a forward slash in a generated name",
+    unsafeName: "acme/deploy",
+    expectedMessage:
+      'workflowArtifactPath workflow name "acme/deploy" "acme/deploy" must not contain path separators.',
+  },
+  {
+    title: "a backslash in a generated name",
+    unsafeName: "acme\\deploy",
+    expectedMessage:
+      'workflowArtifactPath workflow name "acme\\deploy" "acme\\deploy" must not contain path separators.',
+  },
+  {
+    title: "an ASCII control character in a generated name",
+    unsafeName: "acme\x00deploy",
+    expectedMessage:
+      'workflowArtifactPath workflow name "acme\x00deploy" "acme\x00deploy" must not contain ASCII control characters.',
+  },
+] as const) {
+  test(`rejects ${title} before composing any path`, async (t) => {
+    // arrange
+    await hermeticHome(t, "artifact-refusal");
+    const projectDirectory = await temporaryDirectory(t, "artifact-refusal-cwd");
+    const locations = locationsFor("user", projectDirectory);
+
+    // act
+    const rejection = locations.workflowArtifactPath(unsafeName);
+
+    // assert
+    // The thrown value is the name check's own plain Error rather than a
+    // containment error, which is what places the refusal upstream of the join.
+    await assert.rejects(rejection, (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        { name: error.name, message: error.message },
+        { name: "Error", message: expectedMessage },
+      );
+      return true;
+    });
+  });
+}
+
+test("refuses a symbolic link planted at the composed artifact path", async (t) => {
+  // arrange
+  const home = await hermeticHome(t, "artifact-symlink");
+  const projectDirectory = await temporaryDirectory(t, "artifact-symlink-cwd");
+  const savedDirectory = path.join(home, ".pi", "workflows", "saved");
+  const artifactPath = path.join(savedDirectory, "acme:linked.json");
+  const linkTarget = path.join(projectDirectory, "elsewhere.json");
+  await mkdir(savedDirectory, { recursive: true });
+  await symlink(linkTarget, artifactPath);
+  const locations = locationsFor("user", projectDirectory);
+
+  // act
+  const rejection = locations.workflowArtifactPath("acme:linked");
+
+  // assert
+  await assert.rejects(rejection, (error: unknown) => {
+    assert.ok(error instanceof SymlinkRefusedError);
+    assert.deepStrictEqual(
+      { name: error.name, linkPath: error.linkPath, linkTarget: error.linkTarget },
+      { name: "SymlinkRefusedError", linkPath: artifactPath, linkTarget },
+    );
+    return true;
+  });
+});

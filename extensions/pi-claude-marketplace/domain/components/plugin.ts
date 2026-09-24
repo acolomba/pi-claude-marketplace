@@ -30,6 +30,7 @@ const SUPPORTED_COMPONENT_PATH_FIELDS = {
   skills: Type.Optional(Type.Unknown()),
   commands: Type.Optional(Type.Unknown()),
   agents: Type.Optional(Type.Unknown()),
+  workflows: Type.Optional(Type.Unknown()),
 };
 
 const UNSUPPORTED_COMPONENT_FIELDS = {
@@ -42,7 +43,6 @@ const UNSUPPORTED_COMPONENT_FIELDS = {
   userConfig: Type.Optional(Type.Unknown()),
   bin: Type.Optional(Type.Unknown()),
   settings: Type.Optional(Type.Unknown()),
-  workflows: Type.Optional(Type.Unknown()),
 };
 
 // MCPR-01 / MCPR-02: mcpServers may be a relative (to pluginRoot) string

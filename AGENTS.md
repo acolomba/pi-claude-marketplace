@@ -18,6 +18,28 @@ Before editing any file, read it first. Before modifying a function, trace its c
 - When writing PR descriptions, use the `simple-english` skill in Plain mode and the `humanizer` skill, if available.
 - Always use `--squash` when merging PRs (`gh pr merge --squash`). The repository does not allow merge commits or rebase merges.
 
+### Broken Windows ledger
+
+When appending an entry with `gsd-tools windows append`, **prefix the description with the milestone in square brackets**: `--description "[workflows-replay] the thing that is wrong"`.
+
+The ledger entry schema is `{id, kind, phase, file, line, description, status, reason, recorded_at, resolved_at}` -- it has no milestone field, and `phase` holds a bare number. Phase numbers are NOT unique across milestones in GSD (they are unique only within one active `phases/` directory; archiving moves completed phases into `milestones/<name>-phases/` and frees the numbers). This project has reused 101-105 across two milestones already, and v1.19's 108-117 overlap the current workstream's 109-117.
+
+The consequence, seen for real: 20 entries recorded against "phase 115/116/117" belonged to an archived milestone, and nothing in the ledger could distinguish them from the current one's. Attributing them took dating every entry and cross-reading decision IDs. The bracket prefix costs nothing at write time and makes the whole set greppable by milestone.
+
+Do NOT encode the milestone in `--phase` (e.g. `115@workflows-replay`) -- that field is grouped and numerically normalized by the readers. Do NOT hand-edit `.planning/WINDOWS.md` to retrofit old entries: the file carries a rendered table AND a fenced JSON block, the JSON is the source of truth, and a table-only edit is silently lost (this nearly destroyed two operator decisions).
+
+### Threat Flags in SUMMARY.md
+
+Every plan SUMMARY.md carries a `## Threat Flags` section, **even when the answer is "None."** GSD's executor template says to omit the section when the scan found nothing; do not. Write:
+
+```markdown
+## Threat Flags
+
+None -- no security-relevant surface outside the plan's `<threat_model>` was introduced.
+```
+
+The reason is what an absent section means to the reader. `/gsd-secure-phase` cross-checks the plan's threat register against the surface the executor flagged, and an absent section is indistinguishable from an executor that never ran the scan. Across phases 109-113 of the workflows-replay milestone, zero of 21 summaries carried the section, so every one of those audits' cross-checks was vacuous -- and all four auditors flagged it independently rather than treating absence as evidence that no new surface appeared. An explicit "None" is a claim the auditor can hold the executor to; silence is not.
+
 ### TypeScript
 
 Rules for TypeScript live under `skills/` and are not registered with any runtime; read the ones that apply before editing (skip any your prompt already carries under `<agent_skills>`):
@@ -33,7 +55,7 @@ Before creating a PR, offer to bump the version in `package.json` and `sonar-pro
 
 ## Project
 
-`pi-claude-marketplace` is a Pi extension that gives Pi users access to Claude plugin marketplaces through a `/claude:plugin` command surface intentionally aligned with Claude Code's upstream `/plugin`. It translates Claude plugin artifacts (skills, commands, agents, hooks, MCP servers) into the equivalent Pi-native artifacts (Pi skills, Pi prompt templates, pi-subagents agents, staged Pi hook registrations, pi-mcp-adapter MCP entries) and manages their lifecycle (install, update, uninstall, reinstall, marketplace add/remove/list, import).
+`pi-claude-marketplace` is a Pi extension that gives Pi users access to Claude plugin marketplaces through a `/claude:plugin` command surface intentionally aligned with Claude Code's upstream `/plugin`. It translates Claude plugin artifacts (skills, commands, agents, hooks, MCP servers, workflows) into the equivalent Pi-native artifacts (Pi skills, Pi prompt templates, pi-subagents agents, staged Pi hook registrations, pi-mcp-adapter MCP entries, saved workflow-engine scripts) and manages their lifecycle (install, update, uninstall, reinstall, marketplace add/remove/list, import).
 
 **Core Value:** A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
@@ -42,7 +64,7 @@ Before creating a PR, offer to bump the version in `package.json` and `sonar-pro
 - **Upstream parity:** Claude Code's behavior is the default for every user-visible decision, because this extension installs real Claude plugins and anything it does differently is something a user already learned upstream and must unlearn. Exactly two things license a divergence: a recorded project decision carried here with an ID (SC-1, for instance), or a Pi capability gap that makes parity unavailable. Neither "upstream looks wrong" nor "our way is simpler" qualifies -- those go to the user as a question. Research the upstream contract with `skills/claude-code-compat-research`.
 - **Runtime:** Node >= 20.19.0 (NFR-4)
 - **Tech stack:** TypeScript strict; the resolver MUST expose discriminated `installable: true | false` so consumers cannot read `pluginRoot` from a non-installable plugin (NFR-7)
-- **Pi API:** `@earendil-works/pi-coding-agent` peer dependency, pinned to `>=0.80.5` (dev `^0.84.2`); the NFR-11 floor-pinning SHOULD is now satisfied
+- **Pi API:** `@earendil-works/pi-coding-agent` peer dependency, pinned to `>=0.86.1` (dev `^0.86.1`); the NFR-11 floor-pinning SHOULD is now satisfied
 - **File operations:** All disk mutations atomic (tmp + rename or atomic JSON write) -- NFR-1
 - **Recovery model:** No fix may require a Pi process restart; `Run /reload` must suffice (NFR-2). All operations must be safe to retry -- idempotent or fail-clean (NFR-3)
 - **Network policy (NFR-5, amended by url-source):** Network is required only for git-source `marketplace add`/`update`, and for `install`/`update`/`reinstall` of git-source plugins **on cache miss only** -- warm sha-pinned cache operations stay offline. `list`, `info`, `uninstall`, `marketplace remove`, and path-source operations MUST NOT touch the network

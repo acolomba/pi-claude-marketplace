@@ -5,25 +5,23 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). `notification-types.ts` declares `Reason` as the SINGLE
- * source of catalog truth (OUT-08: the 44-entry membership AND order must stay
+ * source of catalog truth (OUT-08: its membership AND order must stay
  * byte-identical for catalog stability); this module reorganizes that closed set
  * into shared topic-grouped unions + a structural completeness proof WITHOUT
  * restating the vocabulary's order. The topic groups below are typed views over
  * the same closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 44-entry set.
+ * set.
  *
- * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
- * joined the set as the truthful marker for a dropped component kind that has
- * no carve-out of its own. OUT-01 / D-102-05 moved it from 38 to 39:
- * `"installs disabled"` joined as the marker for an install that landed
- * disabled because the plugin's own `defaultEnabled` declaration said so, and
- * brought the fourth topic group with it (D-102-06). `COMPAT-01` pins the
- * membership by enumeration and `notify-closed-set-locks.test.ts` pins the
- * length, so the two sentences above cannot drift from the vocabulary again
- * without a red test. CMP-4 / SCOPE-01 added two structural scope reasons (39 to 41).
- * SCOPE-01 / D-01 added two content scope reasons (41 to 43). WDET-04 /
- * D-106-04 appended the dedicated `workflows` reason (43 to 44).
+ * The set is APPEND-ONLY: a new token joins at the tail, existing entries never
+ * move, and the declared order is catalog-stable because a rendered brace
+ * follows declaration order. `COMPAT-01` pins the membership by enumeration and
+ * `notify-closed-set-locks.test.ts` pins the length, so the vocabulary cannot
+ * drift unnoticed, and every member whose presence needs an argument carries its
+ * own decision ID beside its literal in `notification-types.ts`. No running
+ * count of the set lives in prose here: neither gate reads a comment, so a
+ * number written here would be the one claim about this set that nothing turns
+ * red for.
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -75,36 +73,44 @@ export function skipSeverity(reasons: readonly Reason[] | undefined): "info" | "
  * SEV-01: per-producer severity for an otherwise-successful install/update row,
  * classified from the plugin's DECLARED soft-dep companions and the host's
  * companion-loaded probe. A declared `agents` kind requires `pi-subagents`; a
- * declared `mcp` kind requires `pi-mcp-adapter`. When a declared companion is
- * unloaded the clean operation is silently degraded -> `warning`; otherwise
- * (companion present, or none declared) -> `info`. The caller passes the single
- * sanctioned `softDepStatus(pi)` probe (the same one the renderer uses for the
+ * declared `mcp` kind requires `pi-mcp-adapter`; a declared `workflows` kind
+ * requires the host workflow engine. When a declared companion is unloaded the
+ * clean operation is silently degraded -> `warning`; otherwise (companion
+ * present, or none declared) -> `info`. The caller passes the single sanctioned
+ * `softDepStatus(pi)` probe (the same one the renderer uses for the
  * `{requires pi-...}` marker), so the row bytes are unchanged -- only the
  * desired-state severity moves.
  */
 export function companionSeverity(
-  { declaresAgents, declaresMcp }: { declaresAgents: boolean; declaresMcp: boolean },
+  {
+    declaresAgents,
+    declaresMcp,
+    declaresWorkflows,
+  }: { declaresAgents: boolean; declaresMcp: boolean; declaresWorkflows: boolean },
   probe: SoftDepStatus,
 ): "info" | "warning" {
-  return (declaresAgents && !probe.piSubagentsLoaded) || (declaresMcp && !probe.piMcpAdapterLoaded)
+  return (declaresAgents && !probe.piSubagentsLoaded) ||
+    (declaresMcp && !probe.piMcpAdapterLoaded) ||
+    (declaresWorkflows && !probe.workflowEngineLoaded)
     ? "warning"
     : "info";
 }
 
 /**
  * D-09: unsupported-components / soft-dep reasons -- the topic group the user
- * named explicitly (hooks / LSP / workflows / companion-extension soft deps /
- * unsupported source / unsupported component / no-longer-installable).
+ * named explicitly (hooks / LSP / companion-extension soft deps / unsupported
+ * source / unsupported component / no-longer-installable).
  */
 type UnsupportedReason =
   | "unsupported hooks"
   | "lsp"
   | "requires pi-subagents"
   | "requires pi-mcp"
+  // WDEP-04: the host workflow engine soft-dep marker.
+  | "requires pi-dynamic-workflows"
   | "unsupported source"
   // D-90-05: the truthful marker for a dropped non-carve-out component kind.
   | "unsupported component"
-  | "workflows"
   | "no longer installable";
 
 /**
@@ -279,4 +285,21 @@ type CommandPrivateReason =
   | "marketplace not added"
   | "marketplace not added to user scope"
   | "marketplace not added to project scope"
-  | "orphan rewake";
+  | "orphan rewake"
+  // WLIF-06: the retired-workflow-command marker. Five verbs stamp it. The
+  // three that RE-MATERIALIZE (enable / reinstall / update) take a
+  // previous-minus-current difference through `retiresWorkflowCommand`; the two
+  // that only REMOVE (uninstall / disable) read what their cascade reported
+  // dropping. Enable and reinstall pass PLACED names; update passes its
+  // PREPARED names, which equal the placed ones there because that call site
+  // sits past the phase-3 failure guard -- a commit that placed any less took
+  // the failure exit instead. Named here for the proof rather than promoted to
+  // a shared topic group. Like the cross-scope pair above, it IS a
+  // `ContentReason`.
+  | "stale workflow command"
+  // WCONV-03: the load-time convergence marker. The reconcile backfill
+  // projection places it on both arms of a re-materialized record's row, so a
+  // user can attribute new commands to a reload they did not initiate. Owned by
+  // that one projection rather than shared across topic groups, so it is named
+  // here for the proof. Like its neighbour above, it IS a `ContentReason`.
+  | "components now supported";

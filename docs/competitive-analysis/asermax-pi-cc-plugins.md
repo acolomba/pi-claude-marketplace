@@ -14,7 +14,7 @@
 
 - They are not a plugin manager. They are a declarative loader. The user writes an array of repository references into Pi's `settings.json`. Every session start then clones, converts, and re-materializes the lot. There is no install verb, no uninstall verb, no state file, and no slash command.
 - They read no marketplace. The token `marketplace` appears nowhere in their source, their README, or their agent guide. A Claude marketplace repository that ships forty plugins under `plugins/<name>/` reaches them only as forty hand-written `#subpath=` entries.
-- They translate three component kinds to our five. Skills, agents, and MCP servers work. Slash commands and hooks are absent. Unlike our other competitor, they never declare either one a non-goal. The two are just missing.
+- They translate three component kinds to our six. Skills, agents, and MCP servers work. Slash commands and hooks are absent. Unlike our other competitor, they never declare either one a non-goal. The two are just missing.
 - Their one original idea is skill frontmatter repair. Claude Code accepts loose YAML that Pi's strict parser rejects, so they rewrite the copied `SKILL.md` before Pi reads it. We degrade such a skill to a placeholder description instead. Their instinct is better than ours.
 - Their build of that idea is broken. Their own `sanitizeSkillMarkdown` at this commit turns `tags: [a, b]` into the string `"[a, b]"`. It also turns a valid multi-line plain scalar into YAML that no parser accepts. The feature they lead with damages the documents it must rescue.
 - Four more correctness defects sit in the same tree. An agent cache key omits the subpath, so one plugin can overwrite another plugin's agent. Two manifest-declared paths escape the plugin root. A reference count has no lock and no crash recovery. And the documentation describes a soft-dependency gate that the code does not have.
@@ -353,7 +353,7 @@ The reference-count idea is sound even though the implementation is not. Concurr
 
 The feature they lead with damages the files it processes. Flow collections become strings, and multi-line plain scalars stop parsing. Both failures are demonstrable by running their own exported function.
 
-Two of the five component kinds are missing, and no statement anywhere admits it. There is no marketplace, so the ordinary shape of the Claude ecosystem reaches them only through hand-written subpaths. That shape is one repository that holds many plugins. There is no pinning, so every start follows the default branch wherever it went.
+Three of the six component kinds are missing, and no statement anywhere admits it. There is no marketplace, so the ordinary shape of the Claude ecosystem reaches them only through hand-written subpaths. That shape is one repository that holds many plugins. There is no pinning, so every start follows the default branch wherever it went.
 
 There is no way to see what happened. No list, no info, no plan preview, and no per-plugin status. When a source fails, the user gets one aggregated notification at severity `warning` and nothing else.
 
@@ -361,7 +361,7 @@ The engineering hygiene is thin. No TypeScript configuration, no linter, no decl
 
 ### Our strengths
 
-Against this competitor our advantage is breadth and safety, not any single feature. Five component kinds to their three. A marketplace model where they have none. Versions and pins where they follow a branch. A transactional ledger with load-time reconcile where they re-derive and hope.
+Against this competitor our advantage is breadth and safety, not any single feature. Six component kinds to their three. A marketplace model where they have none. Versions and pins where they follow a branch. A transactional ledger with load-time reconcile where they re-derive and hope.
 
 The safety properties are the ones a user notices only when something goes wrong. A cross-process lock, atomic writes, one containment chokepoint, and an offline guarantee that fails the build rather than the user.
 
@@ -414,7 +414,7 @@ Their reference-count mechanism. The problem it addresses is real: concurrent se
 | Area                             | Stance            | Reason                                                               |
 | -------------------------------- | ----------------- | -------------------------------------------------------------------- |
 | Marketplace model                | Differentiate     | They have none, and a loader has nowhere to put one                  |
-| Component coverage               | Differentiate     | Five kinds to three, and they declare no non-goals to hide behind    |
+| Component coverage               | Differentiate     | Six kinds to three, and they declare no non-goals to hide behind     |
 | Lifecycle and inspection         | Differentiate     | Nothing on their side answers what is installed or what failed       |
 | Versions, pins, and reinstall    | Differentiate     | They follow a branch tip with no way back                            |
 | Transactional safety             | Differentiate     | No transaction, no rollback, and no lock on their side               |

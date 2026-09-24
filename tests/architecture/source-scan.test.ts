@@ -8,10 +8,12 @@
 // These cases pin the difference.
 
 import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
 
 import { MISSING_TARGET_PROBES } from "./gate-targets.ts";
-import { assertNoForbiddenSurface, stripComments } from "./source-scan.ts";
+import { assertNoForbiddenSurface, filesMatching, stripComments } from "./source-scan.ts";
 import { materializeTargets, plantOffender, withTempRoot } from "./temp-root-control.ts";
 
 import type { ScanReport } from "./source-scan.ts";
@@ -151,4 +153,43 @@ test("an empty target list resolves with nothing visited and nothing waived", as
 
   // assert
   assert.deepEqual(report, expectedReport);
+});
+
+test("filesMatching recurses, drops a comment-only mention, skips non-.ts files, and sorts the hits", async () => {
+  await withTempRoot("source-scan-files-matching-", async (root) => {
+    // arrange
+    // `readdir` lists `zeta.ts` before it descends into `nested/`, the reverse
+    // of the two hits' alphabetical order, so an implementation that forgot to
+    // sort would return them in directory-read order instead.
+    const fixtures: ReadonlyArray<readonly [rel: string, body: string]> = [
+      ["scan-root/zeta.ts", "export const needle = 1;\n"],
+      ["scan-root/nested/alpha.ts", "export const needle = 2;\n"],
+      [
+        "scan-root/comment-only.ts",
+        "// needle appears in this comment alone\nexport const other = 3;\n",
+      ],
+      ["scan-root/notes.md", "needle\n"],
+    ];
+    for (const [rel, body] of fixtures) {
+      const destination = path.join(root, rel);
+      await mkdir(path.dirname(destination), { recursive: true });
+      await writeFile(destination, body);
+    }
+
+    const expectedMatches = ["scan-root/nested/alpha.ts", "scan-root/zeta.ts"];
+
+    // act
+    const matched = await filesMatching("scan-root", /needle/, { root });
+
+    // assert
+    assert.deepStrictEqual(matched, expectedMatches);
+  });
+});
+
+test("filesMatching rejects a global-flagged pattern before reading anything", async () => {
+  // arrange
+  const globalPattern = /needle/g;
+
+  // act & assert
+  await assert.rejects(() => filesMatching("scan-root", globalPattern), /is global/);
 });

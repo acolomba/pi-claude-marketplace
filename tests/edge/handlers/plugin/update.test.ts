@@ -72,7 +72,7 @@
 //     never -- `notifyUsageError` writes straight to the channel;
 //   * every delegating case, whether the update succeeds, degrades or is
 //     refused by the candidate gate, reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` FOUR times.
+//     `pi.getAllTools()` SIX times.
 //
 // The network door is `https.request`, not `globalThis.fetch`: the git
 // transport reaches the wire through `simple-get`, and `fetch` has a single
@@ -247,6 +247,7 @@ function seededRecord(plugin: SeededPlugin): Record<string, unknown> {
       agents: plugin.agent === true ? [`pi-claude-marketplace-${plugin.name}-scout`] : [],
       mcpServers: [],
       hooks: [],
+      workflows: [],
     },
     enabled: true,
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -591,6 +592,7 @@ const PROJECT_ONE_UPDATED: ScopeFootprint = {
 };
 
 test("forwards the exact direct update request through the required update operation", async (t) => {
+  // arrange
   const workspace = await createHermeticWorkspace(t, "forward-operation");
   const { ctx, pi } = createNotificationBoundary(1, 4, {
     value: workspace.cwd,
@@ -604,8 +606,10 @@ test("forwards the exact direct update request through the required update opera
 
   const updateHandler = makeUpdateHandler(pi, updateOperation);
 
+  // act
   await updateHandler("one@alpha --scope project --map-model --partial --local", ctx);
 
+  // assert
   assert.deepStrictEqual(calls, [
     {
       ctx,
@@ -668,7 +672,7 @@ for (const { args, expectedFootprint, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -720,7 +724,7 @@ for (const { args, expectedFootprint, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -815,7 +819,7 @@ for (const { args, expectedFootprint, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedDegraded(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -868,7 +872,7 @@ for (const { args, expectedAgents, label, position } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -896,7 +900,7 @@ test("honors a scope flag and the scope-target flag supplied together, narrowing
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
     value: workspace.cwd,
     reads: 1,
   });

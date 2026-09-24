@@ -3,7 +3,10 @@ import {
   findManualRecoveryError,
   ManualRecoveryError,
   PluginShapeError,
+  StateLockHeldError,
 } from "../../shared/errors.ts";
+
+import { retiresWorkflowCommand } from "./shared.ts";
 
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
@@ -33,6 +36,13 @@ export interface RecordReinstalledOutcomeInput extends ReinstallOutcomeTarget {
   readonly installable: MaterializablePlugin;
   readonly handles: ReinstallPreparedHandles;
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
+  /**
+   * WLIF-01 / T-112-15: the envelope names the workflows commit REPORTED
+   * placing, never the prepared staged names -- a commit can stage three and
+   * place two, and a record that overstates what is on disk is what the next
+   * removal walks.
+   */
+  readonly placedWorkflowNames: readonly string[];
 }
 
 export interface RecordSkippedOutcomeInput extends ReinstallOutcomeTarget {
@@ -73,6 +83,16 @@ export function reinstallReasonsFromError(error: unknown): readonly ContentReaso
 
   if (error instanceof ManualRecoveryError) {
     return ["rollback partial"] as const;
+  }
+
+  // A held per-scope state lock is another operation in progress, not an
+  // unreadable plugin. Without this arm the message text falls through
+  // `narrowReason`'s last-resort `"unreadable"`, while the reconcile wrapper
+  // one layer up maps the same error to `"lock held"` -- one cause, two tokens
+  // from the same closed set depending on which layer caught it. `lock held`
+  // is the one word that tells the operator to retry.
+  if (error instanceof StateLockHeldError) {
+    return ["lock held"] as const;
   }
 
   if (error instanceof Error) {
@@ -124,7 +144,12 @@ function recordReinstalledOutcome(
     );
   }
 
-  const resources = resourcesFromHandles(input.handles, input.name, input.installable);
+  const resources = resourcesFromHandles(
+    input.handles,
+    input.placedWorkflowNames,
+    input.name,
+    input.installable,
+  );
   marketplace.plugins[input.name] = {
     version: input.oldRecord.version,
     resolvedSource: input.installable.pluginRoot,
@@ -144,7 +169,12 @@ function recordReinstalledOutcome(
     updatedAt: new Date().toISOString(),
   };
 
-  const outcomeResources = resourcesFromHandles(input.handles);
+  // WR-06: `[]` stated HERE rather than defaulted, because the reasoning that
+  // makes it safe is local to this site: this projection feeds only
+  // `stagedAgentNames`, `stagedMcpServerNames`, `declaresAgents`,
+  // `declaresMcp`, and `resourcesChanged`, none of which reads `workflows`,
+  // so an empty workflow inventory here is inert.
+  const outcomeResources = resourcesFromHandles(input.handles, []);
   const degradedKinds = Array.from(
     new Set<DegradeKind>([
       ...(input.handles.skills.result.degraded.length > 0 ? (["skill"] as const) : []),
@@ -161,13 +191,22 @@ function recordReinstalledOutcome(
     stagedMcpServerNames: outcomeResources.mcpServers,
     declaresAgents: outcomeResources.agents.length > 0,
     declaresMcp: outcomeResources.mcpServers.length > 0,
+    declaresWorkflows: resources.workflows.length > 0,
     resourcesChanged: resourcesChanged(input.oldRecord.resources, outcomeResources),
     ...(degradedKinds.length > 0 && { degradedKinds }),
+    // WLIF-06: the record's PRE-reinstall inventory minus what the replace
+    // step reported placing. A source that dropped or renamed a workflow
+    // leaves the old generated name in that difference, and the command it
+    // registered stays live until a reload.
+    ...(retiresWorkflowCommand(input.oldRecord.resources.workflows, input.placedWorkflowNames) && {
+      staleWorkflowCommand: true,
+    }),
   };
 }
 
 function resourcesFromHandles(
   handles: ReinstallPreparedHandles,
+  placedWorkflowNames: readonly string[],
   plugin?: string,
   installable?: MaterializablePlugin,
 ): PluginInstallRecord["resources"] {
@@ -177,6 +216,7 @@ function resourcesFromHandles(
     agents: handles.agents.result.recorded.map((record) => record.generatedName),
     mcpServers: handles.mcp.result.recorded.map((record) => record.generatedName),
     hooks: plugin !== undefined && installable?.hooksConfigPath !== undefined ? [plugin] : [],
+    workflows: [...placedWorkflowNames],
   };
 }
 

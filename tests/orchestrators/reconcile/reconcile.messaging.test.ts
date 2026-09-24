@@ -20,11 +20,11 @@ import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/pl
 void ({} satisfies { readonly retired?: typeof ReconcileMessaging.PENDING_STATUSES });
 
 function allSoftDependenciesLoaded(): SoftDepStatus {
-  return { piMcpAdapterLoaded: true, piSubagentsLoaded: true };
+  return { piMcpAdapterLoaded: true, piSubagentsLoaded: true, workflowEngineLoaded: true };
 }
 
 function noSoftDependenciesLoaded(): SoftDepStatus {
-  return { piMcpAdapterLoaded: false, piSubagentsLoaded: false };
+  return { piMcpAdapterLoaded: false, piSubagentsLoaded: false, workflowEngineLoaded: false };
 }
 
 void ({ name: "plugin", status: "will install" } satisfies PendingMsg);

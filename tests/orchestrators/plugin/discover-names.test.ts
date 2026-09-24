@@ -21,6 +21,7 @@ function resolvedPlugin(
     readonly agents: readonly string[];
     readonly commands: readonly string[];
     readonly skills: readonly string[];
+    readonly workflows: readonly string[];
   },
 ): MaterializablePlugin {
   return {
@@ -28,6 +29,7 @@ function resolvedPlugin(
       agents: [...componentPaths.agents],
       commands: [...componentPaths.commands],
       skills: [...componentPaths.skills],
+      workflows: [...componentPaths.workflows],
     },
     defaultEnabled: true,
     installable: true,
@@ -59,6 +61,19 @@ async function writeSkill(directory: string, sourceName: string): Promise<void> 
   await writeFile(path.join(skillDirectory, "SKILL.md"), "Skill body.\n", "utf8");
 }
 
+async function writeWorkflow(
+  directory: string,
+  fileName: string,
+  metaName?: string,
+): Promise<void> {
+  await mkdir(directory, { recursive: true });
+  const contents =
+    metaName === undefined
+      ? "export function help() {\n  return 1;\n}\n"
+      : `export const meta = { name: ${JSON.stringify(metaName)}, description: "d" };\n`;
+  await writeFile(path.join(directory, fileName), contents, "utf8");
+}
+
 test("composes generated names from every bridge in each bridge's declared order", async (t) => {
   // arrange
   const pluginRoot = await createPluginRoot(t, "plugin-discover-names-complete-");
@@ -71,10 +86,16 @@ test("composes generated names from every bridge in each bridge's declared order
   await writeCommand(commandsDirectory, "alpha.md");
   await writeSkill(skillsDirectory, "zeta");
   await writeSkill(skillsDirectory, "alpha");
+  const workflowsDirectory = path.join(pluginRoot, "workflows");
+  await writeWorkflow(workflowsDirectory, "zeta.js", "zeta");
+  await writeWorkflow(workflowsDirectory, "alpha.js", "acme-alpha");
+  // A helper module with no `meta` is not a workflow, so it contributes no name.
+  await writeWorkflow(workflowsDirectory, "helper.js");
   const resolved = resolvedPlugin(pluginRoot, {
     agents: ["agents"],
     commands: ["commands"],
     skills: ["skills"],
+    workflows: ["workflows"],
   });
 
   // act
@@ -86,6 +107,7 @@ test("composes generated names from every bridge in each bridge's declared order
     agentsDirs: [agentsDirectory],
     commands: ["acme:alpha", "acme:zeta"],
     skills: ["acme:alpha", "acme:zeta"],
+    workflows: ["acme:alpha", "acme:zeta"],
   });
 });
 
@@ -96,6 +118,7 @@ test("returns empty names and a null source when no components are declared", as
     agents: [],
     commands: [],
     skills: [],
+    workflows: [],
   });
 
   // act
@@ -107,6 +130,7 @@ test("returns empty names and a null source when no components are declared", as
     agentsDirs: [],
     commands: [],
     skills: [],
+    workflows: [],
   });
 });
 
@@ -119,6 +143,7 @@ test("returns an empty agent list with the selected relative source directory", 
     agents: ["agents"],
     commands: [],
     skills: [],
+    workflows: [],
   });
 
   // act
@@ -130,6 +155,7 @@ test("returns an empty agent list with the selected relative source directory", 
     agentsDirs: [agentsDirectory],
     commands: [],
     skills: [],
+    workflows: [],
   });
 });
 
@@ -149,6 +175,7 @@ test("keeps first-wins names while deliberately dropping all bridge warnings", a
     agents: ["agents"],
     commands: ["commands"],
     skills: ["skills"],
+    workflows: [],
   });
 
   // act
@@ -160,6 +187,7 @@ test("keeps first-wins names while deliberately dropping all bridge warnings", a
     agentsDirs: [agentsDirectory],
     commands: ["acme:run"],
     skills: ["acme:helper"],
+    workflows: [],
   });
 });
 
@@ -175,6 +203,7 @@ test("discovers agents from every resolved directory in resolver order", async (
     agents: ["declared-agents", "agents"],
     commands: [],
     skills: [],
+    workflows: [],
   });
 
   // act
@@ -186,6 +215,7 @@ test("discovers agents from every resolved directory in resolver order", async (
     agentsDirs: [declaredDirectory, conventionalDirectory],
     commands: [],
     skills: [],
+    workflows: [],
   });
 });
 
@@ -202,6 +232,7 @@ test("propagates a hard agent failure after successful skill and command discove
     agents: ["agents"],
     commands: ["commands"],
     skills: ["skills"],
+    workflows: [],
   });
 
   // act & assert

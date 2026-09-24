@@ -16,7 +16,12 @@ function emptyResolution() {
   return {
     supported: [] as string[],
     notes: [] as string[],
-    componentPaths: { skills: [] as string[], commands: [] as string[], agents: [] as string[] },
+    componentPaths: {
+      skills: [] as string[],
+      commands: [] as string[],
+      agents: [] as string[],
+      workflows: [] as string[],
+    },
   };
 }
 
@@ -52,6 +57,7 @@ test("collects strict paths in declaration order with first-wins deduplication",
       skills: ["entry", "shared", "manifest", "skills"],
       commands: [],
       agents: [],
+      workflows: [],
     },
   });
 });
@@ -78,7 +84,7 @@ test("accepts contained declared paths without requiring the leaf to exist", asy
   assert.deepStrictEqual(resolution, {
     supported: ["commands"],
     notes: [],
-    componentPaths: { skills: [], commands: ["missing-command"], agents: [] },
+    componentPaths: { skills: [], commands: ["missing-command"], agents: [], workflows: [] },
   });
 });
 
@@ -150,7 +156,7 @@ for (const { title, value, reason } of invalidPathCases) {
     assert.deepStrictEqual(resolution, {
       supported: [],
       notes: [reason],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     });
   });
 }
@@ -184,7 +190,7 @@ test("rejects a component path that crosses a symlink", async (testContext) => {
   assert.deepStrictEqual(resolution, {
     supported: [],
     notes: ['component path for "agents" escapes plugin root: "linked/agent.md"'],
-    componentPaths: { skills: [], commands: [], agents: [] },
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
   });
 });
 
@@ -237,7 +243,7 @@ test("collects declared entry paths without convention matches", async () => {
   assert.deepStrictEqual(resolution, {
     supported: ["agents"],
     notes: [],
-    componentPaths: { skills: [], commands: [], agents: ["one", "two"] },
+    componentPaths: { skills: [], commands: [], agents: ["one", "two"], workflows: [] },
   });
 });
 

@@ -95,6 +95,11 @@ const PI_DRIVE_TIMEOUT_MS = 120_000;
 // contract: notify and this canary must agree or the canary fails loud.
 const NOT_IN_MANIFEST = "not in manifest";
 
+// The only agent-state root this canary will install into. Resolved off the
+// repository rather than `process.cwd()`, so which directory the containment
+// check below protects does not depend on where the driver was invoked.
+const SANDBOX_ROOT = path.resolve(REPO_ROOT, "tmp", "pi-uat");
+
 /**
  * Thrown (not process.exit) by the routing helpers so main()'s `finally`
  * always tears the canary out of the shared sandbox before the process exits
@@ -138,18 +143,23 @@ async function assertPreconditions() {
       "Run: PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/agent node tests/live-uat/manifest-absence-canary.mjs",
     );
   }
-  // Refuse to churn installs outside the disposable sandbox.
-  if (!agentDir.includes(path.join("tmp", "pi-uat"))) {
+  // Refuse to churn installs outside the disposable sandbox. Containment is
+  // decided on the RESOLVED path, never on the raw string: a value that merely
+  // CARRIES the `tmp/pi-uat` segment can still name a directory outside it
+  // (`.../tmp/pi-uat/../../.pi/agent` does, and it exists), and a sibling such
+  // as `tmp/pi-uat-backup` is not a child, which is what the separator pins.
+  const resolvedAgentDir = path.resolve(agentDir);
+  if (resolvedAgentDir !== SANDBOX_ROOT && !resolvedAgentDir.startsWith(SANDBOX_ROOT + path.sep)) {
     liveRuntimeRequired(
-      `PI_CODING_AGENT_DIR (${agentDir}) is not the tmp/pi-uat sandbox.`,
+      `PI_CODING_AGENT_DIR (${agentDir} -> ${resolvedAgentDir}) is not inside ${SANDBOX_ROOT}.`,
       "Refusing to install the canary outside the disposable sandbox.",
     );
   }
-  if (!existsSync(agentDir)) {
-    liveRuntimeRequired(`PI_CODING_AGENT_DIR (${agentDir}) does not exist.`);
+  if (!existsSync(resolvedAgentDir)) {
+    liveRuntimeRequired(`PI_CODING_AGENT_DIR (${agentDir} -> ${resolvedAgentDir}) does not exist.`);
   }
-  pass(`sandbox ${agentDir}`);
-  return agentDir;
+  pass(`sandbox ${resolvedAgentDir}`);
+  return resolvedAgentDir;
 }
 
 // ---------------------------------------------------------------------------

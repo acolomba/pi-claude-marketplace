@@ -25,7 +25,6 @@ const UNSUPPORTED_COMPONENT_KINDS = [
   "channels",
   "userConfig",
   "settings",
-  "workflows",
 ] as const;
 
 /** One member of the closed unsupported-component vocabulary. */
@@ -42,7 +41,6 @@ const UNSUPPORTED_COMPONENT_CONVENTIONS: Partial<
   themes: [{ relativePath: "themes", kind: "dir" }],
   outputStyles: [{ relativePath: "output-styles", kind: "dir" }],
   settings: [{ relativePath: "settings.json", kind: "file" }],
-  workflows: [{ relativePath: "workflows", kind: "dir" }],
 };
 
 function nestedExperimentalValue(

@@ -57,7 +57,12 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
     supported: ["skills", "commands", "agents"],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: ["skills"], commands: ["commands"], agents: ["agents"] },
+    componentPaths: {
+      skills: ["skills"],
+      commands: ["commands"],
+      agents: ["agents"],
+      workflows: [],
+    },
     defaultEnabled: true,
     mcpServers: {
       local: {

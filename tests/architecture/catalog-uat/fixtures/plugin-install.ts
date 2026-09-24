@@ -1,4 +1,10 @@
-import { piWithBothLoaded, piWithMcpLoaded, piWithNothingLoaded } from "../mock-pi.ts";
+import {
+  piWithAllLoaded,
+  piWithBothLoaded,
+  piWithMcpLoaded,
+  piWithNothingLoaded,
+  piWithoutWorkflowEngine,
+} from "../mock-pi.ts";
 
 import type { NotificationMessage } from "../../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { FixtureMap } from "../fixture-types.ts";
@@ -48,6 +54,62 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 name: "helper",
                 version: "1.0.0",
                 dependencies: ["agents", "mcp"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WDEP-02: the plugin declares only `workflows` and the session carries no
+    // host workflow engine, so the brace holds exactly one marker. The tri-state
+    // severity rule puts it at `warning`, not `info`: the envelopes ARE written
+    // and correct, but the desired state is not reached because nothing runs
+    // them yet.
+    "success-with-workflow-engine-absent": {
+      pi: piWithoutWorkflowEngine(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                severity: "warning",
+                needsReload: true,
+                name: "helper",
+                version: "1.0.0",
+                dependencies: ["workflows"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WDEP-04 / D-16-15: two markers, ONE brace, comma-space separated, with the
+    // host-engine marker SECOND. Marker order inside the brace is `agents`,
+    // `mcp`, `workflows` -- appended, never interleaved. Probe with only `mcp`
+    // loaded so the `agents` and `workflows` markers both fire and `mcp` does
+    // not.
+    "success-with-agents-and-workflows-soft-dep": {
+      pi: piWithMcpLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                severity: "warning",
+                needsReload: true,
+                name: "helper",
+                version: "1.0.0",
+                dependencies: ["agents", "workflows"],
               },
             ],
           },
@@ -153,8 +215,11 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
 
     // WDET-04: explicit partial consent installs the supported components and
     // reports the dropped workflow kind through the existing success grammar.
-    "workflow-partial-install-success": {
-      pi: piWithBothLoaded(),
+    // WINV-04: a plain install of a workflow-bearing plugin -- no flag opt-in --
+    // materializes the supported components and reports them through the clean
+    // `(installed)` success grammar.
+    "workflow-install-success": {
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -162,13 +227,12 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "partially-installed",
-                severity: "info",
-                needsReload: true,
+                status: "installed",
                 name: "helper",
                 version: "1.0.0",
                 dependencies: [],
-                reasons: ["workflows"],
+                severity: "info",
+                needsReload: true,
               },
             ],
           },
@@ -256,10 +320,12 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
       },
     },
 
-    // WDET-04: a normal install rejects a workflow-bearing plugin through the
-    // existing partially-available error row and partial-install hint.
-    "workflow-install-rejection": {
-      pi: piWithBothLoaded(),
+    // WINV-04: a plugin carrying workflows AND a second component kind Pi does
+    // not support is rejected on that second kind, through the existing
+    // partially-available error row and partial-install hint. The brace names
+    // the second kind alone.
+    "workflow-plus-unsupported-rejection": {
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -270,7 +336,7 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
               {
                 status: "partially-available",
                 name: "helper",
-                reasons: ["workflows"],
+                reasons: ["unsupported component"],
                 partialHint: true,
                 severity: "error",
               },

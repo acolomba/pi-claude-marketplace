@@ -11,9 +11,9 @@
 
 ## Executive summary
 
-- Both projects install Claude Code plugins into Pi, and each makes the opposite trade. They support three component kinds and install a plugin whole. We support five kinds, allow partial installs, and degrade when a soft dependency is absent.
+- Both projects install Claude Code plugins into Pi, and each makes the opposite trade. They support three component kinds and install a plugin whole. We support six kinds, allow partial installs, and degrade when a soft dependency is absent.
 - Their depth is in trust, network hardening, plugin user configuration, and an interactive terminal manager. We have none of these.
-- Our depth is in component coverage, enforced offline guarantees, and migration away from Claude Code. They attempt all three and stop short of each: three component kinds against our five, an offline promise that no gate enforces, and adoption that reads marketplace declarations but never the installed plugin set.
+- Our depth is in component coverage, enforced offline guarantees, and migration away from Claude Code. They attempt all three and stop short of each: three component kinds against our six, an offline promise that no gate enforces, and adoption that reads marketplace declarations but never the installed plugin set.
 - Hooks are the one axis where neither side leads outright. We activate ten Claude events and run an async-rewake lane they leave dormant. They intercept subagent lifecycle events we do not support, and they run eight handlers at once where we run one.
 - They translate no slash commands and no Claude agents. Both are explicit non-goals for them. Both work for us.
 - They are the larger tree: 79,579 lines over 417 TypeScript files against our 57,552 lines over 202 files. Their Node floor is `>=24` because they use `node:sqlite`. Ours is `>=20.19.0`.
@@ -130,7 +130,7 @@ Their `docs/COMPATIBILITY.md` carries an "Explicit non-goals" list. It names:
 - Bidirectional foreign-state sync
 - Partial plugin installation
 
-Ours is the opposite trade. We support five component kinds and we allow partial installs. We degrade when a companion extension is absent. We enforce offline-first guarantees structurally rather than by convention.
+Ours is the opposite trade. We support six component kinds and we allow partial installs. We degrade when a companion extension is absent. We enforce offline-first guarantees structurally rather than by convention.
 
 ## Capability ratings
 
@@ -498,7 +498,7 @@ Two of their advantages are not code at all. Bundling into a one-install harness
 
 ### Their weaknesses
 
-Two of the five component kinds are missing by design. No slash commands, no Claude agents. For someone migrating from Claude Code that is a large hole, and it stays quiet until the plugin they wanted stops doing what it used to do. Installs are all or nothing, so a single unsupported component kind blocks the whole plugin.
+Two of the six component kinds are missing by design. No slash commands, no Claude agents. For someone migrating from Claude Code that is a large hole, and it stays quiet until the plugin they wanted stops doing what it used to do. Installs are all or nothing, so a single unsupported component kind blocks the whole plugin.
 
 Plugin user configuration stops at the first secret. Their secret store returns unavailable on every platform, and the tree holds no Keychain, libsecret, or Windows Credential Manager code. Trust cannot be revoked through the product either. The primitive is exported, and nothing calls it.
 
@@ -508,7 +508,7 @@ The section "Their declared limitations" above carries the fuller list, in their
 
 ### Our strengths
 
-We translate five component kinds to their three, including the two they refuse. An unsupported kind never blocks the rest, and an absent companion extension degrades presentationally instead of failing outright. We adopt marketplace declarations and the installed plugin set, which for someone leaving Claude Code is the difference between one command and rebuilding a plugin list by hand.
+We translate six component kinds to their three, including the two they refuse. An unsupported kind never blocks the rest, and an absent companion extension degrades presentationally instead of failing outright. We adopt marketplace declarations and the installed plugin set, which for someone leaving Claude Code is the difference between one command and rebuilding a plugin list by hand.
 
 Some of our guarantees are enforced rather than promised. A test greps the orchestrators for git surfaces and fails the build, so the offline guarantee cannot rot quietly. Our hooks go deeper where it counts: ten events, `StopFailure` mapped over a closed error-type set, and a live async-rewake lane that they retain without activating.
 

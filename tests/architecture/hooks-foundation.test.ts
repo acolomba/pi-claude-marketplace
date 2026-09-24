@@ -25,7 +25,7 @@ import type {
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 // The actual public state contract keeps exactly both accepted schema versions
-// and requires all five resource arrays. Persistence owner tests exercise these
+// and requires all six resource arrays. Persistence owner tests exercise these
 // same fields through loadState/saveState, including invalid records and bytes.
 type IsExact<Actual, Expected> = [Actual] extends [Expected]
   ? [Expected] extends [Actual]
@@ -42,6 +42,7 @@ void (true satisfies IsExact<
     agents: string[];
     mcpServers: string[];
     hooks: string[];
+    workflows: string[];
   }
 >);
 
@@ -162,7 +163,7 @@ test("NFR-7 + HOOK-01: resolveStrict admits a hook-only plugin (installable: tru
     supported: ["hooks"],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: [], commands: [], agents: [] },
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
     hooksConfigPath: "hooks/hooks.json",
     defaultEnabled: true,

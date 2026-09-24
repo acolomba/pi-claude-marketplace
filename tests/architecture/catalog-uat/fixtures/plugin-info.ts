@@ -1,4 +1,4 @@
-import { piWithBothLoaded } from "../mock-pi.ts";
+import { piWithAllLoaded, piWithBothLoaded } from "../mock-pi.ts";
 
 import type { FixtureMap } from "../fixture-types.ts";
 
@@ -50,6 +50,96 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
       },
     },
 
+    // WFLW-04: the `workflows:` line renders LAST among the per-kind lines.
+    // Both entries are admitted arms -- `commit-commands:changelog` names
+    // itself, `commit-commands:release` falls back to its file stem -- and the
+    // renderer emits them in the order the composer supplied.
+    "installed-with-workflows": {
+      pi: piWithAllLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          componentsResolved: true,
+          components: {
+            agents: ["review-bot"],
+            commands: ["c1", "c2"],
+            skills: ["commit-summary"],
+            workflows: ["commit-commands:changelog", "commit-commands:release"],
+          },
+        },
+      },
+    },
+
+    // WR-09: the preview-tense advisory channel. `notes` is free text and
+    // carries no closed-set reason, so the row's brace stays empty and its
+    // severity stays `info` -- the sentence is about one file, not about the
+    // read. The composer reduces the walked directory to its name before the
+    // string reaches the row, which is what makes these bytes pinnable.
+    "installed-with-workflow-preview-note": {
+      pi: piWithAllLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          notes: [
+            'workflow script "roll.js" in "workflows" will be refused: roll.js calls ' +
+              "`Math.random`, which the workflow engine refuses as nondeterministic",
+          ],
+          componentsResolved: true,
+          components: {
+            skills: ["commit-summary"],
+            workflows: ["commit-commands:changelog"],
+          },
+        },
+      },
+    },
+
+    // WGATE-01: the engine-gate advisory. A gated script is ADMITTED -- its
+    // envelope is written and its command registers -- so its generated name
+    // sits on the `workflows:` line and the note is the only place the coming
+    // refusal is stated. Free text again: no closed-set reason, an empty brace,
+    // and `info` severity, because the sentence is about one file.
+    "installed-with-workflow-gate-note": {
+      pi: piWithAllLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          notes: [
+            'workflow script "greet.js" in "workflows" would be installed but the engine will ' +
+              "refuse to load it: the engine refuses at its check 9 -- `meta.description` must " +
+              "be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array " +
+              "of objects each carrying a string `title`) must match those shapes wherever " +
+              "they are declared",
+          ],
+          componentsResolved: true,
+          components: {
+            skills: ["commit-summary"],
+            workflows: ["commit-commands:changelog", "commit-commands:greet"],
+          },
+        },
+      },
+    },
+
     "state-only-installed-single-scope": {
       pi: piWithBothLoaded(),
       message: {
@@ -65,6 +155,30 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
           componentsResolved: true,
           components: {
             skills: ["alpha-skill"],
+          },
+        },
+      },
+    },
+
+    // WFLW-04: the state-only arm's `workflows:` line. The names are the
+    // generated installed names the record holds, which is why they carry the
+    // `<plugin>:` prefix the manifest-backed arm's source names do not.
+    "state-only-installed-with-workflows": {
+      pi: piWithAllLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "alpha",
+          version: "1.0.0",
+          reasons: ["not in manifest"],
+          componentsResolved: true,
+          components: {
+            skills: ["alpha-skill"],
+            workflows: ["alpha:changelog", "alpha:release"],
           },
         },
       },

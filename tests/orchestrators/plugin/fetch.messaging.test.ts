@@ -40,6 +40,7 @@ test("renders an available post-fetch row without candidate reasons or scope", (
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -61,6 +62,7 @@ test("renders a partially-available post-fetch row with complete reasons", () =>
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -81,6 +83,7 @@ test("renders an unavailable post-fetch row without a scope bracket", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -101,6 +104,7 @@ test("renders a bare remote post-fetch row without candidate reasons", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -123,6 +127,7 @@ test("renders a skipped no-op row with scope, version, and reason", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -146,6 +151,7 @@ test("renders a failed fetch row without leaking its cause into the row body", (
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act

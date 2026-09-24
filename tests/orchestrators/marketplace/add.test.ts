@@ -311,7 +311,7 @@ function makeCtx(expectedNotifications = 1): {
       .times(expectedNotifications);
     when(() => pi.getAllTools())
       .thenReturn([])
-      .times(expectedNotifications === 2 ? 2 : expectedNotifications * 2);
+      .times(expectedNotifications === 2 ? 3 : expectedNotifications * 3);
     when(() => ui.notify)
       .thenReturn((message, severity) => {
         notifications.push(severity === undefined ? { message } : { message, severity });
@@ -1773,9 +1773,14 @@ test("orchestrated mode normalizes a non-Error opaque failure without mutation",
     // arrange
     const { ctx, pi, notifications } = makeCtx(0);
     const { gitOps, state } = createGitOps();
-    t.mock.method(path, "basename", () => {
-      // eslint-disable-next-line @typescript-eslint/only-throw-error -- this case proves the public unknown-throw normalizer.
-      throw "opaque add failure";
+    const originalBasename = path.basename.bind(path);
+    t.mock.method(path, "basename", (value: string, suffix?: string) => {
+      if (value === locations.configJsonPath) {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- this case proves the public unknown-throw normalizer.
+        throw "opaque add failure";
+      }
+
+      return suffix === undefined ? originalBasename(value) : originalBasename(value, suffix);
     });
 
     // act
@@ -1826,9 +1831,14 @@ test("normalizes a structurally classified exotic throw in orchestrated mode", a
     );
     const { ctx, pi, notifications } = makeCtx(0);
     const { gitOps, state } = createGitOps();
-    t.mock.method(path, "basename", () => {
-      // eslint-disable-next-line @typescript-eslint/only-throw-error -- an exotic thenable-free value exercises unknown-throw normalization.
-      throw exoticDuplicate;
+    const originalBasename = path.basename.bind(path);
+    t.mock.method(path, "basename", (value: string, suffix?: string) => {
+      if (value === locations.configJsonPath) {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- an exotic thenable-free value exercises unknown-throw normalization.
+        throw exoticDuplicate;
+      }
+
+      return suffix === undefined ? originalBasename(value) : originalBasename(value, suffix);
     });
 
     // act

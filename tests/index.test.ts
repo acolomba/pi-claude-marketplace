@@ -669,8 +669,22 @@ async function seedPrompt(root: string, fileName: string): Promise<string> {
   return promptPath;
 }
 
-/** Record one enabled project-scope plugin whose binaries live under `root`. */
-async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<void> {
+/**
+ * Record one enabled project-scope plugin whose binaries live under `root`.
+ *
+ * The version stamp is part of the seed, not decoration: an absent
+ * `lastReconciledExtensionVersion` opens the load-time backfill gate, and the
+ * scan that follows re-resolves this record against a `marketplaceRoot` no case
+ * here creates. Most cases here are about PATH plumbing over a steady-state
+ * scope, so the default seed describes one: a scope already reconciled at the
+ * running version. `stamped: false` leaves the gate OPEN, which is what the
+ * WCONV-01 convergence case below needs.
+ */
+async function seedEnabledPlugin(
+  cwd: string,
+  resolvedSource: string,
+  opts: { readonly stamped?: boolean } = {},
+): Promise<void> {
   const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
   const marketplaceRoot = path.join(cwd, "mp-src");
   await mkdir(extensionRoot, { recursive: true });
@@ -678,6 +692,7 @@ async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<v
     path.join(extensionRoot, "state.json"),
     JSON.stringify({
       schemaVersion: 2,
+      ...(opts.stamped !== false && { lastReconciledExtensionVersion: EXTENSION_VERSION }),
       marketplaces: {
         mp: {
           name: "mp",
@@ -691,7 +706,14 @@ async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<v
               version: "1.0.0",
               resolvedSource,
               compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-              resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+              resources: {
+                skills: [],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: [],
+                workflows: [],
+              },
               enabled: true,
               installedAt: "2026-08-03T00:00:00.000Z",
               updatedAt: "2026-08-03T00:00:00.000Z",
@@ -810,7 +832,7 @@ test("keeps hook routing and command completion state inside each extension-load
   await seedBlockingHookPlugin(ownerCwd);
   const ownerMarketplace = await seedMarketplaceSource(ownerCwd, "owned-rows", "hello");
   process.chdir(ownerCwd);
-  const owner = await loadExtension(1, 2, { value: ownerCwd, reads: 1 });
+  const owner = await loadExtension(1, 3, { value: ownerCwd, reads: 1 });
   const ownerHookContext = hookContext(ownerCwd, "owner-graph-session");
   await owner.bridgeSessionStart({ type: "session_start", reason: "startup" }, ownerHookContext);
   const toolEvent: ToolCallEvent = {
@@ -944,11 +966,7 @@ test(
         mp: {
           name: "mp",
           scope: "project",
-          source: {
-            kind: "path",
-            logical: path.join(scope.cwd, "mp-src"),
-            raw: path.join(scope.cwd, "mp-src"),
-          },
+          source: { kind: "path", raw: path.join(scope.cwd, "mp-src") },
           addedFromCwd: scope.cwd,
           manifestPath: path.join(scope.cwd, "mp-src", ".claude-plugin", "marketplace.json"),
           marketplaceRoot: path.join(scope.cwd, "mp-src"),
@@ -957,7 +975,14 @@ test(
               version: "1.0.0",
               resolvedSource,
               compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-              resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+              resources: {
+                skills: [],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: [],
+                workflows: [],
+              },
               enabled: true,
               installedAt: "2026-08-03T00:00:00.000Z",
               updatedAt: "2026-08-03T00:00:00.000Z",
@@ -1013,7 +1038,7 @@ test("reports the scope whose install state it cannot read once as a reconcile f
   // arrange
   const scope = await createHermeticScope(t, "path-warning");
   const statePath = await seedUnreadableState(scope.cwd);
-  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(2, 2);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(2, 3);
   const expectedNotifications: readonly Notification[] = [
     { message: RECONCILE_CASCADE_FOR_UNREADABLE_STATE, severity: "error" },
     {
@@ -1040,6 +1065,45 @@ test("reports the scope whose install state it cannot read once as a reconcile f
 // observable per stage: the PATH the recompute leaves behind, and which of the
 // two lines the reconcile stage emits.
 
+test("converges silently over a recorded plugin whose marketplace source is absent (WCONV-01)", async (t) => {
+  // arrange -- the seed the PATH cases use with the version stamp left OUT, so
+  // the load-time backfill gate is OPEN and the scan reaches this record. Its
+  // `marketplaceRoot` (<cwd>/mp-src) is never created, so the offline re-resolve
+  // throws on the manifest read. The record is recorded `installable: true`, so
+  // that throw is a reason to promote nothing rather than a failure to report.
+  //
+  // This is the only case at the entry-point layer that observes a reconcile
+  // over a record whose marketplace source is gone, and it is the layer that
+  // matters: a `(failed)` row here reaches the user on a reload they did not
+  // initiate.
+  const scope = await createHermeticScope(t, "backfill-absent-source");
+  const resolvedSource = path.join(scope.cwd, "vendored-plugin");
+  await seedEnabledPlugin(scope.cwd, resolvedSource, { stamped: false });
+  // The zero-emission boundary states that nothing may be emitted at all. It is
+  // the weaker of the two observables here: NFR-2 makes `resources_discover`
+  // swallow every throw, including the boundary's own refusal of an unexpected
+  // emission, so the empty array below bounds what reached the user without
+  // bounding what the scan produced. The landed stamp is what carries the claim.
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(0, 0);
+  const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
+
+  // act
+  const discovered = await discover(discoverEvent(scope.cwd), ctx);
+
+  // assert
+  assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
+  assert.deepStrictEqual(notifications, []);
+  // The gate CLOSED. Silence alone would also be produced by a scan that never
+  // ran, and by a scan whose row the boundary refused; the landed stamp is what
+  // makes this load the last one that reads the absent manifest rather than the
+  // first of an unbounded series.
+  const stamped = JSON.parse(await readFile(statePath, "utf8")) as {
+    lastReconciledExtensionVersion?: string;
+  };
+  assert.deepStrictEqual(stamped.lastReconciledExtensionVersion, EXTENSION_VERSION);
+  verifyBoundary();
+});
+
 test("still answers when the deferred project-scope hydrate fails (NFR-2)", async (t) => {
   // arrange
   const scope = await createHermeticScope(t, "hydrate-refused");
@@ -1051,7 +1115,7 @@ test("still answers when the deferred project-scope hydrate fails (NFR-2)", asyn
   // reconcile that never runs is silent and a reconcile with nothing to report
   // is silent too.
   await seedInvalidConfig(scope.cwd);
-  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(1, 2);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(1, 3);
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
   const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_DEFERRED_HYDRATE);
@@ -1138,7 +1202,7 @@ test("reports an aborted reconcile as one raw error line and still answers (NFR-
   // arrange
   const scope = await createHermeticScope(t, "reconcile-aborted");
   await seedInvalidConfig(scope.cwd);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 2);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, 3);
   const recorded: Notification[] = [];
   let attempts = 0;
   const refusing = contextNotifyingThrough(ctx, (message, severity) => {
@@ -1166,7 +1230,7 @@ test("still answers when the last-ditch reconcile notification is also refused (
   // arrange
   const scope = await createHermeticScope(t, "last-ditch-refused");
   await seedInvalidConfig(scope.cwd);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 2);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, 3);
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
   const expectedAttempts: readonly Notification[] = [
@@ -1187,7 +1251,7 @@ test("still answers when the plugin PATH warning notification is refused (NFR-2)
   // arrange
   const scope = await createHermeticScope(t, "warning-refused");
   const statePath = await seedUnreadableState(scope.cwd);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 2);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, 3);
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
   const expectedAttempts: readonly Notification[] = [
@@ -1227,7 +1291,7 @@ test("attempts every skipped-scope PATH warning when every host notification thr
   const staleProjectBin = path.join(scope.cwd, "stale-project", "bin");
   process.env.PATH = ["/usr/bin", staleUserBin, staleProjectBin].join(path.delimiter);
   process.env.PI_CLAUDE_MARKETPLACE_PATH = [staleUserBin, staleProjectBin].join(path.delimiter);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 2);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, 3);
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
   const expectedAttempts: readonly Notification[] = [

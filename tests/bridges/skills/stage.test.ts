@@ -79,7 +79,7 @@ describe("prepareStageSkills", () => {
       supported: [],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -88,6 +88,7 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -135,7 +136,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -156,6 +157,7 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -216,7 +218,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -230,6 +232,7 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -284,7 +287,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -293,6 +296,7 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -308,6 +312,58 @@ describe("prepareStageSkills", () => {
       Buffer.from(
         '---\nname: acme:alpha\ndescription: "Wraps acme:tool for cleanup"\n---\n\n' +
           "Run acme:tool before acme:ghost.\n\n```text\nacme:acme-tool stays verbatim\n```\n",
+      ),
+    );
+  });
+
+  test("SKTK-01: rewrites a sibling-workflow reference onto the name the caller says will be staged", async (t) => {
+    // arrange -- the skill names a workflow by its upstream spelling. The
+    // workflows bridge has not run yet, so the installed name is whatever the
+    // caller threads in; a workflow the caller does not name stays verbatim.
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-workflow-tokens-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const alphaDirectory = path.join(skillsDirectory, "alpha");
+    await mkdir(alphaDirectory, { recursive: true });
+    await writeFile(
+      path.join(alphaDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: Runs the audit\n---\n\n" +
+        "Run /acme:acme-audit, then /acme:acme-release.\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+
+    // act
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      knownWorkflowNames: ["acme:audit"],
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const alphaBytes = await readFile(path.join(prepared.stagingRoot, "acme:alpha", "SKILL.md"));
+
+    // assert
+    assert.deepStrictEqual(
+      alphaBytes,
+      Buffer.from(
+        "---\nname: acme:alpha\ndescription: Runs the audit\n---\n\n" +
+          "Run /acme:audit, then /acme:acme-release.\n",
       ),
     );
   });
@@ -339,7 +395,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -348,6 +404,7 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -394,7 +451,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -426,6 +483,7 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -463,7 +521,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -488,6 +546,7 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -526,7 +585,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -558,6 +617,7 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -596,7 +656,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -609,6 +669,7 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -662,7 +723,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -684,6 +745,7 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -731,7 +793,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -744,6 +806,7 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot: windowsRoot,
       pluginDataDir,
@@ -783,7 +846,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -801,6 +864,7 @@ describe("prepareStageSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: path.join(scopeRoot, "ignored-project"),
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -837,7 +901,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -855,6 +919,7 @@ describe("prepareStageSkills", () => {
       await prepareStageSkills(createRemovalOps(), {
         locations,
         cwd: scopeRoot,
+        knownWorkflowNames: [],
         pluginName: "acme",
         pluginRoot,
         pluginDataDir: "[unterminated",
@@ -898,7 +963,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -918,6 +983,7 @@ describe("prepareStageSkills", () => {
       await prepareStageSkills(createRemovalOps(), {
         locations,
         cwd: scopeRoot,
+        knownWorkflowNames: [],
         pluginName: "acme",
         pluginRoot,
         pluginDataDir,
@@ -962,7 +1028,7 @@ describe("prepareStageSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -973,6 +1039,7 @@ describe("prepareStageSkills", () => {
       await prepareStageSkills(createRemovalOps(), {
         locations,
         cwd: scopeRoot,
+        knownWorkflowNames: [],
         pluginName: "acme",
         pluginRoot,
         pluginDataDir,
@@ -1007,13 +1074,14 @@ describe("commitPreparedSkills", () => {
       supported: [],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1055,7 +1123,7 @@ describe("commitPreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
@@ -1068,6 +1136,7 @@ describe("commitPreparedSkills", () => {
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1109,13 +1178,14 @@ describe("commitPreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1173,13 +1243,14 @@ describe("commitPreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1247,13 +1318,14 @@ describe("commitPreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1320,13 +1392,14 @@ describe("commitPreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1380,13 +1453,14 @@ describe("commitPreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1436,13 +1510,14 @@ describe("abortPreparedSkills", () => {
       supported: [],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1478,13 +1553,14 @@ describe("abortPreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1522,13 +1598,14 @@ describe("replacePreparedSkills", () => {
       supported: [],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1570,13 +1647,14 @@ describe("replacePreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1637,13 +1715,14 @@ describe("replacePreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1722,13 +1801,14 @@ describe("replacePreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1795,13 +1875,14 @@ describe("replacePreparedSkills", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1873,13 +1954,14 @@ describe("rollbackSkillsReplacement", () => {
       supported: [],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1927,13 +2009,14 @@ describe("rollbackSkillsReplacement", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1983,13 +2066,14 @@ describe("rollbackSkillsReplacement", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -2073,13 +2157,14 @@ describe("rollbackSkillsReplacement", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -2121,13 +2206,14 @@ describe("finalizeSkillsReplacement", () => {
       supported: [],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [] },
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -2167,13 +2253,14 @@ describe("finalizeSkillsReplacement", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -2221,13 +2308,14 @@ describe("finalizeSkillsReplacement", () => {
       supported: ["skills"],
       unsupported: [],
       notes: [],
-      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
+      knownWorkflowNames: [],
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,

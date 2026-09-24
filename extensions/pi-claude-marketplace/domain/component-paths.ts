@@ -5,7 +5,7 @@ import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts
 import type { PluginEntry } from "./components/plugin.ts";
 import type { StatKindReader } from "./resolver-types.ts";
 
-const COMPONENT_PATH_KINDS = ["skills", "commands", "agents"] as const;
+const COMPONENT_PATH_KINDS = ["skills", "commands", "agents", "workflows"] as const;
 type ComponentPathKind = (typeof COMPONENT_PATH_KINDS)[number];
 
 /** Resolves a relative component path after enforcing root containment. */
@@ -40,7 +40,7 @@ export async function resolveContainedComponentPath(
 export interface ComponentPathResolution {
   supported: string[];
   notes: string[];
-  componentPaths: { skills: string[]; commands: string[]; agents: string[] };
+  componentPaths: { skills: string[]; commands: string[]; agents: string[]; workflows: string[] };
 }
 
 function readPathOrArray(value: unknown): readonly unknown[] {

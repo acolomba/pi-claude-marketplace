@@ -175,7 +175,7 @@ test("TUI mode with no marketplaces emits structured (no marketplaces) notificat
   when(() => ctx.ui).thenReturn(ui);
   when(() => pi.getAllTools())
     .thenReturn([])
-    .times(2);
+    .times(3);
   when(() => {
     ui.notify("(no marketplaces)");
   })
@@ -315,7 +315,7 @@ test("TUI mode when loadMarketplaceEntries throws emits structured failure notif
   when(() => ctx.ui).thenReturn(ui);
   when(() => pi.getAllTools())
     .thenReturn([])
-    .times(2);
+    .times(3);
   const capturedNotify = It.willCapture<string>();
   when(() => {
     ui.notify(capturedNotify, "error");
@@ -341,7 +341,7 @@ test("TUI mode exercises custom UI factory, render, invalidate, handleInput, and
   const scope = await createHermeticScope(t, "factory-exercise");
   const pluginRecord = buildInstalledPluginRecord(
     { version: "1.0.0" },
-    { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
   ) as unknown as MarketplaceRecord["plugins"][string];
   await seedMarketplace(scope.cwd, "official", { "test-plugin": pluginRecord });
   const manifestPath = marketplaceRecordIn(scope.cwd, "official").manifestPath;

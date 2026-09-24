@@ -116,7 +116,7 @@ test("lists every scope project-first when no scope flag narrows the listing", a
   // arrange
   const { cwd } = await createHermeticScope(t, "both-scopes");
   await seedBothScopes(cwd);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: cwd,
     reads: 1,
   });
@@ -160,7 +160,7 @@ for (const { row, scope } of [
     // arrange
     const { cwd } = await createHermeticScope(t, `scope-${scope}`);
     await seedBothScopes(cwd);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: cwd,
       reads: 1,
     });
@@ -227,7 +227,7 @@ test("list --scope project keeps shared, local, and overridden entries with unch
     '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
   await writeFile(locations.configJsonPath, sharedBytes);
   await writeFile(locations.configLocalJsonPath, localBytes);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: cwd,
     reads: 1,
   });

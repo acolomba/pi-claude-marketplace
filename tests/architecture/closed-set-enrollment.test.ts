@@ -22,10 +22,10 @@
  * neither offers members this gate could count directly. The hook half counts
  * `BUCKET_A_EVENTS`, the registration tuple the resolver reads. The `Dependency`
  * half takes the two instruments a bare literal union leaves available: a
- * compile-time `Exclude` proof that the union holds exactly the two members
+ * compile-time `Exclude` proof that the union holds exactly the three members
  * `softDepMarkers` branches on, and a runtime pin on that function's arity. A
- * third dependency added to the union without a `softDepMarkers` branch leaves
- * the flag count and the emitted marker set unchanged, so neither the five
+ * fourth dependency added to the union without a `softDepMarkers` branch leaves
+ * the flag count and the emitted marker set unchanged, so neither the
  * cross-product cases below nor the catalog case would notice it; the proof
  * fails to compile instead.
  */
@@ -44,15 +44,15 @@ import type { Dependency } from "../../extensions/pi-claude-marketplace/shared/c
 import type { Reason } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 /**
- * The two `Dependency` members `softDepMarkers` carries a branch for.
+ * The three `Dependency` members `softDepMarkers` carries a branch for.
  *
- * `AssertNever` accepts `never` alone, so a third member of the union leaves
+ * `AssertNever` accepts `never` alone, so a fourth member of the union leaves
  * `UnenrolledDependency` non-`never` and the annotation below is a TS2344 build
  * failure. This is the reverse direction `hook-events.ts` states for the event
  * set, spelled here because `Dependency` has no tuple of its own to constrain.
  */
 type AssertNever<T extends never> = T;
-type UnenrolledDependency = Exclude<Dependency, "agents" | "mcp">;
+type UnenrolledDependency = Exclude<Dependency, "agents" | "mcp" | "workflows">;
 const UNENROLLED_DEPENDENCIES: AssertNever<UnenrolledDependency>[] = [];
 
 test("SCN-F025: BUCKET_A_EVENTS is the closed 10-entry admitted-event set", () => {
@@ -99,9 +99,9 @@ test("SCN-F025: every TOOL_EVENTS member is an admitted bucket-A event", () => {
   assert.deepStrictEqual(unadmittedToolEvents, []);
 });
 
-test("SCN-F025: Dependency is the closed 2-member set softDepMarkers branches on", () => {
+test("SCN-F025: Dependency is the closed 3-member set softDepMarkers branches on", () => {
   // arrange
-  const expectedDeclaresFlagCount = 2;
+  const expectedDeclaresFlagCount = 3;
   const probeParameterCount = 1;
 
   // act
@@ -111,7 +111,7 @@ test("SCN-F025: Dependency is the closed 2-member set softDepMarkers branches on
   assert.deepStrictEqual(
     UNENROLLED_DEPENDENCIES,
     [],
-    "SCN-F025: a Dependency member outside the enrolled pair is a compile failure at UNENROLLED_DEPENDENCIES, not a value this array could ever hold.",
+    "SCN-F025: a Dependency member outside the enrolled triple is a compile failure at UNENROLLED_DEPENDENCIES, not a value this array could ever hold.",
   );
   assert.strictEqual(
     parameterCount,
@@ -120,15 +120,16 @@ test("SCN-F025: Dependency is the closed 2-member set softDepMarkers branches on
   );
 });
 
-test("SCN-F025: softDepMarkers emits both markers in canonical agents-before-mcp order", () => {
+test("SCN-F025: softDepMarkers emits the agents and mcp markers in canonical agents-before-mcp order", () => {
   // arrange
   const probe = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: false,
   } satisfies SoftDepStatus;
 
   // act
-  const markers = softDepMarkers(true, true, probe);
+  const markers = softDepMarkers(true, true, false, probe);
 
   // assert
   assert.deepStrictEqual(markers, ["requires pi-subagents", "requires pi-mcp"]);
@@ -139,10 +140,11 @@ test("SCN-F025: softDepMarkers emits only the agents marker for an agents-only d
   const probe = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: false,
   } satisfies SoftDepStatus;
 
   // act
-  const markers = softDepMarkers(true, false, probe);
+  const markers = softDepMarkers(true, false, false, probe);
 
   // assert
   assert.deepStrictEqual(markers, ["requires pi-subagents"]);
@@ -153,10 +155,11 @@ test("SCN-F025: softDepMarkers emits only the mcp marker for an mcp-only declara
   const probe = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: false,
   } satisfies SoftDepStatus;
 
   // act
-  const markers = softDepMarkers(false, true, probe);
+  const markers = softDepMarkers(false, true, false, probe);
 
   // assert
   assert.deepStrictEqual(markers, ["requires pi-mcp"]);
@@ -167,10 +170,11 @@ test("SCN-F025: softDepMarkers emits nothing when the row declares neither depen
   const probe = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: false,
   } satisfies SoftDepStatus;
 
   // act
-  const markers = softDepMarkers(false, false, probe);
+  const markers = softDepMarkers(false, false, false, probe);
 
   // assert
   assert.deepStrictEqual(markers, []);
@@ -181,10 +185,11 @@ test("SCN-F025: softDepMarkers emits nothing when both companions are loaded", (
   const probe = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   } satisfies SoftDepStatus;
 
   // act
-  const markers = softDepMarkers(true, true, probe);
+  const markers = softDepMarkers(true, true, false, probe);
 
   // assert
   assert.deepStrictEqual(markers, []);
@@ -199,20 +204,25 @@ test("SCN-F025: softDepMarkers emits nothing when both companions are loaded", (
  * here, and `softDepMarkers`' own `readonly Reason[]` return type says the same
  * thing about every input, not just the one the case below drives.
  */
-const EMITTABLE_SOFT_DEP_MARKERS: readonly Reason[] = ["requires pi-subagents", "requires pi-mcp"];
+const EMITTABLE_SOFT_DEP_MARKERS: readonly Reason[] = [
+  "requires pi-subagents",
+  "requires pi-mcp",
+  "requires pi-dynamic-workflows",
+];
 
 test("SCN-F025: every marker softDepMarkers can emit is a reason catalog member", () => {
   // arrange
   const probe = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: false,
   } satisfies SoftDepStatus;
   const expectedMarkers = EMITTABLE_SOFT_DEP_MARKERS;
 
   // act
-  // Both dependencies declared and neither companion loaded is the one input
+  // All three dependencies declared and no companion loaded is the one input
   // that emits every marker, so this call enumerates the emittable set.
-  const markers = softDepMarkers(true, true, probe);
+  const markers = softDepMarkers(true, true, true, probe);
 
   // assert
   assert.deepStrictEqual(markers, expectedMarkers);

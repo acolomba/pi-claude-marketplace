@@ -1,13 +1,15 @@
 # Live runtime UAT
 
-Runtime verification that the offline suites cannot establish. Every harness here is **standalone** -- none is part of `npm run check`, because each needs a disposable `PI_CODING_AGENT_DIR` sandbox and some need a live `pi` binary with provider credentials.
+Runtime verification that the offline suites cannot establish. Every harness here is **standalone** -- none is part of `npm run check`. Each needs a disposable `PI_CODING_AGENT_DIR` sandbox; some need a live `pi` binary with provider credentials, and one needs a scratch install of the host workflow engine with provider credentials deliberately **unreachable**.
 
-| Canary                        | Proves                                                                                          | Needs live `pi`                  |
-| ----------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------- |
-| `stop-canary.mjs`             | the `agent_settled` Stop dispatcher fire-point (STOP-01, STOP-03, STOP-07)                      | yes, for every assertion         |
-| `manifest-absence-canary.mjs` | installed plugins survive their manifest entry disappearing; disabled partials read as disabled | only for the optional host smoke |
+| Canary                              | Proves                                                                                                                               | Needs live `pi`                                              |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| `stop-canary.mjs`                   | the `agent_settled` Stop dispatcher fire-point (STOP-01, STOP-03, STOP-07)                                                           | yes, for every assertion                                     |
+| `manifest-absence-canary.mjs`       | installed plugins survive their manifest entry disappearing; disabled partials read as disabled                                      | only for the optional host smoke                             |
+| `workflow-agent-failure-canary.mjs` | the host engine's `agent()` failure observable -- a recoverable failure resolves to `null`, a non-recoverable one rejects (WEVID-01) | no -- it drives the engine, not a Pi session                 |
+| `workflow-storage-canary.mjs`       | the envelopes the bridge writes are the envelopes the host engine lists, loads and parses, in both scopes (WSTOR-01)                 | no -- it drives the extension and the engine's storage layer |
 
-Both follow the same honesty contract: an unmet precondition or an unobserved assertion exits **non-zero** with a human-readable reason, so the verifier records `human_needed` rather than a silent pass.
+All four follow the same honesty contract: an unmet precondition or an unobserved assertion exits **non-zero** with a human-readable reason, so the verifier records `human_needed` rather than a silent pass.
 
 ## Manifest-absence canary -- `manifest-absence-canary.mjs`
 
@@ -28,7 +30,7 @@ The harness builds a disposable path-source marketplace with three plugins -- a 
 
 - **A1** (INV-01..04) -- `list` keeps the record and stamps `{not in manifest}`.
 - **A2** (BOUND-03) -- the still-declared control plugin is **not** stamped, proving the reason tracks the entry rather than the read.
-- **A3** (INFO-09..11) -- `info` renders from the installation record instead of `(failed)`, and reconstructs the component inventory across all five kinds.
+- **A3** (INFO-09..11) -- `info` renders from the installation record instead of `(failed)`, and reconstructs the component inventory across all six kinds.
 - **A4** (INFO-12) -- `info --fetch` emits the skip note instead of reaching the network.
 - **A5** (LIFE-05) -- `update` renders `(skipped) {not in manifest}`.
 - **A6** (LIFE-04) -- `uninstall` succeeds, removes the staged artifacts from disk, and drops the record.
@@ -56,6 +58,141 @@ exit 1
 
 Flows A and B are proven on the real extension against real disk. Flow C is the only residue.
 
+## Engine `agent()` failure canary -- `workflow-agent-failure-canary.mjs`
+
+Proves what the host workflow engine's `agent()` call actually does when the subagent fails (WEVID-01). The offline suites cannot establish this at all: the engine is deliberately in no dependency manifest (NFR-5, D-98-10), so nothing inside `npm run check` can import it, and driving the failure needs the real subagent runner the fixtures avoid. This is the first harness in the table above that drives the **engine** rather than a Pi session, which is why its "Needs live `pi`" answer is `no`.
+
+### Prerequisites
+
+| Requirement                                              | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A scratch install of `@quintinshaw/pi-dynamic-workflows` | `npm install --prefix /var/tmp/wf-engine @quintinshaw/pi-dynamic-workflows@3.13.0`, then point `PI_WORKFLOW_ENGINE_ROOT` at `/var/tmp/wf-engine/node_modules`. The version is pinned because `docs/workflows-compatibility.md` publishes this driver's result as a grade naming 3.13.0; dropping the pin re-measures against whatever is current, which the PASS lines will then name. The prefix must live OUTSIDE this repository and the engine must never enter `package.json` or `package-lock.json` (NFR-5, D-98-10). Do not add `--ignore-scripts`: the engine's peer places a platform binary in a post-install step, so suppressing scripts breaks the import instead of hardening anything. |
+| A disposable `PI_CODING_AGENT_DIR` sandbox               | Use `$(pwd)/tmp/pi-uat/wf-agent`. The harness refuses any directory outside `tmp/pi-uat` before it creates anything and before it imports the engine, because the engine writes into whatever agent-state directory it is handed. Both sides of that comparison are resolved first, so a `..` segment does not walk out of the sandbox and a sibling such as `tmp/pi-uat-backup` does not pass as a child.                                                                                                                                                                                                                                                                                            |
+| Provider credentials **unreachable** from that sandbox   | This inverts the usual precondition, and saying so outright is the point. The failure inducer is an ABSENCE: with no API key reachable, the real subagent runner throws, and that throw is the thing being measured. A machine whose sandbox can reach a provider measures nothing at all.                                                                                                                                                                                                                                                                                                                                                                                                            |
+
+### Run
+
+```bash
+mkdir -p /var/tmp/wf-engine tmp/pi-uat/wf-agent
+npm install --prefix /var/tmp/wf-engine @quintinshaw/pi-dynamic-workflows@3.13.0
+PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/wf-agent \
+PI_WORKFLOW_ENGINE_ROOT=/var/tmp/wf-engine/node_modules \
+  node tests/live-uat/workflow-agent-failure-canary.mjs
+rm -rf /var/tmp/wf-engine tmp/pi-uat/wf-agent
+```
+
+The harness reads the engine version out of the engine's own manifest and prints it in every PASS line, so a transcript dates itself. It creates its own empty child directory beneath the sandbox root and removes it in a `finally`, so a failed assertion still cleans up.
+
+### What it asserts (exit 0 conditions)
+
+- **A0 -- the measurement precondition.** The induced failure actually happened, read off the run's own logs, asserted BEFORE any verdict. Without it a machine with reachable credentials exits 0 having proved nothing (D-117-05).
+- **A1 -- the measurement** (WEVID-01, D-117-04). A recoverable `agent()` failure resolves to `null`. It asserts the OBSERVABLE a script author experiences, never which internal branch ran; an assertion on the branch would only restate a source read.
+- **A2 -- the differential control**, always on and never behind a flag. The same call one option apart, with a model specification that resolves to nothing, REJECTS with `MODEL_NOT_FOUND`. Two assertions in one run that disagree by design are what prove the harness discriminates rather than reporting whatever it sees. This is the only assertion here that names an error code.
+- **A3 -- the upstream fan-out pattern, end to end.** Three failing calls through the engine's own pipeline helper return three rows, none of which survives `.filter(Boolean)`, and the run completes. That it completes at all is part of the observation.
+
+### What it routes to `human_needed` (exit non-zero)
+
+- **No engine.** `PI_WORKFLOW_ENGINE_ROOT` unset, or the engine's manifest unreadable beneath it. Prints `LIVE ENGINE REQUIRED` with the scratch-install route.
+- **A non-sandbox agent directory.** Refused before anything is created and before the engine is imported. The check resolves the supplied path and requires it to be `tmp/pi-uat` itself or a child of it, so a traversal segment is refused rather than followed.
+- **A call whose failure was not observed.** Prints `NOTHING WAS MEASURED`, which is what the missing marker actually supports: no log line named it. The message then branches on the logs, because they discriminate. No logs at all is the shape a _successful_ call produces, so the sandbox most likely reached a provider. Logs that name something else say the engine ran and used different words -- check its error vocabulary before concluding anything about the machine. Either way no verdict about the engine can be read from that run, and neither reading is an engine regression.
+
+### The negative control
+
+`--invert` flips A1's expectation and nothing else, so a green run means something:
+
+```bash
+PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/wf-agent \
+PI_WORKFLOW_ENGINE_ROOT=/var/tmp/wf-engine/node_modules \
+  node tests/live-uat/workflow-agent-failure-canary.mjs --invert
+```
+
+Expect exit 1 naming A1. A0 still PASSES on that run, which is exactly the discrimination the control is for: the failure was induced, and only the verdict disagreed.
+
+### Not here, deliberately
+
+The storage assertions (`W0`-`W5`, the envelope listing and round trip) live in `workflow-storage-canary.mjs` below, not in this harness. This canary carries only the `agent()` assertions WEVID-01 names.
+
+### Observed result (2026-09-21, engine 3.13.0)
+
+```text
+[wf-agent-canary] engine 3.13.0
+[wf-agent-canary] PASS: A0: the agent call failed as induced, so this run measured something (engine 3.13.0)
+[wf-agent-canary] PASS: A1: a recoverable agent() failure resolves to null (engine 3.13.0)
+[wf-agent-canary] PASS: A2: a non-recoverable agent() failure rejects MODEL_NOT_FOUND (engine 3.13.0)
+[wf-agent-canary] PASS: A3: three fanned-out failures return 3 rows, 0 survive the truthiness filter, and the run completes (engine 3.13.0)
+exit 0
+```
+
+All four assertions are proven against a real engine in a credential-free sandbox, first at 3.10.1 on 2026-09-09 and again at 3.13.0 with identical lines. Both negative controls were run at each: `--invert` exits 1 naming A1, and A0 was planted with an empty log collection -- the shape a successful call produces -- and observed exiting 1 with `NOTHING WAS MEASURED`.
+
+## Engine storage canary -- `workflow-storage-canary.mjs`
+
+Proves that the envelopes this extension writes are the envelopes the host workflow engine reads (WSTOR-01). The offline suites pin the bytes the bridge writes against a layout read out of the engine's source; this driver installs a workflow-bearing plugin through the extension's own `/claude:plugin` handler into a scratch `HOME`, then reads it back through the **engine's** public entry -- `createWorkflowStorage`, `parseWorkflowScript`, `workflowUserSavedDir`, `workflowProjectPaths` -- resolved out of the same scratch install the agent-failure canary uses. A layout the engine moved shows up as a listing that comes back empty, which is exactly the failure nothing inside `npm run check` can see.
+
+Nothing is run: no subagent starts, so no provider credentials are needed in either direction.
+
+### Prerequisites
+
+| Requirement                                              | Notes                                                                                                                                                                                                                                                                                                      |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A scratch install of `@quintinshaw/pi-dynamic-workflows` | The same route as the agent-failure canary. Pin the version you mean to publish a grade for; the driver reads the version out of the engine's own manifest and prints it in every PASS line. Keep the prefix on a real filesystem -- a tmpfs `/tmp` that is out of inodes fails the install with `ENOSPC`. |
+| A disposable `PI_CODING_AGENT_DIR` sandbox               | Use `$(pwd)/tmp/pi-uat/wf-store`. The driver rewrites `HOME` to a fresh child of this directory before either side is imported, because both the bridge and the engine derive the storage root from `os.homedir()`; it refuses any directory outside `tmp/pi-uat` before creating anything.                |
+
+### Run
+
+```bash
+mkdir -p /var/tmp/wf-engine tmp/pi-uat/wf-store
+npm install --prefix /var/tmp/wf-engine @quintinshaw/pi-dynamic-workflows@3.13.0
+PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/wf-store \
+PI_WORKFLOW_ENGINE_ROOT=/var/tmp/wf-engine/node_modules \
+  node tests/live-uat/workflow-storage-canary.mjs
+rm -rf /var/tmp/wf-engine tmp/pi-uat/wf-store
+```
+
+The fixture is one plugin with four scripts: two the engine loads (one with a `meta.name` that repeats the plugin prefix, so the envelope name is the elided form while the script keeps the full one), and two it refuses at first run (no `meta.description`; a statement before the `meta` export). Both scopes are driven in turn, and the plugin is always uninstalled and the marketplace removed afterward.
+
+### What it asserts (exit 0 conditions)
+
+- **W0 -- the precondition.** The bridge's `workflowsSavedDir` equals the engine's `workflowUserSavedDir()` and `workflowProjectPaths(cwd).savedDir` under the same `HOME`. Without it, an empty listing in W1 would be a home mismatch rather than the engine moving its storage.
+- **W1** -- the engine's own `list()` reports every admitted script under its generated name, in the tier the scope maps to (`user` or `project`), read off the row's `source` field rather than inferred from a path.
+- **W2** -- `load(name)` round-trips every envelope, and the script bytes are the plugin's source bytes, unchanged. This is the verbatim promise measured on the engine's side.
+- **W3** -- the engine's `parseWorkflowScript` admits the two loadable scripts and refuses the other two with the messages its checks 9 and 3 raise.
+- **W4** -- the install output named check 9 and check 3 for those same two files, so the admit-versus-run divergence is paired on both sides from one run.
+- **W5** -- after `uninstall`, the engine's listing is empty.
+
+### What it routes to `human_needed` (exit non-zero)
+
+- **No engine.** `PI_WORKFLOW_ENGINE_ROOT` unset, or the engine's manifest unreadable beneath it. Prints `LIVE ENGINE REQUIRED`.
+- **A non-sandbox agent directory.** Refused on the resolved path before anything is created, because `HOME` is about to be rewritten to a child of it.
+
+### The negative control
+
+`--invert` flips W2's byte-identity expectation and nothing else:
+
+```bash
+PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/wf-store \
+PI_WORKFLOW_ENGINE_ROOT=/var/tmp/wf-engine/node_modules \
+  node tests/live-uat/workflow-storage-canary.mjs --invert
+```
+
+Expect exit 1 naming `[user] W2`, after W0 and `[user] W1` have passed.
+
+### Observed result (2026-09-21, engine 3.13.0)
+
+```text
+[wf-storage-canary] engine 3.13.0
+[wf-storage-canary] PASS: W0: the bridge and the engine derive the same saved directories for both scopes (engine 3.13.0)
+[wf-storage-canary] PASS: [user] W1: the engine lists all 4 envelopes in its user tier (engine 3.13.0)
+[wf-storage-canary] PASS: [user] W2: load() returns every envelope with byte-identical script source (engine 3.13.0)
+[wf-storage-canary] PASS: [user] W3: the engine's parser admits 2 scripts and refuses 2 at the checks the install warned about (engine 3.13.0)
+[wf-storage-canary] PASS: [user] W4: the install named check 9 and check 3 for the scripts the engine refuses at them (engine 3.13.0)
+[wf-storage-canary] PASS: [user] W5: uninstall leaves the engine's listing empty (engine 3.13.0)
+[wf-storage-canary] PASS: [project] W1 .. W5 -- identical lines for the project tier
+[wf-storage-canary] all assertions proven; exit 0
+```
+
+All three controls were run and exited 1: `--invert` failed at `[user] W2`, an unset `PI_WORKFLOW_ENGINE_ROOT` and a `PI_CODING_AGENT_DIR` outside the sandbox each routed to `LIVE ENGINE REQUIRED`. The sandbox was empty afterward.
+
 ## Stop contract canary -- `stop-canary.mjs`
 
 Live-Pi verification for the `agent_settled` Stop dispatcher (STOP-01, STOP-03, STOP-07). The mocked settle tests under `tests/bridges/hooks/` prove the dispatcher logic offline; this canary proves the settle **fire-point** on a real Pi runtime, which no fake `pi` can establish.
@@ -69,7 +206,7 @@ It has two halves:
 
 | Requirement                                | Notes                                                                                                                                                                                   |
 | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pi` CLI **>= 0.80.5** on `PATH`           | `agent_settled` fire-point. Verified against 0.80.10.                                                                                                                                   |
+| `pi` CLI **>= 0.86.1** on `PATH`           | Package peer floor. `agent_settled` first appeared in 0.80.5. The earlier canary run used 0.80.10.                                                                                      |
 | A disposable `PI_CODING_AGENT_DIR` sandbox | Use `$(pwd)/tmp/pi-uat/agent`. The harness refuses to run against any dir outside `tmp/pi-uat` (T-88-08) so the always-block canary never churns a real Pi state dir.                   |
 | A working default provider in the sandbox  | The sandbox's `settings.json` selects the provider/model; a real turn must reach it. `--offline` disables only Pi's _startup_ network ops (marketplace autoupdate), not the model call. |
 

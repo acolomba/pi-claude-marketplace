@@ -108,25 +108,40 @@ export interface LedgerDegradationSignals {
    * `stagedAgents`, driving the `{requires pi-mcp}` marker and the same raise.
    */
   readonly stagedMcpServers?: boolean;
+  /**
+   * SEV-01: the ledger staged at least one workflow, so the row DECLARES the
+   * host workflow engine. The workflows counterpart of `stagedAgents`, driving
+   * the `{requires pi-dynamic-workflows}` marker and the same raise. Carries a
+   * COUNT verdict only -- the staged workflow names never reach a rendered row.
+   */
+  readonly stagedWorkflows?: boolean;
 }
 
 /**
  * SEV-01 / D-98-02: derive the closed-set `Dependency[]` an enable row declares
  * from the ledger's staged-count signals -- the same derivation `install-flow.ts`
- * runs off `installCtx.stagedAgentNames` / `stagedMcpServerNames` for the same
- * ledger run. Shared by the standalone enable row and the reconcile enable
- * projection so the two row composers cannot drift.
+ * runs off `installCtx.stagedAgentNames` / `stagedMcpServerNames` /
+ * `stagedWorkflowNames` for the same ledger run. Shared by the standalone
+ * enable row and the reconcile enable projection so the two row composers
+ * cannot drift.
  *
- * WR-01: both picked members are OPTIONAL, so every shape that inherits
+ * WR-01: all three picked members are OPTIONAL, so every shape that inherits
  * `LedgerDegradationSignals` matched this parameter structurally -- including
  * `PluginUpdateUpdatedOutcome`, which spells the same facts as `declaresAgents`
- * / `declaresMcp` and would therefore have compiled here and returned `[]` for
- * every update. The `partition?: never` refusal excludes the outcome shapes
- * discriminated by that field (the update / reinstall partitions) while leaving
- * the two `kind`-discriminated enable outcomes this function serves untouched.
+ * / `declaresMcp` / `declaresWorkflows` and would therefore have compiled here
+ * and returned `[]` for every update. The `partition?: never` refusal excludes
+ * the outcome shapes discriminated by that field (the update / reinstall
+ * partitions) while leaving the two `kind`-discriminated enable outcomes this
+ * function serves untouched.
+ *
+ * WDEP-02: `workflows` pushes LAST, so an enable that staged agents and MCP
+ * servers renders the same two-marker brace whether or not it staged workflows.
  */
 export function enableRowDependencies(
-  signals: Pick<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers"> & {
+  signals: Pick<
+    LedgerDegradationSignals,
+    "stagedAgents" | "stagedMcpServers" | "stagedWorkflows"
+  > & {
     readonly partition?: never;
   },
 ): readonly Dependency[] {
@@ -137,6 +152,10 @@ export function enableRowDependencies(
 
   if (signals.stagedMcpServers === true) {
     dependencies.push("mcp");
+  }
+
+  if (signals.stagedWorkflows === true) {
+    dependencies.push("workflows");
   }
 
   return dependencies;
@@ -1185,6 +1204,7 @@ export function applyPartialCascadeFold(
       agents: string[];
       mcpServers: string[];
       hooks: string[];
+      workflows: string[];
     };
   },
   dropped: {
@@ -1193,6 +1213,7 @@ export function applyPartialCascadeFold(
     readonly agents: readonly string[];
     readonly hooks: readonly string[];
     readonly mcpServers: readonly string[];
+    readonly workflows: readonly string[];
   },
 ): void {
   installed.resources.skills = installed.resources.skills.filter(
@@ -1212,6 +1233,14 @@ export function applyPartialCascadeFold(
   // must subtract them so a disable / uninstall partial-cascade failure
   // does not leave a stale hooks entry in the in-memory record.
   installed.resources.hooks = installed.resources.hooks.filter((n) => !dropped.hooks.includes(n));
+  // WLIF-03: name-identical, unlike the commands-to-prompts mapping. The
+  // parameter shapes are structural, so nothing here is compile-forced -- a
+  // caller passing a wider bundle satisfies a narrower parameter and this
+  // subtraction can go missing in silence. The behavioral case in the owner
+  // test is what holds it in place.
+  installed.resources.workflows = installed.resources.workflows.filter(
+    (n) => !dropped.workflows.includes(n),
+  );
 }
 
 /**
@@ -1220,8 +1249,10 @@ export function applyPartialCascadeFold(
  *
  * RECON-03 / D-47-A: orchestrated callers get the typed failure carrying the
  * structural `marketplace not added` sentinel; standalone callers get the canonical
- * `MarketplaceNotAddedMessage` row and `undefined`, because the row IS the
- * outcome on that path.
+ * `MarketplaceNotAddedMessage` row emitted first, and then the SAME typed
+ * failure, which they discard -- the row is what the operator sees on that path.
+ * Returning it unconditionally is what lets both callers' bodies declare a
+ * narrow `Promise<TOutcome>` return the compiler can check (WR-01).
  *
  * `uninstall.ts` and `enable-disable.ts` both reach this state. The routing
  * policy is one decision, so it lives here once; the return shape is the
@@ -1240,33 +1271,32 @@ export function emitMarketplaceNotAdded(args: {
   readonly marketplace: string;
   readonly requestedScope: Scope | undefined;
   readonly orchestrated: boolean;
-}):
-  | {
-      readonly status: "failed";
-      readonly reason: "marketplace not added";
-      readonly error: Error;
-      readonly cause: string;
-    }
-  | undefined {
+}): {
+  readonly status: "failed";
+  readonly reason: "marketplace not added";
+  readonly error: Error;
+  readonly cause: string;
+} {
   const { ctx, pi, marketplace, requestedScope, orchestrated } = args;
-  if (orchestrated) {
-    const scopeList: readonly Scope[] =
-      requestedScope === undefined ? ["project", "user"] : [requestedScope];
-    const err = new MarketplaceNotFoundError(marketplace, scopeList);
-    return {
-      status: "failed",
-      reason: "marketplace not added",
-      error: err,
-      cause: errorMessage(err),
-    };
+  const scopeList: readonly Scope[] =
+    requestedScope === undefined ? ["project", "user"] : [requestedScope];
+  const err = new MarketplaceNotFoundError(marketplace, scopeList);
+  const outcome = {
+    status: "failed",
+    reason: "marketplace not added",
+    error: err,
+    cause: errorMessage(err),
+  } as const;
+
+  if (!orchestrated) {
+    notify(ctx, pi, {
+      kind: "marketplace-not-added",
+      name: marketplace,
+      ...(requestedScope !== undefined && { scope: requestedScope }),
+    });
   }
 
-  notify(ctx, pi, {
-    kind: "marketplace-not-added",
-    name: marketplace,
-    ...(requestedScope !== undefined && { scope: requestedScope }),
-  });
-  return undefined;
+  return outcome;
 }
 
 /**
@@ -1403,6 +1433,14 @@ export function splitStagingWarnings(warnings: {
  * NFR-9: a discovery warning embeds the absolute component directory it
  * walked, so it goes through `redactAbsolutePaths` before it reaches the
  * user, exactly as the reconcile composer does.
+ *
+ * WGATE-01: the header counts the lines and states nothing about what became
+ * of the components they name. It cannot: two of the families routed into this
+ * array report a component that WAS materialized -- a workflow script the host
+ * engine will refuse to load, and one that installs under a name it does not
+ * declare -- so a header claiming a disposal would contradict the lines
+ * directly beneath it. "Note" is the word the read-only `info` surface already
+ * prints for the same facts, so the two surfaces name them the same way.
  */
 export function surfaceDiscoveryWarnings(
   ctx: NotificationContext,
@@ -1419,7 +1457,41 @@ export function surfaceDiscoveryWarnings(
   const lines = args.warnings.map((w) => redactAbsolutePaths(w));
   const header =
     lines.length === 1
-      ? `Plugin "${args.plugin}" ${args.verb}; 1 declared component was skipped.`
-      : `Plugin "${args.plugin}" ${args.verb}; ${lines.length.toString()} declared components were skipped.`;
+      ? `Plugin "${args.plugin}" ${args.verb}; 1 declared component has a note.`
+      : `Plugin "${args.plugin}" ${args.verb}; ${lines.length.toString()} declared components have notes.`;
   notifyDiagnostic(ctx, header, lines);
+}
+
+/**
+ * WLIF-06: does a just-finished materialization leave at least one workflow
+ * command registered with no envelope behind it?
+ *
+ * The host exposes no unregister call, so a workflow whose envelope this run
+ * did NOT re-place keeps its command live and runnable for the rest of the
+ * session. The gate is therefore set difference -- the names the record held
+ * before, minus the names this run placed -- which makes a RENAME retire a
+ * command exactly as a deletion does: the old generated name is in the first
+ * set and not in the second.
+ *
+ * A name present in BOTH sets retires nothing; that is the ordinary re-place.
+ * An empty difference stamps nothing, which is what keeps an unaffected row
+ * byte-identical (NREG-01).
+ *
+ * One boolean, not the names: the row states that a command lingers and names
+ * the remedy; which command it was is not something the operator can act on
+ * differently, and the standing rule on the staged-name arrays is that the
+ * names never reach a rendered row.
+ *
+ * The three verbs that RE-MATERIALIZE (enable / reinstall / update) call this.
+ * The two that only REMOVE (uninstall / disable) read what their cascade
+ * reported dropping instead -- for them the placed set is empty by
+ * construction, and the cascade's report is the truthful operand because it
+ * names what actually came off disk rather than what the record claimed.
+ */
+export function retiresWorkflowCommand(
+  previousNames: readonly string[],
+  placedNames: readonly string[],
+): boolean {
+  const placed = new Set(placedNames);
+  return previousNames.some((name) => !placed.has(name));
 }

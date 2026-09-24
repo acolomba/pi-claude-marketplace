@@ -584,6 +584,7 @@ async function cascadeAutoupdates(
         // producer site honest.
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         // Carry the raw `err` so the cascade mapper
         // (outcomeToCascadePluginMessage) can attach it to
         // PluginFailedMessage.cause for the 4-space-indent cause-chain

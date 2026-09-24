@@ -71,6 +71,7 @@ test("renders an updated row with ordered reasons and both missing companions", 
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -109,6 +110,7 @@ test("renders a partially-installed row with a folded scope and MCP marker", () 
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -145,6 +147,7 @@ test("renders a skipped row without failure-only metadata", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -182,6 +185,7 @@ test("renders a failed row while preserving cause and rollback metadata", () => 
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -214,6 +218,7 @@ test("projects a clean updated outcome with dependency order and optional reason
     stagedMcpServerNames: ["docs"],
     declaresAgents: true,
     declaresMcp: true,
+    declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -244,6 +249,7 @@ test("projects orphan rewake before canonical malformed reasons on an updated ro
     stagedMcpServerNames: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     orphanRewake: true,
     degradedKinds: ["command", "skill", "command"],
   } as const satisfies PluginUpdateOutcome;
@@ -276,6 +282,7 @@ test("keeps an empty newly-degraded signal on the clean updated row", () => {
     stagedMcpServerNames: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     partialDegrade: { kinds: [], newlyDegraded: true },
   } satisfies PluginUpdateOutcome;
 
@@ -307,6 +314,7 @@ test("projects a newly degraded partial update with warning severity", () => {
     stagedMcpServerNames: [],
     declaresAgents: false,
     declaresMcp: true,
+    declaresWorkflows: false,
     partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
   } satisfies PluginUpdateOutcome;
 
@@ -337,6 +345,7 @@ test("projects an already degraded partial update with info severity", () => {
     stagedMcpServerNames: [],
     declaresAgents: true,
     declaresMcp: false,
+    declaresWorkflows: false,
     partialDegrade: { kinds: ["hooks"], newlyDegraded: false },
   } satisfies PluginUpdateOutcome;
 
@@ -367,6 +376,7 @@ test("preserves orphan, malformed, and dropped reason order on a partial update"
     stagedMcpServerNames: ["docs"],
     declaresAgents: true,
     declaresMcp: true,
+    declaresWorkflows: false,
     orphanRewake: true,
     degradedKinds: ["command", "skill", "command"],
     partialDegrade: {
@@ -407,6 +417,7 @@ test("projects an unchanged outcome as a complete benign skipped message", () =>
     toVersion: "7.0.0",
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -434,6 +445,7 @@ test("prefers a typed benign skip reason over contradictory notes", () => {
     reasons: ["up-to-date"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } as const satisfies PluginUpdateOutcome;
 
   // act
@@ -460,6 +472,7 @@ test("prefers a typed actionable skip reason over unclassified notes", () => {
     reasons: ["not installed"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } as const satisfies PluginUpdateOutcome;
 
   // act
@@ -485,6 +498,7 @@ test("classifies an empty notes-only skip as an unreadable manifest", () => {
     reasons: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -510,6 +524,7 @@ test("classifies an explicit not-in-manifest skip note", () => {
     reasons: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -535,6 +550,7 @@ test("classifies a not-found-in-marketplace skip note", () => {
     reasons: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -560,6 +576,7 @@ test("classifies a source-mismatch skip note", () => {
     reasons: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -585,6 +602,7 @@ test("classifies a no-longer-installable skip note", () => {
     reasons: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -610,6 +628,7 @@ test("classifies an unknown skip note as an unreadable manifest", () => {
     reasons: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -639,6 +658,7 @@ test("prefers a typed failure reason and preserves its Error cause", () => {
     cause,
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } as const satisfies PluginUpdateOutcome;
 
   // act
@@ -668,6 +688,7 @@ test("prefers a typed rollback reason while truly omitting an absent cause", () 
     reasons: ["rollback partial"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } as const satisfies PluginUpdateOutcome;
 
   // act
@@ -694,6 +715,7 @@ test("classifies an empty notes-only failure as an unreadable manifest", () => {
     reasons: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -718,6 +740,7 @@ test("classifies an explicit not-in-manifest failure note", () => {
     notes: ["plugin not in manifest"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -742,6 +765,7 @@ test("classifies a not-found-in-marketplace failure note", () => {
     notes: ["plugin was not found in marketplace"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -766,6 +790,7 @@ test("classifies a rollback-partial failure note", () => {
     notes: ["rollback partial: agents"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -790,6 +815,7 @@ test("classifies an invalid-manifest failure note", () => {
     notes: ["invalid manifest after refresh"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -814,6 +840,7 @@ test("classifies an unparseable failure note as an invalid manifest", () => {
     notes: ["manifest is unparseable"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -838,6 +865,7 @@ test("classifies an unreadable failure note as an unreadable manifest", () => {
     notes: ["manifest is unreadable"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
   // act
@@ -862,6 +890,7 @@ test("classifies an unknown failure note as an unreadable manifest", () => {
     notes: ["unclassified producer note"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   } satisfies PluginUpdateOutcome;
 
   // act

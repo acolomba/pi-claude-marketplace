@@ -123,6 +123,7 @@ function registerImportCommand(cwd: string, gitOps: GitOps) {
           toVersion: "0.0.0",
           declaresAgents: false,
           declaresMcp: false,
+          declaresWorkflows: false,
         }),
     },
     hooksRouting,

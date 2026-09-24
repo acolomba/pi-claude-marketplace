@@ -1,0 +1,102 @@
+---
+phase: 114
+slug: degradation-and-documentation
+status: verified
+threats_open: 0
+asvs_level: 1
+created: 2026-09-08
+---
+
+# Phase 114 — Security
+
+> Plan-authored threat mitigations verified against the implementation, the tests and the published documents from `56ac5e7c` through `HEAD`.
+
+---
+
+## Audit Basis
+
+- Register origin: plan-authored (`114-01-PLAN.md` through `114-05-PLAN.md`). `T-114-SC` is declared identically in all five and is audited once.
+- Policy: OWASP ASVS Level 1; `security_block_on: high`.
+- Register: 22 distinct threats — 19 `mitigate`, 3 `accept`, 0 `transfer`.
+- Summary threat flags: `114-02` through `114-05` each declare "None" with a stated basis. `114-01-SUMMARY.md` carries no `## Threat Flags` section at all; logged below as an unregistered flag.
+- Verification method: every mitigation was re-derived first-hand from the tree. Findings reported by `114-REVIEW.md` were not inherited — the supply-chain and marker-spelling claims were re-greped repo-wide.
+- Evidence paths beginning with `platform/`, `shared/`, `orchestrators/` or `bridges/` are relative to `extensions/pi-claude-marketplace/`.
+- Not re-run: `npm run check` (green minutes before this audit, 5564 unit + 34 integration, 0 failures). This audit reads code, tests and documents rather than re-running the suite.
+
+## Trust Boundaries
+
+| Boundary | Threats | Data Crossing |
+| --- | --- | --- |
+| Pi host session → `platform/pi-api.ts` | T-114-01, T-114-03, T-114-05 | The host-controlled tool list. Any loaded extension may register a tool under any name. |
+| `shared/notify.ts` → `ctx.ui.notify` | T-114-02, T-114-06, T-114-09, T-114-13 | Every rendered reason token reaching the operator's terminal. |
+| The repository → the operator's package manager | T-114-04, T-114-14, T-114-18 | A rendered token or a written instruction that names an installable package. |
+| Host tool list → the envelope write decision | T-114-10, T-114-11, T-114-12 | Whether the engine is loaded must never reach the code that writes, replaces or removes an artifact. |
+| Coverage and byte gates → what they actually prove | T-114-07, T-114-08, T-114-15, T-114-16, T-114-17, T-114-19, T-114-22 | A gate's own claim about its scope, and the evidence grade a document asserts. |
+| The compatibility document → a plugin author shipping executable code | T-114-20 | The sandbox comparison a third party relies on when deciding to distribute JavaScript that runs on other people's machines. |
+| The phase diff → the dependency manifest | T-114-SC, T-114-21 | Any manifest or version-constant edit carried in under cover of documentation. |
+
+## Threat Register
+
+| Threat ID | Category | Component | Severity | Disposition | Status | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| T-114-01 | Spoofing | `hasLoadedWorkflowEngine` | medium | mitigate | CLOSED | `platform/pi-api.ts:148` compares `tool.name === "workflow_control"` by exact equality — no case folding, no substring, no `sourceInfo` fallback arm. The decoy acceptance is `tests/platform/pi-api.test.ts:359`, a session exposing only `workflow` asserting `false`. `tests/architecture/workflows-marker-coverage.test.ts:79` re-drives the same discriminator through all seven derivation surfaces via `DECOY_TOOL`, and `tests/orchestrators/plugin/install.test.ts:9741` drives it end to end. The probe never gates writing: see T-114-10. |
+| T-114-02 | Information disclosure | the rendered reason brace | low | mitigate | CLOSED | `shared/notify.ts:270` declares `Reason = (typeof REASONS)[number]` over an `as const` array, so the union is closed. `shared/concerns/soft-dep.ts:42` assigns the plain literal `"requires pi-dynamic-workflows"` to a `Reason`-typed constant. No template literal and no `as Reason` cast exists anywhere in `shared/`; a constructed token is a compile error. No plugin name, workflow name or path can reach the token. |
+| T-114-03 | Information disclosure | the probe's `catch` block | low | mitigate | CLOSED | `platform/pi-api.ts:149-151` — the catch body is exactly `return false;`. The caught error is not bound, logged, re-thrown or named, matching `hasLoadedPiSubagents` and `hasLoadedPiMcpAdapter` byte for byte (ASVS V7). |
+| T-114-04 | Tampering | the marker literal | high | mitigate | CLOSED | `shared/concerns/soft-dep.ts:36-42` — the constant is `requires pi-dynamic-workflows`, and its doc comment records that the short form is the npm name of `@nicknisi/pi-workflows`, a different engine. `shared/notify.ts:258-267` repeats the rationale at the `REASONS` tail. Independent repo-wide grep for `requires pi-workflows` returns zero matches outside `.planning/`. Three standing gates pin the literal: `notify-closed-set-locks`, `catalog-uat` and `workflows-marker-coverage.test.ts:74`. |
+| T-114-05 | Denial of service | `pi.getAllTools()` | low | accept | ACCEPTED | See Accepted Risks. Behavior confirmed at `tests/platform/pi-api.test.ts:389`: a throwing `getAllTools` degrades to unloaded. |
+| T-114-06 | Tampering | the `list` inventory row | low | mitigate | CLOSED | `orchestrators/plugin/list.ts:515` reads `record.resources.workflows.length > 0` only. No element value is read, rendered or interpolated. `dependenciesFromDeclares` (`list.ts:309`) pushes the bare `"workflows"` token. A hostile `state.json` can flip the marker on or off — the same exposure the two existing companions already carry. |
+| T-114-07 | Elevation of privilege | production module visibility | high | mitigate | CLOSED | `git diff 56ac5e7c..HEAD -- extensions/` changes exactly two export lines across the entire phase: `hasLoadedWorkflowEngine` (the probe itself, WDEP-01) and the `Dependency` union widened by one member. No module-private derivation was exported to serve a test. The coverage gate reaches its five private sites through already-exported composers (`enableRowDependencies`, `reinstalledRowFromOutcome`, `updatedRowFromOutcome`, `dependenciesFromInstall`) or full entry points (`installPlugin`, `listPlugins`, `importClaudeSettings`). |
+| T-114-08 | Repudiation | the coverage gate | high | mitigate | CLOSED | The negative control was run at `orchestrators/import/execute.ts` — a full-orchestrator site, the shape most easily satisfied vacuously — with the gate green immediately before. Exactly one projected row reddened and its `site` value named the file. Verbatim transcript at `114-02-SUMMARY.md:107-160`. All seven sites were individually controlled, not the one the plan required. `workflows-marker-coverage.test.ts:491` additionally binds the case list to the tree by scanning `orchestrators/` for the two derivation shapes and asserting set equality in both directions, so an eighth site is a red row rather than a silent gap. |
+| T-114-09 | Information disclosure | the rendered brace | low | accept | ACCEPTED | See Accepted Risks. Structurally covered by T-114-02. |
+| T-114-10 | Denial of service | `bridges/workflows/stage.ts` | high | mitigate | CLOSED | `tests/architecture/no-probe-in-workflows-bridge.test.ts` refuses six patterns across every `.ts` file in the bridge directory: the four probe symbols plus `getAllTools` and `ExtensionAPI`. Refusing the raw tool-list read and the only handle that reaches it screens the capability rather than four spellings, so the probe cannot be spelled inline either. The write path has no way to branch on the answer, and the byte pair at `tests/orchestrators/plugin/install.test.ts:9773` proves the envelopes are identical across both engine states. Framing confirmed: a false-positive probe misreports the row and never withholds an artifact. |
+| T-114-11 | Repudiation | the byte-equality test | high | mitigate | CLOSED | `tests/orchestrators/plugin/install.test.ts:9766-9797` carries all four non-vacuity assertions: an independently authored expected-bytes anchor (`workflowEnvelopeBytes`) pinning what one run actually wrote, the recorded-inventory deep equality, the marker present on the engine-absent run, and absent on the engine-present run. Each run takes its own hermetic `HOME` and cwd, so the first run's envelope cannot satisfy the second's read. The comparison is over raw bytes, never a `JSON.parse` round trip. |
+| T-114-12 | Tampering | the purity gate's target list | medium | mitigate | CLOSED | Verified stronger than declared. Targets are derived by `readdir` at run time, then cross-checked against `DOCUMENTED_TARGETS` with `assert.deepEqual`, so a directory rename throws `ENOENT`, an added module is screened on the day it lands, and a removed one is red. No `allowMissing` argument is passed, and `tests/architecture/source-scan.ts:85-90` asserts on `ENOENT` unless allowlisted — a missing target fails rather than silently inspecting nothing. |
+| T-114-13 | Information disclosure | envelope contents in test output | low | accept | ACCEPTED | See Accepted Risks. Confirmed: the compared bytes are the fixture script authored inline at `install.test.ts:9707`. |
+| T-114-14 | Tampering | the published marker spelling | high | mitigate | CLOSED | `docs/output-catalog.md:532` and `:547` both render the scoped `requires pi-dynamic-workflows`, and `:69` names the marker set in prose with the same spelling. The `catalog-uat` gate pairs each annotated block byte-for-byte with `notify()` output, so the published string and the rendered string cannot drift apart. Repo-wide grep for the unscoped spelling returns zero. |
+| T-114-15 | Repudiation | `tests/architecture/catalog-uat.test.ts` | medium | mitigate | CLOSED | `piWithBothLoaded` is renamed to `piWithAllLoaded` (`catalog-uat.test.ts:216`) and its tool list now carries all three companions including `workflow_control`. Repo-wide grep for `piWithBothLoaded` returns zero. The sibling `piWithoutWorkflowEngine` (`:227`) is the new discriminating factory. The helper no longer claims two while probing three. |
+| T-114-16 | Tampering | the exact-count assertion | medium | mitigate | CLOSED | `catalog-uat.test.ts:5569`, `:5575` and `:5576` all moved 192 → 194 — the comment, the asserted value and the failure message. The assertion is `assert.equal(examples.length, 194, …)`, never relaxed into a floor or a `>=`. |
+| T-114-17 | Tampering | fixture string literals | high | mitigate | CLOSED | Audited by inspecting every removed line in the file's phase diff. All 187 deletions are the `piWithBothLoaded` symbol rename (182), three doc comments, and the three count lines. Zero fixture `message` string literals moved. The rename was symbol-scoped as mandated; no catalog byte moved under cover of it. |
+| T-114-18 | Spoofing | install instructions in the document and both READMEs | high | mitigate | CLOSED | Re-verified independently rather than inherited from the review. Every install-shaped instruction repo-wide names the scoped form: `docs/workflows-compatibility.md:19` (`npm pack @quintinshaw/…@3.10.1`), `:179` (`pi install npm:@quintinshaw/pi-dynamic-workflows`), `README.md:41` and `README.es.md:41`. The only three unscoped `pi-workflows` tokens outside `.planning/` are the warnings themselves (`workflows-compatibility.md:182`, `messaging-style-guide.md:61`, `soft-dep.ts:38`). `@nicknisi/pi-workflows` appears only scoped and only in rejection context. Regression gate at `tests/architecture/workflows-doc-pins.test.ts:153` pins the scoped literal and requires exactly two naming lines and one doc link in each README, line-for-line aligned across both languages. That file was untracked at audit time and entered history only in `3bff212c` — see Observations. The threat is closed on the document content, which was already committed and verified independently of the gate. |
+| T-114-19 | Repudiation | evidence grades | high | mitigate | CLOSED | Both tables carry an explicit `Grade` column and the section head warns "do not read the table as one uniform measurement". At least five distinct grades appear: `source-read at 3.10.1`, `runtime-measured at 3.10.1`, `measured at 3.5.1, not re-driven since`, `refinement at 3.10.1`, `read from the 2.1.251 binary`. The two engines' `agent()` rows state two different grades — `@nicknisi` **runtime-measured**, `@quintinshaw` **source-read only** — and the paragraph beneath states the measurement a later phase owns has not been done and that no result should be inferred until it has. `114-REVIEW-FIX.md` corrected two overstated claims (a false "0.x package" maturity claim, and a flat `warning` severity claim true of only three of seven surfaces) without softening any risk statement. |
+| T-114-20 | Information disclosure | the document understating the executable-code risk | high | mitigate | CLOSED | `docs/workflows-compatibility.md:23` states the fact unhedged and in bold: "**This is the first bridge that installs executable code rather than data.**" The sandbox comparison at `:120-126` is intact and per-row graded. `:27` carries the engine's own caveat quoted verbatim with a source citation — "vm is not a security sandbox … The guard is best-effort against ACCIDENTAL nondeterminism … not a security wall" — under the heading "**Neither engine is a security boundary, and the chosen one says so about itself**", and generalizes it: "The comparison below is a difference of degree, not a boundary." The upstream-stability risk is stated as a risk at `:196`, strengthened rather than weakened by the review fix. `:19` adds that every line citation is pinned to 3.10.1 and ungated, tracked as `WPIN-01`. |
+| T-114-21 | Tampering | dependency manifest | high | mitigate | CLOSED | `git diff 56ac5e7c..HEAD -- package.json package-lock.json sonar-project.properties CHANGELOG.md` is empty. `acorn ^8.16.0` was already declared at `package.json:9` and is byte-unchanged, so WDOC-03 stayed verification-only per D-114-07. No version constant moved. |
+| T-114-22 | Repudiation | the spike record | medium | mitigate | CLOSED | `.planning/spikes/027-workflow-engine-3-10-1-recheck/README.md` is corrected in the same change set that publishes the document: `validateMeta` throws six distinct messages, quoted verbatim with a line citation, replacing the earlier "four messages / twelve refusal messages in all". The correction also refuses to state a total, because check 2's message is acorn's own parser text and cannot be enumerated. Both the old and the corrected reading are recorded. |
+| T-114-SC | Tampering | npm dependency manifest | high | mitigate | CLOSED | Same evidence as T-114-21, audited once for all five plans. The phase diff touches 113 files; not one is a manifest, a lockfile, a Sonar property or a changelog. A manifest change smuggled in with documentation did not occur. |
+
+## Accepted Risks
+
+| Threat ID | Severity | Risk | Rationale |
+| --- | --- | --- | --- |
+| T-114-05 | low | A host that throws or hangs on `getAllTools()` degrades the marker to absent, so a row that should name the missing engine renders bare. | The probe is render-time only and never gates a write — the artifacts are written regardless (WDEP-02). Both pre-existing soft-dependency probes make the identical trade, so accepting it here keeps one behavior across all three rather than introducing a fourth failure mode. Recovery is a reload. |
+| T-114-09 | low | The rendered brace could in principle carry caller-supplied text. | Structurally impossible: `Reason` is a closed union derived from an `as const` array, so a constructed token does not compile. Accepted with no additional control beyond T-114-02. |
+| T-114-13 | low | Envelope contents appear in test assertion diffs on failure. | The compared bytes are a fixture script authored inside the test itself (`install.test.ts:9707`). No user data, no filesystem path outside a `mkdtemp` root and no credential reaches the assertion diff. |
+
+## Unregistered Flags
+
+**WARNING — `114-01-SUMMARY.md` carries no `## Threat Flags` section.** The other four summaries each declare "None" with a stated basis. Plan 01 is the one plan that introduced new production code — the `hasLoadedWorkflowEngine` probe and the widened `Dependency` union, the entire new attack surface of this phase — and it is the plan whose summary omits the section.
+
+Non-blocking. The surface it would have declared is fully covered by the register: the probe by T-114-01/T-114-03/T-114-05, the marker literal by T-114-02/T-114-04, and the manifest by T-114-SC, all independently verified above. The gap is in the process artifact, not in the code. Worth fixing in the summary template rather than in this phase.
+
+## Observations (non-blocking, no threat opened)
+
+**`tests/architecture/workflows-doc-pins.test.ts` was untracked at audit time; it is committed now.** At the moment this audit ran, `git log --all -- <path>` was empty and the file was not gitignored — the phase's own documentation gate existed only in the working tree. It pins the scoped package name in both READMEs (WDOC-01), pins this project's peer floor against `package.json` (WDEP-04), and binds the refusal-check counts to the enumerations beneath them (the T-114-22 subject). The local `npm run check` that reported green did execute it, but a fresh checkout of `features/workflow` would not have contained it.
+
+It entered history in `3bff212c`, the commit that first recorded this finding — swept in from the index by a concurrent stage rather than deliberately. The committed bytes are identical to the audited ones (verified by `git show <sha>:<path> | diff -`), so the gate this audit read and the gate now in history are the same file. See Audit Log.
+
+No threat was opened either way. Every mitigation this audit closed was verified against committed content: the scoped naming in all three documents, the marker literal, the probe, and the empty manifest diff are all in `HEAD`. What was at risk was the regression protection, not the fix.
+
+**The README package-name gate matches per line, not per occurrence.** (Same file as the finding above.) `tests/architecture/workflows-doc-pins.test.ts:136` filters README lines with `line.includes(ENGINE)` and asserts exactly two such lines per file. `README.md:41` carries the scoped name three times on one line — link text, URL and the `pi install npm:` fragment. Dropping the scope from the install fragment alone would leave that line still matching `ENGINE`, and the gate would stay green. Current content is correct at every occurrence (verified by exhaustive grep for T-114-18), so no threat is open; this is a durability limit on the regression gate, not a present defect. Counting occurrences instead of lines would close it.
+
+**`orchestrators/marketplace/update.messaging.ts` is a `Dependency[]` consumer, not a derivation site.** It translates an existing `dependencies` array into declares-booleans for `composeReasons` (`:79-81`) and therefore falls correctly outside `DERIVATION_SHAPE` and outside the marker-coverage gate's seven sites. It was fixed in plan 01 (deviation 1) after being mis-bucketed as a site that passes literal `false`; without that fix the autoupdate `(updated)` row would have been the one surface silently dropping the marker. The consumer tier has no standing totality gate of its own — a seventh consumer passing literal `false` would render no marker and nothing would notice. Below the block threshold and outside this phase's register; noted for whoever adds the fourth companion.
+
+## Audit Log
+
+| Commit | Contents | Note |
+| --- | --- | --- |
+| `d5a8f191` | `114-SECURITY.md` | The verdict as first written. |
+| `3bff212c` | `114-SECURITY.md`, `114-VALIDATION.md`, `tests/architecture/workflows-doc-pins.test.ts` | Intended to carry the security file alone. The other two were staged into the index by a concurrent writer between this auditor's `git status` and its `git commit`, and were swept in. Both are legitimate in-flight phase work — the validation record moving to `status: validated`, and the doc-pins gate it cites as its new automated carrier — and both are byte-identical to their working-tree state. Nothing was lost and no history was rewritten, but the commit message describes only the security file. |
+| `HEAD` | `114-SECURITY.md` | This correction. |
+
+## Verdict
+
+**SECURED.** 22 of 22 threats resolved — 19 CLOSED by verified mitigations, 3 documented accepted risks. `threats_open: 0`.

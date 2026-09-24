@@ -77,7 +77,9 @@ const EXPECTED_REASONS = [
   "installs disabled",
   "marketplace in user scope",
   "marketplace in project scope",
-  "workflows",
+  "stale workflow command",
+  "requires pi-dynamic-workflows",
+  "components now supported",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [
@@ -254,7 +256,10 @@ void (true satisfies IsExact<MarketplaceStatus, (typeof EXPECTED_MARKETPLACE_STA
 // control per direction, on the largest set -- a member the union does not hold,
 // and a member it holds that the list drops.
 void (false satisfies IsExact<Reason, (typeof EXPECTED_REASONS)[number] | "not a reason">);
-void (false satisfies IsExact<Reason, Exclude<(typeof EXPECTED_REASONS)[number], "workflows">>);
+void (false satisfies IsExact<
+  Reason,
+  Exclude<(typeof EXPECTED_REASONS)[number], "components now supported">
+>);
 void (false satisfies IsExact<
   StatusToken,
   (typeof EXPECTED_STATUS_TOKENS)[number] | "not a token"

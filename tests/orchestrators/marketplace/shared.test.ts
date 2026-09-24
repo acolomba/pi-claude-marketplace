@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
@@ -18,6 +17,7 @@ import {
   narrowCascadeFailure,
   refreshGitHubClone,
   resolveScopeOrNotifyNotAdded,
+  WorkflowsUnstageFailureError,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -83,7 +83,7 @@ void (DEFAULT_GIT_OPS satisfies GitOps);
 void ({ changed: [], unchanged: [] } satisfies AutoupdateFlipResult);
 void ({
   ok: true,
-  dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+  dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [], workflows: [] },
 } satisfies UnstageOutcome);
 
 function createGitOps(scenario: GitScenario): {
@@ -161,6 +161,7 @@ function pluginRecord(resources: Partial<PluginRecord["resources"]> = {}): Plugi
       agents: resources.agents ?? [],
       hooks: resources.hooks ?? [],
       mcpServers: resources.mcpServers ?? [],
+      workflows: resources.workflows ?? [],
     },
     enabled: true,
     installedAt: "2026-08-31T12:00:00.000Z",
@@ -192,8 +193,10 @@ async function createProjectScope(
   t: TestContext,
   label: string,
 ): Promise<{ readonly cwd: string; readonly locations: ScopedLocations }> {
-  const cwd = await mkdtemp(path.join(tmpdir(), `marketplace-shared-${label}-`));
-  t.after(() => rm(cwd, { recursive: true, force: true }));
+  // WPTH-04: `workflowsSavedDir` is rooted at `os.homedir()` and honors no
+  // override, so a cascade that unlinks a recorded envelope would reach the
+  // real user's saved workflows unless HOME is relocated first.
+  const { cwd } = await createHermeticEnvironment(t, `marketplace-shared-${label}-`);
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
   return { cwd, locations };
@@ -238,7 +241,7 @@ function notificationBoundary(expectation?: NotificationExpectation): {
     when(() => ctx.ui).thenReturn(ui);
     when(() => pi.getAllTools())
       .thenReturn([])
-      .twice();
+      .times(3);
     when(() => {
       ui.notify(expectation.message, expectation.severity);
     }).thenReturn(undefined);
@@ -290,11 +293,39 @@ async function seedAgent(
   return { generatedName, targetPath };
 }
 
+/**
+ * Seeds one saved workflow envelope, in the three-key shape the workflows
+ * bridge writes. Composes the path with `path.join` rather than the
+ * asynchronous `locations.workflowArtifactPath`, because a forgotten `await`
+ * on the latter yields a leaf named after a promise instead of throwing.
+ */
+async function seedWorkflowEnvelope(
+  locations: ScopedLocations,
+  generatedName: string,
+): Promise<string> {
+  const target = path.join(locations.workflowsSavedDir, `${generatedName}.json`);
+  await mkdir(locations.workflowsSavedDir, { recursive: true });
+  await writeFile(
+    target,
+    JSON.stringify({
+      name: generatedName,
+      description: "greets",
+      script: 'export const meta = { name: "greet", description: "greets" };\n',
+    }),
+  );
+  return target;
+}
+
 async function seedFullCascade(
   locations: ScopedLocations,
   marketplace: string,
   plugin: string,
-): Promise<{ readonly record: PluginRecord; readonly agentName: string }> {
+): Promise<{
+  readonly record: PluginRecord;
+  readonly agentName: string;
+  readonly workflowName: string;
+  readonly workflowPath: string;
+}> {
   const skillDir = path.join(locations.skillsTargetDir, "sample-skill");
   await mkdir(skillDir, { recursive: true });
   await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: sample-skill\n---\nBody.\n");
@@ -322,6 +353,9 @@ async function seedFullCascade(
     }),
   );
 
+  const workflowName = `${plugin}:greet`;
+  const workflowPath = await seedWorkflowEnvelope(locations, workflowName);
+
   return {
     record: pluginRecord({
       skills: ["sample-skill"],
@@ -329,8 +363,11 @@ async function seedFullCascade(
       agents: [agentName],
       hooks: [plugin],
       mcpServers: ["sample-server"],
+      workflows: [workflowName],
     }),
     agentName,
+    workflowName,
+    workflowPath,
   };
 }
 
@@ -372,6 +409,28 @@ test("AgentsUnstageFailureError preserves its typed failures and standard Error 
   assert.equal(error.message, "Failed to remove 1 agent");
   assert.strictEqual(error.failedAgents, failedAgents);
   assert.ok(error instanceof Error);
+});
+
+test("WorkflowsUnstageFailureError freezes a defensive copy of its typed failures", () => {
+  // arrange
+  const failedWorkflows = [{ name: "sample:build", reason: "EPERM: operation not permitted" }];
+
+  // act
+  const error = new WorkflowsUnstageFailureError("Failed to remove 1 workflow", failedWorkflows);
+  failedWorkflows.push({ name: "sample:deploy", reason: "EACCES: permission denied" });
+
+  // assert -- WLIF-03: unlike the agents sibling next door, the payload is a
+  // FROZEN COPY. The names identify executable files left on disk and the
+  // error is read long after the bridge returned, so a later mutation of the
+  // caller's array must not reach the field.
+  assert.equal(error.name, "WorkflowsUnstageFailureError");
+  assert.equal(error.message, "Failed to remove 1 workflow");
+  assert.ok(error instanceof Error);
+  assert.notStrictEqual(error.failedWorkflows, failedWorkflows);
+  assert.deepStrictEqual(error.failedWorkflows, [
+    { name: "sample:build", reason: "EPERM: operation not permitted" },
+  ]);
+  assert.strictEqual(Object.isFrozen(error.failedWorkflows), true);
 });
 
 test("refreshGitHubClone tracks the default branch and invokes its callback after authenticated fetch", async () => {
@@ -581,10 +640,15 @@ for (const { title, scenario, storedRef, expectedCalls } of [
   });
 }
 
-test("cascadeUnstagePlugin returns every removed resource in five-kind order", async (t) => {
+test("cascadeUnstagePlugin returns every removed resource in six-kind order", async (t) => {
   // arrange
   const { locations } = await createProjectScope(t, "cascade-success");
-  const { record, agentName } = await seedFullCascade(locations, "official", "sample");
+  const { record, agentName, workflowName, workflowPath } = await seedFullCascade(
+    locations,
+    "official",
+    "sample",
+  );
+  await stat(workflowPath);
   const expected: UnstageOutcome = {
     ok: true,
     dropped: {
@@ -593,6 +657,7 @@ test("cascadeUnstagePlugin returns every removed resource in five-kind order", a
       agents: [agentName],
       hooks: ["sample"],
       mcpServers: ["sample-server"],
+      workflows: [workflowName],
     },
   };
 
@@ -605,6 +670,135 @@ test("cascadeUnstagePlugin returns every removed resource in five-kind order", a
   assert.equal(Object.isFrozen(outcome), true);
   assert.equal(Object.isFrozen(outcome.dropped), true);
   assert.equal(Object.values(outcome.dropped).every(Object.isFrozen), true);
+  await assert.rejects(() => stat(workflowPath), { code: "ENOENT" });
+});
+
+test("cascadeUnstagePlugin removes every recorded workflow envelope", async (t) => {
+  // arrange
+  const { locations } = await createProjectScope(t, "cascade-workflows-many");
+  const firstPath = await seedWorkflowEnvelope(locations, "sample:greet");
+  const secondPath = await seedWorkflowEnvelope(locations, "sample:farewell");
+  const record = pluginRecord({ workflows: ["sample:greet", "sample:farewell"] });
+  await stat(firstPath);
+  await stat(secondPath);
+
+  // act
+  const outcome = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.equal(outcome.ok, true);
+  assert.deepStrictEqual(outcome.dropped.workflows, ["sample:greet", "sample:farewell"]);
+  await assert.rejects(() => stat(firstPath), { code: "ENOENT" });
+  await assert.rejects(() => stat(secondPath), { code: "ENOENT" });
+});
+
+test("cascadeUnstagePlugin reports an empty workflows axis for an empty inventory", async (t) => {
+  // arrange
+  const { locations } = await createProjectScope(t, "cascade-workflows-empty");
+  const neighbour = await seedWorkflowEnvelope(locations, "other:greet");
+  const record = pluginRecord({ workflows: [] });
+
+  // act
+  const outcome = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.equal(outcome.ok, true);
+  assert.deepStrictEqual(outcome.dropped.workflows, []);
+  assert.equal("cause" in outcome, false);
+  await stat(neighbour);
+});
+
+test("cascadeUnstagePlugin removes the RECORDED envelope name, not a re-derived one", async (t) => {
+  // arrange -- the plugin source has since renamed its workflow, so a
+  // re-derivation would target `sample:renamed`; the record is what names the
+  // envelope actually on disk.
+  const { locations } = await createProjectScope(t, "cascade-workflows-recorded-name");
+  const recordedPath = await seedWorkflowEnvelope(locations, "sample:greet");
+  const rederivedPath = await seedWorkflowEnvelope(locations, "sample:renamed");
+  const record = pluginRecord({ workflows: ["sample:greet"] });
+  await stat(recordedPath);
+
+  // act
+  const outcome = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.deepStrictEqual(outcome.dropped.workflows, ["sample:greet"]);
+  await assert.rejects(() => stat(recordedPath), { code: "ENOENT" });
+  await stat(rederivedPath);
+});
+
+test("cascadeUnstagePlugin leaves an adjacent plugin's envelope byte-unchanged", async (t) => {
+  // arrange
+  const { locations } = await createProjectScope(t, "cascade-workflows-adjacent");
+  const { record, workflowPath } = await seedFullCascade(locations, "official", "sample");
+  const neighbourPath = await seedWorkflowEnvelope(locations, "neighbour:greet");
+  const neighbourBytes = await readFile(neighbourPath, "utf8");
+  await stat(workflowPath);
+
+  // act
+  const outcome = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.equal(outcome.ok, true);
+  await assert.rejects(() => stat(workflowPath), { code: "ENOENT" });
+  assert.equal(await readFile(neighbourPath, "utf8"), neighbourBytes);
+});
+
+test("cascadeUnstagePlugin removing twice reports no failure on the second pass", async (t) => {
+  // arrange
+  const { locations } = await createProjectScope(t, "cascade-workflows-idempotent");
+  const { record, workflowPath } = await seedFullCascade(locations, "official", "sample");
+  await stat(workflowPath);
+
+  // act
+  const first = await cascadeUnstagePlugin("sample", "official", locations, record);
+  const second = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.equal(first.ok, true);
+  assert.deepStrictEqual(first.dropped.workflows, [record.resources.workflows[0]]);
+  assert.equal(second.ok, true);
+  assert.deepStrictEqual(second.dropped.workflows, []);
+  assert.equal("cause" in second, false);
+});
+
+test("cascadeUnstagePlugin raises a typed workflows failure naming every unremovable name", async (t) => {
+  // arrange -- a directory at a recorded envelope path makes `unlink` fail with
+  // a non-ENOENT error, which is the accumulate-and-continue policy's trigger.
+  const { locations } = await createProjectScope(t, "cascade-workflows-failure");
+  const removablePath = await seedWorkflowEnvelope(locations, "sample:greet");
+  await mkdir(path.join(locations.workflowsSavedDir, "sample:blocked-one.json"), {
+    recursive: true,
+  });
+  await mkdir(path.join(locations.workflowsSavedDir, "sample:blocked-two.json"), {
+    recursive: true,
+  });
+  const record = pluginRecord({
+    skills: [],
+    workflows: ["sample:greet", "sample:blocked-one", "sample:blocked-two"],
+  });
+  await stat(removablePath);
+
+  // act
+  const outcome = await cascadeUnstagePlugin("sample", "official", locations, record);
+
+  // assert
+  assert.equal(outcome.ok, false);
+  assert.ok(outcome.cause instanceof WorkflowsUnstageFailureError);
+  assert.deepStrictEqual(
+    outcome.cause.failedWorkflows.map((f) => f.name),
+    ["sample:blocked-one", "sample:blocked-two"],
+  );
+  assert.ok(
+    outcome.cause.message.startsWith("Failed to remove 2 workflow(s): sample:blocked-one: "),
+    `unexpected message: ${outcome.cause.message}`,
+  );
+  assert.ok(outcome.cause.message.includes("; sample:blocked-two: "));
+  // The axes filled before the throw are still reported, and so is the name the
+  // same pass did manage to remove.
+  assert.deepStrictEqual(outcome.dropped.hooks, ["sample"]);
+  assert.deepStrictEqual(outcome.dropped.workflows, ["sample:greet"]);
+  await assert.rejects(() => stat(removablePath), { code: "ENOENT" });
 });
 
 test("cascadeUnstagePlugin deletes the staged hooks subtree from the scope root", async (t) => {
@@ -640,6 +834,7 @@ test("cascadeUnstagePlugin stops before commands when skill validation fails", a
     agents: [],
     hooks: [],
     mcpServers: [],
+    workflows: [],
   });
   assert.ok(outcome.cause instanceof Error);
   assert.equal(
@@ -670,6 +865,7 @@ test("cascadeUnstagePlugin normalizes a non-Error JavaScript boundary failure", 
     agents: [],
     hooks: [],
     mcpServers: [],
+    workflows: [],
   });
   assert.ok(outcome.cause instanceof Error);
   assert.equal(outcome.cause.message, "bridge rejected");
@@ -694,6 +890,7 @@ test("cascadeUnstagePlugin preserves the skill partial when command containment 
     agents: [],
     hooks: [],
     mcpServers: [],
+    workflows: [],
   });
   assert.ok(outcome.cause instanceof Error);
   assert.match(outcome.cause.message, /command to unstage/);
@@ -734,6 +931,7 @@ test("cascadeUnstagePlugin returns typed foreign-agent failure and stops before 
     agents: [],
     hooks: [],
     mcpServers: [],
+    workflows: [],
   });
   assert.ok(outcome.cause instanceof AgentsUnstageFailureError);
   assert.deepStrictEqual(outcome.cause.failedAgents, [
@@ -767,6 +965,7 @@ test("cascadeUnstagePlugin preserves earlier partials when hook name validation 
     agents: [],
     hooks: [],
     mcpServers: [],
+    workflows: [],
   });
   assert.ok(outcome.cause instanceof Error);
   assert.equal(outcome.cause.message, 'hooks bridge plugin name must not be "." or "..".');
@@ -790,6 +989,7 @@ test("cascadeUnstagePlugin reports hook partial when malformed MCP JSON fails la
     agents: [],
     hooks: ["sample"],
     mcpServers: [],
+    workflows: [],
   });
   assert.ok(outcome.cause instanceof Error);
   assert.match(outcome.cause.message, /malformed JSON/);

@@ -74,7 +74,7 @@ type GateProven<Partition, T> = [Exclude<Reason, Partition>, Exclude<Partition, 
   : never;
 
 type BenignPartition = Reason;
-type MissingReasonPartition = Exclude<Reason, "workflows">;
+type MissingReasonPartition = Exclude<Reason, "components now supported">;
 type StrayReasonPartition = Reason | "not a reason";
 
 void (true satisfies IsExact<GateProven<BenignPartition, FailureReason>, FailureReason>);
@@ -177,113 +177,233 @@ const companionSeverityCases = [
     title: "keeps info when no companion is declared and neither companion is loaded",
     declaresAgents: false,
     declaresMcp: false,
-    probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
     expectedSeverity: "info",
   },
   {
     title: "warns when only agents are declared and neither companion is loaded",
     declaresAgents: true,
     declaresMcp: false,
-    probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
     expectedSeverity: "warning",
   },
   {
     title: "warns when only MCP is declared and neither companion is loaded",
     declaresAgents: false,
     declaresMcp: true,
-    probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
     expectedSeverity: "warning",
   },
   {
     title: "warns when both companions are declared and neither companion is loaded",
     declaresAgents: true,
     declaresMcp: true,
-    probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
     expectedSeverity: "warning",
   },
   {
     title: "keeps info when no companion is declared and only MCP is loaded",
     declaresAgents: false,
     declaresMcp: false,
-    probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: true },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
     expectedSeverity: "info",
   },
   {
     title: "warns when only agents are declared and only MCP is loaded",
     declaresAgents: true,
     declaresMcp: false,
-    probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: true },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
     expectedSeverity: "warning",
   },
   {
     title: "keeps info when only MCP is declared and loaded",
     declaresAgents: false,
     declaresMcp: true,
-    probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: true },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
     expectedSeverity: "info",
   },
   {
     title: "warns when agents are also declared but only MCP is loaded",
     declaresAgents: true,
     declaresMcp: true,
-    probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: true },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
     expectedSeverity: "warning",
   },
   {
     title: "keeps info when no companion is declared and only agents are loaded",
     declaresAgents: false,
     declaresMcp: false,
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: false },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
     expectedSeverity: "info",
   },
   {
     title: "keeps info when only agents are declared and loaded",
     declaresAgents: true,
     declaresMcp: false,
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: false },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
     expectedSeverity: "info",
   },
   {
     title: "warns when only MCP is declared and only agents are loaded",
     declaresAgents: false,
     declaresMcp: true,
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: false },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
     expectedSeverity: "warning",
   },
   {
     title: "warns when MCP is also declared but only agents are loaded",
     declaresAgents: true,
     declaresMcp: true,
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: false },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
     expectedSeverity: "warning",
   },
   {
     title: "keeps info when no companion is declared and both companions are loaded",
     declaresAgents: false,
     declaresMcp: false,
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
     expectedSeverity: "info",
   },
   {
     title: "keeps info when only agents are declared and both companions are loaded",
     declaresAgents: true,
     declaresMcp: false,
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
     expectedSeverity: "info",
   },
   {
     title: "keeps info when only MCP is declared and both companions are loaded",
     declaresAgents: false,
     declaresMcp: true,
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
     expectedSeverity: "info",
   },
   {
     title: "keeps info when both companions are declared and loaded",
     declaresAgents: true,
     declaresMcp: true,
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
     expectedSeverity: "info",
+  },
+  {
+    // SEV-01 / WDEP-04: the workflows axis. The envelopes are written either
+    // way, so the shortfall is a severity raise and never a failure.
+    title: "raises to warning when workflows are declared and the host engine is absent",
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: true,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: false,
+    },
+    expectedSeverity: "warning",
+  },
+  {
+    title: "keeps info when workflows are declared and the host engine is loaded",
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: true,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
+    expectedSeverity: "info",
+  },
+  {
+    // The third disjunct COMPOSES with the other two rather than replacing
+    // them: two unloaded companions still reach warning through their own arms.
+    title: "raises to warning for two unloaded companions while the host engine is loaded",
+    declaresAgents: true,
+    declaresMcp: true,
+    declaresWorkflows: true,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
+    expectedSeverity: "warning",
   },
 ] as const;
 
@@ -291,6 +411,7 @@ for (const {
   title,
   declaresAgents,
   declaresMcp,
+  declaresWorkflows,
   probe,
   expectedSeverity,
 } of companionSeverityCases) {
@@ -299,7 +420,7 @@ for (const {
     const expectedCompanionSeverity = expectedSeverity;
 
     // act
-    const severity = companionSeverity({ declaresAgents, declaresMcp }, probe);
+    const severity = companionSeverity({ declaresAgents, declaresMcp, declaresWorkflows }, probe);
 
     // assert
     assert.strictEqual(severity, expectedCompanionSeverity);

@@ -308,6 +308,7 @@ function skippedCandidate(
     reasons: [...reasons],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   };
 }
 
@@ -351,6 +352,7 @@ function staticPreflightRow(
       reasons: [options.reason],
       declaresAgents: false,
       declaresMcp: false,
+      declaresWorkflows: false,
     };
   }
 
@@ -362,6 +364,7 @@ function staticPreflightRow(
     reasons: [options.reason],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   };
 }
 
@@ -514,6 +517,7 @@ async function refreshDisabledPluginUpdate(
       toVersion: preflight.toVersion,
       declaresAgents: false,
       declaresMcp: false,
+      declaresWorkflows: false,
     };
   }
 
@@ -524,6 +528,7 @@ async function refreshDisabledPluginUpdate(
     reasons: ["already disabled"],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   };
 }
 
@@ -590,6 +595,7 @@ export async function preparePluginUpdate(
       toVersion,
       declaresAgents: false,
       declaresMcp: false,
+      declaresWorkflows: false,
     };
   }
 

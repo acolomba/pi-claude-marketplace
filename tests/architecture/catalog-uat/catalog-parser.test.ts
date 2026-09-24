@@ -66,12 +66,12 @@ test("loadCatalogExamples maps the two non-command catalog sections exactly", ()
   ]);
 });
 
-test("loadCatalogExamples parses all 190 independent catalog tuples", async () => {
+test("loadCatalogExamples parses all 205 independent catalog tuples", async () => {
   const catalog = await readFile(CATALOG_PATH, "utf8");
 
   const examples = loadCatalogExamples(catalog);
 
-  assert.equal(examples.length, 190);
+  assert.equal(examples.length, 205);
   assert.equal(new Set(examples.map(({ section }) => section)).size, 20);
   assert.deepStrictEqual(examples[0], {
     section: "/claude:plugin list",
@@ -195,6 +195,36 @@ test("loadCatalogExamples rejects a marker that has no following fence", () => {
   );
 });
 
+test("loadCatalogExamples rejects a marker followed by a new recognized section with no fence", () => {
+  const catalog = [
+    "## `/claude:plugin list`",
+    "<!-- catalog-state: empty -->",
+    "## `/claude:plugin install <plugin>@<marketplace>`",
+  ].join("\n");
+
+  assert.throws(
+    () => loadCatalogExamples(catalog),
+    new Error(
+      'Catalog parse error at line 3: marker "empty" from line 2 has no following fenced output.',
+    ),
+  );
+});
+
+test("loadCatalogExamples rejects a marker followed by an unrecognized section with no fence", () => {
+  const catalog = [
+    "## `/claude:plugin list`",
+    "<!-- catalog-state: empty -->",
+    "## Conventions",
+  ].join("\n");
+
+  assert.throws(
+    () => loadCatalogExamples(catalog),
+    new Error(
+      'Catalog parse error at line 3: marker "empty" from line 2 has no following fenced output.',
+    ),
+  );
+});
+
 test("loadCatalogExamples rejects an unclosed fenced output", () => {
   const catalog = [
     "## `/claude:plugin list`",
@@ -207,6 +237,19 @@ test("loadCatalogExamples rejects an unclosed fenced output", () => {
     () => loadCatalogExamples(catalog),
     new Error(
       'Catalog parse error at end of input: unclosed fenced output for tuple "/claude:plugin list::empty" opened at line 3.',
+    ),
+  );
+});
+
+test("loadCatalogExamples rejects an unclosed fenced output opened outside a recognized section", () => {
+  const catalog = ["## Conventions", "<!-- catalog-state: empty -->", "```text", "output"].join(
+    "\n",
+  );
+
+  assert.throws(
+    () => loadCatalogExamples(catalog),
+    new Error(
+      'Catalog parse error at end of input: unclosed fenced output for tuple "(ignored section)::(unmarked)" opened at line 3.',
     ),
   );
 });

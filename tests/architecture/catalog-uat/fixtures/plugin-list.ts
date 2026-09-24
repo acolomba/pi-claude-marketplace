@@ -1,6 +1,11 @@
 import { LIST_CONTEXT } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts";
 import { notifyWithContext } from "../../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
-import { piWithBothLoaded, piWithMcpLoaded, piWithNothingLoaded } from "../mock-pi.ts";
+import {
+  piWithAllLoaded,
+  piWithBothLoaded,
+  piWithMcpLoaded,
+  piWithNothingLoaded,
+} from "../mock-pi.ts";
 
 import type { FixtureMap } from "../fixture-types.ts";
 
@@ -595,11 +600,11 @@ export const PLUGIN_LIST_FIXTURES: FixtureMap = {
       },
     },
 
-    // WDET-04: a workflow-bearing plugin uses the existing partial inventory
-    // grammar. The typed reason has info severity and adds no hint or reload
-    // trailer before installation.
-    "workflow-partially-available-inventory": {
-      pi: piWithBothLoaded(),
+    // WINV-04: a workflow-bearing plugin renders as an ordinary not-installed
+    // inventory row -- `(available)` with no reason brace, info severity, and
+    // no hint or reload trailer before installation.
+    "workflow-available-inventory": {
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -607,10 +612,9 @@ export const PLUGIN_LIST_FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "partially-available",
+                status: "available",
                 name: "helper",
                 version: "1.0.0",
-                reasons: ["workflows"],
               },
             ],
           },

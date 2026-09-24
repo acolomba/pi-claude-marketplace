@@ -6,6 +6,7 @@ type ComponentPathsSchema = Type.TObject<{
   skills: Type.TArray<Type.TString>;
   commands: Type.TArray<Type.TString>;
   agents: Type.TArray<Type.TString>;
+  workflows: Type.TArray<Type.TString>;
 }>;
 
 type McpServersFieldSchema = ReturnType<typeof Type.Record<Type.TString, Type.TUnknown>>;

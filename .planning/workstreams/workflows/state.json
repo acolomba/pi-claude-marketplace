@@ -1,0 +1,58 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "workflows-replay — Workflow Bridge Replay onto main",
+  "phases": [
+    {
+      "number": "109",
+      "name": "Kind inversion",
+      "status": "complete"
+    },
+    {
+      "number": "110",
+      "name": "Domain and platform modules",
+      "status": "complete"
+    },
+    {
+      "number": "111",
+      "name": "Workflows bridge",
+      "status": "complete"
+    },
+    {
+      "number": "112",
+      "name": "Install and removal lifecycle",
+      "status": "complete"
+    },
+    {
+      "number": "113",
+      "name": "Update, enable/disable, reconcile",
+      "status": "complete"
+    },
+    {
+      "number": "114",
+      "name": "Degradation and documentation",
+      "status": "complete"
+    },
+    {
+      "number": "115",
+      "name": "Install-time admission-gate warnings",
+      "status": "complete"
+    },
+    {
+      "number": "116",
+      "name": "Load-time workflow convergence",
+      "status": "complete"
+    },
+    {
+      "number": "117",
+      "name": "Measured `agent()` failure evidence",
+      "status": "complete"
+    }
+  ],
+  "next": {
+    "command": "/gsd:progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
+  },
+  "updated_at": "2026-09-21T15:45:27.512Z"
+}

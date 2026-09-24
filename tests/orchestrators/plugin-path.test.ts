@@ -22,7 +22,7 @@ function pluginRecord(resolvedSource: string, enabled: boolean): PluginInstallRe
     version: "1.0.0",
     resolvedSource,
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
     enabled,
     installedAt: "2026-08-31T00:00:00.000Z",
     updatedAt: "2026-08-31T00:00:00.000Z",

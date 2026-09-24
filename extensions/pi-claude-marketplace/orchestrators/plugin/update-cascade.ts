@@ -97,7 +97,11 @@ function outcomeToCascadePluginMessage(
   cardinality: "single" | "plural",
 ): UpdateMsg {
   const successSeverity = companionSeverity(
-    { declaresAgents: outcome.declaresAgents, declaresMcp: outcome.declaresMcp },
+    {
+      declaresAgents: outcome.declaresAgents,
+      declaresMcp: outcome.declaresMcp,
+      declaresWorkflows: outcome.declaresWorkflows,
+    },
     probe,
   );
   switch (outcome.partition) {

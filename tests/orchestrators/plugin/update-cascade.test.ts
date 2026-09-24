@@ -23,13 +23,14 @@ function updated(
       stagedMcpServerNames: [],
       declaresAgents: false,
       declaresMcp: false,
+      declaresWorkflows: false,
     },
   };
 }
 
 test("renders an empty bulk cascade as the exact no-op headline", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 4);
+  const boundary = createNotificationBoundary(1, 6);
 
   // act
   composeUpdateCascade(boundary.ctx, boundary.pi, [], "plural");
@@ -41,7 +42,7 @@ test("renders an empty bulk cascade as the exact no-op headline", () => {
 
 test("sorts changed marketplaces and renders the exact bulk tally and reload hint", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 4);
+  const boundary = createNotificationBoundary(1, 6);
   const outcomes = [updated("zeta", "user", "world"), updated("alpha", "project", "hello")];
   const expectedMessage = [
     "● alpha [project]",
@@ -65,7 +66,7 @@ test("sorts changed marketplaces and renders the exact bulk tally and reload hin
 
 test("keeps an unchanged targeted result exact without a tally or reload hint", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 4);
+  const boundary = createNotificationBoundary(1, 6);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -76,6 +77,7 @@ test("keeps an unchanged targeted result exact without a tally or reload hint", 
         toVersion: "1.0.0",
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       },
     },
   ];
@@ -92,7 +94,7 @@ test("keeps an unchanged targeted result exact without a tally or reload hint", 
 
 test("renders a partial bulk decline before the exact no-op headline", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 4);
+  const boundary = createNotificationBoundary(1, 6);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -105,6 +107,7 @@ test("renders a partial bulk decline before the exact no-op headline", () => {
         partialUpgradable: true,
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       },
     },
   ];
@@ -126,7 +129,7 @@ test("renders a partial bulk decline before the exact no-op headline", () => {
 
 test("renders an absent targeted result as an exact error without a version", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 4);
+  const boundary = createNotificationBoundary(1, 6);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -137,6 +140,7 @@ test("renders an absent targeted result as an exact error without a version", ()
         reasons: ["not installed"],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       },
     },
   ];
@@ -157,7 +161,7 @@ test("renders an absent targeted result as an exact error without a version", ()
 
 test("renders a failed bulk result with exact severity and tally", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 4);
+  const boundary = createNotificationBoundary(1, 6);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -168,6 +172,7 @@ test("renders a failed bulk result with exact severity and tally", () => {
         reasons: ["permission denied"],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       },
     },
   ];
@@ -188,7 +193,7 @@ test("renders a failed bulk result with exact severity and tally", () => {
 
 test("suppresses an unchanged cascade after a separately reported failure", () => {
   // arrange
-  const boundary = createNotificationBoundary(0, 2);
+  const boundary = createNotificationBoundary(0, 3);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
@@ -199,6 +204,7 @@ test("suppresses an unchanged cascade after a separately reported failure", () =
         toVersion: "1.0.0",
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       },
     },
   ];
@@ -233,6 +239,7 @@ const skippedCases: readonly SkippedCase[] = [
         reasons: ["no longer installable"],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       },
     },
     expectedMessage:
@@ -252,6 +259,7 @@ const skippedCases: readonly SkippedCase[] = [
         reasons: ["no longer installable"],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       },
     },
     expectedMessage:
@@ -270,6 +278,7 @@ const skippedCases: readonly SkippedCase[] = [
         partialUpgradable: true,
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       },
     },
     expectedMessage:
@@ -288,6 +297,7 @@ const skippedCases: readonly SkippedCase[] = [
         reasons: ["invalid manifest"],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       },
     },
     expectedMessage:
@@ -299,7 +309,7 @@ const skippedCases: readonly SkippedCase[] = [
 for (const row of skippedCases) {
   test(row.title, () => {
     // arrange
-    const boundary = createNotificationBoundary(1, 4);
+    const boundary = createNotificationBoundary(1, 6);
     const expectedNotification =
       row.expectedSeverity === undefined
         ? { message: row.expectedMessage }
@@ -316,7 +326,7 @@ for (const row of skippedCases) {
 
 test("preserves caller order for rows in one marketplace", () => {
   // arrange
-  const boundary = createNotificationBoundary(1, 4);
+  const boundary = createNotificationBoundary(1, 6);
   const outcomes = [updated("mp", "project", "beta"), updated("mp", "project", "alpha")];
   const expectedMessage = [
     "● mp [project]",

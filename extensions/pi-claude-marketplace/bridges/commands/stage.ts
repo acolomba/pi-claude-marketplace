@@ -218,7 +218,7 @@ export async function prepareStageCommands(
 
         // FMBOM-01: a leading U+FEFF produces no gate-1 throw, so no CMD-01
         // degrade fires and the marker rides `content` straight into the
-        // staged artifact below -- where a peer at the `>=0.80.5` floor drops
+        // staged artifact below -- where Pi's loader drops
         // the whole frontmatter block at load time.
         let content = stripBom(await readFile(command.commandFile, "utf8"));
 

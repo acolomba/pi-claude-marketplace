@@ -523,6 +523,42 @@ test("renders resolved plugin components and wraps descriptions without ellipsis
   );
 });
 
+test("WR-09: renders one note line per entry, last, in composer order", () => {
+  // arrange
+  const message = {
+    marketplaceName: "official",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "installed",
+      name: "alpha",
+      componentsResolved: true,
+      components: {
+        agents: undefined,
+        commands: undefined,
+        hooks: undefined,
+        mcp: undefined,
+        skills: undefined,
+      },
+      notes: ["first note", "second note"],
+    },
+  };
+
+  // act
+  const rendered = renderPluginInfo(message as never, bothLoadedProbe());
+
+  // assert
+  assert.equal(
+    rendered,
+    [
+      "● official [user] <no autoupdate>",
+      "  ● alpha (installed)",
+      "    note: first note",
+      "    note: second note",
+    ].join("\n"),
+  );
+});
+
 test("plugin info cascades preserve zero and repeated-render many shapes", () => {
   // arrange
   const block = {
@@ -658,14 +694,14 @@ test("optional dependency and empty cause branches collapse without extra tokens
   assert.deepStrictEqual(failed, ["  row"]);
 });
 
-type Probe = Parameters<typeof composeReasons>[3];
+type Probe = Parameters<typeof composeReasons>[4];
 
 function bothLoadedProbe(): Probe {
-  return { piSubagentsLoaded: true, piMcpAdapterLoaded: true };
+  return { piSubagentsLoaded: true, piMcpAdapterLoaded: true, workflowEngineLoaded: true };
 }
 
 function neitherLoadedProbe(): Probe {
-  return { piSubagentsLoaded: false, piMcpAdapterLoaded: false };
+  return { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false };
 }
 
 test("notification glyph constants preserve exact public values", () => {
@@ -816,12 +852,13 @@ test("composeVersionArrow renders complete version bytes on both sides", () => {
   assert.equal(arrow, expectedArrow);
 });
 
-for (const { name, reasons, agents, mcp, probe, expected } of [
+for (const { name, reasons, agents, mcp, workflows, probe, expected } of [
   {
     name: "omits an empty reasons block",
     reasons: undefined,
     agents: false,
     mcp: false,
+    workflows: false,
     probe: bothLoadedProbe(),
     expected: "",
   },
@@ -830,6 +867,7 @@ for (const { name, reasons, agents, mcp, probe, expected } of [
     reasons: ["not found", "permission denied"] satisfies readonly Reason[],
     agents: false,
     mcp: false,
+    workflows: false,
     probe: bothLoadedProbe(),
     expected: "{not found, permission denied}",
   },
@@ -838,6 +876,7 @@ for (const { name, reasons, agents, mcp, probe, expected } of [
     reasons: ["not found"] satisfies readonly Reason[],
     agents: true,
     mcp: true,
+    workflows: false,
     probe: neitherLoadedProbe(),
     expected: "{not found, requires pi-subagents, requires pi-mcp}",
   },
@@ -847,7 +886,7 @@ for (const { name, reasons, agents, mcp, probe, expected } of [
     const expectedReasons = expected;
 
     // act
-    const renderedReasons = composeReasons(reasons, agents, mcp, probe);
+    const renderedReasons = composeReasons(reasons, agents, mcp, workflows, probe);
 
     // assert
     assert.equal(renderedReasons, expectedReasons);

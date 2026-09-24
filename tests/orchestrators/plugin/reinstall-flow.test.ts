@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { chmodSync, readdirSync, watch, writeFileSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -42,12 +43,19 @@ import {
   rollbackSkillsReplacement,
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/index.ts";
 import {
+  abortPreparedWorkflows,
+  commitPreparedWorkflows,
+  prepareStageWorkflows,
+  unstagePluginWorkflows,
+} from "../../../extensions/pi-claude-marketplace/bridges/workflows/index.ts";
+import {
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { loadMarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
@@ -212,6 +220,13 @@ interface ResourceSet {
    * cache+rebuild pattern.
    */
   readonly hooksJson?: object;
+  /**
+   * WLIF-01: each entry becomes `<pluginRoot>/workflows/<sourceName>.js`. The
+   * default body carries a NAMED `meta` export on purpose -- a default-export
+   * body classifies as SKIPPED and stages nothing, so a case relying on the
+   * default would pass for the wrong reason.
+   */
+  readonly workflows?: readonly { readonly sourceName: string; readonly body?: string }[];
 }
 
 interface ExistingManifestEntry {
@@ -390,6 +405,42 @@ async function writePluginTree(
     const hooksDir = path.join(pluginRoot, "hooks");
     await mkdir(hooksDir, { recursive: true });
     await writeFile(path.join(hooksDir, "hooks.json"), JSON.stringify(resources.hooksJson));
+  }
+
+  await writeWorkflowScripts(pluginRoot, resources.workflows ?? []);
+}
+
+/**
+ * WLIF-01: write `<pluginRoot>/workflows/<sourceName>.js` per entry.
+ *
+ * Its own function rather than a sixth branch inside `writePluginTree`, which
+ * sits near the cognitive-complexity ceiling with five.
+ */
+async function writeWorkflowScripts(
+  pluginRoot: string,
+  workflows: readonly { readonly sourceName: string; readonly body?: string }[],
+): Promise<void> {
+  if (workflows.length === 0) {
+    return;
+  }
+
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  await mkdir(workflowsDir, { recursive: true });
+  for (const workflow of workflows) {
+    await writeFile(
+      path.join(workflowsDir, `${workflow.sourceName}.js`),
+      workflow.body ??
+        `export const meta = { name: "${workflow.sourceName}", description: "does ${workflow.sourceName}" };\n`,
+    );
+  }
+}
+
+/** Directory entries, or `[]` when the directory was never created. */
+async function entriesOf(directory: string): Promise<string[]> {
+  try {
+    return (await readdir(directory)).sort();
+  } catch {
+    return [];
   }
 }
 
@@ -619,6 +670,7 @@ for (const coexist of [false, true]) {
         stagedMcpServerNames: [],
         declaresAgents: true,
         declaresMcp: false,
+        declaresWorkflows: false,
         resourcesChanged: true,
       });
       assert.deepStrictEqual(notifications, []);
@@ -641,7 +693,7 @@ for (const coexist of [false, true]) {
         });
         assert.strictEqual(
           await readFile(targetPath, "utf8"),
-          `---\nname: ${agent.generatedName}\ndescription: ${agent.description}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
+          `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
         );
       }
 
@@ -1803,8 +1855,8 @@ test("260525-cjr C9: same-name cross-scope reinstall -> project-scope row render
   // tie-break on `MarketplaceRow.scope` never fires. This test seeds
   // the SAME marketplace name in BOTH scopes so the tie-break is
   // exercised end-to-end through the cascade renderer (NOT just via
-  // the unit test on `compareByNameThenScope` in
-  // `tests/presentation/sort.test.ts`).
+  // the unit cases on `compareByNameThenScope` in
+  // `tests/shared/notification-dispatch.test.ts`).
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-same-name-scopes-"));
     try {
@@ -3594,7 +3646,14 @@ test("plugin reinstall authentication: a bulk cold-cache sweep shares one host m
           supported: [] as string[],
           unsupported: [] as string[],
         },
-        resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+        resources: {
+          skills: [],
+          prompts: [],
+          agents: [],
+          mcpServers: [],
+          hooks: [],
+          workflows: [],
+        },
         resolvedSource: await locations.pluginCloneDir(
           pluginCloneKey(`https://github.com/${repo}`, sha),
         ),
@@ -3927,7 +3986,14 @@ async function seedUnpinnedGitRecord(opts: {
             resolvedSource: opts.resolvedSource,
             resolvedSha: opts.resolvedSha,
             compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-            resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
             enabled: true,
             installedAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
@@ -4601,21 +4667,40 @@ async function markRecordedPluginDisabled(
  */
 async function seedDisabledInstall(
   cwd: string,
-  opts: { readonly pluginName?: string; readonly marketplaceRoot?: string } = {},
-): Promise<{ readonly skillDir: string }> {
+  opts: {
+    readonly pluginName?: string;
+    readonly marketplaceRoot?: string;
+    /** WLIF-01: source names to declare, each landing as one envelope. */
+    readonly workflows?: readonly string[];
+  } = {},
+): Promise<{ readonly skillDir: string; readonly envelopePaths: readonly string[] }> {
   const pluginName = opts.pluginName ?? "hello";
+  const workflows = opts.workflows ?? [];
   await seedMarketplace({
     cwd,
     marketplaceRoot: opts.marketplaceRoot ?? path.join(cwd, "mp-src"),
     pluginName,
-    resources: { skill: "old skill", command: "old command" },
+    resources: {
+      skill: "old skill",
+      command: "old command",
+      workflows: workflows.map((sourceName) => ({ sourceName })),
+    },
     install: true,
   });
   await markRecordedPluginDisabled(cwd, "mp", pluginName);
 
-  const skillDir = path.join(locationsFor("project", cwd).skillsTargetDir, `${pluginName}-tool`);
+  const locations = locationsFor("project", cwd);
+  const skillDir = path.join(locations.skillsTargetDir, `${pluginName}-tool`);
   await rm(skillDir, { recursive: true, force: true });
-  return { skillDir };
+  // The envelopes are deliberately NOT removed: a disabled record keeps its
+  // recorded inventory, and the point of the disabled case is that reinstall
+  // leaves those bytes exactly where they are.
+  return {
+    skillDir,
+    envelopePaths: workflows.map((sourceName) =>
+      path.join(locations.workflowsSavedDir, `${pluginName}:${sourceName}.json`),
+    ),
+  };
 }
 
 // Re-staging artifacts and flipping a disabled record to enabled here would
@@ -4627,7 +4712,12 @@ test("DFEN-07 / D-103-12 / ENBL-18: reinstall over a disabled record writes noth
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-disabled-"));
     try {
       const locations = locationsFor("project", cwd);
-      const { skillDir } = await seedDisabledInstall(cwd);
+      const { skillDir, envelopePaths } = await seedDisabledInstall(cwd, {
+        workflows: ["greet"],
+      });
+      const envelopePath = envelopePaths[0];
+      assert.ok(envelopePath !== undefined);
+      const envelopeBefore = await readFile(envelopePath, "utf8");
 
       const recordBefore = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
         "hello"
@@ -4653,6 +4743,9 @@ test("DFEN-07 / D-103-12 / ENBL-18: reinstall over a disabled record writes noth
       assert.deepEqual(recordAfter, recordBefore);
       assert.equal(await readFile(locations.configJsonPath, "utf8"), configBefore);
       assert.equal(await pathExists(skillDir), false, "nothing may be re-materialized");
+      // WLIF-01: the recorded envelope is left exactly as it was -- the
+      // disabled skip runs before any prepare, so nothing displaces it.
+      assert.equal(await readFile(envelopePath, "utf8"), envelopeBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -4988,7 +5081,7 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
       });
       await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
 
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 2);
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 3);
       const outcomes = await reinstallPlugins({
         ctx,
         pi,
@@ -5003,10 +5096,15 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
         },
         {
           message:
-            'Plugin "hello" reinstalled; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello:foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello:foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
+      // NFR-9: the absolute skills directory is redacted to its basename.
+      assert.ok(
+        !notifications.some((n) => n.message.includes(marketplaceRoot)),
+        `absolute path leaked: ${JSON.stringify(notifications)}`,
+      );
       verifyBoundary();
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -5038,7 +5136,7 @@ test("D-141-03: a bulk reinstall surfaces one diagnostic per plugin, singular an
       // one-collision fixture leaves dark.
       await seedCollidingSkills(world.pluginRoot, "world", ["foo", "bar"]);
 
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 2);
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 3);
       await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
       assert.deepStrictEqual(notifications, [
@@ -5048,12 +5146,12 @@ test("D-141-03: a bulk reinstall surfaces one diagnostic per plugin, singular an
         },
         {
           message:
-            'Plugin "hello" reinstalled; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello:foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello:foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
         {
           message:
-            'Plugin "world" reinstalled; 2 declared components were skipped.\n\nskill source "world-bar" in "skills" elides to generated name "world:bar", already produced by skill source "bar"; ignoring duplicate.\nskill source "world-foo" in "skills" elides to generated name "world:foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "world" reinstalled; 2 declared components have notes.\n\nskill source "world-bar" in "skills" elides to generated name "world:bar", already produced by skill source "bar"; ignoring duplicate.\nskill source "world-foo" in "skills" elides to generated name "world:foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
@@ -5224,10 +5322,219 @@ test("D-141-03: an agents hygiene warning rides notes in orchestrated mode and n
         },
         {
           message:
-            'Plugin "hello" reinstalled; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello:foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello:foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WGATE-01 / D-115-05: the workflows discovery channel on a standalone reinstall
+//
+// The families below are the `WorkflowOutcomeSite` union
+// (`bridges/workflows/discover.ts`) measured member by member, not a shorter
+// list of the interesting ones: `gate`, `skipped`, `refused`, `read`,
+// `oversize` and `inspect`. Every one of them rides the single
+// `handles.workflows.result.warnings` array, so a verb that drops that array
+// drops all six at once.
+//
+// `inspect` cannot share a directory with the other five. It fires when
+// `lstat` fails on an entry `readdir` returned, which needs the directory's
+// execute bit cleared -- and that also stops every sibling in the same
+// directory from being opened. It gets its own case below.
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * One script per family, named so the discovery walk's name sort is the order
+ * the expectations below are written in. `ff-fine.js` is well-formed: it earns
+ * no line, which is what keeps the expected list from passing as a prefix of a
+ * channel that warns about everything.
+ */
+const WORKFLOW_FAMILY_SCRIPTS: readonly { readonly sourceName: string; readonly body: string }[] = [
+  // named + gate: a readable `meta.name`, no description -- the engine's check 9.
+  { sourceName: "aa-gate", body: 'export const meta = { name: "gate" };\n' },
+  // skipped: a helper module with no `meta` at all.
+  { sourceName: "bb-helper", body: "export function helper() {\n  return 1;\n}\n" },
+  // refused: a determinism-blocklist match.
+  {
+    sourceName: "cc-roll",
+    body: 'export const meta = { name: "roll", description: "rolls" };\nMath.random();\n',
+  },
+  // skipped, differently: a `meta` with no name at all, so no command name is readable.
+  {
+    sourceName: "dd-nameless",
+    body: 'export const meta = { description: "a helper with no name" };\n',
+  },
+  // oversize: one byte past the cap Claude Code's loader imposes.
+  { sourceName: "ee-big", body: "/".repeat(WORKFLOW_SCRIPT_MAX_BYTES + 1) },
+  // ff-fine earns no warning.
+  { sourceName: "ff-fine", body: 'export const meta = { name: "fine", description: "fine" };\n' },
+];
+
+/**
+ * The `read` family's script, written as raw bytes because the reason under
+ * test is the decoder's: `0xff 0xfe` is not valid UTF-8 in any position, which
+ * is deterministic on every platform and is not a permission the test process
+ * might hold. `writeFile` with a string cannot produce it -- every JavaScript
+ * string encodes to valid UTF-8.
+ */
+async function writeUnreadableWorkflowScript(pluginRoot: string): Promise<void> {
+  await writeFile(
+    path.join(pluginRoot, "workflows", "ee-bad.js"),
+    Buffer.from([0x65, 0x78, 0xff, 0xfe, 0x0a]),
+  );
+}
+
+/** The rendered line each family earns, in directory-entry-name order. */
+const EXPECTED_FAMILY_LINES: readonly string[] = [
+  'workflow script "aa-gate.js" in "workflows" was installed but the engine will refuse to load it: the engine refuses at its check 9 -- `meta.description` must be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array of objects each carrying a string `title`) must match those shapes wherever they are declared',
+  'workflow script "bb-helper.js" in "workflows" was not installed: bb-helper.js declares no `meta`, so there is nothing to install',
+  'workflow script "cc-roll.js" in "workflows" was refused: cc-roll.js calls `Math.random`, which the workflow engine refuses as nondeterministic',
+  'workflow script "dd-nameless.js" in "workflows" was not installed: dd-nameless.js declares no string-literal `meta.name`, so there is no command to install',
+  'workflow script "ee-bad.js" in "workflows" could not be read and was skipped: the file is not valid UTF-8, so its bytes cannot be copied verbatim',
+  `workflow script "ee-big.js" in "workflows" was not installed: the file is ${(WORKFLOW_SCRIPT_MAX_BYTES + 1).toString()} bytes and Claude Code loads a plugin workflow script only up to ${WORKFLOW_SCRIPT_MAX_BYTES.toString()} bytes`,
+];
+
+/**
+ * Seed a plugin carrying `workflows`, install it, then run the reinstall a user
+ * reaches -- `reinstallPlugins`, which drives `reinstallPlugin` with
+ * `render: "none"` and renders the cascade itself.
+ *
+ * `mutate` runs after the install and before the reinstall, for a fixture the
+ * seeder's string-bodied entries cannot express.
+ */
+async function standaloneReinstallNotifications(
+  cwd: string,
+  workflows: readonly { readonly sourceName: string; readonly body?: string }[],
+  mutate?: (pluginRoot: string) => Promise<void>,
+): Promise<readonly NotifyRecord[]> {
+  const { pluginRoot } = await seedMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    resources: { skill: "old skill", workflows },
+    install: true,
+  });
+  if (mutate !== undefined) {
+    await mutate(pluginRoot);
+  }
+
+  const { ctx, pi, notifications } = makeCtx();
+  const outcomes = await reinstallPlugins({
+    ctx,
+    pi,
+    cwd,
+    target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+  });
+  assert.equal(outcomes[0]?.partition, "reinstalled");
+  return notifications;
+}
+
+test("WGATE-01 / D-115-05: a standalone reinstall renders every workflow discovery family", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflow-families-"));
+    try {
+      // act
+      const notifications = await standaloneReinstallNotifications(
+        cwd,
+        WORKFLOW_FAMILY_SCRIPTS,
+        writeUnreadableWorkflowScript,
+      );
+
+      // assert -- the reinstall row, then the diagnostic block that qualifies it.
+      assert.equal(notifications.length, 2, JSON.stringify(notifications));
+      const row = notifications[0];
+      const diagnostic = notifications[1];
+      assert.ok(row !== undefined);
+      assert.ok(diagnostic !== undefined);
+      assert.equal(diagnostic.severity, "warning");
+      // Per-family attribution first: a changed phrase names its own line here,
+      // where the whole-message comparison below would only name the block.
+      assert.deepEqual(
+        diagnostic.message.split("\n").filter((line) => line.startsWith("workflow script ")),
+        EXPECTED_FAMILY_LINES,
+      );
+      // Then the whole block, byte for byte -- the header, the blank-line
+      // separator and the line order, none of which the filter above sees.
+      //
+      // The header counts the lines and claims no disposal, because one of the
+      // six components below it WAS installed -- the one the host engine will
+      // refuse to load. It is shared by install, update and reinstall.
+      assert.equal(
+        diagnostic.message,
+        `Plugin "hello" reinstalled; 6 declared components have notes.\n\n${EXPECTED_FAMILY_LINES.join("\n")}`,
+      );
+      // WGATE-03: the row itself states no gate. The channel is a second
+      // notification precisely so the row is free of it.
+      assert.doesNotMatch(row.message, /engine will refuse/);
+      assert.doesNotMatch(row.message, /check 9/);
+      assert.doesNotMatch(row.message, /aa-gate/);
+      // NFR-9: the temporary marketplace root never reaches the user.
+      assert.ok(!diagnostic.message.includes(cwd), diagnostic.message);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WGATE-01 / D-115-05: a standalone reinstall reports a workflow script it could not inspect", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflow-inspect-"));
+    let lockedDir: string | undefined;
+    try {
+      // arrange -- clearing the directory's execute bit is what makes the
+      // `lstat` inside it fail while `readdir` still returns the entry, which
+      // is the only shape that reaches the `inspect` site.
+      const notifications = await standaloneReinstallNotifications(
+        cwd,
+        [{ sourceName: "gg-locked" }],
+        async (pluginRoot) => {
+          lockedDir = path.join(pluginRoot, "workflows");
+          await chmod(lockedDir, 0o444);
+        },
+      );
+
+      // assert
+      assert.ok(lockedDir !== undefined);
+      const diagnostic = notifications.find((n) => n.message.includes("could not be inspected"));
+      assert.ok(diagnostic !== undefined, JSON.stringify(notifications));
+      assert.equal(diagnostic.severity, "warning");
+      assert.ok(
+        diagnostic.message.includes(
+          `workflow script "gg-locked.js" in "workflows" could not be inspected and was skipped: EACCES: permission denied, lstat 'gg-locked.js'`,
+        ),
+        diagnostic.message,
+      );
+    } finally {
+      if (lockedDir !== undefined) {
+        // Restored before the removal below, which cannot walk a directory it
+        // may not enter.
+        await chmod(lockedDir, 0o755).catch(() => undefined);
+      }
+
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WGATE-01 / D-115-05: a standalone reinstall of well-formed workflow scripts emits one notification", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflow-clean-"));
+    try {
+      // act -- both scripts carry a literal name and a non-empty description,
+      // so no family fires.
+      const notifications = await standaloneReinstallNotifications(cwd, [
+        { sourceName: "greet" },
+        { sourceName: "wave" },
+      ]);
+
+      // assert -- without this case, "the second notification contains X" is
+      // satisfiable by a second notification that is always emitted.
+      assert.equal(notifications.length, 1, JSON.stringify(notifications));
+      assert.doesNotMatch(notifications[0]?.message ?? "", /declared component/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5868,6 +6175,8 @@ test("a pinned git-subdir reinstall reports a missing cached subdirectory", asyn
  *   finalize:<bridge>  a backup was dropped after state persistence committed
  *   commit:hooks       the staged hooks config was written
  *   remove:hooks       the staged hooks config was removed
+ *   commit:workflows   the prepared workflow envelopes were renamed into place
+ *   unplace:workflows  envelopes the commit reported placing were unlinked
  *
  * Every event is recorded before its operation runs and names only the
  * operation issued -- including one that throws -- so a repeated, extra,
@@ -5981,6 +6290,22 @@ function observeReinstallOperations(
     finalizeMcpReplacement: (...args) => {
       record("finalize:mcp");
       return finalizeMcpReplacement(...args);
+    },
+    prepareStageWorkflows: (...args) => {
+      record("prepare:workflows");
+      return prepareStageWorkflows(...args);
+    },
+    commitPreparedWorkflows: (...args) => {
+      record("commit:workflows");
+      return commitPreparedWorkflows(...args);
+    },
+    abortPreparedWorkflows: (...args) => {
+      record("abort:workflows");
+      return abortPreparedWorkflows(...args);
+    },
+    unstagePluginWorkflows: (...args) => {
+      record("unplace:workflows");
+      return unstagePluginWorkflows(...args);
     },
   };
 }
@@ -6152,6 +6477,7 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         marketplace: "mp",
         name: "hello",
         partition: "reinstalled",
@@ -6210,6 +6536,7 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
           mcpServers: [],
           prompts: ["hello:deploy"],
           skills: ["hello:tool"],
+          workflows: [],
         },
       );
     } finally {
@@ -6289,6 +6616,7 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         marketplace: "mp",
         name: "hello",
         partition: "reinstalled",
@@ -6589,11 +6917,13 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
         "prepare:commands",
         "prepare:agents",
         "prepare:mcp",
+        "prepare:workflows",
         "replace:skills",
         "replace:commands",
         "replace:agents",
         "remove:hooks",
         "replace:mcp",
+        "commit:workflows",
         "save:state",
         "finalize:skills",
         "finalize:commands",
@@ -6926,6 +7256,7 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
           mcpServers: [],
           prompts: ["hello:deploy"],
           skills: ["hello:fresh", "hello:tool"],
+          workflows: [],
         },
       );
       assert.match(
@@ -7025,9 +7356,11 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
         "prepare:commands",
         "prepare:agents",
         "prepare:mcp",
+        "prepare:workflows",
         "replace:skills",
         "replace:commands",
         "rollback:skills",
+        "abort:workflows",
         "abort:mcp",
         "abort:agents",
         "abort:commands",
@@ -7038,11 +7371,13 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
         "prepare:commands",
         "prepare:agents",
         "prepare:mcp",
+        "prepare:workflows",
         "replace:skills",
         "replace:commands",
         "replace:agents",
         "remove:hooks",
         "replace:mcp",
+        "commit:workflows",
         "save:state",
         "finalize:skills",
         "finalize:commands",
@@ -7095,6 +7430,7 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
           mcpServers: [],
           prompts: ["hello:deploy", "hello:fresh"],
           skills: ["hello:tool"],
+          workflows: [],
         },
       );
     } finally {
@@ -7211,7 +7547,14 @@ test("retry proof: reinstall: a persistence failure after hooks removal leaves t
       ]);
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources,
-        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["hello:tool"] },
+        {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: [],
+          skills: ["hello:tool"],
+          workflows: [],
+        },
       );
       assert.match(await readSkill(cwd), /new skill/);
     } finally {
@@ -7310,11 +7653,13 @@ test("retry proof: reinstall: a persistence failure after four committed replace
         "prepare:commands",
         "prepare:agents",
         "prepare:mcp",
+        "prepare:workflows",
         "replace:skills",
         "replace:commands",
         "replace:agents",
         "remove:hooks",
         "replace:mcp",
+        "commit:workflows",
         "save:state",
         "rollback:mcp",
         "rollback:agents",
@@ -7326,11 +7671,13 @@ test("retry proof: reinstall: a persistence failure after four committed replace
         "prepare:commands",
         "prepare:agents",
         "prepare:mcp",
+        "prepare:workflows",
         "replace:skills",
         "replace:commands",
         "replace:agents",
         "remove:hooks",
         "replace:mcp",
+        "commit:workflows",
         "save:state",
         "finalize:skills",
         "finalize:commands",
@@ -8171,6 +8518,773 @@ test("retry proof: reinstall: a bulk cascade keeps the earlier committed target 
   });
 });
 
+const retryFs = createRequire(import.meta.url)(
+  "node:fs/promises",
+) as typeof import("node:fs/promises");
+
+// ──────────────────────────────────────────────────────────────────────────
+// WLIF-01: the workflows handle -- reinstall's fifth prepare and its abort arm.
+//
+// `locationsFor` is called INSIDE the `withHermeticHome` closure in every case
+// below: the helper sets `process.env.HOME`, which is what the workflow home
+// derivation reads, so a call outside the closure would point
+// `workflowsSavedDir` at the developer's real home.
+//
+// Envelope paths are composed with a plain `path.join`, NOT with the async
+// artifact-path composer: a forgotten await there yields a leaf named after a
+// promise instead of throwing.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WLIF-01: a replace-step failure leaves no workflows staging tree behind", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-abort-"));
+    const originalRename = retryFs.rename.bind(retryFs);
+    let renameMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      const envelopeBefore = await readFile(envelopePath, "utf8");
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "greet" }],
+      });
+      // The skills replace is the FIRST step of the replace sequence, so its
+      // failure reaches `abortHandles` with all five prepared handles and the
+      // workflows commit never runs. That is what makes the abort arm the right
+      // owner of the staging root HERE. The other path into the same catch is
+      // the workflows commit throwing part way, and there the commit owns its
+      // own staging lifecycle -- covered by the two cases below.
+      renameMock = t.mock.method(
+        retryFs,
+        "rename",
+        async (...args: Parameters<typeof retryFs.rename>) => {
+          if (String(args[1]).startsWith(locations.skillsTargetDir)) {
+            throw new Error("skills replace denied");
+          }
+
+          return originalRename(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert
+      assert.equal(outcome.partition, "failed");
+      assert.deepStrictEqual(await entriesOf(locations.workflowsStagingDir), []);
+      // The failure landed BEFORE the workflows step, so the envelope the
+      // install placed is untouched rather than removed or rewritten.
+      assert.equal(await readFile(envelopePath, "utf8"), envelopeBefore);
+    } finally {
+      renameMock?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("CR-01: a partially failed workflows commit unplaces what it stranded", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-stranded-"));
+    const originalRename = retryFs.rename.bind(retryFs);
+    let renameMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      // The old install ships NO workflows, so both envelopes below are names
+      // the old record does not carry. A stranded one is therefore an orphan:
+      // `unstagePluginWorkflows` removes strictly by recorded name and the
+      // shared saved directory is never enumerated, so nothing would ever find
+      // it again (WLIF-03).
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "greet" }, { sourceName: "wave" }],
+      });
+      const greetPath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      const wavePath = path.join(locations.workflowsSavedDir, "hello:wave.json");
+      // Place `greet`, refuse `wave`, then refuse the reversal of `greet`. That
+      // is the shape that produces a non-empty `stranded` set: a rename the
+      // commit completed and could not take back, with no restore reclaiming
+      // its target.
+      renameMock = t.mock.method(
+        retryFs,
+        "rename",
+        async (...args: Parameters<typeof retryFs.rename>) => {
+          if (String(args[1]) === wavePath) {
+            throw new Error("wave placement denied");
+          }
+
+          if (String(args[0]) === greetPath) {
+            throw new Error("greet reversal denied");
+          }
+
+          return originalRename(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert
+      assert.equal(outcome.partition, "failed");
+      // The catch built its removal payload from the commit's `onPlaced`
+      // report, so the stranded envelope is gone rather than orphaned.
+      assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), []);
+    } finally {
+      renameMock?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("CR-02: a failed restore keeps the staging root holding the only copy", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-retained-"));
+    const originalRename = retryFs.rename.bind(retryFs);
+    let renameMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      // The old install DOES ship `greet`, so the commit displaces that
+      // envelope into `<stagingRoot>/.previous/` instead of unlinking it.
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      const envelopeBefore = await readFile(envelopePath, "utf8");
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "greet" }, { sourceName: "wave" }],
+      });
+      const wavePath = path.join(locations.workflowsSavedDir, "hello:wave.json");
+      // Refuse `wave`, then refuse the restore out of `.previous/`. The commit
+      // then reports it could not put the previous envelope back and KEEPS the
+      // staging root, because that directory now holds the only copy.
+      renameMock = t.mock.method(
+        retryFs,
+        "rename",
+        async (...args: Parameters<typeof retryFs.rename>) => {
+          if (String(args[1]) === wavePath) {
+            throw new Error("wave placement denied");
+          }
+
+          if (String(args[0]).includes(`${path.sep}.previous${path.sep}`)) {
+            throw new Error("previous envelope restore denied");
+          }
+
+          return originalRename(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert
+      assert.equal(outcome.partition, "failed");
+      // The abort arm must NOT have run: `cleanupStaging` is a recursive rm and
+      // `.previous/` is inside the root, so aborting here would destroy the
+      // bytes the leak text just told the operator to move back by hand.
+      const staging = await entriesOf(locations.workflowsStagingDir);
+      assert.equal(staging.length, 1);
+      const retainedPrevious = path.join(
+        locations.workflowsStagingDir,
+        staging[0] ?? "",
+        ".previous",
+      );
+      assert.deepStrictEqual(await entriesOf(retainedPrevious), ["hello:greet.json"]);
+      assert.equal(
+        await readFile(path.join(retainedPrevious, "hello:greet.json"), "utf8"),
+        envelopeBefore,
+      );
+    } finally {
+      renameMock?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-01: a reinstall of a plugin with no workflows touches neither workflow directory", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-none-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", { skill: "new skill" });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert -- the prepare short-circuits on the noop branch, so no staging
+      // root is created and the engine's storage root is not brought into
+      // existence for a plugin that ships no workflows (WPTH-05).
+      assert.equal(outcome.partition, "reinstalled");
+      assert.deepStrictEqual(await entriesOf(locations.workflowsStagingDir), []);
+      assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), []);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WLIF-01: the workflows commit -- the LAST step of the replace sequence, the
+// placed names threaded out of it, and the outer recovery path that is the
+// only thing able to take those envelopes back.
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * A foreign envelope in the shared saved directory. Nothing this extension
+ * placed and nothing any record names, so every case that removes envelopes
+ * can assert its bytes survived.
+ */
+async function seedForeignEnvelope(savedDir: string): Promise<{
+  readonly path: string;
+  readonly bytes: string;
+}> {
+  await mkdir(savedDir, { recursive: true });
+  const foreignPath = path.join(savedDir, "someone-else:thing.json");
+  const bytes = '{ "name": "someone-else:thing" }\n';
+  await writeFile(foreignPath, bytes, "utf8");
+  return { path: foreignPath, bytes };
+}
+
+test("WLIF-04: a reinstall REPLACES a workflow envelope at its recorded target", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-replace-"));
+    try {
+      // arrange -- install once so both a record and an envelope exist, then
+      // change the workflow's description so the re-materialized bytes are
+      // distinguishable from the ones already at the target. The old record
+      // naming the envelope is what puts the commit on its displace path
+      // rather than into the occupancy refusal.
+      //
+      // WLIF-04 is "reinstall replaces workflow artifacts", and REPLACES is
+      // what separates this case from a first-write: the same target path holds
+      // different bytes afterwards. The pre-reinstall bytes are read here so
+      // "the old content is gone" is an assertion rather than an inference from
+      // the new content matching.
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      assert.equal(await pathExists(envelopePath), true, "the install must place the envelope");
+      const beforeBytes = await readFile(envelopePath, "utf8");
+      const foreign = await seedForeignEnvelope(locations.workflowsSavedDir);
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [
+          {
+            sourceName: "greet",
+            body: 'export const meta = { name: "greet", description: "greets again" };\n',
+          },
+        ],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      assert.notEqual(
+        await readFile(envelopePath, "utf8"),
+        beforeBytes,
+        "WLIF-04: the pre-reinstall envelope content is gone from the target",
+      );
+      assert.deepStrictEqual(JSON.parse(await readFile(envelopePath, "utf8")), {
+        name: "hello:greet",
+        description: "greets again",
+        script: 'export const meta = { name: "greet", description: "greets again" };\n',
+      });
+      const state = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.workflows, [
+        "hello:greet",
+      ]);
+      // The commit's staging root is removed on success, so nothing is left
+      // behind under the staging directory.
+      assert.deepStrictEqual(await entriesOf(locations.workflowsStagingDir), []);
+      // WLIF-04: "replaces" is only meaningful against a boundary saying which
+      // artifacts it does NOT touch. The saved directory is shared, so an
+      // adjacent plugin's envelope sitting beside the replacement target has to
+      // come through byte-unchanged.
+      assert.equal(await readFile(foreign.path, "utf8"), foreign.bytes);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-01: a failure after the commit removes exactly the envelopes it placed", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-unplace-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      assert.equal(await pathExists(envelopePath), true, "the install must place the envelope");
+      const foreign = await seedForeignEnvelope(locations.workflowsSavedDir);
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "greet" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act -- the transaction save is the last of the three post-commit steps
+      // and the simplest to sabotage; the workflows step sits outside the
+      // replacement ledger, so only the outer catch can reach the envelope.
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        stateTransaction: {
+          saveState: () => Promise.reject(new Error("save-failure")),
+        },
+      });
+
+      // assert -- the recovery removed the envelope cleanly, so there is no
+      // leak and therefore no manual-recovery promotion: a clean take-back is
+      // not a condition the user has to repair by hand.
+      assert.equal(outcome.partition, "failed");
+      assert.equal(outcome.failureClass, undefined);
+      assert.ok(
+        outcome.notes?.some((note) => note.includes("save-failure")),
+        `expected the primary failure in the notes: ${JSON.stringify(outcome.notes)}`,
+      );
+      await assert.rejects(() => readFile(envelopePath, "utf8"), { code: "ENOENT" });
+      assert.equal(await readFile(foreign.path, "utf8"), foreign.bytes);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("T-112-14: a containment refusal during recovery becomes a leak, not the surfaced error", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-refusal-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      const decoyPath = path.join(cwd, "decoy.json");
+      await writeFile(decoyPath, "{}\n", "utf8");
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "greet" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act -- the sabotage replaces the just-placed envelope with a symlink
+      // BEFORE it throws, so the recovery's own path chokepoint refuses the
+      // leaf it composed (SymlinkRefusedError extends PathContainmentError).
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        stateTransaction: {
+          saveState: async () => {
+            await rm(envelopePath, { force: true });
+            await symlink(decoyPath, envelopePath);
+            throw new Error("save-failure");
+          },
+        },
+      });
+
+      // assert -- the ORIGINAL error survives. A refusal allowed to propagate
+      // out of the recovery composer would replace it and discard every leak
+      // string already collected.
+      assert.equal(outcome.partition, "failed");
+      assert.equal(outcome.failureClass, "manual-recovery");
+      assert.ok(
+        outcome.notes?.some((note) => note.includes("save-failure")),
+        `expected the primary failure in the notes: ${JSON.stringify(outcome.notes)}`,
+      );
+      assert.ok(
+        !outcome.notes?.some((note) => note.includes("symlink")),
+        `the containment refusal must not become the surfaced error: ${JSON.stringify(
+          outcome.notes,
+        )}`,
+      );
+      // The refused name is still on disk -- that is the leak the composer
+      // recorded rather than raised.
+      assert.equal(await pathExists(envelopePath), true);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-01: a workflows staging-cleanup leak reaches the reinstall bridge warnings", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-leak-"));
+    const originalRm = retryFs.rm.bind(retryFs);
+    let rmMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "greet" }],
+      });
+      let leakedRoot: string | undefined;
+      rmMock = t.mock.method(retryFs, "rm", async (...args: Parameters<typeof retryFs.rm>) => {
+        const target = String(args[0]);
+        if (target.startsWith(`${locations.workflowsStagingDir}${path.sep}`)) {
+          leakedRoot = target;
+          throw new Error("staging cleanup denied");
+        }
+
+        return originalRm(...args);
+      });
+      syncBuiltinESMExports();
+      const { ctx, pi } = makeCtx();
+
+      // act -- `render: "none"` is the cascade surface, the only one that
+      // carries the hygiene (bridge) warnings out as notes per D-19-01.
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      assert.ok(leakedRoot !== undefined);
+      assert.ok(
+        outcome.notes?.includes(
+          `warning: failed to clean up workflows staging directory at ${leakedRoot}: staging cleanup denied`,
+        ),
+        `expected the staging leak in the notes: ${JSON.stringify(outcome.notes)}`,
+      );
+    } finally {
+      rmMock?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-03: an unremovable placed envelope becomes a manual-recovery leak", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-unremovable-"));
+    const originalUnlink = retryFs.unlink.bind(retryFs);
+    let unlinkMock: ReturnType<typeof t.mock.method> | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      assert.equal(await pathExists(envelopePath), true, "the install must place the envelope");
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "greet" }],
+      });
+      // The bridge binds `unlink` through a static ESM import, so the CJS view
+      // has to be re-synced for the mock to be visible to it.
+      unlinkMock = t.mock.method(
+        retryFs,
+        "unlink",
+        async (...args: Parameters<typeof retryFs.unlink>) => {
+          if (String(args[0]) === envelopePath) {
+            throw Object.assign(new Error("unlink denied"), { code: "EPERM" });
+          }
+
+          return originalUnlink(...args);
+        },
+      );
+      syncBuiltinESMExports();
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        stateTransaction: {
+          saveState: () => Promise.reject(new Error("save-failure")),
+        },
+      });
+
+      // assert -- a per-name removal failure is a leak, so the failure is
+      // promoted to manual recovery and the envelope is still on disk.
+      assert.equal(outcome.partition, "failed");
+      assert.equal(outcome.failureClass, "manual-recovery");
+      unlinkMock.mock.restore();
+      syncBuiltinESMExports();
+      assert.equal(await pathExists(envelopePath), true);
+    } finally {
+      unlinkMock?.mock.restore();
+      syncBuiltinESMExports();
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WLIF-01 / T-112-15: the record names the envelopes reinstall actually wrote.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WLIF-01: the record names both envelopes a two-workflow reinstall wrote", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-two-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: {
+          skill: "old skill",
+          workflows: [{ sourceName: "alpha" }, { sourceName: "beta" }],
+        },
+        install: true,
+      });
+      const foreign = await seedForeignEnvelope(locations.workflowsSavedDir);
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "alpha" }, { sourceName: "beta" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      const state = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.workflows, [
+        "hello:alpha",
+        "hello:beta",
+      ]);
+      for (const sourceName of ["alpha", "beta"]) {
+        const envelopePath = path.join(locations.workflowsSavedDir, `hello:${sourceName}.json`);
+        assert.deepStrictEqual(JSON.parse(await readFile(envelopePath, "utf8")), {
+          name: `hello:${sourceName}`,
+          description: `does ${sourceName}`,
+          script: `export const meta = { name: "${sourceName}", description: "does ${sourceName}" };\n`,
+        });
+      }
+
+      assert.equal(await readFile(foreign.path, "utf8"), foreign.bytes);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-04: a workflow the new version drops leaves neither an envelope nor a record entry", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-dropped-"));
+    try {
+      // arrange -- the workflows directory is REMOVED before the new tree is
+      // written, so the dropped source name is genuinely absent rather than
+      // shadowed by the new one. This is the case that distinguishes a replace
+      // from an add.
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      const droppedPath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      assert.equal(await pathExists(droppedPath), true, "the install must place the envelope");
+      const foreign = await seedForeignEnvelope(locations.workflowsSavedDir);
+      await rm(path.join(seeded.pluginRoot, "workflows"), { force: true, recursive: true });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "farewell" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(await pathExists(droppedPath), false);
+      assert.equal(
+        await pathExists(path.join(locations.workflowsSavedDir, "hello:farewell.json")),
+        true,
+      );
+      const state = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.workflows, [
+        "hello:farewell",
+      ]);
+      assert.equal(await readFile(foreign.path, "utf8"), foreign.bytes);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-06: a reinstall whose source dropped a workflow carries the stale-command axis", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-stale-"));
+    try {
+      // arrange -- the record names `hello:greet`; the new tree declares only
+      // `hello:farewell`, so the replace step places a name the record did not
+      // hold and does not re-place one it did.
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      await rm(path.join(seeded.pluginRoot, "workflows"), { force: true, recursive: true });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "farewell" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert -- the axis rides the outcome so the shared row composer can
+      // name the remedy; `reinstall.messaging.test.ts` pins what it renders.
+      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(outcome.staleWorkflowCommand, true);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-06: a reinstall that re-placed every recorded workflow omits the axis", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-stale-none-"));
+    try {
+      // arrange -- the SAME name before and after. A name in both the recorded
+      // and the placed set retires nothing; that is the ordinary re-place.
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "greet" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert -- ABSENT, not `false`: the outcome shape of a clean reinstall
+      // is unchanged, which is what keeps its row byte-identical.
+      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(Object.hasOwn(outcome, "staleWorkflowCommand"), false);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-01: a reinstall with no workflows records an empty array, not an absent key", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-empty-record-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", { skill: "new skill" });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert -- an own, empty array. A `deepStrictEqual` against `[]` alone
+      // would not distinguish an absent key from an empty one, so the presence
+      // of the property is asserted separately.
+      assert.equal(outcome.partition, "reinstalled");
+      const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+      assert.ok(record !== undefined);
+      assert.ok(Object.hasOwn(record.resources, "workflows"));
+      assert.deepStrictEqual(record.resources.workflows, []);
+      assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), []);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
 test("PRL-03: a bulk cascade forwards the state-transaction seam to every per-plugin reinstall", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-state-seam-"));
@@ -8284,6 +9398,7 @@ test("PRL-08 / PRL-11: preserves state, tree, cleanup, and exact notification th
         stagedMcpServerNames: ["server1"],
         declaresAgents: true,
         declaresMcp: true,
+        declaresWorkflows: false,
         resourcesChanged: true,
       });
       const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
@@ -8296,6 +9411,7 @@ test("PRL-08 / PRL-11: preserves state, tree, cleanup, and exact notification th
         agents: ["pi-claude-marketplace-hello-bot"],
         mcpServers: ["server1"],
         hooks: [],
+        workflows: [],
       });
       assert.strictEqual(
         await readFile(path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md"), "utf8"),

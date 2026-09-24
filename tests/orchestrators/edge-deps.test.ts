@@ -106,7 +106,7 @@ function pluginRecord(resolvedSource: string, installed: InstalledFixture): Plug
       supported: [],
       unsupported: [...unsupported],
     },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
     enabled: installed.enabled ?? true,
     installedAt: "2026-06-17T00:00:00.000Z",
     updatedAt: "2026-06-17T00:00:00.000Z",

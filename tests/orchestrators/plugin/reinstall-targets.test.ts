@@ -19,7 +19,7 @@ function pluginRecord(): PluginInstallRecord {
     version: "1.0.0",
     resolvedSource: "/plugin",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [], workflows: [] },
     enabled: true,
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",

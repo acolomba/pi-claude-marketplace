@@ -47,6 +47,12 @@ function dependenciesFromRecord(record: PluginInstallRecord): readonly Dependenc
     dependencies.push("mcp");
   }
 
+  // WDEP-02: `workflows` pushes LAST, so a row that declares agents and mcp
+  // renders the same two-marker brace whether or not it also declares workflows.
+  if (record.resources.workflows.length > 0) {
+    dependencies.push("workflows");
+  }
+
   return dependencies;
 }
 

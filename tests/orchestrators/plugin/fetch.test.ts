@@ -123,7 +123,7 @@ function notificationBoundary(name: string, expectedCalls = 1): NotificationBoun
     .times(expectedCalls);
   when(() => pi.getAllTools())
     .thenReturn([])
-    .twice();
+    .times(3);
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       notifications.push({ message, ...(severity === undefined ? {} : { severity }) });

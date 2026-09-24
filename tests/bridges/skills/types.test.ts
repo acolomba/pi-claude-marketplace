@@ -28,6 +28,7 @@ const stageSkillsInput: StageSkillsInput = {
   pluginDataDir: "/data/official/acme",
   resolved: undefined!,
   previousSkillNames: ["acme-obsolete"],
+  knownWorkflowNames: ["acme:audit"],
   cwd: "/work/project",
 } satisfies StageSkillsInput;
 void stageSkillsInput;
@@ -98,8 +99,20 @@ const stageSkillsInputWithoutCwd: StageSkillsInput = {
   pluginRoot: "/plugins/acme",
   pluginDataDir: "/data/official/acme",
   resolved: undefined!,
+  knownWorkflowNames: [],
 };
 void stageSkillsInputWithoutCwd;
+
+// @ts-expect-error a stage input always names the sibling workflows, even when there are none
+const stageSkillsInputWithoutWorkflowNames: StageSkillsInput = {
+  locations: undefined!,
+  pluginName: "acme",
+  pluginRoot: "/plugins/acme",
+  pluginDataDir: "/data/official/acme",
+  resolved: undefined!,
+  cwd: "/work/project",
+};
+void stageSkillsInputWithoutWorkflowNames;
 
 // @ts-expect-error a staged skill always identifies its target path
 const stagedSkillRecordWithoutTarget: StagedSkillRecord = {

@@ -23,7 +23,7 @@ function resolvedPlugin(pluginRoot: string, skills: readonly string[]): Resolved
     supported: ["skills"],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: [...skills], commands: [], agents: [] },
+    componentPaths: { skills: [...skills], commands: [], agents: [], workflows: [] },
     mcpServers: {},
     defaultEnabled: true,
   };
