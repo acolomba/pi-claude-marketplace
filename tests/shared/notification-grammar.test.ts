@@ -32,8 +32,10 @@ import {
   renderUninstalledRow,
   renderVersion,
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import { shouldEmitReloadHint } from "../../extensions/pi-claude-marketplace/shared/notification-summary.ts";
 
 import type {
+  MarketplaceNotificationMessage,
   PluginInfoMessage,
   PluginNotificationMessage,
   Reason,
@@ -299,6 +301,30 @@ for (const { plugin, expected } of ROW_CASES) {
     assert.equal(rendered, `● official [user]\n  ${expected}`);
   });
 }
+
+test("pending uninstall stays bare while prune preview adds its reason without a reload", () => {
+  const bare: MarketplaceNotificationMessage = {
+    name: "official",
+    scope: "user",
+    plugins: [{ status: "will uninstall", name: "shared-lib" }],
+  };
+  const prunePreview: MarketplaceNotificationMessage = {
+    name: "official",
+    scope: "user",
+    plugins: [{ status: "will uninstall", name: "shared-lib", reasons: ["dependency pruned"] }],
+  };
+
+  assert.equal(
+    composeMarketplaceBlock(bare, bothLoadedProbe()),
+    "● official [user]\n  ○ shared-lib (will uninstall)",
+  );
+  assert.equal(
+    composeMarketplaceBlock(prunePreview, bothLoadedProbe()),
+    "● official [user]\n  ○ shared-lib (will uninstall) {dependency pruned}",
+  );
+  assert.equal(shouldEmitReloadHint({ marketplaces: [bare] }), false);
+  assert.equal(shouldEmitReloadHint({ kind: "cascade", marketplaces: [prunePreview] }), false);
+});
 
 test("composes descriptions, hints, causes, leaks, and rollback failures in order", () => {
   // arrange

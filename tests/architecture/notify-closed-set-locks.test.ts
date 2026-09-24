@@ -29,8 +29,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type {
+  ContentReason,
   MarketplaceStatus,
+  NotificationMessage,
   PluginStatus,
+  PluginWillUninstallMessage,
   Reason,
   StatusToken,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
@@ -160,6 +163,23 @@ const MARKETPLACE_STATUS_ENROLLMENT: Record<MarketplaceStatus, true> = {
   skipped: true,
 };
 
+// Standalone notifications have their own discriminator set. A scoped empty
+// prune result is a member; the cascade's absent kind remains optional.
+const NOTIFICATION_KIND_ENROLLMENT: Record<
+  Exclude<NotificationMessage["kind"], undefined>,
+  true
+> = {
+  cascade: true,
+  "marketplace-info": true,
+  "plugin-info": true,
+  "marketplace-info-cascade": true,
+  "plugin-info-cascade": true,
+  "marketplace-not-added": true,
+  "reconcile-pending-empty": true,
+  "prune-empty": true,
+  "reconcile-applied-cascade": true,
+};
+
 test("OUT-08: Reason is the closed 63-entry reason set", () => {
   // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
   // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
@@ -281,6 +301,10 @@ test("SNM-02: MarketplaceStatus is the closed 7-entry marketplace-status set", (
   assert.strictEqual(Object.keys(MARKETPLACE_STATUS_ENROLLMENT).length, 7);
 });
 
+test("standalone notification kinds include scoped prune emptiness exactly", () => {
+  assert.strictEqual(Object.keys(NOTIFICATION_KIND_ENROLLMENT).length, 9);
+});
+
 /**
  * Discriminating controls for the four maps above. An exhaustive `Record` is
  * only a tripwire if it actually rejects both drift directions, and a count over
@@ -298,6 +322,23 @@ void (true satisfies IsExact<keyof typeof REASON_ENROLLMENT, Reason>);
 void (true satisfies IsExact<keyof typeof STATUS_TOKEN_ENROLLMENT, StatusToken>);
 void (true satisfies IsExact<keyof typeof PLUGIN_STATUS_ENROLLMENT, PluginStatus>);
 void (true satisfies IsExact<keyof typeof MARKETPLACE_STATUS_ENROLLMENT, MarketplaceStatus>);
+void (true satisfies IsExact<
+  keyof typeof NOTIFICATION_KIND_ENROLLMENT,
+  Exclude<NotificationMessage["kind"], undefined>
+>);
+
+// A preview may name why prune would remove a member. Ordinary pending
+// reconciliation must still be able to omit the reason entirely.
+void (true satisfies IsExact<
+  PluginWillUninstallMessage["reasons"],
+  readonly ContentReason[] | undefined
+>);
+void ({ status: "will uninstall", name: "shared-lib" } satisfies PluginWillUninstallMessage);
+void ({
+  status: "will uninstall",
+  name: "shared-lib",
+  reasons: ["dependency pruned"],
+} satisfies PluginWillUninstallMessage);
 
 // A member the union does not hold, and a member it holds that an enrollment map
 // would drop: both directions of the drift this file exists to catch.
