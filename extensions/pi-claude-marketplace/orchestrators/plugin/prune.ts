@@ -97,6 +97,8 @@ export function createPrunePlugin(
       );
       if (marketplaces.length > 0) {
         notify(options.ctx, options.pi, { kind: "cascade", marketplaces, cardinality: "single" });
+      } else {
+        notify(options.ctx, options.pi, { kind: "prune-empty", scope });
       }
 
       return;

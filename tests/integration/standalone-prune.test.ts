@@ -329,11 +329,73 @@ test("preview of a missing project state leaves both scope trees unchanged", asy
       await assert.rejects(stat(missing), { code: "ENOENT" });
     }
 
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [
+      { message: "Nothing to prune in project scope: no orphaned dependency installs were found." },
+    ]);
     assert.deepStrictEqual(gitCalls.clone, []);
     assert.deepStrictEqual(gitCalls.fetch, []);
   });
 });
+
+for (const { scope, args } of [
+  { scope: "user", args: "prune" },
+  { scope: "project", args: "prune --scope project" },
+  { scope: "user", args: "prune --dry-run" },
+  { scope: "project", args: "prune --scope project --dry-run" },
+] as const) {
+  test(`${args} reports an empty ${scope} scope without changing the scope`, async () => {
+    await withHermeticEnvironment("standalone-prune-empty-", async ({ cwd }) => {
+      // arrange
+      const seeded = await seedScope(scope, cwd);
+      const locations = locationsFor(scope, cwd);
+      const marketplace = seeded.marketplaces.mp;
+      assert.ok(marketplace);
+      await saveState(locations.extensionRoot, {
+        ...seeded,
+        marketplaces: {
+          mp: {
+            ...marketplace,
+            plugins: {
+              app: pluginRecord("explicit", "app-skill"),
+              orphan: pluginRecord("explicit", "orphan-skill"),
+            },
+          },
+        },
+      });
+      await writeFile(locations.configJsonPath, '{"plugins":{}}');
+      const stateBefore = await readFile(locations.stateJsonPath);
+      const stateMtimeBefore = (await stat(locations.stateJsonPath, { bigint: true })).mtimeNs;
+      const configBefore = await readFile(locations.configJsonPath);
+      const configMtimeBefore = (await stat(locations.configJsonPath, { bigint: true })).mtimeNs;
+      const treeBefore = await scopeTree(scope, cwd);
+      const { command, ctx, notifications, gitCalls } = registeredCommand(cwd);
+
+      // act
+      await command.handler(args, ctx);
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `Nothing to prune in ${scope} scope: no orphaned dependency installs were found.`,
+        },
+      ]);
+      assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
+      assert.equal(
+        (await stat(locations.stateJsonPath, { bigint: true })).mtimeNs,
+        stateMtimeBefore,
+      );
+      assert.deepStrictEqual(await readFile(locations.configJsonPath), configBefore);
+      assert.equal(
+        (await stat(locations.configJsonPath, { bigint: true })).mtimeNs,
+        configMtimeBefore,
+      );
+      assert.deepStrictEqual(await scopeTree(scope, cwd), treeBefore);
+      await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
+      assert.deepStrictEqual(gitCalls.clone, []);
+      assert.deepStrictEqual(gitCalls.fetch, []);
+    });
+  });
+}
 
 test("project prune removes only the project orphan", async () => {
   await withHermeticEnvironment("standalone-prune-project-", async ({ cwd }) => {

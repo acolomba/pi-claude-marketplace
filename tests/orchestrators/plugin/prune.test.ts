@@ -225,9 +225,13 @@ test("preview without orphans leaves the selected scope absent", async () => {
     const { ctx, notifications } = makeCtx(cwd);
 
     await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project", dryRun: true });
+    await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project", dryRun: true });
 
     await assert.rejects(stat(locations.extensionRoot), { code: "ENOENT" });
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [
+      { message: "Nothing to prune in project scope: no orphaned dependency installs were found." },
+      { message: "Nothing to prune in project scope: no orphaned dependency installs were found." },
+    ]);
   });
 });
 
