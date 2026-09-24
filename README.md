@@ -98,15 +98,15 @@ Run a plugin:
 
 This extension prefixes command and skill names with the plugin name. If the name already starts with the plugin name and `-`, this extension removes that common part.
 
-Commands and skill names use Pi's colon form:
+Commands use a colon on POSIX:
 
-| Plugin name | Command or skill name | Pi name    |
-| ----------- | --------------------- | ---------- |
-| `foo`       | `bar`                 | `/foo:bar` |
-| `foo`       | `foo-bar`             | `/foo:bar` |
-| `foo`       | `foo`                 | `/foo:foo` |
+| Plugin name | Command name | Pi name    |
+| ----------- | ------------ | ---------- |
+| `foo`       | `bar`        | `/foo:bar` |
+| `foo`       | `foo-bar`    | `/foo:bar` |
+| `foo`       | `foo`        | `/foo:foo` |
 
-On Windows, commands are prefixed with a dot (`.`) instead of a colon (`:`). Skill names do not change:
+On Windows, commands use a dot (`.`) instead of a colon (`:`):
 
 | Plugin name | Command name | Pi name (Windows) |
 | ----------- | ------------ | ----------------- |
@@ -114,13 +114,15 @@ On Windows, commands are prefixed with a dot (`.`) instead of a colon (`:`). Ski
 | `foo`       | `foo-bar`    | `/foo.bar`        |
 | `foo`       | `foo`        | `/foo.foo`        |
 
-This extension also registers skills with hyphenated names after the `/skill:` prefix:
+Skills use hyphens on every platform. Run them with `/skill:`:
 
 | Plugin name | Skill name | Pi name          |
 | ----------- | ---------- | ---------------- |
 | `foo`       | `bar`      | `/skill:foo-bar` |
 | `foo`       | `foo-bar`  | `/skill:foo-bar` |
 | `foo`       | `foo`      | `/skill:foo`     |
+
+Skill names use lowercase ASCII letters, digits, and hyphens. Other characters become hyphens. A name with no ASCII letters or digits gets a short hash suffix. Names longer than 64 characters also get a hash suffix. References such as `foo:bar` inside a skill or agent resolve to the installed name `foo-bar`.
 
 MCP server names do not change. If another MCP configuration already uses that name, the plugin install or update fails.
 

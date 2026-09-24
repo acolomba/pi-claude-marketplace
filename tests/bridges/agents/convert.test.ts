@@ -268,7 +268,7 @@ description: Reviews changes
 model: anthropic/claude-sonnet-4-6
 tools: bash,read
 thinking: high
-skills: spec-tree:review-changes
+skills: spec-tree-review-changes
 skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
@@ -293,7 +293,7 @@ provenance:
 
 These instructions reference Claude skills by their original names. In this Pi session:
 
-- \`spec-tree:review-changes\` → skill \`spec-tree:review-changes\` (available on demand)
+- \`spec-tree:review-changes\` → skill \`spec-tree-review-changes\` (available on demand)
 
 Review /plugins/spec-tree and /data/spec-tree for /workspace.
 Use spec-tree:review-changes.
@@ -315,7 +315,7 @@ Keep \${CLAUDE_SKILL_DIR} literal.
       pluginName: "spec-tree",
       pluginRoot: "/plugins/spec-tree",
       pluginDataDir: "/data/spec-tree",
-      knownSkills: ["spec-tree:review-changes"],
+      knownSkills: ["spec-tree-review-changes"],
       discovered: {
         sourceName: "changes-reviewer",
         generatedName: "pi-claude-marketplace-spec-tree-changes-reviewer",
@@ -804,7 +804,7 @@ Review files.
       pluginName: "spec-tree",
       pluginRoot: "/plugins/spec-tree",
       pluginDataDir: "/data/spec-tree",
-      knownSkills: ["spec-tree:review-changes"],
+      knownSkills: ["spec-tree-review-changes"],
       discovered: {
         sourceName: "reviewer",
         generatedName: "pi-claude-marketplace-spec-tree-reviewer",
@@ -836,15 +836,15 @@ Review files.
 
 These instructions reference Claude skills by their original names. In this Pi session:
 
-- \`spec-tree:review-changes\` → skill \`spec-tree:review-changes\` (available on demand)
-- \`spec-tree:other\` → skill \`spec-tree:other\` (available on demand)`;
+- \`spec-tree:review-changes\` → skill \`spec-tree-review-changes\` (available on demand)
+- \`spec-tree:other\` → skill \`spec-tree-other\` (available on demand)`;
 
     // act
     const agent = convertAgent({
       pluginName: "spec-tree",
       pluginRoot: "/plugins/spec-tree",
       pluginDataDir: "/data/spec-tree",
-      knownSkills: ["spec-tree:review-changes", "spec-tree:other"],
+      knownSkills: ["spec-tree-review-changes", "spec-tree-other"],
       discovered: {
         sourceName: "reviewer",
         generatedName: "pi-claude-marketplace-spec-tree-reviewer",
@@ -873,7 +873,7 @@ These instructions reference Claude skills by their original names. In this Pi s
 name: pi-claude-marketplace-acme-bot
 description: d
 tools: read,bash
-skills: acme:knowledge
+skills: acme-knowledge
 skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
@@ -897,7 +897,7 @@ Body.
       pluginName: "acme",
       pluginRoot: "/root",
       pluginDataDir: "/data",
-      knownSkills: ["acme:knowledge"],
+      knownSkills: ["acme-knowledge"],
       discovered: {
         sourceName: "bot",
         generatedName: "pi-claude-marketplace-acme-bot",
@@ -1373,7 +1373,7 @@ Body content.
 name: pi-claude-marketplace-acme-bot
 description: d
 tools: read,bash
-skills: acme:knowledge
+skills: acme-knowledge
 skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
@@ -1396,7 +1396,7 @@ Body.\r
       pluginName: "acme",
       pluginRoot: "/root",
       pluginDataDir: "/data",
-      knownSkills: ["acme:knowledge"],
+      knownSkills: ["acme-knowledge"],
       discovered: {
         sourceName: "bot",
         generatedName: "pi-claude-marketplace-acme-bot",

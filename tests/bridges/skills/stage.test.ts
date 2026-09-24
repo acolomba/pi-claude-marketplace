@@ -139,10 +139,10 @@ describe("prepareStageSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const alphaTarget = path.join(locations.skillsTargetDir, "acme:alpha");
-    const betaTarget = path.join(locations.skillsTargetDir, "acme:beta");
+    const alphaTarget = path.join(locations.skillsTargetDir, "acme-alpha");
+    const betaTarget = path.join(locations.skillsTargetDir, "acme-beta");
     const expectedAlphaBytes =
-      "---\nname: acme:alpha\ndescription: Alpha skill\nlicense: MIT\n---\n\nRoot: " +
+      "---\nname: acme-alpha\ndescription: Alpha skill\nlicense: MIT\n---\n\nRoot: " +
       pluginRoot +
       "\nData: " +
       pluginDataDir +
@@ -162,29 +162,29 @@ describe("prepareStageSkills", () => {
       resolved,
     });
     assert.strictEqual(prepared.kind, "staged");
-    const alphaBytes = await readFile(path.join(prepared.stagingRoot, "acme:alpha", "SKILL.md"));
-    const betaBytes = await readFile(path.join(prepared.stagingRoot, "acme:beta", "SKILL.md"));
+    const alphaBytes = await readFile(path.join(prepared.stagingRoot, "acme-alpha", "SKILL.md"));
+    const betaBytes = await readFile(path.join(prepared.stagingRoot, "acme-beta", "SKILL.md"));
     const resourceBytes = await readFile(
-      path.join(prepared.stagingRoot, "acme:alpha", "resources", "lookup.json"),
+      path.join(prepared.stagingRoot, "acme-alpha", "resources", "lookup.json"),
     );
     const stagedTree = await readdir(prepared.stagingRoot);
 
     // assert
     assert.deepStrictEqual(prepared.result, {
-      stagedNames: ["acme:alpha", "acme:beta"],
+      stagedNames: ["acme-alpha", "acme-beta"],
       recorded: [
-        { generatedName: "acme:alpha", sourcePath: alphaDirectory, targetPath: alphaTarget },
-        { generatedName: "acme:beta", sourcePath: betaDirectory, targetPath: betaTarget },
+        { generatedName: "acme-alpha", sourcePath: alphaDirectory, targetPath: alphaTarget },
+        { generatedName: "acme-beta", sourcePath: betaDirectory, targetPath: betaTarget },
       ],
       warnings: [],
       degraded: [],
     });
     assert.deepStrictEqual(prepared._previousNames, []);
-    assert.deepStrictEqual(stagedTree, ["acme:alpha", "acme:beta"]);
+    assert.deepStrictEqual(stagedTree, ["acme-alpha", "acme-beta"]);
     assert.deepStrictEqual(alphaBytes, Buffer.from(expectedAlphaBytes));
     assert.deepStrictEqual(
       betaBytes,
-      Buffer.from("---\nname: acme:beta\ndescription: Beta skill\n---\n\nUnchanged beta body.\n"),
+      Buffer.from("---\nname: acme-beta\ndescription: Beta skill\n---\n\nUnchanged beta body.\n"),
     );
     assert.deepStrictEqual(resourceBytes, Buffer.from('{"keys":["a","b"]}\n'));
   });
@@ -223,7 +223,7 @@ describe("prepareStageSkills", () => {
     const expectedWarning =
       'skill source "tool" in "' +
       skillsDirectory +
-      '" elides to generated name "acme:tool", already produced by skill source ' +
+      '" elides to generated name "acme-tool", already produced by skill source ' +
       '"acme-tool"; ignoring duplicate.';
 
     // act
@@ -239,20 +239,20 @@ describe("prepareStageSkills", () => {
     // assert
     assert.strictEqual(prepared.kind, "staged");
     assert.deepStrictEqual(prepared.result, {
-      stagedNames: ["acme:tool"],
+      stagedNames: ["acme-tool"],
       recorded: [
         {
-          generatedName: "acme:tool",
+          generatedName: "acme-tool",
           sourcePath: winningDirectory,
-          targetPath: path.join(locations.skillsTargetDir, "acme:tool"),
+          targetPath: path.join(locations.skillsTargetDir, "acme-tool"),
         },
       ],
       warnings: [expectedWarning],
       degraded: [],
     });
     assert.strictEqual(
-      await readFile(path.join(prepared.stagingRoot, "acme:tool", "SKILL.md"), "utf8"),
-      "---\nname: acme:tool\ndescription: Winning skill\n---\n",
+      await readFile(path.join(prepared.stagingRoot, "acme-tool", "SKILL.md"), "utf8"),
+      "---\nname: acme-tool\ndescription: Winning skill\n---\n",
     );
   });
 
@@ -299,15 +299,15 @@ describe("prepareStageSkills", () => {
       resolved,
     });
     assert.strictEqual(prepared.kind, "staged");
-    const alphaBytes = await readFile(path.join(prepared.stagingRoot, "acme:alpha", "SKILL.md"));
+    const alphaBytes = await readFile(path.join(prepared.stagingRoot, "acme-alpha", "SKILL.md"));
 
     // assert
-    assert.deepStrictEqual(prepared.result.stagedNames, ["acme:alpha", "acme:tool"]);
+    assert.deepStrictEqual(prepared.result.stagedNames, ["acme-alpha", "acme-tool"]);
     assert.deepStrictEqual(
       alphaBytes,
       Buffer.from(
-        '---\nname: acme:alpha\ndescription: "Wraps acme:tool for cleanup"\n---\n\n' +
-          "Run acme:tool before acme:ghost.\n\n```text\nacme:acme-tool stays verbatim\n```\n",
+        '---\nname: acme-alpha\ndescription: "Wraps acme-tool for cleanup"\n---\n\n' +
+          "Run acme-tool before acme:ghost.\n\n```text\nacme:acme-tool stays verbatim\n```\n",
       ),
     );
   });
@@ -354,20 +354,20 @@ describe("prepareStageSkills", () => {
       resolved,
     });
     assert.strictEqual(prepared.kind, "staged");
-    const brokenBytes = await readFile(path.join(prepared.stagingRoot, "acme:broken", "SKILL.md"));
+    const brokenBytes = await readFile(path.join(prepared.stagingRoot, "acme-broken", "SKILL.md"));
 
     // assert
-    assert.deepStrictEqual(prepared.result.stagedNames, ["acme:broken", "acme:tool"]);
+    assert.deepStrictEqual(prepared.result.stagedNames, ["acme-broken", "acme-tool"]);
     assert.deepStrictEqual(
       prepared.result.degraded.map((record) => record.generatedName),
-      ["acme:broken"],
+      ["acme-broken"],
     );
     assert.deepStrictEqual(
       brokenBytes,
       Buffer.from(
-        "---\nname: acme:broken\n" +
+        "---\nname: acme-broken\n" +
           "description: Source frontmatter could not be parsed.\n" +
-          "disable-model-invocation: true\n---\n\nRun acme:tool after the break.",
+          "disable-model-invocation: true\n---\n\nRun acme-tool after the break.",
       ),
     );
   });
@@ -399,22 +399,22 @@ describe("prepareStageSkills", () => {
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const expectedBytes =
-      "---\nname: acme:broken\n" +
+      "---\nname: acme-broken\n" +
       "description: Source frontmatter could not be parsed.\n" +
       "disable-model-invocation: true\n---\n\n# Broken\n\nBody bytes survive.";
     const expectedResult = {
-      stagedNames: ["acme:broken"],
+      stagedNames: ["acme-broken"],
       recorded: [
         {
-          generatedName: "acme:broken",
+          generatedName: "acme-broken",
           sourcePath: skillDirectory,
-          targetPath: path.join(locations.skillsTargetDir, "acme:broken"),
+          targetPath: path.join(locations.skillsTargetDir, "acme-broken"),
         },
       ],
       warnings: [],
       degraded: [
         {
-          generatedName: "acme:broken",
+          generatedName: "acme-broken",
           parseError:
             "Flow sequence in block collection must be sufficiently indented and end with a ] at line 2, column 1:\n\n" +
             "name: [unterminated\ndescription: discarded\n^\n",
@@ -433,7 +433,7 @@ describe("prepareStageSkills", () => {
     });
     assert.strictEqual(prepared.kind, "staged");
     const stagedBytes = await readFile(
-      path.join(prepared.stagingRoot, "acme:broken", "SKILL.md"),
+      path.join(prepared.stagingRoot, "acme-broken", "SKILL.md"),
       "utf8",
     );
 
@@ -468,16 +468,16 @@ describe("prepareStageSkills", () => {
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const expectedBytes =
-      "---\nname: acme:helper\n" +
+      "---\nname: acme-helper\n" +
       'description: "Use this: when reviewing pull requests"\n' +
       "---\n\nBody prose.\n";
     const expectedResult = {
-      stagedNames: ["acme:helper"],
+      stagedNames: ["acme-helper"],
       recorded: [
         {
-          generatedName: "acme:helper",
+          generatedName: "acme-helper",
           sourcePath: skillDirectory,
-          targetPath: path.join(locations.skillsTargetDir, "acme:helper"),
+          targetPath: path.join(locations.skillsTargetDir, "acme-helper"),
         },
       ],
       warnings: [],
@@ -495,7 +495,7 @@ describe("prepareStageSkills", () => {
     });
     assert.strictEqual(prepared.kind, "staged");
     const stagedBytes = await readFile(
-      path.join(prepared.stagingRoot, "acme:helper", "SKILL.md"),
+      path.join(prepared.stagingRoot, "acme-helper", "SKILL.md"),
       "utf8",
     );
 
@@ -531,22 +531,22 @@ describe("prepareStageSkills", () => {
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const expectedBytes =
-      "---\nname: acme:broken\n" +
+      "---\nname: acme-broken\n" +
       "description: Source frontmatter could not be parsed.\n" +
       "disable-model-invocation: true\n---\n\n# Broken\n\nBody bytes survive.";
     const expectedResult = {
-      stagedNames: ["acme:broken"],
+      stagedNames: ["acme-broken"],
       recorded: [
         {
-          generatedName: "acme:broken",
+          generatedName: "acme-broken",
           sourcePath: skillDirectory,
-          targetPath: path.join(locations.skillsTargetDir, "acme:broken"),
+          targetPath: path.join(locations.skillsTargetDir, "acme-broken"),
         },
       ],
       warnings: [],
       degraded: [
         {
-          generatedName: "acme:broken",
+          generatedName: "acme-broken",
           parseError:
             "Flow sequence in block collection must be sufficiently indented and end with a ] at line 2, column 1:\n\n" +
             "name: [unterminated\ndescription: Use this: when reviewing\n^\n",
@@ -565,7 +565,7 @@ describe("prepareStageSkills", () => {
     });
     assert.strictEqual(prepared.kind, "staged");
     const stagedBytes = await readFile(
-      path.join(prepared.stagingRoot, "acme:broken", "SKILL.md"),
+      path.join(prepared.stagingRoot, "acme-broken", "SKILL.md"),
       "utf8",
     );
 
@@ -601,7 +601,7 @@ describe("prepareStageSkills", () => {
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const expectedBytes =
-      "---\nname: acme:helper\n" +
+      "---\nname: acme-helper\n" +
       'description: "Use this: when reviewing For pull requests"\n' +
       "when_to_use: For pull requests\n---\n\nBody.\n";
 
@@ -616,7 +616,7 @@ describe("prepareStageSkills", () => {
     });
     assert.strictEqual(prepared.kind, "staged");
     const stagedBytes = await readFile(
-      path.join(prepared.stagingRoot, "acme:helper", "SKILL.md"),
+      path.join(prepared.stagingRoot, "acme-helper", "SKILL.md"),
       "utf8",
     );
 
@@ -667,13 +667,13 @@ describe("prepareStageSkills", () => {
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
     const expectedEmpty =
-      '---\nname: acme:empty\nversion: 1\ndescription: "No description provided."\n---\n';
+      '---\nname: acme-empty\nversion: 1\ndescription: "No description provided."\n---\n';
     const expectedProse =
-      '---\nname: acme:prose\nversion: 2\ndescription: "First prose line. Second prose line."\n' +
+      '---\nname: acme-prose\nversion: 2\ndescription: "First prose line. Second prose line."\n' +
       "---\n\n# Heading\n\nFirst prose line.\nSecond prose line.\n\nLater.\n";
     const expectedFoldedDescription = description + " " + "b".repeat(535);
     const expectedFolded =
-      "---\nname: acme:folded\n" +
+      "---\nname: acme-folded\n" +
       'description: "' +
       expectedFoldedDescription +
       '"\nversion: 3\nwhen_to_use: ' +
@@ -691,15 +691,15 @@ describe("prepareStageSkills", () => {
     });
     assert.strictEqual(prepared.kind, "staged");
     const emptyBytes = await readFile(
-      path.join(prepared.stagingRoot, "acme:empty", "SKILL.md"),
+      path.join(prepared.stagingRoot, "acme-empty", "SKILL.md"),
       "utf8",
     );
     const proseBytes = await readFile(
-      path.join(prepared.stagingRoot, "acme:prose", "SKILL.md"),
+      path.join(prepared.stagingRoot, "acme-prose", "SKILL.md"),
       "utf8",
     );
     const foldedBytes = await readFile(
-      path.join(prepared.stagingRoot, "acme:folded", "SKILL.md"),
+      path.join(prepared.stagingRoot, "acme-folded", "SKILL.md"),
       "utf8",
     );
 
@@ -737,7 +737,7 @@ describe("prepareStageSkills", () => {
     } satisfies ResolvedPluginInstallable;
     const windowsRoot = "C:\\Users\\case\\plugin";
     const expectedBytes =
-      '---\nname: acme:windows\ndescription: "Uses C:\\\\Users\\\\case\\\\plugin."\n' +
+      '---\nname: acme-windows\ndescription: "Uses C:\\\\Users\\\\case\\\\plugin."\n' +
       "---\nUses C:\\Users\\case\\plugin.\n";
 
     // act
@@ -751,7 +751,7 @@ describe("prepareStageSkills", () => {
     });
     assert.strictEqual(prepared.kind, "staged");
     const stagedBytes = await readFile(
-      path.join(prepared.stagingRoot, "acme:windows", "SKILL.md"),
+      path.join(prepared.stagingRoot, "acme-windows", "SKILL.md"),
       "utf8",
     );
 
@@ -787,9 +787,9 @@ describe("prepareStageSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const targetDirectory = path.join(locations.skillsTargetDir, "acme:vars");
+    const targetDirectory = path.join(locations.skillsTargetDir, "acme-vars");
     const expectedBytes =
-      "---\nname: acme:vars\ndescription: Variables\n---\nRoot: " +
+      "---\nname: acme-vars\ndescription: Variables\n---\nRoot: " +
       pluginRoot +
       "\nData: " +
       pluginDataDir +
@@ -808,7 +808,7 @@ describe("prepareStageSkills", () => {
     });
     assert.strictEqual(prepared.kind, "staged");
     const stagedBytes = await readFile(
-      path.join(prepared.stagingRoot, "acme:vars", "SKILL.md"),
+      path.join(prepared.stagingRoot, "acme-vars", "SKILL.md"),
       "utf8",
     );
 
@@ -931,7 +931,7 @@ describe("prepareStageSkills", () => {
     assert.strictEqual(prepareError, copyError);
     assert.deepStrictEqual(await readdir(locations.skillsStagingDir), []);
     assert.strictEqual(
-      await stat(path.join(locations.skillsTargetDir, "acme:alpha")).catch(() => undefined),
+      await stat(path.join(locations.skillsTargetDir, "acme-alpha")).catch(() => undefined),
       undefined,
     );
   });
@@ -948,7 +948,7 @@ describe("prepareStageSkills", () => {
     await mkdir(skillDirectory, { recursive: true });
     await mkdir(locations.skillsTargetDir, { recursive: true });
     await mkdir(outsideDirectory, { recursive: true });
-    const hostileTarget = path.join(locations.skillsTargetDir, "acme:safe");
+    const hostileTarget = path.join(locations.skillsTargetDir, "acme-safe");
     await symlink(outsideDirectory, hostileTarget, "dir");
     await writeFile(
       path.join(skillDirectory, "SKILL.md"),
@@ -1059,9 +1059,9 @@ describe("commitPreparedSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const targetFile = path.join(locations.skillsTargetDir, "acme:reviewer", "SKILL.md");
+    const targetFile = path.join(locations.skillsTargetDir, "acme-reviewer", "SKILL.md");
     const expectedBytes = Buffer.from(
-      "---\nname: acme:reviewer\ndescription: Reviews changes\n---\n\nReview carefully.\n",
+      "---\nname: acme-reviewer\ndescription: Reviews changes\n---\n\nReview carefully.\n",
     );
 
     // act
@@ -1090,7 +1090,7 @@ describe("commitPreparedSkills", () => {
     const skillsDirectory = path.join(pluginRoot, "skills");
     const skillDirectory = path.join(skillsDirectory, "alpha");
     const previousDirectory = path.join(locations.skillsTargetDir, "previous");
-    const staleDirectory = path.join(locations.skillsTargetDir, "acme:alpha");
+    const staleDirectory = path.join(locations.skillsTargetDir, "acme-alpha");
     await mkdir(path.join(skillDirectory, "resources"), { recursive: true });
     await mkdir(previousDirectory, { recursive: true });
     await mkdir(staleDirectory, { recursive: true });
@@ -1127,22 +1127,22 @@ describe("commitPreparedSkills", () => {
     // act
     const leak = await commitPreparedSkills(createRemovalOps(), prepared);
     const targetBytes = await readFile(
-      path.join(locations.skillsTargetDir, "acme:alpha", "SKILL.md"),
+      path.join(locations.skillsTargetDir, "acme-alpha", "SKILL.md"),
       "utf8",
     );
     const resourceBytes = await readFile(
-      path.join(locations.skillsTargetDir, "acme:alpha", "resources", "a.txt"),
+      path.join(locations.skillsTargetDir, "acme-alpha", "resources", "a.txt"),
       "utf8",
     );
     const previousState = await stat(previousDirectory).catch(() => undefined);
     const staleState = await stat(
-      path.join(locations.skillsTargetDir, "acme:alpha", "leftover.txt"),
+      path.join(locations.skillsTargetDir, "acme-alpha", "leftover.txt"),
     ).catch(() => undefined);
     const stagingState = await stat(prepared.stagingRoot).catch(() => undefined);
 
     // assert
     assert.strictEqual(leak, undefined);
-    assert.strictEqual(targetBytes, "---\nname: acme:alpha\ndescription: Alpha\n---\nBody.\n");
+    assert.strictEqual(targetBytes, "---\nname: acme-alpha\ndescription: Alpha\n---\nBody.\n");
     assert.strictEqual(resourceBytes, "new resource\n");
     assert.strictEqual(previousState, undefined);
     assert.strictEqual(staleState, undefined);
@@ -1260,7 +1260,7 @@ describe("commitPreparedSkills", () => {
       resolved,
     });
     assert.strictEqual(prepared.kind, "staged");
-    const targetDirectory = path.join(locations.skillsTargetDir, "acme:alpha");
+    const targetDirectory = path.join(locations.skillsTargetDir, "acme-alpha");
     const originalStat = filesystemPromises.stat.bind(filesystemPromises);
     const inspectionError = Object.assign(new Error("target inspection denied"), {
       code: "EACCES",
@@ -1354,8 +1354,8 @@ describe("commitPreparedSkills", () => {
     // assert
     assert.strictEqual(commitError, renameError);
     assert.strictEqual(
-      await readFile(path.join(prepared.stagingRoot, "acme:alpha", "SKILL.md"), "utf8"),
-      "---\nname: acme:alpha\ndescription: Alpha\n---\n",
+      await readFile(path.join(prepared.stagingRoot, "acme-alpha", "SKILL.md"), "utf8"),
+      "---\nname: acme-alpha\ndescription: Alpha\n---\n",
     );
   });
 
@@ -1409,13 +1409,13 @@ describe("commitPreparedSkills", () => {
     // act
     const leak = await commitPreparedSkills(removal.removalOps, prepared);
     const targetBytes = await readFile(
-      path.join(locations.skillsTargetDir, "acme:alpha", "SKILL.md"),
+      path.join(locations.skillsTargetDir, "acme-alpha", "SKILL.md"),
       "utf8",
     );
 
     // assert
     assert.strictEqual(leak, expectedLeak);
-    assert.strictEqual(targetBytes, "---\nname: acme:alpha\ndescription: Alpha\n---\n");
+    assert.strictEqual(targetBytes, "---\nname: acme-alpha\ndescription: Alpha\n---\n");
     assert.strictEqual((await stat(prepared.stagingRoot)).isDirectory(), true);
   });
 });
@@ -1544,7 +1544,7 @@ describe("replacePreparedSkills", () => {
     assert.strictEqual(await stat(locations.skillsStagingDir).catch(() => undefined), undefined);
   });
 
-  test("backs up an owned tree, skips a missing previous tree, and installs exact new bytes", async (t) => {
+  test("replaces a 0.19.0 colon-named skill with its Pi-valid name", async (t) => {
     // arrange
     const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
       t,
@@ -1552,16 +1552,17 @@ describe("replacePreparedSkills", () => {
     );
     const skillsDirectory = path.join(pluginRoot, "skills");
     const skillDirectory = path.join(skillsDirectory, "alpha");
-    const targetDirectory = path.join(locations.skillsTargetDir, "acme:alpha");
+    const targetDirectory = path.join(locations.skillsTargetDir, "acme-alpha");
+    const previousDirectory = path.join(locations.skillsTargetDir, "acme:alpha");
     await mkdir(path.join(skillDirectory, "resources"), { recursive: true });
-    await mkdir(targetDirectory, { recursive: true });
+    await mkdir(previousDirectory, { recursive: true });
     await writeFile(
       path.join(skillDirectory, "SKILL.md"),
       "---\nname: alpha\ndescription: New alpha\n---\nNew body.\n",
     );
     await writeFile(path.join(skillDirectory, "resources", "new.txt"), "new resource\n");
-    await writeFile(path.join(targetDirectory, "SKILL.md"), "old skill bytes\n");
-    await writeFile(path.join(targetDirectory, "old.txt"), "old resource\n");
+    await writeFile(path.join(previousDirectory, "SKILL.md"), "old skill bytes\n");
+    await writeFile(path.join(previousDirectory, "old.txt"), "old resource\n");
     const resolved = {
       installable: true,
       state: "installable",
@@ -1594,14 +1595,14 @@ describe("replacePreparedSkills", () => {
       path.join(targetDirectory, "resources", "new.txt"),
       "utf8",
     );
-    const oldResource = await stat(path.join(targetDirectory, "old.txt")).catch(() => undefined);
+    const oldResource = await stat(previousDirectory).catch(() => undefined);
     const stagingEntries = await readdir(locations.skillsStagingDir);
 
     // assert
     assert.deepStrictEqual(replacement, { kind: "replaced", prepared });
     assert.strictEqual(
       targetBytes,
-      "---\nname: acme:alpha\ndescription: New alpha\n---\nNew body.\n",
+      "---\nname: acme-alpha\ndescription: New alpha\n---\nNew body.\n",
     );
     assert.strictEqual(resourceBytes, "new resource\n");
     assert.strictEqual(oldResource, undefined);
@@ -1621,7 +1622,7 @@ describe("replacePreparedSkills", () => {
     );
     const skillsDirectory = path.join(pluginRoot, "skills");
     const skillDirectory = path.join(skillsDirectory, "alpha");
-    const targetDirectory = path.join(locations.skillsTargetDir, "acme:alpha");
+    const targetDirectory = path.join(locations.skillsTargetDir, "acme-alpha");
     await mkdir(skillDirectory, { recursive: true });
     await mkdir(targetDirectory, { recursive: true });
     await writeFile(
@@ -1648,7 +1649,7 @@ describe("replacePreparedSkills", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      previousSkillNames: ["acme:alpha"],
+      previousSkillNames: ["acme-alpha"],
     });
     assert.strictEqual(prepared.kind, "staged");
     const originalRename = filesystemPromises.rename.bind(filesystemPromises);
@@ -1683,7 +1684,7 @@ describe("replacePreparedSkills", () => {
     // assert
     assert.strictEqual(
       targetBytes,
-      "---\nname: acme:alpha\ndescription: New alpha\n---\nNew body.\n",
+      "---\nname: acme-alpha\ndescription: New alpha\n---\nNew body.\n",
     );
     assert.strictEqual(orphanState, undefined);
     assert.deepStrictEqual(leaks, []);
@@ -1698,8 +1699,8 @@ describe("replacePreparedSkills", () => {
     const skillsDirectory = path.join(pluginRoot, "skills");
     const alphaDirectory = path.join(skillsDirectory, "alpha");
     const betaDirectory = path.join(skillsDirectory, "beta");
-    const alphaTarget = path.join(locations.skillsTargetDir, "acme:alpha");
-    const betaTarget = path.join(locations.skillsTargetDir, "acme:beta");
+    const alphaTarget = path.join(locations.skillsTargetDir, "acme-alpha");
+    const betaTarget = path.join(locations.skillsTargetDir, "acme-beta");
     await mkdir(alphaDirectory, { recursive: true });
     await mkdir(betaDirectory, { recursive: true });
     await mkdir(alphaTarget, { recursive: true });
@@ -1733,7 +1734,7 @@ describe("replacePreparedSkills", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      previousSkillNames: ["acme:alpha"],
+      previousSkillNames: ["acme-alpha"],
     });
     assert.strictEqual(prepared.kind, "staged");
     const expectedMessage =
@@ -1771,8 +1772,8 @@ describe("replacePreparedSkills", () => {
     const skillsDirectory = path.join(pluginRoot, "skills");
     const alphaDirectory = path.join(skillsDirectory, "alpha");
     const betaDirectory = path.join(skillsDirectory, "beta");
-    const alphaTarget = path.join(locations.skillsTargetDir, "acme:alpha");
-    const betaTarget = path.join(locations.skillsTargetDir, "acme:beta");
+    const alphaTarget = path.join(locations.skillsTargetDir, "acme-alpha");
+    const betaTarget = path.join(locations.skillsTargetDir, "acme-beta");
     await mkdir(alphaDirectory, { recursive: true });
     await mkdir(betaDirectory, { recursive: true });
     await mkdir(alphaTarget, { recursive: true });
@@ -1806,7 +1807,7 @@ describe("replacePreparedSkills", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      previousSkillNames: ["acme:alpha"],
+      previousSkillNames: ["acme-alpha"],
     });
     assert.strictEqual(prepared.kind, "staged");
     const removalError = Object.assign(new Error("replacement removal denied"), { code: "EACCES" });
@@ -1841,14 +1842,14 @@ describe("replacePreparedSkills", () => {
       replacementError.message,
       "Cannot replace skill target with non-previous content at " + betaTarget,
     );
-    assert.strictEqual(path.basename(backupPath), "acme:alpha");
+    assert.strictEqual(path.basename(backupPath), "acme-alpha");
     assert.strictEqual(
       path.dirname(backupPath).startsWith(path.join(locations.skillsStagingDir, "backup-")),
       true,
     );
     assert.deepStrictEqual(replacementError.leaks, [
       "failed to remove replacement skill dir at " + alphaTarget + ": replacement removal denied",
-      "failed to restore previous skill dir acme:alpha from " +
+      "failed to restore previous skill dir acme-alpha from " +
         backupPath +
         " to " +
         alphaTarget +
@@ -1967,7 +1968,7 @@ describe("rollbackSkillsReplacement", () => {
     );
     const skillsDirectory = path.join(pluginRoot, "skills");
     const alphaDirectory = path.join(skillsDirectory, "alpha");
-    const alphaTarget = path.join(locations.skillsTargetDir, "acme:alpha");
+    const alphaTarget = path.join(locations.skillsTargetDir, "acme-alpha");
     await mkdir(alphaDirectory, { recursive: true });
     await mkdir(alphaTarget, { recursive: true });
     await writeFile(
@@ -1994,7 +1995,7 @@ describe("rollbackSkillsReplacement", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      previousSkillNames: ["acme:alpha"],
+      previousSkillNames: ["acme-alpha"],
     });
     assert.strictEqual(prepared.kind, "staged");
     const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
@@ -2008,7 +2009,7 @@ describe("rollbackSkillsReplacement", () => {
     // nothing could reach.
     assert.match(backupDirectory, /^backup-[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/);
     const backupRoot = path.join(locations.skillsStagingDir, backupDirectory);
-    const backupPath = path.join(backupRoot, "acme:alpha");
+    const backupPath = path.join(backupRoot, "acme-alpha");
     const removalError = Object.assign(new Error("replacement removal denied"), { code: "EACCES" });
     const restoreError = Object.assign(new Error("previous restoration denied"), {
       code: "EACCES",
@@ -2028,7 +2029,7 @@ describe("rollbackSkillsReplacement", () => {
     });
     const expectedLeaks = [
       "failed to remove replacement skill dir at " + alphaTarget + ": replacement removal denied",
-      "failed to restore previous skill dir acme:alpha from " +
+      "failed to restore previous skill dir acme-alpha from " +
         backupPath +
         " to " +
         alphaTarget +
@@ -2049,7 +2050,7 @@ describe("rollbackSkillsReplacement", () => {
     assert.strictEqual(Object.isFrozen(leaks), true);
     assert.strictEqual(stagingState?.isDirectory(), true);
     assert.strictEqual(backupState, undefined);
-    assert.strictEqual(targetBytes, "---\nname: acme:alpha\ndescription: New alpha\n---\n");
+    assert.strictEqual(targetBytes, "---\nname: acme-alpha\ndescription: New alpha\n---\n");
   });
 
   test("rejects a cloned replacement handle without internal identity", async (t) => {
@@ -2151,7 +2152,7 @@ describe("finalizeSkillsReplacement", () => {
     );
     const skillsDirectory = path.join(pluginRoot, "skills");
     const skillDirectory = path.join(skillsDirectory, "alpha");
-    const targetDirectory = path.join(locations.skillsTargetDir, "acme:alpha");
+    const targetDirectory = path.join(locations.skillsTargetDir, "acme-alpha");
     await mkdir(skillDirectory, { recursive: true });
     await mkdir(targetDirectory, { recursive: true });
     await writeFile(
@@ -2178,7 +2179,7 @@ describe("finalizeSkillsReplacement", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      previousSkillNames: ["acme:alpha"],
+      previousSkillNames: ["acme-alpha"],
     });
     assert.strictEqual(prepared.kind, "staged");
     const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
@@ -2193,7 +2194,7 @@ describe("finalizeSkillsReplacement", () => {
     // assert
     assert.deepStrictEqual(firstLeaks, []);
     assert.deepStrictEqual(secondLeaks, []);
-    assert.strictEqual(targetBytes, "---\nname: acme:alpha\ndescription: New alpha\n---\n");
+    assert.strictEqual(targetBytes, "---\nname: acme-alpha\ndescription: New alpha\n---\n");
     assert.deepStrictEqual(stagingEntries, []);
   });
 
@@ -2205,7 +2206,7 @@ describe("finalizeSkillsReplacement", () => {
     );
     const skillsDirectory = path.join(pluginRoot, "skills");
     const skillDirectory = path.join(skillsDirectory, "alpha");
-    const targetDirectory = path.join(locations.skillsTargetDir, "acme:alpha");
+    const targetDirectory = path.join(locations.skillsTargetDir, "acme-alpha");
     await mkdir(skillDirectory, { recursive: true });
     await mkdir(targetDirectory, { recursive: true });
     await writeFile(
@@ -2232,7 +2233,7 @@ describe("finalizeSkillsReplacement", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      previousSkillNames: ["acme:alpha"],
+      previousSkillNames: ["acme-alpha"],
     });
     assert.strictEqual(prepared.kind, "staged");
     const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
@@ -2272,7 +2273,7 @@ describe("finalizeSkillsReplacement", () => {
 
     // assert
     assert.deepStrictEqual(leaks, expectedLeaks);
-    assert.strictEqual(targetBytes, "---\nname: acme:alpha\ndescription: New alpha\n---\n");
+    assert.strictEqual(targetBytes, "---\nname: acme-alpha\ndescription: New alpha\n---\n");
     assert.strictEqual(Object.isFrozen(leaks), true);
   });
 });
