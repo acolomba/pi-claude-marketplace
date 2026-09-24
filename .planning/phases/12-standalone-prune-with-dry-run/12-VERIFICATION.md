@@ -1,7 +1,7 @@
 ---
 phase: 12-standalone-prune-with-dry-run
-verified: 2026-09-24T14:36:30Z
-status: human_needed
+verified: 2026-09-24T14:49:15Z
+status: passed
 score: 27/27 must-haves verified
 covered_files:
   - .planning/BACKLOG.md
@@ -76,7 +76,7 @@ covered_files:
   - tests/shared/notification-summary.test.ts
   - tests/shared/notification-types.test.ts
   - tests/transaction/with-state-guard.test.ts
-covered_digest: "v1:sha256:1eb613c4d82b543e99ac319fce0b5c360944fc4f93ce4e5ffeeb092af88dac1f"
+covered_digest: "v1:sha256:35fcb29bfec8b0306148257f8ca12244c964557f5e4d16b89c59b8b8bcba0520"
 behavior_unverified: 0
 overrides_applied: 0
 decision_coverage:
@@ -99,8 +99,8 @@ human_verification:
 # Phase 12: Standalone prune with dry-run Verification Report
 
 **Phase goal:** A user can see and remove the scope's orphaned dependency-installed plugins without uninstalling anything else, through a prune verb whose extra flag surface closes at --dry-run.
-**Verified:** 2026-09-24T14:36:30Z
-**Status:** human_needed. All code-level must-haves are verified; one live Pi host flow remains for human confirmation.
+**Verified:** 2026-09-24T14:49:15Z
+**Status:** passed. All code-level must-haves and the live Pi host flow passed.
 **Re-verification:** Yes. The previous 26/27 report found a legacy-state double write; commit d6705259 closes that gap.
 
 ## Goal Achievement
@@ -222,21 +222,22 @@ The filesystem writes in the tests seed fresh hermetic temporary scopes. Catalog
 
 No unreferenced TBD, FIXME, XXX, TODO, HACK, or PLACEHOLDER marker appeared in the 15 phase-changed production TypeScript files. The relevant source paths have real selector, state, and notification flows rather than empty return stubs. The final 12-REVIEW.md reports zero findings; this verification relies on the source and named tests above, not that review claim.
 
-### Human Verification Required
+### Human Verification Completed
 
 #### 1. Real Pi scratch-scope command flow
 
 **Test:** In a live Pi session using a disposable marketplace with one orphaned dependency, one held dependency, and one explicit plugin, run /claude:plugin prune --scope project --dry-run. Inspect the listed rows and project files. Then run /claude:plugin prune --scope project, /reload, and list; compare the user scope.
 **Expected:** The preview shows only the project orphan as (will uninstall) {dependency pruned} and changes no file. Actual prune shows its (uninstalled) {dependency pruned} row, removes only that orphan's record and staged resources, leaves the held/explicit plugins and user scope untouched, and Pi shows the result after /reload.
 **Why human:** The registered-command integration uses a Pi API test double. It proves the command-to-disk behavior and exact notification bytes but cannot prove live Pi command entry, rendering readability, or reload visibility.
+**Result:** Passed by the user on 2026-09-24. `12-UAT.md` records the live Pi scratch run, preview and actual rows, `/reload`, and scope results.
 
 ### Gaps Summary
 
-No code gaps remain. The legacy double-write gap is closed by the nonpersisting locked load and a new actual-prune regression test. The live Pi host flow above remains for human UAT.
+No code or UAT gaps remain. The legacy double-write gap is closed by the nonpersisting locked load and a new actual-prune regression test. The post-UAT validation audit found 3/3 requirements covered, and the security audit closed all 12 planned threats.
 
 The repository-wide npm run check cannot clear format:check while untouched operator-owned .planning/config.json is dirty; all changed-file formatting and unaffected downstream gates passed according to the parent run. That baseline is not a Phase 12 code gap.
 
 ---
 
-_Verified: 2026-09-24T14:36:30Z_
+_Verified: 2026-09-24T14:49:15Z_
 _Verifier: the agent (gsd-verifier)_
