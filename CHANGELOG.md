@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [0.19.1] - 2026-09-23
+## [0.19.1] - 2026-09-24
 
 - Plugin skills now install with Pi-valid hyphenated names on every platform. Skill and agent references to Claude's `plugin:skill` names resolve to those installed names. This fixes #211 and corrects the name mapping in both READMEs. Thanks to @CharonRyui.
 
