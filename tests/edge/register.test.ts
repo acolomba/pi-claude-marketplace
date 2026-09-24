@@ -134,7 +134,7 @@ const EXPECTED_TOP_LEVEL_USAGE =
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
-  "  prune [--scope user|project]\n" +
+  "  prune [--scope user|project] [--dry-run]\n" +
   "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
   "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
@@ -522,11 +522,11 @@ describe("registerClaudePluginCommand", () => {
 
   for (const { operand, diagnostic } of [
     { operand: "orphan@mp", diagnostic: "Too many arguments." },
-    { operand: "--unknown", diagnostic: 'Unknown option: "--unknown".' },
-    { operand: "--local", diagnostic: 'Unknown option: "--local".' },
-    { operand: "--keep-data", diagnostic: 'Unknown option: "--keep-data".' },
-    { operand: "--prune", diagnostic: 'Unknown option: "--prune".' },
-    { operand: "-y", diagnostic: 'Unknown option: "-y".' },
+    { operand: "--unknown", diagnostic: 'Unknown flag: "--unknown".' },
+    { operand: "--local", diagnostic: 'Unknown flag: "--local".' },
+    { operand: "--keep-data", diagnostic: 'Unknown flag: "--keep-data".' },
+    { operand: "--prune", diagnostic: 'Unknown flag: "--prune".' },
+    { operand: "-y", diagnostic: 'Unknown flag: "-y".' },
   ] as const) {
     test(`registered prune rejects ${operand} before reaching state`, async (t) => {
       // arrange
@@ -549,7 +549,7 @@ describe("registerClaudePluginCommand", () => {
       // assert
       assert.deepStrictEqual(notifications, [
         {
-          message: `${diagnostic}\n\nUsage: /claude:plugin prune [--scope user|project]`,
+          message: `${diagnostic}\n\nUsage: /claude:plugin prune [--scope user|project] [--dry-run]`,
           severity: "error",
         },
       ]);
@@ -1687,8 +1687,8 @@ const COMMAND_ARGUMENT_CASES = [
   {
     verb: "prune",
     operand: "",
-    usage: "prune [--scope user|project]",
-    unknown: 'Unknown option: "--bogus".',
+    usage: "prune [--scope user|project] [--dry-run]",
+    unknown: 'Unknown flag: "--bogus".',
   },
   {
     verb: "update",
