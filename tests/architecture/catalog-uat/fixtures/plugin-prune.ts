@@ -1,0 +1,218 @@
+import { piWithBothLoaded } from "../mock-pi.ts";
+
+import type { FixtureMap } from "../fixture-types.ts";
+
+/** Independent structured inputs for the standalone prune catalog bytes. */
+export const PLUGIN_PRUNE_FIXTURES: FixtureMap = {
+  "/claude:plugin prune": {
+    "actual-one-orphan": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "shared-lib",
+                version: "2.0.0",
+                reasons: ["dependency pruned"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+        cardinality: "single",
+      },
+    },
+    "actual-interleaved-chain": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["dependency pruned"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+          {
+            name: "community",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "tooling",
+                version: "3.0.0",
+                reasons: ["dependency pruned"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "shared-lib",
+                version: "2.0.0",
+                reasons: ["dependency pruned"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+        cardinality: "single",
+      },
+    },
+    "pending-one-orphan": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "cascade",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "will uninstall",
+                name: "shared-lib",
+                reasons: ["dependency pruned"],
+                severity: "info",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+        cardinality: "single",
+      },
+    },
+    "pending-interleaved-chain": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "cascade",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "will uninstall",
+                name: "helper",
+                reasons: ["dependency pruned"],
+                severity: "info",
+                needsReload: false,
+              },
+            ],
+          },
+          {
+            name: "community",
+            scope: "user",
+            plugins: [
+              {
+                status: "will uninstall",
+                name: "tooling",
+                reasons: ["dependency pruned"],
+                severity: "info",
+                needsReload: false,
+              },
+            ],
+          },
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "will uninstall",
+                name: "shared-lib",
+                reasons: ["dependency pruned"],
+                severity: "info",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+        cardinality: "single",
+      },
+    },
+    "empty-user-scope": {
+      pi: piWithBothLoaded(),
+      message: { kind: "prune-empty", scope: "user" },
+    },
+    "member-failure-independent-success": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["source mismatch"],
+                cause: new Error("Agents unstage refused: foreign content"),
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+          {
+            name: "community",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "tooling",
+                version: "3.0.0",
+                reasons: ["dependency pruned"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+        cardinality: "single",
+      },
+    },
+    "unreadable-declarer": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "other",
+                reasons: ["unreadable"],
+                cause: new Error(
+                  "cannot read the dependencies of other@official: not declared by its marketplace",
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+        cardinality: "single",
+      },
+    },
+  },
+};

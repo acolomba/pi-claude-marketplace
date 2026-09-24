@@ -23,6 +23,7 @@ import { PLUGIN_INFO_FIXTURES } from "./fixtures/plugin-info.ts";
 import { PLUGIN_INSTALL_FIXTURES } from "./fixtures/plugin-install.ts";
 import { PLUGIN_LIST_FIXTURES } from "./fixtures/plugin-list.ts";
 import { PLUGIN_PENDING_FIXTURES } from "./fixtures/plugin-pending.ts";
+import { PLUGIN_PRUNE_FIXTURES } from "./fixtures/plugin-prune.ts";
 import { PLUGIN_REINSTALL_FIXTURES } from "./fixtures/plugin-reinstall.ts";
 import { PLUGIN_UNINSTALL_FIXTURES } from "./fixtures/plugin-uninstall.ts";
 import { PLUGIN_UPDATE_FIXTURES } from "./fixtures/plugin-update.ts";
@@ -33,8 +34,8 @@ import type { CatalogFixture, FixtureMap } from "./fixture-types.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const CATALOG_PATH = path.join(REPO_ROOT, "docs/output-catalog.md");
-const EXPECTED_MODULE_COUNT = 20;
-const EXPECTED_SECTION_COUNT = 20;
+const EXPECTED_MODULE_COUNT = 21;
+const EXPECTED_SECTION_COUNT = 21;
 // D-01-22 / D-01-30: +1 state for plugin info's constraint parenthetical --
 // one `dependencies:` block carrying a version range alone, a sha alone, and
 // both together (190 -> 191).
@@ -139,13 +140,16 @@ const EXPECTED_SECTION_COUNT = 20;
 // D-11-04: one nonempty marketplace-info policy state (227 -> 228).
 // D-11-06: one cross-marketplace dependency refusal (228 -> 229).
 // D-11-06: one reload refusal retaining the dependent-disable row (229 -> 230).
-const EXPECTED_STATE_COUNT = 230;
-const EXPECTED_UTF8_BYTES = 32_526;
+// PRUNE-06 / PRUNE-07: seven standalone sweep states pin realized, pending,
+// scoped empty, independent member failure, and unreadable-declarer output.
+const EXPECTED_STATE_COUNT = 237;
+const EXPECTED_UTF8_BYTES = 33_688;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,
   PLUGIN_INSTALL_FIXTURES,
   PLUGIN_UNINSTALL_FIXTURES,
+  PLUGIN_PRUNE_FIXTURES,
   PLUGIN_REINSTALL_FIXTURES,
   PLUGIN_UPDATE_FIXTURES,
   PLUGIN_FETCH_FIXTURES,
@@ -169,6 +173,7 @@ const FIXTURE_SECTION_ORDER = [
   "/claude:plugin list",
   "/claude:plugin install <plugin>@<marketplace>",
   "/claude:plugin uninstall <plugin>@<marketplace>",
+  "/claude:plugin prune",
   "/claude:plugin reinstall",
   "/claude:plugin update",
   "/claude:plugin fetch",
@@ -429,7 +434,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 20 fixture modules to 230 exact documented states", async () => {
+test("catalog contract matches all 21 fixture modules to 237 exact documented states", async () => {
   assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);

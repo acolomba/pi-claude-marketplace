@@ -1205,6 +1205,107 @@ A plugin operation needs attention.
 
 ______________________________________________________________________
 
+## `/claude:plugin prune`
+
+The standalone command sweeps orphaned dependency installs in one scope. Actual removals use `(uninstalled) {dependency pruned}` with a version and the usual `/reload` hint. `--dry-run` uses `(will uninstall) {dependency pruned}` without a version or reload hint. Both choose candidates in dependent-before-dependency order; marketplace blocks follow that order even when the same marketplace appears again later. A preview does not reserve its candidates. Concurrent changes can alter the later actual result, and a failed member remains installed while independent removals can succeed.
+
+### One orphan removed
+
+<!-- catalog-state: actual-one-orphan -->
+
+```text
+● official [user]
+  ○ shared-lib v2.0.0 (uninstalled) {dependency pruned}
+
+/reload to pick up changes
+```
+
+### Interleaved marketplace fixpoint chain removed
+
+<!-- catalog-state: actual-interleaved-chain -->
+
+```text
+● official [user]
+  ○ helper v1.0.0 (uninstalled) {dependency pruned}
+
+● community [user]
+  ○ tooling v3.0.0 (uninstalled) {dependency pruned}
+
+● official [user]
+  ○ shared-lib v2.0.0 (uninstalled) {dependency pruned}
+
+/reload to pick up changes
+```
+
+### One orphan previewed
+
+<!-- catalog-state: pending-one-orphan -->
+
+```text
+● official [user]
+  ○ shared-lib (will uninstall) {dependency pruned}
+```
+
+### Interleaved marketplace fixpoint chain previewed
+
+<!-- catalog-state: pending-interleaved-chain -->
+
+```text
+● official [user]
+  ○ helper (will uninstall) {dependency pruned}
+
+● community [user]
+  ○ tooling (will uninstall) {dependency pruned}
+
+● official [user]
+  ○ shared-lib (will uninstall) {dependency pruned}
+```
+
+### No orphaned dependency installs
+
+Both `prune` and `prune --dry-run` use this normal informational result when the selected scope has no orphaned dependency installs. Nothing failed or changed, so there is no reload hint.
+
+<!-- catalog-state: empty-user-scope -->
+
+```text
+Nothing to prune in user scope: no orphaned dependency installs were found.
+```
+
+### One member fails while an independent orphan is removed
+
+<!-- catalog-state: member-failure-independent-success -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ⊘ helper v1.0.0 (failed) {source mismatch}
+    cause: Agents unstage refused: foreign content
+
+● community [user]
+  ○ tooling v3.0.0 (uninstalled) {dependency pruned}
+
+/reload to pick up changes
+```
+
+The failed member stays installed. The successful removal stands, and its reload hint remains necessary.
+
+### Unreadable declarer refuses the sweep
+
+<!-- catalog-state: unreadable-declarer -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ other (failed) {unreadable}
+    cause: cannot read the dependencies of other@official: not declared by its marketplace
+```
+
+The failure names the declarer and a redacted cause. The command removes nothing and emits no reload hint.
+
+______________________________________________________________________
+
 ## `/claude:plugin reinstall`
 
 Multi-plugin cascade. One marketplace header per affected marketplace; plugin rows indent two spaces underneath.
