@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-09-24 after Phase 12 standalone prune)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** v1.20 milestone audit and closeout. All 12 phases and 44
+**Current focus:** v1.20 milestone audit and closeout. All 12 phases and 45
 requirements are complete. v1.19 Unit Test Refactor closed 2026-09-04 and is
 archived under `.planning/milestones/v1.19-*`.
 

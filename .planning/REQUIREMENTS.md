@@ -294,9 +294,9 @@ this milestone.
 
 **Coverage:**
 
-- v1.20 requirements: 44 total (25 defined 2026-09-09; 19 added 2026-09-18
+- v1.20 requirements: 45 total (26 defined 2026-09-09; 19 added 2026-09-18
   from `HANDOFF-upstream-dependency-parity.md`)
-- Mapped to phases: 44
+- Mapped to phases: 45
 - Unmapped: 0 ✓
 
 Every requirement maps to exactly one phase: 7 to Phase 1, 3 to Phase 2, 6 to

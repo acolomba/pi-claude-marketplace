@@ -915,7 +915,7 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-_Last updated: 2026-09-24 after v1.20 Phase 12 standalone prune verified 27/27 functional truths and live Pi UAT. All 12 phases and 44 requirements are complete; milestone audit is next. Prior updates follow._
+_Last updated: 2026-09-24 after v1.20 Phase 12 standalone prune verified 27/27 functional truths and live Pi UAT. All 12 phases and 45 requirements are complete; milestone audit is next. Prior updates follow._
 
 _Last updated: 2026-09-23 after v1.20 Phase 11 cross-marketplace dependency allowlist verified 20/20 functional truths and 2/2 human wording checks. XMKT-01 and XMKT-02 are complete; Phase 12 (standalone prune with dry-run) is next. Prior updates follow._
 

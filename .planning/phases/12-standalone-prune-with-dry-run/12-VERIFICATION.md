@@ -76,7 +76,7 @@ covered_files:
   - tests/shared/notification-summary.test.ts
   - tests/shared/notification-types.test.ts
   - tests/transaction/with-state-guard.test.ts
-covered_digest: "v1:sha256:acee32ddc1717eb5f4e88100bd73eaed7554f2dfa4d74b9aa84a8d6b93ef8ee2"
+covered_digest: "v1:sha256:adbca047c74cf89f2794707e055a2807fe65107ec5b9a00a4f314f4b77fd113d"
 behavior_unverified: 0
 overrides_applied: 0
 decision_coverage:
