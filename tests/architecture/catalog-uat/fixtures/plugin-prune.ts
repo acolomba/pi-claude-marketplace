@@ -270,5 +270,41 @@ export const PLUGIN_PRUNE_FIXTURES: FixtureMap = {
         cardinality: "single",
       },
     },
+    "rollback-partial": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "(prune)",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "(prune)",
+                reasons: ["rollback partial"],
+                cause: new Error(
+                  "Prune rollback was incomplete; the backup was retained for recovery.",
+                  {
+                    cause: new Error("state save failed"),
+                  },
+                ),
+                rollbackPartial: [
+                  {
+                    phase: "skills",
+                    cause: new Error(
+                      "Prune rollback found an occupied artifact at mp-orphan-skill.",
+                    ),
+                  },
+                ],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+        cardinality: "single",
+      },
+    },
   },
 };

@@ -1332,6 +1332,22 @@ A plugin operation has failed.
     cause: Another pi-claude-marketplace operation is in progress for user scope (.state-lock). Retry after it completes. -> Lock file is already being held
 ```
 
+### Prune rollback needs manual recovery
+
+If a failed state save leaves a newly occupied artifact path, prune retains the original in a recovery backup. The command reports each restore failure with a redacted cause. It does not suggest `/reload` because the removal did not commit.
+
+<!-- catalog-state: rollback-partial -->
+
+```text
+A plugin operation has failed.
+
+● (prune) [project]
+  ⊘ (prune) (failed) {rollback partial}
+    cause: Prune rollback was incomplete; the backup was retained for recovery. -> state save failed
+    [skills] (rollback failed)
+      cause: Prune rollback found an occupied artifact at mp-orphan-skill.
+```
+
 ______________________________________________________________________
 
 ## `/claude:plugin reinstall`

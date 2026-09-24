@@ -1,6 +1,8 @@
 // A standalone, same-scope orphan sweep. Actual removals share one locked
 // snapshot; preview selects from one nonpersisting read.
 
+import { rename, rm } from "node:fs/promises";
+
 import { pruneOrphans } from "../../domain/dependency-orphans.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
@@ -10,9 +12,11 @@ import { notifyWithContext } from "../../shared/notify-context.ts";
 import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 
 import { buildScopeDeclarationIndex } from "./dependency-index.ts";
+import { preparePruneRollback } from "./prune-rollback.ts";
 import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
 import { finalizePrunedMembers, sweepOrphans } from "./uninstall.ts";
 
+import type { PruneRestoreFailure } from "./prune-rollback.ts";
 import type { UninstallHooksRouting, UninstallTransaction } from "./uninstall.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -25,6 +29,17 @@ export interface PrunePluginOptions {
   readonly cwd: string;
   readonly scope?: Scope;
   readonly dryRun?: boolean;
+}
+
+class PruneRollbackError extends Error {
+  readonly failures: readonly PruneRestoreFailure[];
+
+  constructor(primary: unknown, failures: readonly PruneRestoreFailure[]) {
+    super("Prune rollback was incomplete; the backup was retained for recovery.", {
+      cause: primary,
+    });
+    this.failures = failures;
+  }
 }
 
 /** Reports a declaration read failure without exposing an absolute path. */
@@ -65,6 +80,21 @@ function notifyUnreadable(
 /** Reports a prune operation failure without attributing it to a declaration. */
 function notifyOperationFailure(options: PrunePluginOptions, scope: Scope, error: unknown): void {
   const cause = redactCauseChain(error) ?? new Error(errorMessage(error));
+  const rollbackPartial =
+    error instanceof PruneRollbackError
+      ? error.failures.map((failure) => ({
+          phase: failure.phase,
+          // Every failure has an Error; the redactor returns undefined only for nullish input.
+          cause: redactCauseChain(failure.cause) as unknown as Error,
+        }))
+      : undefined;
+  let reason: "rollback partial" | "lock held" | "unreadable" = "unreadable";
+  if (rollbackPartial !== undefined) {
+    reason = "rollback partial";
+  } else if (error instanceof StateLockHeldError) {
+    reason = "lock held";
+  }
+
   notifyWithContext(
     options.ctx,
     options.pi,
@@ -77,8 +107,9 @@ function notifyOperationFailure(options: PrunePluginOptions, scope: Scope, error
           {
             status: "failed",
             name: "(prune)",
-            reasons: [error instanceof StateLockHeldError ? "lock held" : "unreadable"],
+            reasons: [reason],
             cause,
+            ...(rollbackPartial !== undefined && { rollbackPartial }),
             severity: "error",
             needsReload: false,
           },
@@ -152,16 +183,38 @@ export function createPrunePlugin(
           };
         }
 
-        const members = await sweepOrphans({
-          snapshot,
-          initiallyGone: new Set<string>(),
-          locations,
-          keepData: false,
-          cascade: transaction.cascadeUnstagePlugin,
-          transaction,
-        });
-        if (members.length > 0) {
-          await tx.save();
+        const order = pruneOrphans(snapshot.candidates, snapshot.index, new Set<string>());
+        const candidates = snapshot.candidates.filter((candidate) => order.includes(candidate.key));
+        const backup =
+          candidates.length > 0
+            ? await preparePruneRollback(locations, candidates, { rename, removeBackup: rm })
+            : undefined;
+        let members: Awaited<ReturnType<typeof sweepOrphans>>;
+        try {
+          members = await sweepOrphans({
+            snapshot,
+            initiallyGone: new Set<string>(),
+            locations,
+            keepData: false,
+            cascade: transaction.cascadeUnstagePlugin,
+            transaction,
+          });
+          if (members.length > 0) {
+            await tx.save();
+          }
+        } catch (error: unknown) {
+          if (backup !== undefined) {
+            const failures = await backup.rollback();
+            if (failures.length > 0) {
+              throw new PruneRollbackError(error, failures);
+            }
+          }
+
+          throw error;
+        }
+
+        if (backup !== undefined) {
+          await backup.discard();
         }
 
         return { kind: "swept" as const, members };

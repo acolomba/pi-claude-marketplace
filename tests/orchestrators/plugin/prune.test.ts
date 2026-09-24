@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -20,6 +20,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { makeCtx } from "../../e2e/_helpers.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
@@ -247,6 +248,40 @@ test("reports an empty project sweep without saving state", async () => {
     await prune()({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
 
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
+    assert.deepStrictEqual(notifications, [
+      { message: "Nothing to prune in project scope: no orphaned dependency installs were found." },
+    ]);
+  });
+});
+
+test("actual prune with a missing state skips snapshot and save", async () => {
+  await withHermeticEnvironment("prune-owner-empty-missing-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    let saves = 0;
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run, {
+          saveState: () => {
+            saves += 1;
+            return Promise.resolve();
+          },
+        }),
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    // assert
+    assert.equal(saves, 0);
+    await assert.rejects(stat(locations.stateJsonPath), { code: "ENOENT" });
+    await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
+    assert.deepStrictEqual(
+      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
+      [],
+    );
     assert.deepStrictEqual(notifications, [
       { message: "Nothing to prune in project scope: no orphaned dependency installs were found." },
     ]);
@@ -520,6 +555,182 @@ test("actual prune reports a non-Error transaction rejection", async () => {
         message:
           "A plugin operation has failed.\n\n" +
           "● (prune) [user]\n  ⊘ (prune) (failed) {unreadable}\n    cause: undefined",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("a failed state save restores removed artifacts and original state bytes", async () => {
+  await withHermeticEnvironment("prune-owner-save-failure-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seedScope("project", cwd, {
+      mp: { orphan: { provenance: "dependency" } },
+    });
+    const stateBefore = await readFile(locations.stateJsonPath);
+    const skillBefore = await readFile(fixture.skills["orphan@mp"] ?? "");
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run, {
+          saveState: () => Promise.reject(new Error("state save failed")),
+        }),
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
+    assert.deepStrictEqual(await readFile(fixture.skills["orphan@mp"] ?? ""), skillBefore);
+    assert.deepStrictEqual(
+      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
+      [],
+    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [project]\n  ⊘ (prune) (failed) {unreadable}\n    cause: state save failed",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("a save that writes then rejects restores original state and skill bytes", async () => {
+  await withHermeticEnvironment("prune-owner-save-after-write-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seedScope("project", cwd, {
+      mp: { orphan: { provenance: "dependency" } },
+    });
+    const stateBefore = await readFile(locations.stateJsonPath);
+    const skillBefore = await readFile(fixture.skills["orphan@mp"] ?? "");
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run, {
+          saveState: async (root, state) => {
+            await saveState(root, state);
+            throw new Error("state save rejected after write");
+          },
+        }),
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
+    assert.deepStrictEqual(await readFile(fixture.skills["orphan@mp"] ?? ""), skillBefore);
+    assert.deepStrictEqual(
+      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
+      [],
+    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [project]\n  ⊘ (prune) (failed) {unreadable}\n" +
+          "    cause: state save rejected after write",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("a failed save removes state when it did not exist before pruning", async () => {
+  await withHermeticEnvironment("prune-owner-save-created-state-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seedScope("project", cwd, {
+      mp: { orphan: { provenance: "dependency" } },
+    });
+    const loaded = await loadState(locations.extensionRoot);
+    const skillBefore = await readFile(fixture.skills["orphan@mp"] ?? "");
+    await rm(locations.stateJsonPath);
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run, {
+          loadState: () => Promise.resolve(loaded),
+          saveState: async (root, state) => {
+            await saveState(root, state);
+            throw new Error("state save rejected after create");
+          },
+        }),
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    // assert
+    await assert.rejects(stat(locations.stateJsonPath), { code: "ENOENT" });
+    await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
+    assert.deepStrictEqual(await readFile(fixture.skills["orphan@mp"] ?? ""), skillBefore);
+    assert.deepStrictEqual(
+      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
+      [],
+    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [project]\n  ⊘ (prune) (failed) {unreadable}\n" +
+          "    cause: state save rejected after create",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("an occupied restore target reports rollback partial and retains the backup", async () => {
+  await withHermeticEnvironment("prune-owner-restore-occupied-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seedScope("project", cwd, {
+      mp: { orphan: { provenance: "dependency" } },
+    });
+    const skill = fixture.skills["orphan@mp"] ?? "";
+    const stateBefore = await readFile(locations.stateJsonPath);
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run, {
+          saveState: async () => {
+            await mkdir(path.dirname(skill), { recursive: true });
+            await writeFile(skill, "replacement\n");
+            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the transaction can reject with a non-Error value.
+            await Promise.reject("state save failed");
+          },
+        }),
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
+    assert.equal(await readFile(skill, "utf8"), "replacement\n");
+    assert.equal(
+      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-"))
+        .length,
+      1,
+    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
+          "    cause: Prune rollback was incomplete; the backup was retained for recovery. -> state save failed\n" +
+          "    [skills] (rollback failed)\n" +
+          "      cause: Prune rollback found an occupied artifact at mp-orphan-skill.",
         severity: "error",
       },
     ]);
