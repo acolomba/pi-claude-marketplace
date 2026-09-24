@@ -185,6 +185,60 @@ test("removes an orphan from the default user scope and reports it", async () =>
   });
 });
 
+test("prunes legacy state with one durable save", async () => {
+  await withHermeticEnvironment("prune-owner-legacy-save-", async ({ cwd }) => {
+    // arrange
+    await seedRecord(
+      "project",
+      cwd,
+      JSON.stringify({ name: "mp", plugins: [{ name: "orphan", source: "./orphan" }] }),
+    );
+    const locations = locationsFor("project", cwd);
+    const current = await loadState(locations.extensionRoot);
+    const legacy = {
+      schemaVersion: 1,
+      marketplaces: {
+        mp: {
+          name: "mp",
+          scope: "project",
+          source: "./mp",
+          addedFromCwd: cwd,
+          plugins: current.marketplaces.mp?.plugins,
+        },
+      },
+    };
+    await writeFile(locations.stateJsonPath, JSON.stringify(legacy));
+    let saves = 0;
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      withLockedStateTransaction: (target, run, dependencies) => {
+        assert.strictEqual(dependencies?.persistMigration, false);
+        return withLockedStateTransaction(target, run, {
+          ...dependencies,
+          saveState: async (root, state) => {
+            saves += 1;
+            await saveState(root, state);
+          },
+        });
+      },
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces.mp?.plugins, {});
+    assert.equal(saves, 1);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
+      },
+    ]);
+  });
+});
+
 test("previews an orphan without writing state or taking a lock", async () => {
   await withHermeticEnvironment("prune-owner-preview-", async ({ cwd }) => {
     await seedRecord(

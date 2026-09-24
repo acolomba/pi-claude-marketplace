@@ -251,53 +251,59 @@ export function createPrunePlugin(
     let savedMembers: Awaited<ReturnType<typeof sweepOrphans>> | undefined;
     let postCommitFailure: { readonly cause: unknown } | undefined;
     try {
-      outcome = await transaction.withLockedStateTransaction(locations, async (tx) => {
-        const snapshot = await buildScopeDeclarationIndex({ state: tx.state, locations });
-        if (!snapshot.ok) {
-          return {
-            kind: "unreadable" as const,
-            declarer: snapshot.declarer,
-            cause: snapshot.cause,
-          };
-        }
-
-        const order = pruneOrphans(snapshot.candidates, snapshot.index, new Set<string>());
-        const candidates = snapshot.candidates.filter((candidate) => order.includes(candidate.key));
-        const backup =
-          candidates.length > 0
-            ? await preparePruneRollback(locations, candidates, { removeBackup: rm })
-            : undefined;
-        let members: Awaited<ReturnType<typeof sweepOrphans>>;
-        try {
-          members = await sweepOrphans({
-            snapshot,
-            initiallyGone: new Set<string>(),
-            locations,
-            keepData: false,
-            cascade: transaction.cascadeUnstagePlugin,
-            transaction,
-          });
-          if (members.length > 0) {
-            await tx.save();
-            savedMembers = members;
+      outcome = await transaction.withLockedStateTransaction(
+        locations,
+        async (tx) => {
+          const snapshot = await buildScopeDeclarationIndex({ state: tx.state, locations });
+          if (!snapshot.ok) {
+            return {
+              kind: "unreadable" as const,
+              declarer: snapshot.declarer,
+              cause: snapshot.cause,
+            };
           }
-        } catch (error: unknown) {
-          if (backup !== undefined) {
-            const failures = await backup.rollback();
-            if (failures.length > 0) {
-              throw new PruneRollbackError(error, failures, backup.backupName);
+
+          const order = pruneOrphans(snapshot.candidates, snapshot.index, new Set<string>());
+          const candidates = snapshot.candidates.filter((candidate) =>
+            order.includes(candidate.key),
+          );
+          const backup =
+            candidates.length > 0
+              ? await preparePruneRollback(locations, candidates, { removeBackup: rm })
+              : undefined;
+          let members: Awaited<ReturnType<typeof sweepOrphans>>;
+          try {
+            members = await sweepOrphans({
+              snapshot,
+              initiallyGone: new Set<string>(),
+              locations,
+              keepData: false,
+              cascade: transaction.cascadeUnstagePlugin,
+              transaction,
+            });
+            if (members.length > 0) {
+              await tx.save();
+              savedMembers = members;
             }
+          } catch (error: unknown) {
+            if (backup !== undefined) {
+              const failures = await backup.rollback();
+              if (failures.length > 0) {
+                throw new PruneRollbackError(error, failures, backup.backupName);
+              }
+            }
+
+            throw error;
           }
 
-          throw error;
-        }
+          if (backup !== undefined) {
+            await backup.discard();
+          }
 
-        if (backup !== undefined) {
-          await backup.discard();
-        }
-
-        return { kind: "swept" as const, members };
-      });
+          return { kind: "swept" as const, members };
+        },
+        { persistMigration: false },
+      );
     } catch (error: unknown) {
       if (savedMembers === undefined) {
         notifyOperationFailure(options, scope, error);

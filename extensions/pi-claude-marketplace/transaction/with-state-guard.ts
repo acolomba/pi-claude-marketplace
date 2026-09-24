@@ -45,6 +45,8 @@ export interface LockedStateTransaction {
 export interface LockedStateTransactionDeps {
   readonly loadState?: typeof loadState;
   readonly saveState?: typeof saveState;
+  /** Defers legacy migration persistence to the caller's explicit save. */
+  readonly persistMigration?: boolean;
 }
 
 /**
@@ -86,7 +88,9 @@ export async function withLockedStateTransaction<T>(
   deps?: LockedStateTransactionDeps,
 ): Promise<T> {
   return withScopeLock(locations, async () => {
-    const fresh = await (deps?.loadState ?? loadState)(locations.extensionRoot);
+    const fresh = await (deps?.loadState ?? loadState)(locations.extensionRoot, {
+      persistMigration: deps?.persistMigration ?? true,
+    });
     let saved = false;
     const tx: LockedStateTransaction = {
       state: fresh,
