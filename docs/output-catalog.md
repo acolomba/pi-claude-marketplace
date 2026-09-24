@@ -1220,6 +1220,22 @@ The standalone command sweeps orphaned dependency installs in one scope. Actual 
 /reload to pick up changes
 ```
 
+### Removal committed but lock release failed
+
+The state save and removal have committed. Prune completes post-commit cleanup, reports the failure on one committed member, and still requests `/reload`.
+
+<!-- catalog-state: committed-warning -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ○ shared-lib v2.0.0 (uninstalled) {dependency pruned}
+    cause: lock release failed after save
+
+/reload to pick up changes
+```
+
 ### Interleaved marketplace fixpoint chain removed
 
 <!-- catalog-state: actual-interleaved-chain -->

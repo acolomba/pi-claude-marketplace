@@ -736,3 +736,146 @@ test("an occupied restore target reports rollback partial and retains the backup
     ]);
   });
 });
+
+test("a lock-release rejection reports committed removal and completes cleanup", async () => {
+  await withHermeticEnvironment("prune-owner-release-after-save-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seedScope("project", cwd, {
+      mp: { orphan: { provenance: "dependency" } },
+    });
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run).then(() =>
+          Promise.reject(new Error("lock release failed after save")),
+        ),
+    };
+    const routes: string[] = [];
+    const pruneWithRoutes = createPrunePlugin(
+      transaction,
+      {
+        removePluginConfigFromCache: (targetScope, marketplace, plugin) => {
+          routes.push(`${targetScope}:${marketplace}:${plugin}`);
+        },
+        rebuildRoutingTables: () => {
+          routes.push("rebuilt");
+        },
+      },
+      createCompletionCache(),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await pruneWithRoutes({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), []);
+    await assert.rejects(stat(fixture.skills["orphan@mp"] ?? ""), { code: "ENOENT" });
+    await assert.rejects(stat(fixture.data["orphan@mp"] ?? ""), { code: "ENOENT" });
+    assert.deepStrictEqual(routes, ["project:mp:orphan", "rebuilt"]);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n\n" +
+          "● mp [project]\n" +
+          "  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n" +
+          "    cause: lock release failed after save\n\n" +
+          "/reload to pick up changes",
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
+test("post-commit cleanup failure reports committed members and continues cleanup", async () => {
+  await withHermeticEnvironment("prune-owner-cleanup-after-save-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seedScope("project", cwd, {
+      mp: {
+        a: { provenance: "dependency" },
+        b: { provenance: "dependency" },
+      },
+    });
+    const cleaned: string[] = [];
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      runPostCommitCleanup: async (args) => {
+        cleaned.push(args.plugin);
+        if (args.plugin === "a") {
+          throw new Error("first cleanup failed");
+        }
+
+        await REAL_UNINSTALL_TRANSACTION.runPostCommitCleanup(args);
+      },
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(cleaned, ["a", "b"]);
+    assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), []);
+    assert.equal(await readFile(fixture.data["a@mp"] ?? "", "utf8"), "data\n");
+    await assert.rejects(stat(fixture.data["b@mp"] ?? ""), { code: "ENOENT" });
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n\n" +
+          "● mp [project]\n" +
+          "  ○ a v1.0.0 (uninstalled) {dependency pruned}\n" +
+          "    cause: first cleanup failed\n\n" +
+          "● mp [project]\n" +
+          "  ○ b v1.0.0 (uninstalled) {dependency pruned}\n\n" +
+          "/reload to pick up changes",
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
+test("a post-save failure preserves the original cause when every member failed", async () => {
+  await withHermeticEnvironment("prune-owner-release-all-failed-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seedScope("project", cwd, {
+      mp: { orphan: { provenance: "dependency" } },
+    });
+    const cause = new AgentsUnstageFailureError("agent content changed", [
+      { generatedName: "orphan-agent", targetPath: "/agents/orphan.md", reason: "missing marker" },
+    ]);
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      cascadeUnstagePlugin: () =>
+        Promise.resolve({
+          ok: false,
+          dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+          cause,
+        }),
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run).then(() =>
+          Promise.reject(new Error("release failed after save")),
+        ),
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), ["orphan@mp"]);
+    assert.equal(
+      await readFile(fixture.skills["orphan@mp"] ?? "", "utf8"),
+      "---\nname: mp-orphan-skill\n---\nbody\n",
+    );
+    assert.equal(notifications[0]?.severity, "warning");
+    assert.match(notifications[0]?.message ?? "", /orphan v1\.0\.0 \(failed\)/);
+    assert.match(
+      notifications[0]?.message ?? "",
+      /agent content changed; release failed after save/,
+    );
+    assert.match(notifications[0]?.message ?? "", /\/reload to pick up changes/);
+  });
+});

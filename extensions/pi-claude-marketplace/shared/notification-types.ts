@@ -341,10 +341,10 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
   readonly reasons?: readonly ContentReason[];
   /**
    * LOAD-03: the `name@marketplace` keys of the plugins that still declared
-   * the removed plugin, on the `PluginDisabledMessage.cause` precedent. It is
-   * the ONE thing this field carries: the plain uninstall, the `--prune`
-   * member rows and the reconcile-driven removal all omit it and keep their
-   * byte-frozen rows.
+   * the removed plugin, on the `PluginDisabledMessage.cause` precedent.
+   * Standalone prune also uses this slot on one committed member when lock
+   * release or post-commit cleanup fails.
+   * Other uninstall rows omit it.
    *
    * It rides the cause chain because the sentence interpolates plugin
    * identifiers, and the cause chain is the only channel in this grammar that

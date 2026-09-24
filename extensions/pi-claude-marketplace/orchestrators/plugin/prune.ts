@@ -121,6 +121,67 @@ function notifyOperationFailure(options: PrunePluginOptions, scope: Scope, error
   );
 }
 
+async function finalizeCommittedMembers(
+  args: Parameters<typeof finalizePrunedMembers>[0],
+): Promise<unknown[]> {
+  const failures: unknown[] = [];
+  for (const member of args.members) {
+    try {
+      await finalizePrunedMembers({ ...args, members: [member] });
+    } catch (error: unknown) {
+      failures.push(error);
+    }
+  }
+
+  return failures;
+}
+
+function notifyCommitted(
+  options: PrunePluginOptions,
+  scope: Scope,
+  members: Awaited<ReturnType<typeof sweepOrphans>>,
+  postCommitFailures: readonly unknown[],
+): void {
+  if (members.length === 0) {
+    notify(options.ctx, options.pi, { kind: "prune-empty", scope });
+    return;
+  }
+
+  const warningCause =
+    postCommitFailures.length > 0
+      ? new Error(postCommitFailures.map(errorMessage).join("; "))
+      : undefined;
+  const warningMember = members.find((member) => member.removed) ?? members[0];
+  notifyWithContext(
+    options.ctx,
+    options.pi,
+    UNINSTALL_CONTEXT,
+    members.map((member) => ({
+      name: member.marketplace,
+      scope,
+      plugins: [
+        warningCause !== undefined && member === warningMember
+          ? {
+              ...member.row,
+              severity: "warning" as const,
+              needsReload: true,
+              cause: redactCauseChain(
+                new Error(
+                  [member.row.cause, warningCause]
+                    .filter((cause) => cause !== undefined)
+                    .map(errorMessage)
+                    .join("; "),
+                ),
+              ) as unknown as Error,
+            }
+          : member.row,
+      ],
+    })),
+    undefined,
+    "single",
+  );
+}
+
 /** Binds the standalone sweep to uninstall's guarded removal capabilities. */
 export function createPrunePlugin(
   transaction: UninstallTransaction,
@@ -172,6 +233,8 @@ export function createPrunePlugin(
     let outcome:
       | { readonly kind: "unreadable"; readonly declarer: string; readonly cause: Error }
       | { readonly kind: "swept"; readonly members: Awaited<ReturnType<typeof sweepOrphans>> };
+    let savedMembers: Awaited<ReturnType<typeof sweepOrphans>> | undefined;
+    const postCommitFailures: unknown[] = [];
     try {
       outcome = await transaction.withLockedStateTransaction(locations, async (tx) => {
         const snapshot = await buildScopeDeclarationIndex({ state: tx.state, locations });
@@ -201,6 +264,7 @@ export function createPrunePlugin(
           });
           if (members.length > 0) {
             await tx.save();
+            savedMembers = members;
           }
         } catch (error: unknown) {
           if (backup !== undefined) {
@@ -220,8 +284,13 @@ export function createPrunePlugin(
         return { kind: "swept" as const, members };
       });
     } catch (error: unknown) {
-      notifyOperationFailure(options, scope, error);
-      return;
+      if (savedMembers === undefined) {
+        notifyOperationFailure(options, scope, error);
+        return;
+      }
+
+      postCommitFailures.push(error);
+      outcome = { kind: "swept", members: savedMembers };
     }
 
     if (outcome.kind === "unreadable") {
@@ -229,31 +298,17 @@ export function createPrunePlugin(
       return;
     }
 
-    await finalizePrunedMembers({
-      members: outcome.members,
-      hooksRouting,
-      completionCache,
-      locations,
-      scope,
-      keepData: false,
-      transaction,
-    });
-    if (outcome.members.length === 0) {
-      notify(options.ctx, options.pi, { kind: "prune-empty", scope });
-      return;
-    }
-
-    notifyWithContext(
-      options.ctx,
-      options.pi,
-      UNINSTALL_CONTEXT,
-      outcome.members.map((member) => ({
-        name: member.marketplace,
+    postCommitFailures.push(
+      ...(await finalizeCommittedMembers({
+        members: outcome.members,
+        hooksRouting,
+        completionCache,
+        locations,
         scope,
-        plugins: [member.row],
+        keepData: false,
+        transaction,
       })),
-      undefined,
-      "single",
     );
+    notifyCommitted(options, scope, outcome.members, postCommitFailures);
   };
 }

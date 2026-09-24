@@ -1645,11 +1645,11 @@ export function composePluginLinesWith(
   // other `(disabled)` producer omits `cause` and keeps its byte-frozen row.
   //
   // LOAD-03: `uninstalled` joins them for the same reason on the opposite side
-  // of the outcome. The one uninstalled row that names anything names the
-  // plugins that still declared what it removed, which interpolates a list of
-  // identifiers, so it takes the same channel. Every other `uninstalled`
-  // producer -- the plain removal, the `--prune` member rows, the
-  // reconcile-driven removal -- omits `cause` and keeps its byte-frozen row.
+  // of the outcome. One uninstall row names surviving dependents. Standalone
+  // prune also uses this channel when a committed removal needs a warning
+  // about lock release or post-commit cleanup.
+  // Ordinary `uninstalled` rows
+  // omit `cause` and keep their byte-frozen form.
   //
   // UPDT-02 / D-10-11: `skipped` joins them here too, the first `skipped`
   // partition to interpolate. A held update's row names the constraining

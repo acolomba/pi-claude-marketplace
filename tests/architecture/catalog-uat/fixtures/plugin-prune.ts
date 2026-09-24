@@ -27,6 +27,30 @@ export const PLUGIN_PRUNE_FIXTURES: FixtureMap = {
         cardinality: "single",
       },
     },
+    "committed-warning": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "shared-lib",
+                version: "2.0.0",
+                reasons: ["dependency pruned"],
+                cause: new Error("lock release failed after save"),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+        cardinality: "single",
+      },
+    },
     "actual-interleaved-chain": {
       pi: piWithBothLoaded(),
       message: {
