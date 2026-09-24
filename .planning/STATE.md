@@ -3,16 +3,15 @@ gsd_state_version: "1.0"
 milestone: v1.20
 milestone_name: transitive-dependencies
 current_phase: 12
-current_phase_name: Standalone prune with dry-run
-status: executing
-stopped_at: Phase 12 plans complete; review and verification pending
-last_updated: "2026-09-24T03:57:30Z"
-last_activity: 2026-09-23
-last_activity_desc: Phase 12 eight plans complete; review and verification pending
-state_head: 229f9cea04863657eee38dc3c1e7132aae8ac09f
+status: completed
+stopped_at: Phase 12 complete — all phases complete
+last_updated: "2026-09-24T14:50:02.462Z"
+last_activity: 2026-09-24
+last_activity_desc: Phase 12 complete
+state_head: 3a511b4394f39b367432472327d7f9e06e059502
 progress:
   total_phases: 12
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 55
   completed_plans: 55
   percent: 100
@@ -22,39 +21,31 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-23 after Phase 11 cross-marketplace dependency allowlist)
+See: `.planning/PROJECT.md` (updated 2026-09-24 after Phase 12 standalone prune)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 12 — Standalone prune with dry-run
-within phases 6-12, which align the shipped dependency feature with the Claude
-Code dependency docs. Phases 6-11 are complete.
-44 requirements across 12 phases (25 shipped in Phases 1-5 as PR #198, 19
-added 2026-09-18). v1.19 Unit Test Refactor closed 2026-09-04 and is archived
-under `.planning/milestones/v1.19-*`.
+**Current focus:** v1.20 milestone audit and closeout. All 12 phases and 44
+requirements are complete. v1.19 Unit Test Refactor closed 2026-09-04 and is
+archived under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 12 (Standalone prune with dry-run) — EXECUTING
+Phase: 12 (Standalone prune with dry-run) — COMPLETE
 Plan: 8 of 8 complete
-Status: Executing
+Status: All phases complete
 
-**Plan 12-01 complete 2026-09-23:** The registered `prune` command removes
-orphans in one selected scope under a single lock. Project-scope and
-unreadable-declarer cases pass, and named uninstall remains green. Plans 12-02
-and 12-03 added direct fixpoint, failure, factory, and registration coverage.
-Plan 12-04 added `(will uninstall) {dependency pruned}` previews with the same
-fixpoint selector. Current, legacy, and missing-state previews leave bytes,
-timestamps, the extension tree, and locks untouched. Plans 12-05 and 12-07
-added the scoped `Nothing to prune` result and pinned `--dry-run` as the only
-prune-specific flag across parsing, help, and completion. Plan 12-06 pins seven
-new catalog states and documents the pending-row grammar. Plan 12-08 updates
-public docs and closes PRUNE-CMD-01. The final focused suite, 13 direct source
-pairs, 7,702 unit tests at full aggregate coverage, and 15 integration files
-pass. The chained check stops only on the operator-owned `.planning/config.json`
-formatting drift; each downstream gate passes separately. Code review and
-phase verification remain.
+**Phase 12 closed 2026-09-24:** Standalone `prune` removes only orphaned
+dependency installs in one selected scope; `--dry-run` previews the same
+fixpoint without writing. The scoped empty result, exact flag set, catalog
+rows, and public docs are pinned; the list/info orphan marker was dropped.
+Code review is clean, goal verification passed 27/27, live Pi UAT passed 1/1,
+the validation audit found no test gaps, and all 12 planned security threats
+are closed. The final unit suite passed 7,760/7,760 at 100% aggregate
+coverage, and focused standalone integration passed 25/25. The chained
+`npm run check` stops at the operator-owned `.planning/config.json` formatting
+drift; unaffected gates passed separately.
 
 **Phase 11 closed 2026-09-23**, verified 20/20 functional truths and both
 human wording checks. The validated manifest allowlist controls new foreign
@@ -451,7 +442,7 @@ regression covered by two full `npm run check` runs (0 failures); goal
 verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
 `02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-23 — Phase 11 complete, transitioned to Phase 12
+Last activity: 2026-09-24 — Phase 12 complete
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting.
 Milestone progress is 5 of 5 phases complete (100%).
@@ -478,7 +469,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 
 **Velocity:**
 
-- Total plans completed: 198
+- Total plans completed: 206
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -503,6 +494,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | 09 | 4 | - | - |
 | 10 | 4 | - | - |
 | 11 | 7 | - | - |
+| 12 | 8 | - | - |
 
 **Recent Trend:** 35 Phase 113 plans completed with all direct owner, review, validation, verification, security, and clean-repository gates green.
 **Per-Plan Metrics:**
@@ -666,6 +658,11 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 
 Decisions are logged in the PROJECT.md Key Decisions table.
 
+- [Phase 12] Preview uses `(will uninstall) {dependency pruned}` and actual
+  prune uses `(uninstalled) {dependency pruned}`; the preview never writes.
+- [Phase 12] Both empty modes give a scoped informational reason. The
+  standalone command adds only `--dry-run`, without a prompt or `-y`.
+- [Phase 12] The proposed list/info `{orphaned}` marker was dropped.
 - [Phase 11] New foreign dependency installs require exact membership in the
   governing root marketplace's validated allowlist before lookup or mutation.
 - [Phase 11] Reload checks every eligible original declarer for permission;
@@ -976,10 +973,9 @@ session that must settle it:
   and passed — this note was stale (the report was already on disk when it was
   written). Phase 2 also closed clean: `02-VERIFICATION.md` passed 10/10.
 - RESOLVED by 117-12: D-117-20 in `117-CONTEXT.md` now reads 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only, matching the operator decision taken in plan 117-11 and the retained all-pair artifact. The superseded 197 + 7 wording is gone.
-- [Phase 11] `npm run check` reaches the pre-existing, operator-owned
-  `.planning/config.json` formatting drift. The isolated Phase 11 full check
-  passed, and downstream parent gates passed separately; the local config edit
-  remains intentionally unstaged.
+- [Phase 12] `npm run check` reaches the pre-existing, operator-owned
+  `.planning/config.json` formatting drift. Phase 12 downstream gates passed
+  separately; the local config edit remains intentionally unstaged.
 
 ### Quick Tasks Completed
 
@@ -1084,16 +1080,15 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Phase 12 context gathered
+**Stopped at:** Phase 12 complete; milestone audit and closeout next
 
-**Resume file:** .planning/phases/12-standalone-prune-with-dry-run/12-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-09-23T21:12:57.899Z
-Phase 11 is complete. Seven plans executed, functional verification passed
-20/20, both human UAT checks passed, security closed 17/17 planned threats,
-and validation found no test gaps. Phase 12 is ready for discussion and
-planning. The operator-owned `.planning/config.json` formatting drift remains
-unstaged and blocks the parent checkout's chained `npm run check` at formatting.
+Last session: 2026-09-24T14:50:02Z
+Phase 12 is complete. Eight plans executed; functional verification passed
+27/27, live Pi UAT passed, security closed 12/12 planned threats, and
+validation found no test gaps. Milestone audit is next. The operator-owned
+`.planning/config.json` formatting drift remains unstaged.
 
 Previous session: 2026-09-23T11:47:18.675Z
 Autonomous run (`/gsd-autonomous --from 9`) took Phase 9 from discuss through

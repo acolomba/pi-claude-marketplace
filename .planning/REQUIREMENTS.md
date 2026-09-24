@@ -91,10 +91,10 @@ New scope. Consumes PROV.
   reconcile path survives, because the fail-closed unreadable-declarer refusal
   D-05-07 still reaches it. The supersession record is
   `.planning/phases/06-load-time-dependency-check-and-allowed-uninstall/06-04-SUMMARY.md`.)
-- [ ] **PRUNE-06**: A standalone `prune` removes the dependency-installed
+- [x] **PRUNE-06**: A standalone `prune` removes the dependency-installed
   plugins that no installed plugin in the scope declares, without uninstalling
   anything else, and says which ones it removed.
-- [ ] **PRUNE-07**: `prune --dry-run` lists what `prune` would remove and
+- [x] **PRUNE-07**: `prune --dry-run` lists what `prune` would remove and
   removes nothing.
 
 ### Uninstall data disposition (DATA)
@@ -114,7 +114,7 @@ to opt out.
 
 - [x] **FLAG-01**: `uninstall` accepts exactly `--keep-data` and `--prune` as
   its extra flags, and the flag-catalog drift guard pins that set.
-- [ ] **FLAG-02**: `prune` accepts exactly `--dry-run` as its extra flag, and
+- [x] **FLAG-02**: `prune` accepts exactly `--dry-run` as its extra flag, and
   the flag-catalog drift guard pins that set. No `-y`: there is no prompt to
   skip (Out of Scope table).
 
@@ -287,9 +287,9 @@ this milestone.
 | UPDT-02 | Phase 10 | Complete |
 | XMKT-01 | Phase 11 | Complete |
 | XMKT-02 | Phase 11 | Complete |
-| PRUNE-06 | Phase 12 | Pending |
-| PRUNE-07 | Phase 12 | Pending |
-| FLAG-02 | Phase 12 | Pending |
+| PRUNE-06 | Phase 12 | Complete |
+| PRUNE-07 | Phase 12 | Complete |
+| FLAG-02 | Phase 12 | Complete |
 | DIVG-01 | Phase 7 | Complete |
 
 **Coverage:**
