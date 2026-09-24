@@ -5,9 +5,9 @@ milestone_name: Workflow Bridge Replay onto main
 current_plan: none
 status: Awaiting next milestone
 stopped_at: milestone workflows-replay archived (2026-09-21)
-last_updated: "2026-09-24T00:43:03.000Z"
+last_updated: "2026-09-24T01:00:15.000Z"
 last_activity: 2026-09-23
-last_activity_desc: "Completed quick task 260923-qwz: Pi 0.86.1 workflow compatibility"
+last_activity_desc: "Completed quick task 260923-t30: upstream workflow release hold"
 state_head: dbcc1a20bc363c4a38c618f11276ec4384ecb8a1
 progress:
   total_phases: 9
@@ -38,7 +38,7 @@ closed the three gaps the bridge originally shipped with. The code sits on
 Phase: Milestone workflows-replay complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-09-23 — Completed quick task 260923-qwz: Pi 0.86.1 workflow compatibility
+Last activity: 2026-09-23 — Completed quick task 260923-t30: upstream workflow release hold
 
 Archived 2026-09-21 as one milestone of nine phases (109-117), per the decision
 recorded under Decisions. The archive ran only after the debt the audit graded
@@ -103,6 +103,7 @@ reference ambiguous when the two branches are read side by side.
 | 260909-ox9 | Re-derive the stale `PluginNotificationMessage` enumeration in the messaging style guide | 2026-09-09 | `a39ba7a4` | [260909-ox9-re-derive-the-stale-pluginnotificationme](./quick/260909-ox9-re-derive-the-stale-pluginnotificationme/) |
 | 260923-b1z | Re-run PR #205 babysit review only on files changed after the prior pass | 2026-09-23 | `e8e185d7` | [260923-b1z-re-run-pr-205-babysit-review-only-on-fil](./quick/260923-b1z-re-run-pr-205-babysit-review-only-on-fil/) |
 | 260923-qwz | Raise Pi minimum to 0.86.1 and verify the unpatched workflow engine | 2026-09-23 | `f85d7eb9` | [260923-qwz-raise-pi-minimum-to-0-86-1-and-verify-un](./quick/260923-qwz-raise-pi-minimum-to-0-86-1-and-verify-un/) |
+| 260923-t30 | Record upstream workflow engine issues before merge | 2026-09-23 | `05aa97d2` | [260923-t30-record-upstream-workflow-engine-issues-b](./quick/260923-t30-record-upstream-workflow-engine-issues-b/) |
 
 Closes the last open deferred item filed by the degradation-and-documentation
 phase. The union listing was deleted rather than corrected — it was the second
@@ -526,16 +527,17 @@ _Recorded per phase as the milestone proceeds._
 The milestone is archived and nothing is pending here. What remains is getting
 the code onto main:
 
-- `/gsd-ship` (or `/babysit-pr`) from `features/workflow`: the branch carries
+- Complete review and merge PR #205 from `features/workflow`: the branch carries
   the whole bridge plus today's close-out fixes (`d2ca9df5`, `b596ff01`,
-  `9d9325ec`, `f52f04bb`). `npm run check` is green at 7178 unit / 36
+  `9d9325ec`, `f52f04bb`). `npm run check` is green at 7214 unit / 36
   integration. The ship gate reads the Broken Windows ledger; the 21 entries
   still `open` there belong to the `test-backlog` milestone's phases 06/07
   (coverage-producer and CRAP-gate work), not to this workstream; the CRAP
   pipeline was removed on 2026-09-20, so most are probably stale, but they
   need their own triage before a ship from any branch converges.
-- Version bump + CHANGELOG per the house checklist before the PR
-  (package.json, lock, EXTENSION_VERSION, sonar projectVersion).
+- Hold the release until `pi-dynamic-workflows` fixes its PRs #232, #233, and
+  #234. Keep the version unchanged for PR #205. Bump `package.json`, the lock,
+  `EXTENSION_VERSION`, and the Sonar project version when the release is ready.
 - After merge: `/gsd-cleanup` here, then `/gsd-new-milestone` if the workstream
   continues; the natural first candidate is VSTALE-01 (the `covered_files` rule),
   which touches every phase report and was deliberately kept out of the archive.
