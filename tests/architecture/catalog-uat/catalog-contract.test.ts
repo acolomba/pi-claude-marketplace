@@ -146,7 +146,7 @@ const EXPECTED_SECTION_COUNT = 21;
 // CR-02: a partial restore adds one command-scoped recovery row.
 // A committed prune with failed lock release adds one warning row.
 const EXPECTED_STATE_COUNT = 241;
-const EXPECTED_UTF8_BYTES = 34_700;
+const EXPECTED_UTF8_BYTES = 34_772;
 
 const FIXTURE_MAPS: readonly FixtureMap[] = [
   PLUGIN_LIST_FIXTURES,

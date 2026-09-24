@@ -119,6 +119,8 @@ test("restores every removed artifact and exact metadata bytes after failed pers
       await writeFile(target, "changed\n");
     }
 
+    await rollback.markUnstaged();
+
     const failures = await rollback.rollback();
 
     // assert
@@ -224,6 +226,74 @@ test("rename failure keeps the backup and reports an artifact restore failure", 
   });
 });
 
+test("retained backup maps two skills to their exact recovery targets", async () => {
+  await withHermeticEnvironment("prune-rollback-manifest-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const secondSkill = path.join(locations.skillsTargetDir, "second-skill", "SKILL.md");
+    await mkdir(path.dirname(secondSkill), { recursive: true });
+    await writeFile(secondSkill, "second original\n");
+    const secondMember: IndexedRecord = {
+      ...fixture.member,
+      record: {
+        ...fixture.member.record,
+        resources: { ...fixture.member.record.resources, skills: ["orphan-skill", "second-skill"] },
+      },
+    };
+    const rollback = await preparePruneRollback(locations, [secondMember], {
+      removeBackup: rm,
+      rename: async (from, to) => {
+        if (to === path.dirname(secondSkill)) {
+          throw new Error("restore refused");
+        }
+
+        await rename(from, to);
+      },
+    });
+    await rm(path.dirname(fixture.skill), { recursive: true });
+    await rm(path.dirname(secondSkill), { recursive: true });
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase, cause }) => [phase, cause.message]),
+      [["skills", "restore refused"]],
+    );
+    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
+      name.startsWith("prune-backup-"),
+    );
+    assert.equal(rollback.backupName, backupName);
+    const manifest = JSON.parse(
+      await readFile(path.join(locations.extensionRoot, backupName ?? "", "manifest.json"), "utf8"),
+    ) as { entries: Array<{ phase: string; root: string; target: string; backup: string | null }> };
+    assert.deepStrictEqual(
+      manifest.entries.filter((entry) => entry.phase === "skills"),
+      [
+        {
+          phase: "skills",
+          root: path.join("pi-claude-marketplace", "resources", "skills"),
+          target: "orphan-skill",
+          backup: "0",
+        },
+        {
+          phase: "skills",
+          root: path.join("pi-claude-marketplace", "resources", "skills"),
+          target: "second-skill",
+          backup: "1",
+        },
+      ],
+    );
+    assert.equal(await readFile(secondSkill, "utf8").catch(() => "missing"), "missing");
+    assert.equal(
+      await readFile(path.join(locations.extensionRoot, backupName ?? "", "1", "SKILL.md"), "utf8"),
+      "second original\n",
+    );
+  });
+});
+
 test("snapshot preparation refuses an agent path outside the scope", async () => {
   await withHermeticEnvironment("prune-rollback-outside-", async ({ cwd }) => {
     // arrange
@@ -312,6 +382,7 @@ test("rollback preserves absent artifacts and removes metadata created after the
     });
     await writeFile(locations.mcpJsonPath, "new mcp\n");
     await writeFile(locations.stateJsonPath, "new state\n");
+    await rollback.markUnstaged();
 
     // act
     const failures = await rollback.rollback();
@@ -461,6 +532,136 @@ test("metadata restore failure keeps backups and still restores state last", asy
       ["mcp"],
     );
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), originalState);
+    assert.equal(await readFile(outside, "utf8"), "outside bytes\n");
+    assert.equal(
+      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-"))
+        .length,
+      1,
+    );
+  });
+});
+
+test("shared MCP edit after unstage stays current and retains its original backup", async () => {
+  await withHermeticEnvironment("prune-rollback-mcp-collision-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const originalMcp = await readFile(locations.mcpJsonPath);
+    const originalState = await readFile(locations.stateJsonPath);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      rename,
+      removeBackup: rm,
+    });
+    await writeFile(locations.mcpJsonPath, '{ "mcpServers": {} }\n');
+    await rollback.markUnstaged();
+    await writeFile(locations.mcpJsonPath, '{ "mcpServers": { "independent": 1 } }\n');
+    await writeFile(locations.stateJsonPath, "failed save\n");
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase }) => phase),
+      ["mcp"],
+    );
+    assert.equal(
+      await readFile(locations.mcpJsonPath, "utf8"),
+      '{ "mcpServers": { "independent": 1 } }\n',
+    );
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), originalState);
+    assert.deepStrictEqual(
+      await readFile(path.join(locations.extensionRoot, rollback.backupName, "5")),
+      originalMcp,
+    );
+  });
+});
+
+test("agents index edit after unstage stays current and retains its original backup", async () => {
+  await withHermeticEnvironment("prune-rollback-agents-index-collision-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const originalIndex = await readFile(locations.agentsIndexPath);
+    const originalState = await readFile(locations.stateJsonPath);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      rename,
+      removeBackup: rm,
+    });
+    await writeFile(locations.agentsIndexPath, "unstaged index\n");
+    await rollback.markUnstaged();
+    await writeFile(locations.agentsIndexPath, "independent index\n");
+    await writeFile(locations.stateJsonPath, "failed save\n");
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase }) => phase),
+      ["agents index"],
+    );
+    assert.equal(await readFile(locations.agentsIndexPath, "utf8"), "independent index\n");
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), originalState);
+    assert.deepStrictEqual(
+      await readFile(path.join(locations.extensionRoot, rollback.backupName, "4")),
+      originalIndex,
+    );
+  });
+});
+
+test("metadata directory collision leaves the directory and its backup intact", async () => {
+  await withHermeticEnvironment("prune-rollback-metadata-directory-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const originalMcp = await readFile(locations.mcpJsonPath);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      rename,
+      removeBackup: rm,
+    });
+    await rollback.markUnstaged();
+    await rm(locations.mcpJsonPath);
+    await mkdir(locations.mcpJsonPath);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase }) => phase),
+      ["mcp"],
+    );
+    assert.equal((await stat(locations.mcpJsonPath)).isDirectory(), true);
+    assert.deepStrictEqual(
+      await readFile(path.join(locations.extensionRoot, rollback.backupName, "5")),
+      originalMcp,
+    );
+  });
+});
+
+test("state restore refusal keeps the backup and reports state failure", async () => {
+  await withHermeticEnvironment("prune-rollback-state-refusal-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const rollback = await preparePruneRollback(locations, [fixture.member], {
+      rename,
+      removeBackup: rm,
+    });
+    const outside = path.join(cwd, "outside-state.json");
+    await writeFile(outside, "outside bytes\n");
+    await rm(locations.stateJsonPath);
+    await symlink(outside, locations.stateJsonPath);
+
+    // act
+    const failures = await rollback.rollback();
+
+    // assert
+    assert.deepStrictEqual(
+      failures.map(({ phase }) => phase),
+      ["state"],
+    );
     assert.equal(await readFile(outside, "utf8"), "outside bytes\n");
     assert.equal(
       (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-"))

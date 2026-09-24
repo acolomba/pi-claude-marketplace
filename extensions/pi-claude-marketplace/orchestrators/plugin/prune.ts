@@ -34,10 +34,11 @@ export interface PrunePluginOptions {
 class PruneRollbackError extends Error {
   readonly failures: readonly PruneRestoreFailure[];
 
-  constructor(primary: unknown, failures: readonly PruneRestoreFailure[]) {
-    super("Prune rollback was incomplete; the backup was retained for recovery.", {
-      cause: primary,
-    });
+  constructor(primary: unknown, failures: readonly PruneRestoreFailure[], backupName: string) {
+    super(
+      `Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying.`,
+      { cause: primary },
+    );
     this.failures = failures;
   }
 }
@@ -262,6 +263,10 @@ export function createPrunePlugin(
             cascade: transaction.cascadeUnstagePlugin,
             transaction,
           });
+          if (backup !== undefined) {
+            await backup.markUnstaged();
+          }
+
           if (members.length > 0) {
             await tx.save();
             savedMembers = members;
@@ -270,7 +275,7 @@ export function createPrunePlugin(
           if (backup !== undefined) {
             const failures = await backup.rollback();
             if (failures.length > 0) {
-              throw new PruneRollbackError(error, failures);
+              throw new PruneRollbackError(error, failures, backup.backupName);
             }
           }
 

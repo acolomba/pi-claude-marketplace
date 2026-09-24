@@ -308,7 +308,7 @@ export const PLUGIN_PRUNE_FIXTURES: FixtureMap = {
                 name: "(prune)",
                 reasons: ["rollback partial"],
                 cause: new Error(
-                  "Prune rollback was incomplete; the backup was retained for recovery.",
+                  "Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying.",
                   {
                     cause: new Error("state save failed"),
                   },

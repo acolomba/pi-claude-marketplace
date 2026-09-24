@@ -1350,7 +1350,7 @@ A plugin operation has failed.
 
 ### Prune rollback needs manual recovery
 
-If a failed state save leaves a newly occupied artifact path, prune retains the original in a recovery backup. The command reports each restore failure with a redacted cause. It does not suggest `/reload` because the removal did not commit.
+If rollback finds a changed path, prune keeps the current file and the original in a recovery backup. The backup's `manifest.json` maps each numbered entry to a permitted root and a relative target. Inspect that manifest before retrying. The command reports each restore failure with a redacted cause and gives the backup directory name. It does not suggest `/reload` because the removal did not commit.
 
 <!-- catalog-state: rollback-partial -->
 
@@ -1359,7 +1359,7 @@ A plugin operation has failed.
 
 ● (prune) [project]
   ⊘ (prune) (failed) {rollback partial}
-    cause: Prune rollback was incomplete; the backup was retained for recovery. -> state save failed
+    cause: Prune rollback was incomplete. Inspect prune-backup-ABC123/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed
     [skills] (rollback failed)
       cause: Prune rollback found an occupied artifact at mp-orphan-skill.
 ```

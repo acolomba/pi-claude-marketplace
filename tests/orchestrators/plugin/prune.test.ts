@@ -718,19 +718,93 @@ test("an occupied restore target reports rollback partial and retains the backup
     // assert
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
     assert.equal(await readFile(skill, "utf8"), "replacement\n");
-    assert.equal(
-      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-"))
-        .length,
-      1,
+    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
+      name.startsWith("prune-backup-"),
+    );
+    assert.match(backupName ?? "", /^prune-backup-[\w-]+$/);
+    const manifest = JSON.parse(
+      await readFile(path.join(locations.extensionRoot, backupName ?? "", "manifest.json"), "utf8"),
+    ) as { entries: Array<{ phase: string; root: string; target: string; backup: string | null }> };
+    assert.deepStrictEqual(
+      manifest.entries.filter((entry) => entry.phase === "skills"),
+      [
+        {
+          phase: "skills",
+          root: path.join("pi-claude-marketplace", "resources", "skills"),
+          target: "mp-orphan-skill",
+          backup: "0",
+        },
+      ],
     );
     assert.deepStrictEqual(notifications, [
       {
         message:
           "A plugin operation has failed.\n\n" +
           "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
-          "    cause: Prune rollback was incomplete; the backup was retained for recovery. -> state save failed\n" +
+          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
           "    [skills] (rollback failed)\n" +
           "      cause: Prune rollback found an occupied artifact at mp-orphan-skill.",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("a concurrent MCP edit survives failed save with its original in recovery backup", async () => {
+  await withHermeticEnvironment("prune-owner-mcp-collision-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seedScope("project", cwd, {
+      mp: { orphan: { provenance: "dependency" } },
+    });
+    const originalMcp = Buffer.from('{ "mcpServers": { "original": 1 } }\n');
+    const currentMcp = Buffer.from('{ "mcpServers": { "original": 1, "independent": 2 } }\n');
+    await writeFile(locations.mcpJsonPath, originalMcp);
+    const stateBefore = await readFile(locations.stateJsonPath);
+    const skillBefore = await readFile(fixture.skills["orphan@mp"] ?? "");
+    const transaction: UninstallTransaction = {
+      ...REAL_UNINSTALL_TRANSACTION,
+      withLockedStateTransaction: (target, run) =>
+        withLockedStateTransaction(target, run, {
+          saveState: async () => {
+            await writeFile(locations.mcpJsonPath, currentMcp);
+            throw new Error("state save failed");
+          },
+        }),
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await prune(transaction)({ ctx, pi: { getAllTools: () => [] }, cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(await readFile(locations.mcpJsonPath), currentMcp);
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
+    assert.deepStrictEqual(await readFile(fixture.skills["orphan@mp"] ?? ""), skillBefore);
+    await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
+    const [backupName] = (await readdir(locations.extensionRoot)).filter((name) =>
+      name.startsWith("prune-backup-"),
+    );
+    assert.match(backupName ?? "", /^prune-backup-[\w-]+$/);
+    const manifest = JSON.parse(
+      await readFile(path.join(locations.extensionRoot, backupName ?? "", "manifest.json"), "utf8"),
+    ) as { entries: Array<{ phase: string; root: string; target: string; backup: string | null }> };
+    assert.deepStrictEqual(
+      manifest.entries.filter((entry) => entry.phase === "mcp"),
+      [{ phase: "mcp", root: ".", target: "mcp.json", backup: "3" }],
+    );
+    assert.deepStrictEqual(
+      await readFile(path.join(locations.extensionRoot, backupName ?? "", "3")),
+      originalMcp,
+    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● (prune) [project]\n  ⊘ (prune) (failed) {rollback partial}\n" +
+          `    cause: Prune rollback was incomplete. Inspect ${backupName}/manifest.json under this scope's pi-claude-marketplace directory before retrying. -> state save failed\n` +
+          "    [mcp] (rollback failed)\n" +
+          "      cause: Prune rollback found an occupied metadata path at mcp.json.",
         severity: "error",
       },
     ]);

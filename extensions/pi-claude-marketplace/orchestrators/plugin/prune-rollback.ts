@@ -30,6 +30,10 @@ interface SavedPath {
   readonly phase: string;
 }
 
+type MetadataVersion =
+  | { readonly kind: "absent" }
+  | { readonly kind: "file"; readonly bytes: Buffer; readonly mode: number };
+
 /** One restore failure, kept structured for the failed notification row. */
 export interface PruneRestoreFailure {
   readonly phase: string;
@@ -44,8 +48,32 @@ export interface PruneRestoreOps {
 
 /** Snapshot held until state persistence succeeds or every restore completes. */
 export interface PruneRollback {
+  readonly backupName: string;
+  readonly markUnstaged: () => Promise<void>;
   readonly rollback: () => Promise<readonly PruneRestoreFailure[]>;
   readonly discard: () => Promise<void>;
+}
+
+function recoveryEntry(
+  locations: ScopedLocations,
+  saved: SavedPath,
+): {
+  readonly phase: string;
+  readonly root: string;
+  readonly target: string;
+  readonly backup: string | null;
+} {
+  const root = path.relative(locations.scopeRoot, saved.root) || ".";
+  const target = path.relative(saved.root, saved.target);
+  // ScopedLocations provides roots within scopeRoot; snapshotPath already
+  // checked each target against its root before this mapping is written.
+
+  return {
+    phase: saved.phase,
+    root,
+    target,
+    backup: saved.backup === undefined ? null : path.basename(saved.backup),
+  };
 }
 
 async function snapshotPath(
@@ -122,8 +150,42 @@ async function restoreArtifact(saved: SavedPath, ops: PruneRestoreOps): Promise<
   await ops.rename(saved.backup, saved.target);
 }
 
-async function restoreMetadata(saved: SavedPath): Promise<void> {
+async function metadataVersion(saved: SavedPath): Promise<MetadataVersion> {
   await assertPathInside(saved.root, saved.target, `prune ${saved.phase} restore`);
+  if (!(await pathExists(saved.target))) {
+    return { kind: "absent" };
+  }
+
+  const stat = await lstat(saved.target);
+  if (!stat.isFile()) {
+    throw new Error(`Prune rollback found an occupied metadata path at ${saved.target}.`);
+  }
+
+  return { kind: "file", bytes: await readFile(saved.target), mode: stat.mode };
+}
+
+function sameMetadataVersion(left: MetadataVersion, right: MetadataVersion): boolean {
+  if (left.kind === "absent" || right.kind === "absent") {
+    return left.kind === right.kind;
+  }
+
+  return left.bytes.equals(right.bytes) && left.mode === right.mode;
+}
+
+async function restoreMetadata(saved: SavedPath, expected?: MetadataVersion): Promise<void> {
+  const current = await metadataVersion(saved);
+  const original =
+    saved.backup === undefined
+      ? ({ kind: "absent" } as const)
+      : await metadataVersion({ ...saved, target: saved.backup, root: path.dirname(saved.backup) });
+  if (expected === undefined && sameMetadataVersion(current, original)) {
+    return;
+  }
+
+  if (expected === undefined || !sameMetadataVersion(current, expected)) {
+    throw new Error(`Prune rollback found an occupied metadata path at ${saved.target}.`);
+  }
+
   if (saved.backup === undefined) {
     if (await pathExists(saved.target)) {
       await rm(saved.target);
@@ -205,6 +267,7 @@ export async function preparePruneRollback(
   let agentsIndex: SavedPath;
   let mcp: SavedPath;
   let state: SavedPath;
+  let unstagedMetadata: readonly [MetadataVersion, MetadataVersion] | undefined;
   try {
     for (const [index, { root, target, phase }] of targets.entries()) {
       artifacts.push(await snapshotPath(root, target, phase, backupRoot, index));
@@ -231,12 +294,23 @@ export async function preparePruneRollback(
       backupRoot,
       targets.length + 2,
     );
+    const entries = [...artifacts, agentsIndex, mcp, state].map((saved) =>
+      recoveryEntry(locations, saved),
+    );
+    await writeFileAtomic(
+      path.join(backupRoot, "manifest.json"),
+      `${JSON.stringify({ schemaVersion: 1, entries }, null, 2)}\n`,
+    );
   } catch (error: unknown) {
     await ops.removeBackup(backupRoot, { recursive: true, force: true });
     throw error;
   }
 
   return {
+    backupName: path.basename(backupRoot),
+    markUnstaged: async (): Promise<void> => {
+      unstagedMetadata = await Promise.all([metadataVersion(agentsIndex), metadataVersion(mcp)]);
+    },
     rollback: async (): Promise<readonly PruneRestoreFailure[]> => {
       const failures: PruneRestoreFailure[] = [];
       for (const saved of artifacts) {
@@ -247,12 +321,23 @@ export async function preparePruneRollback(
         }
       }
 
-      for (const saved of [agentsIndex, mcp, state]) {
+      for (const [index, saved] of [agentsIndex, mcp].entries()) {
         try {
-          await restoreMetadata(saved);
+          await restoreMetadata(saved, unstagedMetadata?.[index]);
         } catch (error: unknown) {
           failures.push({ phase: saved.phase, cause: asError(error) });
         }
+      }
+
+      try {
+        await assertPathInside(state.root, state.target, "prune state restore");
+        if (state.backup === undefined) {
+          await rm(state.target, { force: true });
+        } else {
+          await writeFileAtomic(state.target, await readFile(state.backup));
+        }
+      } catch (error: unknown) {
+        failures.push({ phase: state.phase, cause: asError(error) });
       }
 
       if (failures.length === 0) {
