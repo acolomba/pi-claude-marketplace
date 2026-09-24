@@ -98,15 +98,15 @@ Ejecuta un complemento:
 
 Esta extensión prefija los nombres de comandos y habilidades con el nombre del complemento. Si el nombre ya empieza con el nombre del complemento y `-`, esta extensión elimina esa parte común.
 
-Los nombres de comandos y habilidades usan el formato con dos puntos de Pi:
+En POSIX, los comandos usan dos puntos:
 
-| Nombre del complemento | Nombre del comando o habilidad | Nombre en Pi |
-| ---------------------- | ------------------------------ | ------------ |
-| `foo`                  | `bar`                          | `/foo:bar`   |
-| `foo`                  | `foo-bar`                      | `/foo:bar`   |
-| `foo`                  | `foo`                          | `/foo:foo`   |
+| Nombre del complemento | Nombre del comando | Nombre en Pi |
+| ---------------------- | ------------------ | ------------ |
+| `foo`                  | `bar`              | `/foo:bar`   |
+| `foo`                  | `foo-bar`          | `/foo:bar`   |
+| `foo`                  | `foo`              | `/foo:foo`   |
 
-En Windows, los comandos se prefijan con un punto (`.`) en lugar de dos puntos (`:`). Los nombres de habilidades no cambian:
+En Windows, los comandos usan un punto (`.`) en lugar de dos puntos (`:`):
 
 | Nombre del complemento | Nombre del comando | Nombre en Pi (Windows) |
 | ---------------------- | ------------------ | ---------------------- |
@@ -114,13 +114,15 @@ En Windows, los comandos se prefijan con un punto (`.`) en lugar de dos puntos (
 | `foo`                  | `foo-bar`          | `/foo.bar`             |
 | `foo`                  | `foo`              | `/foo.foo`             |
 
-Esta extensión también registra las habilidades con nombres separados por guiones después del prefijo `/skill:`:
+Las habilidades usan guiones en todas las plataformas. Ejecútalas con `/skill:`:
 
 | Nombre del complemento | Nombre de la habilidad | Nombre en Pi     |
 | ---------------------- | ---------------------- | ---------------- |
 | `foo`                  | `bar`                  | `/skill:foo-bar` |
 | `foo`                  | `foo-bar`              | `/skill:foo-bar` |
 | `foo`                  | `foo`                  | `/skill:foo`     |
+
+Los nombres de habilidades usan letras ASCII minúsculas, números y guiones. Los demás caracteres se convierten en guiones. Un nombre sin letras ASCII ni números recibe un sufijo hash corto. Los nombres de más de 64 caracteres también reciben un sufijo hash. Las referencias como `foo:bar` dentro de una habilidad o un agente se resuelven al nombre instalado `foo-bar`.
 
 Los nombres de los servidores MCP no cambian. Si otra configuración de MCP ya utiliza ese nombre, la instalación o actualización del complemento fallará.
 

@@ -5,6 +5,8 @@
 // functions (one shared helper that handled all three was a recurring bug
 // surface).
 
+import { createHash } from "node:crypto";
+
 import { commandNamespaceSeparator } from "../platform/os.ts";
 
 /**
@@ -58,35 +60,53 @@ export function assertSafeName(name: string, label?: string): void {
 /**
  * Skill name generator (RN-1 / SK-2).
  *
- * Format: `<plugin><separator><skill>`, where the separator comes from
- * `commandNamespaceSeparator()`: a colon on POSIX, matching what Claude Code
- * registers, and a dot on Windows. The `<plugin>-` or `<plugin><separator>`
- * prefix is elided from `source` (acme + acme-foo -> acme:foo,
- * acme + acme:foo -> acme:foo). A source equal to the plugin name becomes
- * the plugin name itself (acme + acme -> acme).
+ * Format: `<plugin>-<skill>` on every platform. Elides a matching plugin
+ * prefix from the source, including Claude's colon-qualified form. The
+ * result satisfies Pi's skill-name rules: lowercase ASCII letters, digits,
+ * single interior hyphens, and at most 64 characters. Long names retain a
+ * stable hash suffix so distinct sources do not collapse on truncation. A
+ * source with no ASCII letters or digits also gets a hash-based segment.
  */
 export function generatedSkillName(plugin: string, source: string): string {
   assertSafeName(plugin);
   assertSafeName(source);
-  if (source === plugin) {
-    return plugin;
-  }
 
-  const sep = commandNamespaceSeparator();
-  const prefix = `${plugin}-`;
-  const prefixSep = `${plugin}${sep}`;
   let elided = source;
-
-  if (elided.startsWith(prefix)) {
-    elided = elided.slice(prefix.length);
-  } else if (elided.startsWith(prefixSep)) {
-    elided = elided.slice(prefixSep.length);
+  for (const separator of ["-", ":", "."]) {
+    const prefix = `${plugin}${separator}`;
+    if (source.startsWith(prefix)) {
+      elided = source.slice(prefix.length);
+      break;
+    }
   }
 
   assertSafeName(elided);
-  const generated = `${plugin}${sep}${elided}`;
-  assertSafeName(generated);
-  return generated;
+
+  const normalizedPlugin = normalizePiSkillPart(plugin);
+  const normalizedSkill = normalizePiSkillPart(elided);
+  const generated = source === plugin ? normalizedPlugin : `${normalizedPlugin}-${normalizedSkill}`;
+  if (generated.length <= 64) {
+    return generated;
+  }
+
+  const suffix = createHash("sha256").update(`${plugin}\0${source}`).digest("hex").slice(0, 8);
+  return `${generated.slice(0, 55).replace(/-$/, "")}-${suffix}`;
+}
+
+/** Converts one source-name segment into a nonempty Pi skill-name segment. */
+function normalizePiSkillPart(value: string): string {
+  const normalized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-/, "")
+    .replace(/-$/, "");
+  if (normalized === "") {
+    const suffix = createHash("sha256").update(value).digest("hex").slice(0, 8);
+
+    return `name-${suffix}`;
+  }
+
+  return normalized;
 }
 
 /**

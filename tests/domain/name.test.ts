@@ -172,19 +172,20 @@ describe("assertSafeName", () => {
 
 describe("generatedSkillName", () => {
   for (const { plugin, source, expectedSkillName } of [
-    { plugin: "acme", source: "foo", expectedSkillName: "acme:foo" },
-    { plugin: "acme", source: "acme-foo", expectedSkillName: "acme:foo" },
-    { plugin: "acme", source: "acme:foo", expectedSkillName: "acme:foo" },
-    { plugin: "ab", source: "abc", expectedSkillName: "ab:abc" },
+    { plugin: "acme", source: "foo", expectedSkillName: "acme-foo" },
+    { plugin: "acme", source: "acme-foo", expectedSkillName: "acme-foo" },
+    { plugin: "acme", source: "acme:foo", expectedSkillName: "acme-foo" },
+    { plugin: "acme", source: "acme.foo", expectedSkillName: "acme-foo" },
+    { plugin: "ab", source: "abc", expectedSkillName: "ab-abc" },
     {
       plugin: "acme",
       source: "acme-acme-foo",
-      expectedSkillName: "acme:acme-foo",
+      expectedSkillName: "acme-acme-foo",
     },
     {
       plugin: "Ac.Me",
       source: "Ac.Me-Task_Name",
-      expectedSkillName: "Ac.Me:Task_Name",
+      expectedSkillName: "ac-me-task-name",
     },
     { plugin: "foo", source: "foo", expectedSkillName: "foo" },
   ]) {
@@ -201,10 +202,40 @@ describe("generatedSkillName", () => {
     });
   }
 
+  test("caps long names with a stable suffix that distinguishes sources", () => {
+    // arrange
+    const firstSource = `review-${"a".repeat(80)}`;
+    const secondSource = `review-${"a".repeat(79)}b`;
+
+    // act
+    const first = generatedSkillName("acme", firstSource);
+    const repeated = generatedSkillName("acme", firstSource);
+    const second = generatedSkillName("acme", secondSource);
+
+    // assert
+    assert.match(first, /^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+    assert.strictEqual(first.length, 64);
+    assert.strictEqual(first, repeated);
+    assert.notStrictEqual(first, second);
+  });
+
+  test("gives non-ASCII and punctuation-only sources a stable valid name", () => {
+    // arrange
+    const source = "___";
+
+    // act
+    const generated = generatedSkillName("acme", source);
+
+    // assert
+    assert.match(generated, /^acme-name-[a-f0-9]{8}$/);
+    assert.strictEqual(generated, generatedSkillName("acme", source));
+    assert.notStrictEqual(generated, generatedSkillName("acme", "é"));
+  });
+
   for (const { plugin, source, expectedSkillName } of [
-    { plugin: "acme", source: "foo", expectedSkillName: "acme.foo" },
-    { plugin: "acme", source: "acme-foo", expectedSkillName: "acme.foo" },
-    { plugin: "acme", source: "acme.foo", expectedSkillName: "acme.foo" },
+    { plugin: "acme", source: "foo", expectedSkillName: "acme-foo" },
+    { plugin: "acme", source: "acme-foo", expectedSkillName: "acme-foo" },
+    { plugin: "acme", source: "acme.foo", expectedSkillName: "acme-foo" },
   ]) {
     test(`generates ${JSON.stringify(expectedSkillName)} from ${JSON.stringify(source)} on win32`, (t) => {
       // arrange

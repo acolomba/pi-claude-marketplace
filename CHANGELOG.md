@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-09-23
+
+- Plugin skills now install with Pi-valid hyphenated names on every platform. Skill and agent references to Claude's `plugin:skill` names resolve to those installed names. This fixes #211 and corrects the name mapping in both READMEs. Thanks to @CharonRyui.
+
 ## [0.19.0] - 2026-09-22
 
 - Empty bulk command results now show the empty-state message without a redundant `0 successes` line. Populated bulk results keep their totals. (#209)

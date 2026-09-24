@@ -1082,8 +1082,8 @@ test("updatePlugins preserves a generated skill preload in the staged agent", as
         path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"),
         "utf8",
       );
-      assert.match(agent, /^skills: hello:tool$/m);
-      assert.match(agent, /^- `hello:tool` → skill `hello:tool` \(available on demand\)$/m);
+      assert.match(agent, /^skills: hello-tool$/m);
+      assert.match(agent, /^- `hello:tool` → skill `hello-tool` \(available on demand\)$/m);
       assert.deepEqual(notifications, [
         {
           message:
@@ -1135,8 +1135,8 @@ test("updateSinglePlugin preserves a generated skill preload from its path sourc
       "utf8",
     );
     assert.equal(outcome.partition, "updated");
-    assert.match(agent, /^skills: hello:tool$/m);
-    assert.match(agent, /^- `hello:tool` → skill `hello:tool` \(available on demand\)$/m);
+    assert.match(agent, /^skills: hello-tool$/m);
+    assert.match(agent, /^- `hello:tool` → skill `hello-tool` \(available on demand\)$/m);
   });
 });
 
@@ -2309,9 +2309,9 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
       // at rename time: a *FILE* at the path the bridge wants to rename
       // *into*. The bridge skills target shape is
       // `<skillsTargetDir>/<generatedName>/` -- so we pre-create
-      // `<skillsTargetDir>/hello:tool` as a FILE.
+      // `<skillsTargetDir>/hello-tool` as a FILE.
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      await writeFile(path.join(locations.skillsTargetDir, "hello:tool"), "obstacle");
+      await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
       const { ctx, pi, notifications } = makeCtx();
       const completionCache = createCompletionCache();
@@ -2435,10 +2435,10 @@ test("WR-01: bulk update where an up-to-date plugin precedes a phase-3a failure 
 
       // Force the phase-3a failure for `zzz` only: pre-create its skill TARGET
       // as a FILE so the bridge's `rename(stagingDir -> target)` returns ENOTDIR
-      // (the PUP-6 mechanism). The generated skill name is `<plugin>:<skillDir>`
-      // = `zzz:tool`. `aaa` has no obstacle, so it cleanly partitions unchanged.
+      // (the PUP-6 mechanism). The generated skill name is `<plugin>-<skillDir>`
+      // = `zzz-tool`. `aaa` has no obstacle, so it cleanly partitions unchanged.
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      await writeFile(path.join(locations.skillsTargetDir, "zzz:tool"), "obstacle");
+      await writeFile(path.join(locations.skillsTargetDir, "zzz-tool"), "obstacle");
 
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
@@ -2495,10 +2495,10 @@ test("WR-01: a CLEANLY-UPDATED predecessor before a phase-3a abort stays visible
       });
 
       // Force the phase-3a failure for `zzz` only: pre-create its skill TARGET
-      // (`zzz:tool`) as a FILE so the bridge's `rename(staging -> target)`
-      // returns ENOTDIR. `aaa`'s target (`aaa:tool`) is unobstructed.
+      // (`zzz-tool`) as a FILE so the bridge's `rename(staging -> target)`
+      // returns ENOTDIR. `aaa`'s target (`aaa-tool`) is unobstructed.
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      await writeFile(path.join(locations.skillsTargetDir, "zzz:tool"), "obstacle");
+      await writeFile(path.join(locations.skillsTargetDir, "zzz-tool"), "obstacle");
 
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
@@ -2580,7 +2580,7 @@ test("WR-04: successful update populates stagedAgentNames + stagedMcpServerNames
         !rec.compatibility.notes.includes("update-in-progress"),
         "intent-mark marker must NOT leak into the all-success state",
       );
-      assert.deepEqual([...rec.resources.skills], ["hello:tool"]);
+      assert.deepEqual([...rec.resources.skills], ["hello-tool"]);
       assert.deepEqual([...rec.resources.agents], ["pi-claude-marketplace-hello-bot"]);
       assert.deepEqual([...rec.resources.mcpServers], ["server1"]);
 
@@ -4043,7 +4043,7 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
 
       // Obstacle 1: pre-create skills target as a FILE so commitPreparedSkills throws.
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      await writeFile(path.join(locations.skillsTargetDir, "hello:tool"), "obstacle");
+      await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
       // Obstacle 2: pre-create the command target path as a DIRECTORY so
       // commitPreparedCommands rename(file -> dir) fails with EISDIR.
@@ -4119,7 +4119,7 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
 
       // Pre-create the skills target as a FILE to force skills commit failure.
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      await writeFile(path.join(locations.skillsTargetDir, "hello:tool"), "obstacle");
+      await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
       // Pre-create the agent target path as a DIRECTORY to force agents commit
       // failure. The generated agent name for "bot" in plugin "hello" is
@@ -4204,7 +4204,7 @@ test("TR-04 matrix: skills-fails-others-succeed", async () => {
 
       // Force skills commit failure only (PUP-6 shape).
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      await writeFile(path.join(locations.skillsTargetDir, "hello:tool"), "obstacle");
+      await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
@@ -4284,7 +4284,7 @@ test("TR-04 matrix: commands-fails-others-succeed", async () => {
       assert.equal(rec.version, "1.0.0");
       assert.equal(rec.compatibility.installable, false);
       assert.ok(rec.compatibility.notes.includes("update-in-progress"));
-      assert.deepEqual([...rec.resources.skills], ["hello:tool"]);
+      assert.deepEqual([...rec.resources.skills], ["hello-tool"]);
       assert.deepEqual([...rec.resources.prompts], []);
       assert.deepEqual([...rec.resources.agents], ["pi-claude-marketplace-hello-bot"]);
       assert.deepEqual([...rec.resources.mcpServers], ["server1"]);
@@ -4340,7 +4340,7 @@ test("TR-04 matrix: agents-fails-others-succeed", async () => {
       assert.equal(rec.version, "1.0.0");
       assert.equal(rec.compatibility.installable, false);
       assert.ok(rec.compatibility.notes.includes("update-in-progress"));
-      assert.deepEqual([...rec.resources.skills], ["hello:tool"]);
+      assert.deepEqual([...rec.resources.skills], ["hello-tool"]);
       assert.deepEqual([...rec.resources.prompts], ["hello:deploy"]);
       assert.deepEqual([...rec.resources.agents], []);
       assert.deepEqual([...rec.resources.mcpServers], ["server1"]);
@@ -4392,7 +4392,7 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
       // skills only. Intent-mark survives, version stays at 1.0.0,
       // resources.skills stays at pre-update empty.
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      await writeFile(path.join(locations.skillsTargetDir, "hello:tool"), "obstacle");
+      await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
@@ -4419,7 +4419,7 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
 
       // Between calls: clear the obstacle so the second commit's rename
       // can succeed cleanly.
-      await rm(path.join(locations.skillsTargetDir, "hello:tool"), { force: true });
+      await rm(path.join(locations.skillsTargetDir, "hello-tool"), { force: true });
 
       // Call 2: fresh notification recorder so we assert only the
       // second run's notifications.
@@ -4450,7 +4450,7 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
         !rec2.compatibility.notes.includes("update-in-progress"),
         "intent-mark must NOT survive a successful retry",
       );
-      assert.deepEqual([...rec2.resources.skills], ["hello:tool"]);
+      assert.deepEqual([...rec2.resources.skills], ["hello-tool"]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5459,10 +5459,10 @@ test("ENBL-09: update --partial on a disabled PARTIAL refreshes the pin and stag
       );
 
       // The defect this guards is re-staging on disk, so assert on disk: the
-      // supported `skills/tool` component would materialize as `hello:tool`
+      // supported `skills/tool` component would materialize as `hello-tool`
       // had the three-phase body run.
       assert.equal(
-        await pathExists(path.join(locations.skillsTargetDir, "hello:tool")),
+        await pathExists(path.join(locations.skillsTargetDir, "hello-tool")),
         false,
         "no skill staged for a disabled record",
       );
@@ -6265,8 +6265,8 @@ test("FORCE-02: --partial on a candidate that became partially available degrade
       const record = after.marketplaces["mp"]?.plugins["hello"];
       assert.ok(record !== undefined);
       assert.equal(record.version, "1.1.0");
-      assert.deepEqual([...record.resources.skills], ["hello:tool"]);
-      const skillTarget = path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md");
+      assert.deepEqual([...record.resources.skills], ["hello-tool"]);
+      const skillTarget = path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md");
       assert.ok(
         (await readFile(skillTarget, "utf8")).length > 0,
         "supported skill must materialize",
@@ -7713,7 +7713,7 @@ test("SUB-02: project-scope update substitutes ${CLAUDE_PROJECT_DIR} to the inst
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
       const skillBody = await readFile(
-        path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md"),
+        path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"),
         "utf8",
       );
       assert.ok(
@@ -8310,7 +8310,7 @@ test("D-03 fail-continue: a hooks write that cannot land is aggregated, not thro
       assert.equal(record.compatibility.installable, false);
       assert.ok(record.compatibility.notes.includes("update-in-progress"));
       // Fail-continue: the skills bridge committed even though hooks did not.
-      assert.deepEqual([...record.resources.skills], ["hello:tool"]);
+      assert.deepEqual([...record.resources.skills], ["hello-tool"]);
       // The hooks inventory keeps its pre-update value, matching the disk.
       assert.deepEqual([...record.resources.hooks], []);
     } finally {
@@ -8672,7 +8672,7 @@ test("a disabled update accepts a concurrent writer that already stored the next
 
 /**
  * Seed a D-07 collision inside ONE componentPaths.skills entry of the plugin
- * tree: `hello-foo/` and `foo/` both elide to the generated name `hello:foo`
+ * tree: `hello-foo/` and `foo/` both elide to the generated name `hello-foo`
  * (D-141-04), so discovery keeps the localeCompare-first source and reports
  * the loser.
  */
@@ -8714,7 +8714,7 @@ test("D-141-03: a standalone updatePlugins run surfaces the skills discovery war
         },
         {
           message:
-            'Plugin "hello" updated; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello:foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" updated; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
@@ -8788,7 +8788,7 @@ test("D-141-03: an updateSinglePlugin cascade emits no notification and carries 
           },
           {
             message:
-              'Plugin "hello" updated; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello:foo", already produced by skill source "foo"; ignoring duplicate.',
+              'Plugin "hello" updated; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
             severity: "warning",
           },
         ]);
@@ -8834,12 +8834,12 @@ test("D-141-03: a bulk update surfaces one diagnostic per updated plugin", async
         },
         {
           message:
-            'Plugin "hello" updated; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello:foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" updated; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
         {
           message:
-            'Plugin "world" updated; 1 declared component was skipped.\n\nskill source "world-foo" in "skills" elides to generated name "world:foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "world" updated; 1 declared component was skipped.\n\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
@@ -8966,14 +8966,14 @@ test("PUP-6 happy: flow composes preflight, swap, state, tree, and notification"
       const record = state.marketplaces.mp?.plugins.hello;
       assert.ok(record !== undefined);
       assert.strictEqual(record.version, "1.0.1");
-      assert.deepStrictEqual(record.resources.skills, ["hello:tool"]);
+      assert.deepStrictEqual(record.resources.skills, ["hello-tool"]);
       assert.deepStrictEqual(record.resources.prompts, ["hello:deploy"]);
       assert.deepStrictEqual(record.resources.agents, ["pi-claude-marketplace-hello-bot"]);
       assert.deepStrictEqual(record.resources.mcpServers, ["server1"]);
       assert.strictEqual(record.compatibility.installable, true);
       assert.strictEqual(record.compatibility.notes.includes("update-in-progress"), false);
       assert.ok(
-        (await readFile(path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md"), "utf8"))
+        (await readFile(path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"), "utf8"))
           .length > 0,
       );
       assert.deepStrictEqual(notifications, [

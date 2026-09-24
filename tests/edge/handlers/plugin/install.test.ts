@@ -355,7 +355,7 @@ const ALPHA_USER_RECORD: InstallRecordProjection = {
   enabled: true,
   installable: true,
   unsupported: [],
-  skills: ["alpha:tool"],
+  skills: ["alpha-tool"],
   agents: ["pi-claude-marketplace-alpha-scout"],
 };
 
@@ -379,7 +379,7 @@ const DEGRADED_USER_RECORD: InstallRecordProjection = {
   enabled: true,
   installable: false,
   unsupported: ["themes"],
-  skills: ["degraded:tool"],
+  skills: ["degraded-tool"],
   agents: ["pi-claude-marketplace-degraded-scout"],
 };
 
@@ -647,7 +647,7 @@ test("records a plugin declaring itself off by default as disabled, because the 
           enabled: false,
           installable: true,
           unsupported: [],
-          skills: ["optout:tool"],
+          skills: ["optout-tool"],
           agents: ["pi-claude-marketplace-optout-scout"],
         },
       ],
