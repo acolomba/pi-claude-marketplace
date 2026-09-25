@@ -100,29 +100,23 @@ Ejecuta un complemento:
 
 Esta extensión prefija los nombres de comandos y habilidades con el nombre del complemento. Si el nombre ya empieza con el nombre del complemento y `-`, esta extensión elimina esa parte común.
 
-Los nombres de comandos y habilidades usan el formato con dos puntos de Pi:
+Los comandos usan dos puntos (`:`) en POSIX y un punto (`.`) en Windows:
 
-| Nombre del complemento | Nombre del comando o habilidad | Nombre en Pi |
-| ---------------------- | ------------------------------ | ------------ |
-| `foo`                  | `bar`                          | `/foo:bar`   |
-| `foo`                  | `foo-bar`                      | `/foo:bar`   |
-| `foo`                  | `foo`                          | `/foo:foo`   |
+| Nombre del complemento | Nombre del comando | Nombre en Pi (POSIX) | Nombre en Pi (Windows) |
+| ---------------------- | ------------------ | -------------------- | ---------------------- |
+| `foo`                  | `bar`              | `/foo:bar`           | `/foo.bar`             |
+| `foo`                  | `foo-bar`          | `/foo:bar`           | `/foo.bar`             |
+| `foo`                  | `foo`              | `/foo:foo`           | `/foo.foo`             |
 
-En Windows, los comandos se prefijan con un punto (`.`) en lugar de dos puntos (`:`). Los nombres de habilidades no cambian:
+Las habilidades usan la forma `/skill:` de Pi y también tienen un alias en las sesiones interactivas:
 
-| Nombre del complemento | Nombre del comando | Nombre en Pi (Windows) |
-| ---------------------- | ------------------ | ---------------------- |
-| `foo`                  | `bar`              | `/foo.bar`             |
-| `foo`                  | `foo-bar`          | `/foo.bar`             |
-| `foo`                  | `foo`              | `/foo.foo`             |
+| Nombre del complemento | Nombre de la habilidad | Forma de Pi      | Alias interactivo |
+| ---------------------- | ---------------------- | ---------------- | ----------------- |
+| `foo`                  | `bar`                  | `/skill:foo-bar` | `/foo:bar`        |
+| `foo`                  | `foo-bar`              | `/skill:foo-bar` | `/foo:bar`        |
+| `foo`                  | `foo`                  | `/skill:foo`     | `/foo:foo`        |
 
-Esta extensión también registra las habilidades con nombres separados por guiones después del prefijo `/skill:`:
-
-| Nombre del complemento | Nombre de la habilidad | Nombre en Pi     |
-| ---------------------- | ---------------------- | ---------------- |
-| `foo`                  | `bar`                  | `/skill:foo-bar` |
-| `foo`                  | `foo-bar`              | `/skill:foo-bar` |
-| `foo`                  | `foo`                  | `/skill:foo`     |
+Los alias de habilidades usan dos puntos en todas las plataformas. Si un alias entra en conflicto con un comando, el comando tiene prioridad. Usa `/skill:foo-bar` para ejecutar la habilidad.
 
 Los nombres de los servidores MCP no cambian. Si otra configuración de MCP ya utiliza ese nombre, la instalación o actualización del complemento fallará.
 

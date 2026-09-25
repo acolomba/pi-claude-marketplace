@@ -11,6 +11,7 @@
 // so orchestrators can populate state.json without re-discovering skills.
 
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /** A skill enumerated by `discoverPluginSkills` (one entry per source skill dir). */
@@ -25,6 +26,7 @@ export interface DiscoveredSkill {
 
 /** Input bundle for `prepareStageSkills`. */
 export interface StageSkillsInput {
+  readonly referenceNames?: InstalledReferenceNames | undefined;
   readonly locations: ScopedLocations;
   readonly pluginName: string;
   readonly pluginRoot: string;

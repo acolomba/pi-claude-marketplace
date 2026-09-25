@@ -126,6 +126,7 @@ import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -242,7 +243,7 @@ async function prepareUpdateHandles(
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
   agentsDirs: readonly string[],
-  workflowNames: readonly string[],
+  referenceNames: InstalledReferenceNames,
 ): Promise<PrepHandles> {
   const { plugin, marketplace, cwd, locations } = args;
   const { installable, record } = preflight;
@@ -256,8 +257,9 @@ async function prepareUpdateHandles(
       pluginRoot: installable.pluginRoot,
       pluginDataDir,
       resolved: installable,
+      referenceNames,
       previousSkillNames: record.resources.skills,
-      knownWorkflowNames: workflowNames,
+      knownWorkflowNames: referenceNames.workflows,
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
     });
@@ -267,6 +269,7 @@ async function prepareUpdateHandles(
       pluginRoot: installable.pluginRoot,
       pluginDataDir,
       resolved: installable,
+      referenceNames,
       previousCommandNames: record.resources.prompts,
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
@@ -279,6 +282,7 @@ async function prepareUpdateHandles(
       pluginDataDir,
       agentsDirs,
       knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
+      referenceNames,
       // AG-7 opt-in: forward the direct-path `--map-model` setting. The
       // cascade entrypoint never sets `args.mapModel`, so cascade re-
       // installs always resolve to false (omit `model:`).
@@ -1273,7 +1277,7 @@ export async function swapPluginUpdate(
     args,
     preflight,
     generatedNames.agentsDirs,
-    generatedNames.workflows,
+    generatedNames,
   );
 
   // ─── Phase 2a: pre-commit intent-mark (TR-04) ─────────────────────────────

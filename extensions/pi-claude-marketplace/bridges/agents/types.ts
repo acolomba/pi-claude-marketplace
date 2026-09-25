@@ -15,6 +15,7 @@
 // The line-based parser in frontmatter.ts only emits string values for the
 // known fields; consumers narrow as needed.
 
+import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
@@ -63,6 +64,7 @@ export interface ConvertedAgent {
 }
 
 export interface StageAgentsInput {
+  readonly referenceNames?: InstalledReferenceNames | undefined;
   readonly locations: ScopedLocations;
   readonly marketplaceName: string;
   readonly pluginName: string;
