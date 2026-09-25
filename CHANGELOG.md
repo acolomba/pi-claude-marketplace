@@ -89,6 +89,7 @@
   - `enable` and `disable` reported an absent target as a warning where `uninstall`, `update`, and `reinstall` reported it as an error. Nothing is enabled or disabled when the plugin is not installed, so all five now agree on error. This also re-grades the plain not-installed case for those two verbs.
   - Tab completion now offers `--local` on `install`, `update`, `uninstall`, `reinstall`, `enable`, and `disable`, with a description naming the file it writes to. Every one of those verbs already listed `[--local]` in its usage line, so the flag was documented everywhere and suggested nowhere.
   - `marketplace add` no longer exposes raw HTTP errors for missing or temporarily unavailable repositories. HTTP 404 and 410 now report `{source missing}`. HTTP 408, 429, and 5xx responses report `{network unreachable}`.
+- A git host with no OAuth Device Flow can now carry private marketplace and plugin sources. `gitea.nucleix.io` registers as a stored-credential provider: authentication reuses the git credential helper's stored PAT exactly as before, and a fill miss now fails with a cause line naming `git credential approve` instead of silently cloning authless. The provider registry (`domain/auth-registry.ts`) distinguishes device-flow and stored-credential descriptors by `kind`, so adding another self-hosted host is one descriptor.
 
 ## [0.17.0] - 2026-08-19
 

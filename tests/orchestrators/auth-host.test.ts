@@ -835,3 +835,125 @@ describe("buildCloneAuth", () => {
     verify(ctx);
   });
 });
+
+test("GAUTH-03 buildAuthForHost('gitea.nucleix.io') returns a bundle whose onAuthRequired fails clean with NO_STORED_CREDENTIAL_CAUSE", async () => {
+  // arrange
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .once();
+  when(() => {
+    ui.notify(
+      "no stored git credential for gitea.nucleix.io; store one with 'git credential approve' and retry",
+      "warning",
+    );
+  })
+    .thenReturn(undefined)
+    .once();
+  const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+  // act
+  const bundle = buildAuthForHost({
+    host: "gitea.nucleix.io",
+    credentialOps: credentials.credentialOps,
+    ctx,
+  });
+  assert.ok(bundle !== undefined, "a stored-credential host must still yield a bundle");
+  assert.strictEqual(bundle.host, "gitea.nucleix.io");
+  const result = await bundle.onAuthRequired();
+
+  // assert
+  assert.deepStrictEqual(result, {
+    ok: false,
+    reason:
+      "no stored git credential for gitea.nucleix.io; store one with 'git credential approve' and retry",
+    authAttempted: true,
+  });
+  verify(ctx);
+  verify(ui);
+});
+
+test("GAUTH-03 a stored-credential bundle threads no Device Flow even when a flow http is supplied", async () => {
+  // arrange
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .once();
+  when(() => {
+    ui.notify(
+      "no stored git credential for gitea.nucleix.io; store one with 'git credential approve' and retry",
+      "warning",
+    );
+  })
+    .thenReturn(undefined)
+    .once();
+  const credentials = createCredentialOpsFake({ boundary: "memory" });
+  const deviceFlow = createDeviceFlowFake({
+    boundary: "memory",
+    network: "disabled",
+    deviceCode: {
+      device_code: "unused-device-code",
+      user_code: "UNUSED",
+      verification_uri: "https://gitea.nucleix.io/login/device",
+      expires_in: 900,
+      interval: 0,
+    },
+  });
+
+  // act
+  const bundle = buildAuthForHost({
+    host: "gitea.nucleix.io",
+    credentialOps: credentials.credentialOps,
+    ctx,
+    deviceFlowHttp: deviceFlow.http,
+  });
+  assert.ok(bundle !== undefined);
+  const result = await bundle.onAuthRequired();
+
+  // assert
+  assert.strictEqual(result.ok, false);
+  assert.deepStrictEqual(
+    deviceFlow.calls,
+    { requestCode: [], pollToken: [] },
+    "a stored-credential provider must never start a Device Flow",
+  );
+  verify(ctx);
+  verify(ui);
+});
+
+test("GAUTH-03 NO_STORED_CREDENTIAL_CAUSE names the host and the remedy", async () => {
+  // arrange
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .once();
+  when(() => {
+    ui.notify(
+      "no stored git credential for gitea.nucleix.io; store one with 'git credential approve' and retry",
+      "warning",
+    );
+  })
+    .thenReturn(undefined)
+    .once();
+  const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+  // act
+  const bundle = buildAuthForHost({
+    host: "gitea.nucleix.io",
+    credentialOps: credentials.credentialOps,
+    ctx,
+  });
+  assert.ok(bundle !== undefined);
+  const result = await bundle.onAuthRequired();
+
+  // assert -- the rendered cause names the host and the remedy
+  assert.strictEqual(result.ok, false);
+  const reason = result.ok ? "" : result.reason;
+  assert.match(reason, /gitea\.nucleix\.io/);
+  assert.match(reason, /git credential approve/);
+  verify(ctx);
+  verify(ui);
+});
