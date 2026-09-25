@@ -11,8 +11,8 @@
   - Release waits for `pi-dynamic-workflows` fixes [#232](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/232), [#233](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/233), and [#234](https://github.com/QuintinShaw/pi-dynamic-workflows/pull/234).
 - Internal: the GSD discuss phase now loads a Claude Code compatibility research skill before it generates questions, so phase decisions cite verified upstream behavior instead of assumption. `AGENTS.md` and `PROJECT.md` now state the upstream-parity rule and the two things that license a divergence, and both record the hook bridge that their component list had been omitting. (#210)
   - Internal: the marketplace-remove test that covers the in-lock concurrent disappearance now injects the state load instead of racing a real filesystem writer, so the branch is covered on every run rather than only when the race lands. It was the intermittent cause of sub-100% coverage runs in CI.
-- Internal: tests, the live-UAT canaries, and `scripts/pi.sh` now run the Pi version that `package-lock.json` pins, from `node_modules`, instead of whatever `pi` is on `PATH`. Run `npm ci` first.
-  - `scripts/pi.sh` installs pinned pi-mcp-adapter, pi-subagents, and @quintinshaw/pi-dynamic-workflows into a private npm prefix outside the checkout (`PI_CM_RUNTIME_PREFIX`) instead of the global npm root.
+- Internal: the tests, the live-UAT canaries, and `scripts/pi.sh` now run the Pi version that `package-lock.json` pins. They run it from `node_modules` and no longer use the `pi` on `PATH`. Run `npm ci` first.
+  - `scripts/pi.sh` installs pinned versions of pi-mcp-adapter, pi-subagents, and @quintinshaw/pi-dynamic-workflows into a private npm prefix outside the checkout (`PI_CM_RUNTIME_PREFIX`). It no longer installs them into the global npm root.
 
 ## [0.19.2] - 2026-09-24
 
