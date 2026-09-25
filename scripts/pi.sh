@@ -149,8 +149,8 @@ if ((need_install)); then
   # --legacy-peer-deps: Pi hands its own core packages (@earendil-works/*,
   # typebox) to every extension it loads, so the declared peers are never
   # used. Without this flag npm installs them, landing a second, unpinned Pi
-  # in the prefix (against Decision 1). --ignore-scripts is deliberately not
-  # used: the companions' own install scripts are expected to run.
+  # in the prefix beside the one package-lock.json pins. --ignore-scripts is
+  # deliberately not used: the companions' own install scripts must run.
   npm install --prefix "$prefix" --legacy-peer-deps --save-exact --no-audit --no-fund \
     "${pi_cm_pins[@]}" >&2
   for spec in "${pi_cm_pins[@]}"; do
