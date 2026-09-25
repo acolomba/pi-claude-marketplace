@@ -338,6 +338,30 @@ export async function currentBranch(opts: CurrentBranchOptions): Promise<string 
   return branch ?? undefined;
 }
 
+export interface ListRemotesOptions {
+  dir: string;
+  /** Optional gitdir (defaults to `<dir>/.git`); typically omitted. */
+  gitdir?: string;
+}
+
+/**
+ * NFR-3: list the `git remote` entries of an existing working tree. The
+ * marketplace orchestrator's MA-6 adopt check consumes it to recognize a
+ * leftover clone of the same source; non-git trees reject (isomorphic-git
+ * NotFoundError) and the caller treats them as foreign.
+ *
+ * Source: node_modules/isomorphic-git/index.d.ts listRemotes.
+ */
+export async function listRemotes(
+  opts: ListRemotesOptions,
+): Promise<{ remote: string; url: string }[]> {
+  return git.listRemotes({
+    fs,
+    dir: opts.dir,
+    ...(opts.gitdir !== undefined && { gitdir: opts.gitdir }),
+  });
+}
+
 /**
  * Credential shape consumed by isomorphic-git's onAuth / onAuthFailure callbacks.
  * Matches isomorphic-git's GitAuth; re-exported here so consumers
