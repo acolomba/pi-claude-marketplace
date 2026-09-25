@@ -19,6 +19,7 @@
 // populate `state.json` without re-discovering after commit.
 
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /** A single command discovered under `componentPaths.commands`. */
@@ -41,6 +42,7 @@ export interface DiscoveredCommand {
 
 /** Input bundle for `prepareStageCommands`. */
 export interface StageCommandsInput {
+  readonly referenceNames?: InstalledReferenceNames | undefined;
   readonly locations: ScopedLocations;
   readonly pluginName: string;
   readonly pluginRoot: string;

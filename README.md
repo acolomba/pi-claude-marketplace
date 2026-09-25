@@ -100,29 +100,23 @@ Run a plugin:
 
 This extension prefixes command and skill names with the plugin name. If the name already starts with the plugin name and `-`, this extension removes that common part.
 
-Commands and skill names use Pi's colon form:
+Commands use a colon (`:`) on POSIX and a dot (`.`) on Windows:
 
-| Plugin name | Command or skill name | Pi name    |
-| ----------- | --------------------- | ---------- |
-| `foo`       | `bar`                 | `/foo:bar` |
-| `foo`       | `foo-bar`             | `/foo:bar` |
-| `foo`       | `foo`                 | `/foo:foo` |
+| Plugin name | Command name | Pi name (POSIX) | Pi name (Windows) |
+| ----------- | ------------ | --------------- | ----------------- |
+| `foo`       | `bar`        | `/foo:bar`      | `/foo.bar`        |
+| `foo`       | `foo-bar`    | `/foo:bar`      | `/foo.bar`        |
+| `foo`       | `foo`        | `/foo:foo`      | `/foo.foo`        |
 
-On Windows, commands are prefixed with a dot (`.`) instead of a colon (`:`). Skill names do not change:
+Skills use Pi's `/skill:` form and also have an alias in interactive sessions:
 
-| Plugin name | Command name | Pi name (Windows) |
-| ----------- | ------------ | ----------------- |
-| `foo`       | `bar`        | `/foo.bar`        |
-| `foo`       | `foo-bar`    | `/foo.bar`        |
-| `foo`       | `foo`        | `/foo.foo`        |
+| Plugin name | Skill name | Pi skill form    | Interactive alias |
+| ----------- | ---------- | ---------------- | ----------------- |
+| `foo`       | `bar`      | `/skill:foo-bar` | `/foo:bar`        |
+| `foo`       | `foo-bar`  | `/skill:foo-bar` | `/foo:bar`        |
+| `foo`       | `foo`      | `/skill:foo`     | `/foo:foo`        |
 
-This extension also registers skills with hyphenated names after the `/skill:` prefix:
-
-| Plugin name | Skill name | Pi name          |
-| ----------- | ---------- | ---------------- |
-| `foo`       | `bar`      | `/skill:foo-bar` |
-| `foo`       | `foo-bar`  | `/skill:foo-bar` |
-| `foo`       | `foo`      | `/skill:foo`     |
+Skill aliases use a colon on every platform. If an alias conflicts with a command, the command takes precedence. Use `/skill:foo-bar` to invoke the skill.
 
 MCP server names do not change. If another MCP configuration already uses that name, the plugin install or update fails.
 

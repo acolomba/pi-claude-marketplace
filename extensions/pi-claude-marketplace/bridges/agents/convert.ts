@@ -3,25 +3,24 @@
 // AG-7 conversion pipeline. Notable details:
 //   1. substituteClaudeVars from ../../shared/vars.ts (D-08 / PI-10) handles
 //      body substitution per the PI-10 contract.
-//   2. generatedSkillName from ../../domain/name.ts is the single source of
-//      truth for the skill-legend names this converter resolves; agent name
-//      generation (generatedAgentName, complete source name) happens in ./discover.ts,
-//      not here.
+//   2. resolveSkillReference from ../../domain/skill-tokens.ts maps skill
+//      preloads and body references to the names staged by the skills bridge.
+//      Agent name generation happens in ./discover.ts.
 //   3. discoverPluginAgents lives in ./discover.ts so convert stays pure.
 //
 // Model, tool, and thinking mappings are user contracts; owner tests assert
 // their exact converted output.
 
-import { declaredAgentName, generatedSkillName } from "../../domain/name.ts";
+import { declaredAgentName } from "../../domain/name.ts";
+import { resolveSkillReference, rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { errorMessage } from "../../shared/errors.ts";
-import { escapeRegExp } from "../../shared/regexp.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
 import { emitGeneratedAgentFile } from "./frontmatter.ts";
 
-import type { GeneratedToolsFields, SkillLegendEntry } from "./frontmatter.ts";
+import type { GeneratedToolsFields } from "./frontmatter.ts";
 import type { ConvertedAgent, DiscoveredAgent, RawAgentFrontmatter } from "./types.ts";
+import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 
 /**
  * Source frontmatter fields the converter actively consumes. Anything else
@@ -135,64 +134,6 @@ function splitCsv(value: string | undefined): string[] {
       return trimmed;
     })
     .filter((part) => part !== "");
-}
-
-/**
- * AGSK-04 / D-82-06 / D-82-07: detect `<pluginName>:<skill>` tokens in the
- * emitted body and build the legend entries.
- *
- * The whole body is scanned verbatim, fenced code blocks included
- * (D-82-07: the legend is aggregated at the top and nothing is rewritten
- * inline, so code-block matches are safe and useful). The lookbehind
- * rejects tokens embedded in a longer word (`other-spec-tree:x` is not a
- * `spec-tree:` reference, and `.` sits in the boundary class so a dotted
- * plugin-name prefix `other.spec-tree:x` is not one either); the
- * candidate class excludes `.` so sentence
- * punctuation never joins a candidate (skill names containing dots would
- * be missed -- none exist in the wild). Only candidates resolving into
- * knownSkills get an entry (D-82-06); cross-plugin and unknown tokens get
- * none. Entries dedupe by full token, first occurrence wins.
- */
-function detectSkillTokens(
-  body: string,
-  pluginName: string,
-  knownSkills: readonly string[],
-): SkillLegendEntry[] {
-  const known = new Set(knownSkills);
-  const tokenRe = new RegExp(
-    `(?<![A-Za-z0-9_.:-])${escapeRegExp(pluginName)}:([A-Za-z0-9_-]+)`,
-    "g",
-  );
-  const seen = new Set<string>();
-  const entries: SkillLegendEntry[] = [];
-  for (const match of body.matchAll(tokenRe)) {
-    const token = match[0];
-    const candidate = match[1];
-    if (candidate === undefined || seen.has(token)) {
-      continue;
-    }
-
-    seen.add(token);
-    // generatedSkillName elides a `<plugin>-` prefix; a candidate of
-    // exactly `<plugin>-` would elide to "" and make assertSafeName throw.
-    // A body scan must never turn into a throw -- catch the validator (as
-    // mapSkills does) and skip the candidate instead of aborting the install.
-    let generated: string | null;
-    try {
-      generated = generatedSkillName(pluginName, candidate);
-    } catch (err) {
-      hookDebugLog(
-        `generatedSkillName rejected body-scan candidate "${candidate}" for token "${token}": ${errorMessage(err)}`,
-      );
-      generated = null;
-    }
-
-    if (generated !== null && known.has(generated)) {
-      entries.push({ token, generatedName: generated });
-    }
-  }
-
-  return entries;
 }
 
 function dedupePreservingOrder(values: readonly string[]): string[] {
@@ -413,52 +354,16 @@ function mapSkills(
   const emit: string[] = [];
   const warnings: string[] = [];
   for (const token of tokens) {
-    // AGSK-02 (#86): a token qualified with this plugin's own name
-    // (`spec-tree:review-changes`) maps like its bare form -- strip the
-    // qualifier and delegate to generatedSkillName, whose prefix elision
-    // makes both spellings converge. A cross-plugin qualifier is dropped
-    // with a warning naming the full token (installability of the other
-    // plugin is unknown at convert time).
-    let effective = token;
-    const colon = token.indexOf(":");
-    if (colon !== -1) {
-      // Tolerate conventional YAML `key: value` spacing around the colon:
-      // `spec-tree: review-changes` and `spec-tree :review-changes`
-      // resolve like the tight form instead of silently dropping the
-      // preload the user obviously intended.
-      const qualifier = token.slice(0, colon).trim();
-      const rest = token.slice(colon + 1).trim();
-      if (qualifier !== pluginName) {
-        warnings.push(
-          `skill reference "${token}" is qualified with a different plugin -- dropped (only this plugin's skills can be preloaded)`,
-        );
-        continue;
-      }
-
-      effective = rest;
-    }
-
-    // AGSK-02 (#86): assertSafeName rejects empty, "." / "..", path
-    // separators, and control characters. A warn-drop must never become a
-    // throw -- catch the validator instead of enumerating its conditions,
-    // so every unsafe token (qualified remainder or bare) falls through to
-    // the malformed-reference drop below.
-    let generated: string | null;
-    let malformed = false;
-    try {
-      generated = generatedSkillName(pluginName, effective);
-    } catch (err) {
-      hookDebugLog(`generatedSkillName rejected skill token "${token}": ${errorMessage(err)}`);
-      generated = null;
-      malformed = true;
-    }
-
-    // The warning names the FULL original token (qualifier included) so
-    // the user can find it verbatim in the source frontmatter.
-    if (generated !== null && known.has(generated)) {
-      emit.push(generated);
-    } else if (malformed) {
+    const resolution = resolveSkillReference(pluginName, token, known);
+    if (resolution.kind === "known") {
+      emit.push(resolution.generatedName);
+    } else if (resolution.kind === "malformed") {
+      hookDebugLog(`generatedSkillName rejected skill token "${token}": ${resolution.reason}`);
       warnings.push(`malformed skill reference "${token}" -- dropped`);
+    } else if (resolution.kind === "foreign") {
+      warnings.push(
+        `skill reference "${token}" is qualified with a different plugin -- dropped (only this plugin's skills can be preloaded)`,
+      );
     } else {
       warnings.push(`unknown skill reference "${token}" -- dropped`);
     }
@@ -488,6 +393,7 @@ export function convertAgent(input: {
   pluginRoot: string;
   pluginDataDir: string;
   knownSkills: readonly string[];
+  referenceNames?: InstalledReferenceNames | undefined;
   discovered: DiscoveredAgent;
   sourceHash: string;
   /**
@@ -511,6 +417,7 @@ export function convertAgent(input: {
     pluginRoot,
     pluginDataDir,
     knownSkills,
+    referenceNames,
     discovered,
     sourceHash,
     mapModel: mapModelFlag,
@@ -582,11 +489,12 @@ export function convertAgent(input: {
     projectDir,
   });
 
-  // 7.5 AGSK-04: detect same-plugin skill tokens in the emitted body and
-  //     build the legend. Empty when the body references none -- the
-  //     emitter then keeps the byte-identical no-legend layout
-  //     (reference-gated).
-  const legend = detectSkillTokens(substitutedBody, pluginName, knownSkills);
+  // Resolve references against the names that this install stages.
+  const convertedBody = rewriteMarkdownReferences(
+    substitutedBody,
+    pluginName,
+    referenceNames ?? { skills: knownSkills, commands: [], workflows: [] },
+  );
 
   // 8. Hand off to the frontmatter emitter for final assembly. From here on,
   //    parser-safety (YAML quote-flipping, newline normalization, field
@@ -611,8 +519,7 @@ export function convertAgent(input: {
       droppedTools: toolsResult.dropped,
       warnings,
     },
-    body: substitutedBody,
-    legend,
+    body: convertedBody,
   });
 
   const result: ConvertedAgent = {

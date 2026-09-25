@@ -18,11 +18,11 @@
 //     so a plugin author cannot escape the source tree by planting a symlink.
 
 import { randomUUID } from "node:crypto";
-import { cp, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
-import { rewriteSkillTokens } from "../../domain/skill-tokens.ts";
+import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
 import { appendLeakToError, errorMessage, ManualRecoveryError } from "../../shared/errors.ts";
@@ -53,6 +53,7 @@ import type {
   StagedSkillRecord,
   StageSkillsInput,
 } from "./types.ts";
+import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { ClaudePluginVars } from "../../shared/vars.ts";
 
@@ -173,6 +174,48 @@ function augmentSkillDescription(
   return setDescriptionScalar(content, effective);
 }
 
+/** Rewrites copied supporting Markdown without following plugin symlinks. */
+async function rewriteSupportingMarkdown(
+  directory: string,
+  pluginName: string,
+  names: InstalledReferenceNames,
+): Promise<void> {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const file = path.join(directory, entry.name);
+    const fileStat = await lstat(file);
+    if (fileStat.isSymbolicLink()) {
+      continue;
+    }
+
+    if (fileStat.isDirectory()) {
+      await rewriteSupportingMarkdown(file, pluginName, names);
+    } else if (fileStat.isFile() && entry.name.endsWith(".md")) {
+      const content = await readFile(file, "utf8");
+      const rewritten = rewriteMarkdownReferences(content, pluginName, names);
+      if (rewritten !== content) {
+        await writeFile(file, rewritten, "utf8");
+      }
+    }
+  }
+}
+
+/**
+ * Uses the orchestrator's cross-kind inventory when it is available. The
+ * workflow names always come from the bridge's required `knownWorkflowNames`
+ * input, so a caller that omits the inventory still retargets workflows.
+ */
+function skillReferenceNames(
+  supplied: InstalledReferenceNames | undefined,
+  generatedSkills: readonly string[],
+  workflows: readonly string[],
+): InstalledReferenceNames {
+  return {
+    skills: supplied?.skills ?? generatedSkills,
+    commands: supplied?.commands ?? [],
+    workflows,
+  };
+}
+
 /**
  * Phase-1 of the skills bridge two-phase commit:
  *   1. Discover skills in the source plugin (SK-5). RN-6 / D-141-04:
@@ -231,7 +274,11 @@ export async function prepareStageSkills(
   const recorded: StagedSkillRecord[] = [];
   const degraded: SkillDegradeRecord[] = [];
   // SKTK-01: the same-plugin reference targets this install materializes.
-  const generatedNames = discovered.map((s) => s.generatedName);
+  const referenceNames = skillReferenceNames(
+    input.referenceNames,
+    discovered.map((skill) => skill.generatedName),
+    input.knownWorkflowNames,
+  );
 
   try {
     for (const skill of discovered) {
@@ -318,16 +365,14 @@ export async function prepareStageSkills(
         content = augmentSkillDescription(content, parsed.frontmatter, parsed.body, skillVars);
       }
 
-      // SKTK-01: retarget same-plugin `<plugin>:<skill>` and
-      // `<plugin>:<workflow>` references (both arms -- a degraded skill's body
-      // is prose too). Runs before SK-4 substitution so the PARSE-02 backstop
-      // validates the final bytes.
-      content = rewriteSkillTokens(content, pluginName, {
-        skills: generatedNames,
-        workflows: input.knownWorkflowNames,
-      });
+      // SKTK-01: retarget same-plugin `<plugin>:<skill>`, `<plugin>:<command>`
+      // and `<plugin>:<workflow>` references (both arms -- a degraded skill's
+      // body is prose too). Runs before SK-4 substitution so the PARSE-02
+      // backstop validates the final bytes.
+      content = rewriteMarkdownReferences(content, pluginName, referenceNames);
       content = substituteClaudeVars(content, skillVars);
       await writeFile(skillMdPath, content, "utf8");
+      await rewriteSupportingMarkdown(stagedDir, pluginName, referenceNames);
 
       // PARSE-02 / D-86-04: re-parse the STAGED bytes as a Pi-acceptability
       // backstop. A THROW here means our OWN rewrite/substitution produced

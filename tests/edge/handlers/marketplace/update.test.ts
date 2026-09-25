@@ -500,7 +500,7 @@ for (const { args, tally } of [
     assert.deepStrictEqual(
       (await loadState(locations.extensionRoot)).marketplaces.alpha?.plugins.hello?.resources,
       {
-        skills: ["hello:greet"],
+        skills: ["hello-greet"],
         prompts: [],
         agents: [],
         mcpServers: [],
