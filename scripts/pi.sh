@@ -101,25 +101,44 @@ pi_cm_pins=(
 )
 
 # Prefix resolved against the invocation directory, before the --cd change
-# below moves the shell elsewhere. mkdir -p plus `cd ... && pwd -P` is the
-# portable equivalent of `realpath -m`/`readlink -f`, neither of which macOS
-# ships.
+# below moves the shell elsewhere. The check runs before mkdir, so a refused
+# prefix is never created: canonicalize the deepest existing ancestor with
+# `cd ... && pwd -P` (macOS ships neither `realpath -m` nor `readlink -f`)
+# and append the rest. A `..` in that not-yet-existing rest cannot be
+# resolved without creating directories, so it is refused.
 default_prefix="${XDG_CACHE_HOME:-$HOME/.cache}/pi-claude-marketplace/pi-runtime"
 prefix="${PI_CM_RUNTIME_PREFIX:-$default_prefix}"
 case "$prefix" in
   /*) ;;
   *) prefix="$PWD/$prefix" ;;
 esac
-mkdir -p "$prefix"
-resolved_prefix=$(cd -- "$prefix" && pwd -P)
 resolved_repo_root=$(cd -- "$repo_root" && pwd -P)
-if [[ "$resolved_prefix" == "$resolved_repo_root" || "$resolved_prefix" == "$resolved_repo_root"/* ]]; then
-  echo "scripts/pi.sh: PI_CM_RUNTIME_PREFIX ($resolved_prefix) is the checkout or inside it." >&2
-  echo "scripts/pi.sh: refusing -- npm install --prefix there would write the workflow" >&2
-  echo "scripts/pi.sh: engine into the repository's own manifests (NFR-5, D-98-10)." >&2
-  exit 2
-fi
-prefix="$resolved_prefix"
+
+refuse_prefix_in_checkout() {
+  local dir=$1
+  local rest=""
+  while [[ ! -d "$dir" ]]; do
+    rest="/$(basename -- "$dir")$rest"
+    dir=$(dirname -- "$dir")
+  done
+  if [[ "$rest/" == */../* ]]; then
+    echo "scripts/pi.sh: PI_CM_RUNTIME_PREFIX ($1) has a '..' below a directory that does not exist yet." >&2
+    exit 2
+  fi
+  local resolved
+  resolved="$(cd -- "$dir" && pwd -P)$rest"
+  if [[ "$resolved" == "$resolved_repo_root" || "$resolved" == "$resolved_repo_root"/* ]]; then
+    echo "scripts/pi.sh: PI_CM_RUNTIME_PREFIX ($resolved) is the checkout or inside it." >&2
+    echo "scripts/pi.sh: refusing -- the pinned companions and the package.json," >&2
+    echo "scripts/pi.sh: package-lock.json and node_modules that npm writes into the" >&2
+    echo "scripts/pi.sh: prefix must stay outside the repository." >&2
+    exit 2
+  fi
+}
+
+refuse_prefix_in_checkout "$prefix"
+mkdir -p "$prefix"
+prefix=$(cd -- "$prefix" && pwd -P)
 
 if [[ -n "$pi_cd" ]]; then
   cd "$pi_cd"

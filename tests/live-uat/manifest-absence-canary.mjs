@@ -687,7 +687,7 @@ async function flowC() {
       detail: combined.slice(0, 2000),
     };
   }
-  return { ok: true, version: pi.version };
+  return { ok: true, version: pi.version, cliPath: pi.cliPath };
 }
 
 // ---------------------------------------------------------------------------
@@ -727,7 +727,7 @@ async function main() {
     cSummary = await flowC();
     if (cSummary.ok) {
       pass(
-        `C (NFR-2): pi ${cSummary.version} loaded the extension and settled without an extension error`,
+        `C (NFR-2): pi ${cSummary.version} (${cSummary.cliPath}) loaded the extension and settled without an extension error`,
       );
     }
   } finally {
