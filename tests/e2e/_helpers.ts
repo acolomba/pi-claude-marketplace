@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import claudeMarketplaceExtension from "../../extensions/pi-claude-marketplace/index.ts";
@@ -21,7 +22,7 @@ import type {
 const execFileAsync = promisify(execFile);
 
 const UPSTREAM_URL = "https://github.com/anthropics/claude-plugins-official.git";
-const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 export interface NotifyRecord {
   readonly message: string;

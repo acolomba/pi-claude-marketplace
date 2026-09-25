@@ -8,8 +8,13 @@
  * `github.com` + `initiateDeviceFlow`.
  *
  * PROV-02/03/04 contract:
- *   - Provider found  -> a bundle whose `onAuthRequired` runs that provider's
- *     Device Flow, host-keyed (PROV-03).
+ *   - Device-flow provider found -> a bundle whose `onAuthRequired` runs that
+ *     provider's Device Flow, host-keyed (PROV-03).
+ *   - Stored-credential provider found (GAUTH-03) -> a bundle whose
+ *     `onAuthRequired` fails clean with NO_STORED_CREDENTIAL_CAUSE: the
+ *     fill-first path in buildAuthCallbacks carries the whole auth story, so
+ *     the bundle exists only to thread the host-keyed credential lookup and
+ *     report a usable cause on a miss.
  *   - No provider     -> `undefined`. NEVER build a bundle for a host with no
  *     registered provider: a bundle carries `credentialOps` keyed on the host,
  *     and constructing one for an unrelated host would risk leaking a
@@ -88,6 +93,16 @@ export const NO_PROVIDER_CAUSE: (host: string) => string = (host) =>
   `no auth provider is registered for ${host}`;
 
 /**
+ * The single stored-credential-miss cause line (GAUTH-03). Returned when a
+ * stored-credential provider -- a host with no RFC-8628 Device Flow -- finds
+ * nothing in the git credential helper. The user stores a PAT via
+ * `git credential approve` and retries; there is no interactive flow to fall
+ * back to.
+ */
+const NO_STORED_CREDENTIAL_CAUSE = (host: string): string =>
+  `no stored git credential for ${host}; store one with 'git credential approve' and retry`;
+
+/**
  * Build a `GitAuthBundle` for `host`, or `undefined` when no provider claims
  * the host (PROV-04). When a provider is found, the returned bundle's
  * `onAuthRequired` runs that provider's Device Flow (D-79-05) and, if an
@@ -117,13 +132,25 @@ export function buildAuthForHost(args: {
       return memoized;
     }
 
-    const result = await initiateDeviceFlow({
-      provider,
-      host,
-      credentialOps,
-      notifyFn,
-      ...(deviceFlowHttp !== undefined && { http: deviceFlowHttp }),
-    });
+    let result: AuthAttemptResult;
+    if (provider.kind === "stored-credential") {
+      // GAUTH-03: no Device Flow exists for this host. The fill-first path in
+      // buildAuthCallbacks already missed, so the only honest outcome is a
+      // clean failure naming how to store a credential. The reason reaches
+      // only hookDebugLog, so the guidance also notifies -- the Device Flow
+      // prompt is the precedent for a raw notify in this seam (D-32-04).
+      notifyFn(NO_STORED_CREDENTIAL_CAUSE(host), "warning");
+      result = { ok: false, reason: NO_STORED_CREDENTIAL_CAUSE(host), authAttempted: true };
+    } else {
+      result = await initiateDeviceFlow({
+        provider,
+        host,
+        credentialOps,
+        notifyFn,
+        ...(deviceFlowHttp !== undefined && { http: deviceFlowHttp }),
+      });
+    }
+
     authMemo?.set(host, result);
     return result;
   };

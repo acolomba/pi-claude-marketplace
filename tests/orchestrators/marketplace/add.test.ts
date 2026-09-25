@@ -14,6 +14,7 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { mock, verify, when } from "strong-mock";
 
@@ -75,7 +76,7 @@ void ("unknown add failure" satisfies FailedAddOutcome["reason"]);
 function fixtureMarketplaceDir(
   name: "valid-marketplace" | "invalid-manifest" | "empty-marketplace",
 ): string {
-  return path.join(path.dirname(new URL(import.meta.url).pathname), "_fixtures", name);
+  return path.join(path.dirname(fileURLToPath(import.meta.url)), "_fixtures", name);
 }
 
 interface CredentialAdapterOptions {
@@ -134,6 +135,8 @@ interface GitOpsAdapterOptions {
   readonly fixtureSourceDir?: string;
   readonly cloneThrows?: unknown;
   readonly onClone?: (directory: string) => Promise<void>;
+  /** Remote entries the MA-6 adopt check reads via listRemotes (NFR-3). */
+  readonly listRemotesResult?: readonly { remote: string; url: string }[];
 }
 
 const ALLOWED_MARKETPLACE_REMOTES = [
@@ -152,6 +155,9 @@ function createGitOps(initial: GitOpsAdapterOptions = {}) {
   const git = createGitOpsFake({
     boundary: "memory",
     allowedRemoteUrls: ALLOWED_MARKETPLACE_REMOTES,
+    ...(initial.listRemotesResult === undefined
+      ? {}
+      : { listRemotesResult: initial.listRemotesResult }),
     ...(initial.fixtureSourceDir === undefined
       ? {}
       : {
@@ -469,6 +475,73 @@ test("MA-6 / ATTR-07: pre-existing non-empty sources/<name>/ renders (failed) {s
       "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
     );
     assert.equal(note.severity, "error");
+  });
+});
+
+test("NFR-3 / MA-6 adopt: leftover clone of the SAME source url is replaced by the fresh clone instead of failing {stale clone}", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    // Pre-create the final dir as a leftover clone of the same source.
+    const finalDir = await locations.sourceCloneDir("valid-marketplace");
+    await mkdir(finalDir, { recursive: true });
+    await writeFile(path.join(finalDir, ".stale"), "x");
+
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      listRemotesResult: [
+        { remote: "origin", url: "https://github.com/anthropics/claude-plugins-official.git" },
+      ],
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    const note = notifications[0];
+    assert.ok(note);
+    assert.equal(note.message, "● valid-marketplace [project] (added)");
+    assert.equal(note.severity, undefined);
+    // The leftover tree was replaced by the fresh clone: marker gone, state recorded.
+    assert.equal(await pathExists(path.join(finalDir, ".stale")), false);
+    const persisted = await loadState(locations.extensionRoot);
+    assert.ok("valid-marketplace" in persisted.marketplaces);
+  });
+});
+
+test("MA-6: pre-existing sources/<name>/ clone of a DIFFERENT url still refuses {stale clone}", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    const { ctx, pi, notifications } = makeCtx();
+    const finalDir = await locations.sourceCloneDir("valid-marketplace");
+    await mkdir(finalDir, { recursive: true });
+    await writeFile(path.join(finalDir, ".stale"), "x");
+
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      listRemotesResult: [{ remote: "origin", url: "https://example.com/other/repo.git" }],
+    });
+
+    await addMarketplace({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    const note = notifications[0];
+    assert.ok(note);
+    assert.equal(
+      note.message,
+      "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
+    );
+    // The foreign tree is left untouched.
+    assert.equal(await pathExists(path.join(finalDir, ".stale")), true);
   });
 });
 
@@ -2214,22 +2287,30 @@ test("CFG-03 / T-56-02-05: --local path with an invalid config aborts the add; b
   });
 });
 
-test("WR-07: config write failure after the clone rename cleans up the final clone (retry never hits {stale clone})", async () => {
+test("WR-07: config write failure after the clone rename cleans up the final clone (retry never hits {stale clone})", async (t) => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
-    const { ctx, pi, notifications } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx(0);
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
     // Valid pre-existing config so the CFG-03 pre-check passes -- the
-    // failure must land AFTER addGithubInGuard renamed the clone into its
-    // final sources/<name>/ path.
+    // failure must land AFTER addGitClonedInGuard renamed the clone into its
+    // final sources/<name>/ path. The config write reaches
+    // atomicWriteJson's mkdir(path.dirname(configJsonPath)) after the
+    // rename; throwing there is cross-platform (chmod-based read-only
+    // directories do not block writes on Windows).
     await writeFile(locations.configJsonPath, JSON.stringify({ schemaVersion: 1 }), "utf8");
-    // Read-only scope root: saveConfig's tmp+rename write into scopeRoot
-    // fails with EACCES, while everything under extensionRoot (state lock,
-    // sources/, sources-staging/) stays writable.
-    await chmod(locations.scopeRoot, 0o555);
+    const originalDirname = path.dirname.bind(path);
+    t.mock.method(path, "dirname", (value: string) => {
+      if (value === locations.configJsonPath) {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the public boundary accepts unknown throws from persistence.
+        throw "config writer stopped";
+      }
+
+      return originalDirname(value);
+    });
 
     let threw = false;
     try {
@@ -2244,8 +2325,6 @@ test("WR-07: config write failure after the clone rename cleans up the final clo
       });
     } catch {
       threw = true;
-    } finally {
-      await chmod(locations.scopeRoot, 0o755);
     }
 
     // The command failed (either a classified failure row or a rethrow).

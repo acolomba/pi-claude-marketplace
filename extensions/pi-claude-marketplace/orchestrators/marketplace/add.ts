@@ -50,7 +50,7 @@ import { mkdir, rename, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { findMarketplaceManifestPath, loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { ensureGitSuffix, parsePluginSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
@@ -661,6 +661,23 @@ async function runAddOutcome(
 }
 
 /**
+ * NFR-3 / MA-6 adopt check: true when the leftover `sources/<name>/` tree is
+ * a git clone whose origin URL matches the source being added (compared
+ * post-`ensureGitSuffix` canonicalization on both sides). Non-git trees,
+ * unreadable clones, and clones of a different URL return false so MA-6
+ * keeps refusing them.
+ */
+async function isSameSourceClone(gitOps: GitOps, dir: string, cloneUrl: string): Promise<boolean> {
+  try {
+    const remotes = await gitOps.listRemotes({ dir });
+    const origin = remotes.find((r) => r.remote === "origin");
+    return origin !== undefined && ensureGitSuffix(origin.url) === ensureGitSuffix(cloneUrl);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Shared clone-into-guard body for git-cloned marketplace sources (github and
  * url). Owns everything from staging-dir creation through the clone, manifest
  * read, MA-8 duplicate check, MA-6 stale-clone check, atomic rename, state
@@ -703,7 +720,7 @@ async function addGitClonedInGuard(args: {
   let finalDir: string | undefined;
   try {
     // 2. Read + validate manifest.
-    const manifestPath = path.join(stagingDir, ".claude-plugin", "marketplace.json");
+    const manifestPath = await findMarketplaceManifestPath(stagingDir);
     const parsed = await loadMarketplaceManifest(manifestPath);
 
     const derivedName = parsed.name;
@@ -713,12 +730,30 @@ async function addGitClonedInGuard(args: {
       throw new MarketplaceDuplicateNameError(derivedName, locations.scope);
     }
 
-    // 4. MA-6: stale-clone refusal on the final destination.
+    // 4. MA-6: stale-clone refusal on the final destination -- EXCEPT a
+    //    leftover clone of the SAME source (the WR-07 crash window, or a
+    //    state rebuild while sources/<name>/ survived). NFR-3: that tree is
+    //    unreferenced extension cache, so replace it with the fresh staging
+    //    clone instead of failing every retry until the user deletes the
+    //    directory by hand. A foreign or unreadable tree still refuses.
     finalDir = await locations.sourceCloneDir(derivedName);
     if (await pathExists(finalDir)) {
-      // Carry the derived name so the ATTR-07 entrypoint catch renders the
-      // `(failed) {stale clone}` row on the marketplace SUBJECT (A2).
-      throw new StaleSourceCloneError(finalDir, derivedName);
+      if (!(await isSameSourceClone(gitOps, finalDir, cloneUrl))) {
+        // Carry the derived name so the ATTR-07 entrypoint catch renders the
+        // `(failed) {stale clone}` row on the marketplace SUBJECT (A2).
+        throw new StaleSourceCloneError(finalDir, derivedName);
+      }
+
+      const staleLeak = await cleanupStaging(
+        removalOps,
+        finalDir,
+        `marketplace stale clone ${finalDir}`,
+      );
+      if (staleLeak !== undefined) {
+        // Partial removal: the destination is still blocked. Refuse as stale
+        // and append the cleanup leak rather than mask it (MA-9 discipline).
+        throw appendLeakToError(new StaleSourceCloneError(finalDir, derivedName), staleLeak);
+      }
     }
 
     // 5. Atomic rename -- same FS by D-09 (sources-staging/ and sources/
@@ -734,7 +769,7 @@ async function addGitClonedInGuard(args: {
       scope: locations.scope,
       source,
       addedFromCwd: cwd,
-      manifestPath: path.join(finalDir, ".claude-plugin", "marketplace.json"),
+      manifestPath: await findMarketplaceManifestPath(finalDir),
       marketplaceRoot: finalDir,
       lastUpdatedAt: new Date().toISOString(),
       plugins: {},
@@ -872,7 +907,7 @@ async function addPathInGuard(args: {
   let marketplaceRoot: string;
   if (probe.isDirectory()) {
     marketplaceRoot = onDiskPath;
-    manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+    manifestPath = await findMarketplaceManifestPath(marketplaceRoot);
   } else if (probe.isFile()) {
     manifestPath = onDiskPath;
     // Walk up two levels: <root>/.claude-plugin/marketplace.json -> <root>
