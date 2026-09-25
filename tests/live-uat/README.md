@@ -1,6 +1,6 @@
 # Live runtime UAT
 
-Runtime verification that the offline suites cannot establish. Every harness here is **standalone** -- none is part of `npm run check`. Each needs a disposable `PI_CODING_AGENT_DIR` sandbox; some need a live `pi` binary with provider credentials, and one needs a scratch install of the host workflow engine with provider credentials deliberately **unreachable**.
+Runtime verification that the offline suites cannot establish. Every harness here is **standalone** -- none is part of `npm run check`. The canaries that start Pi run the version `package-lock.json` pins, which `npm ci` installs; they find it through `tests/pi-runtime.ts` and never look up a `pi` on `PATH`, so run `npm ci` before any canary. Each needs a disposable `PI_CODING_AGENT_DIR` sandbox; some need a live Pi session with provider credentials, and one needs a scratch install of the host workflow engine with provider credentials deliberately **unreachable**.
 
 | Canary                              | Proves                                                                                                                               | Needs live `pi`                                              |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
@@ -69,6 +69,8 @@ Proves what the host workflow engine's `agent()` call actually does when the sub
 | A scratch install of `@quintinshaw/pi-dynamic-workflows` | `npm install --prefix /var/tmp/wf-engine @quintinshaw/pi-dynamic-workflows@3.13.0`, then point `PI_WORKFLOW_ENGINE_ROOT` at `/var/tmp/wf-engine/node_modules`. The version is pinned because `docs/workflows-compatibility.md` publishes this driver's result as a grade naming 3.13.0; dropping the pin re-measures against whatever is current, which the PASS lines will then name. The prefix must live OUTSIDE this repository and the engine must never enter `package.json` or `package-lock.json` (NFR-5, D-98-10). Do not add `--ignore-scripts`: the engine's peer places a platform binary in a post-install step, so suppressing scripts breaks the import instead of hardening anything. |
 | A disposable `PI_CODING_AGENT_DIR` sandbox               | Use `$(pwd)/tmp/pi-uat/wf-agent`. The harness refuses any directory outside `tmp/pi-uat` before it creates anything and before it imports the engine, because the engine writes into whatever agent-state directory it is handed. Both sides of that comparison are resolved first, so a `..` segment does not walk out of the sandbox and a sibling such as `tmp/pi-uat-backup` does not pass as a child.                                                                                                                                                                                                                                                                                            |
 | Provider credentials **unreachable** from that sandbox   | This inverts the usual precondition, and saying so outright is the point. The failure inducer is an ABSENCE: with no API key reachable, the real subagent runner throws, and that throw is the thing being measured. A machine whose sandbox can reach a provider measures nothing at all.                                                                                                                                                                                                                                                                                                                                                                                                            |
+
+`scripts/pi.sh`'s private prefix cannot replace this scratch install: it installs the engine without its peer dependencies (Pi supplies them to the extensions it loads), and this driver imports the engine outside Pi, where the peers must be installed.
 
 ### Run
 
@@ -206,7 +208,7 @@ It has two halves:
 
 | Requirement                                | Notes                                                                                                                                                                                   |
 | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pi` CLI **>= 0.86.1** on `PATH`           | Package peer floor. `agent_settled` first appeared in 0.80.5. The earlier canary run used 0.80.10.                                                                                      |
+| The repository's Pi, **>= 0.86.1**         | Installed by `npm ci` from the `@earendil-works/pi-coding-agent` devDependency. Package peer floor. `agent_settled` first appeared in 0.80.5. The earlier canary run used 0.80.10.      |
 | A disposable `PI_CODING_AGENT_DIR` sandbox | Use `$(pwd)/tmp/pi-uat/agent`. The harness refuses to run against any dir outside `tmp/pi-uat` (T-88-08) so the always-block canary never churns a real Pi state dir.                   |
 | A working default provider in the sandbox  | The sandbox's `settings.json` selects the provider/model; a real turn must reach it. `--offline` disables only Pi's _startup_ network ops (marketplace autoupdate), not the model call. |
 
@@ -234,7 +236,7 @@ The harness:
 #### What it routes to `human_needed` (exit non-zero)
 
 - **STOP-07 cap loop** -- a one-shot `pi -p` STARTS the first hook-driven re-entry turn, then tears down its non-interactive lifecycle before that turn settles again, so it never runs the settle→block→re-enter loop to the 8-consecutive-block cap. The harness prints the proven half, then exits non-zero with a `SCRIPTABLE HALF PROVEN, CAP LOOP -> human_needed` message. Drive the cap interactively per **item 4** below.
-- Any unmet precondition (no `pi`, wrong version, non-sandbox dir) exits non-zero with a `LIVE RUNTIME REQUIRED` message.
+- Any unmet precondition (the Pi package is not installed (run `npm ci`), wrong version, non-sandbox dir) exits non-zero with a `LIVE RUNTIME REQUIRED` message.
 
 The harness **never fakes a live result**: it exits non-zero rather than reporting a cap it could not observe, so the verifier records `human_needed`.
 
@@ -279,7 +281,8 @@ These runtime timing / interrupt behaviours cannot be sustained by a headless `p
 ```bash
 export PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/agent
 export PI_CLAUDE_MARKETPLACE_DEBUG=1   # emit [hooks] dispatch logs on stderr
-pi --no-extensions \
+pi_cli=$(node --input-type=module -e 'import { pathToFileURL } from "node:url"; const { resolvePiRuntime } = await import(pathToFileURL(process.argv[1]).href); process.stdout.write(resolvePiRuntime(process.cwd()).cliPath);' ./tests/pi-runtime.ts)
+node "$pi_cli" --no-extensions \
    --extension "$(pwd)/extensions/pi-claude-marketplace/index.ts" \
    --offline
 ```
