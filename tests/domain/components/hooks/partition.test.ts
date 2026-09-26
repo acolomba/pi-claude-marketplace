@@ -41,6 +41,24 @@ describe("partitionHooks", () => {
     });
   });
 
+  test("keeps a mixed matcher group with no dropped entries", () => {
+    // arrange
+    const config = {
+      PreToolUse: [{ matcher: "Edit|MultiEdit", hooks: [{ type: "command", command: "edit" }] }],
+    };
+
+    // act
+    const partition = partitionHooks(config);
+
+    // assert
+    assert.deepStrictEqual(partition, {
+      supported: {
+        PreToolUse: [{ matcher: "Edit|MultiEdit", hooks: [{ type: "command", command: "edit" }] }],
+      },
+      dropped: [],
+    });
+  });
+
   test("drops regex and unmapped tool groups but keeps their supported sibling", () => {
     // arrange
     const config = {

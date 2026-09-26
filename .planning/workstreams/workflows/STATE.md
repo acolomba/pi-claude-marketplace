@@ -38,7 +38,7 @@ closed the three gaps the bridge originally shipped with. The code sits on
 Phase: Milestone workflows-replay complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-09-25 — Completed quick task 260925-r98: Use a repo-private pi for tests and scripts/pi.sh
+Last activity: 2026-09-25 — Completed quick task 260925-ucm: per-alternative hook matcher degradation
 
 Archived 2026-09-21 as one milestone of nine phases (109-117), per the decision
 recorded under Decisions. The archive ran only after the debt the audit graded
@@ -105,6 +105,7 @@ reference ambiguous when the two branches are read side by side.
 | 260923-qwz | Raise Pi minimum to 0.86.1 and verify the unpatched workflow engine | 2026-09-23 | `f85d7eb9` | [260923-qwz-raise-pi-minimum-to-0-86-1-and-verify-un](./quick/260923-qwz-raise-pi-minimum-to-0-86-1-and-verify-un/) |
 | 260923-t30 | Record upstream workflow engine issues before merge | 2026-09-23 | `05aa97d2` | [260923-t30-record-upstream-workflow-engine-issues-b](./quick/260923-t30-record-upstream-workflow-engine-issues-b/) |
 | 260925-r98 | Use a repo-private pi for tests and scripts/pi.sh | 2026-09-25 | `398c2ea` | [260925-r98-use-a-repo-private-pi-for-tests-and-scri](./quick/260925-r98-use-a-repo-private-pi-for-tests-and-scri/) |
+| 260925-ucm | Fix #217: hook matcher pipe-OR degrades per token instead of dropping the whole group | 2026-09-25 | `a2cc7d30` | [260925-ucm-fix-217-hook-matcher-pipe-or-degrades-pe](./quick/260925-ucm-fix-217-hook-matcher-pipe-or-degrades-pe/) |
 
 Closes the last open deferred item filed by the degradation-and-documentation
 phase. The union listing was deleted rather than corrected — it was the second
