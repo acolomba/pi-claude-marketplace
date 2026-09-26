@@ -1,3 +1,4 @@
+import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { CLAUDE_TO_PI_TOOL_NAMES, type PiToolName } from "../hook-tool-names.ts";
 
 const SAFE_MATCHER_CHARS = /^[A-Za-z0-9_|-]+$/;
@@ -66,8 +67,13 @@ export function parseMatcher(raw: string): ParsedMatcher {
       toolNames.add(piTool);
     } else if (isMcpLiteral(token)) {
       toolNames.add(token);
-    } else if (firstDiscarded.length === 0) {
-      firstDiscarded = token;
+    } else {
+      hookDebugLog(
+        `parseMatcher: alternative "${token}" in "${raw}" has no Pi tool mapping; discarding`,
+      );
+      if (firstDiscarded.length === 0) {
+        firstDiscarded = token;
+      }
     }
   }
 

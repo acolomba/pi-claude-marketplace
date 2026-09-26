@@ -8,12 +8,15 @@ import type { ClaudeHookEvent } from "../../shared/concerns/hooks.ts";
 // under any non-bucket-A event key, or carries a non-tool matcher value
 // that has no Pi peer-dep analog.
 //
-// D-58-06 strict-supportability stance: when a Claude-side matcher value
-// has no Pi peer-dep field or no admissible Pi-side counterpart, the
-// matcher trips TOOL-02 (plugin flips `(unavailable) {unsupported hooks}`)
-// rather than silently translating to a no-op filter. Silent never-fires
-// and silent over-fires are both failure modes -- strict trip is the
-// load-bearing design choice.
+// D-58-06 strict-supportability stance: a non-tool matcher value with no
+// Pi peer-dep field or no admissible Pi-side counterpart trips TOOL-02
+// (plugin flips `(unavailable) {unsupported hooks}`) rather than silently
+// translating to a no-op filter. A tool-name matcher's pipe-OR
+// alternatives are classified independently (#217): an alternative with
+// no Pi tool mapping is dropped from the alternative list and logged via
+// `hookDebugLog`; only a matcher left with no supported alternative trips
+// TOOL-02. Silent never-fires and silent over-fires are both failure
+// modes -- strict trip is the load-bearing design choice.
 //
 // Two-tier shape: the `BUCKET_A_EVENTS` / `TOOL_EVENTS` tuples lock the
 // event closed set + tool-event subset; the parallel
