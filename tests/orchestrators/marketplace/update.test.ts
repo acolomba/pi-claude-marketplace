@@ -270,12 +270,13 @@ async function seedUrlMarketplace(opts: {
   cwd: string;
   name: string;
   ref?: string;
+  host?: string;
 }): Promise<{ cloneDir: string }> {
   const locations = locationsFor("project", opts.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
   const cloneDir = await locations.sourceCloneDir(opts.name);
   await cp(fixtureMarketplaceDir("valid-marketplace"), cloneDir, { recursive: true });
-  const rawUrl = `https://gitlab.example.com/team/${opts.name}${
+  const rawUrl = `https://${opts.host ?? "gitlab.example.com"}/team/${opts.name}${
     opts.ref === undefined ? "" : `#${opts.ref}`
   }`;
   const urlSrc = parsePluginSource(rawUrl);
@@ -326,6 +327,7 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
     // arrange
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-403", ref: "main" });
     const { ctx, pi, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
     const transportError = Object.assign(new Error("HTTP 403 from fetch"), {
       code: "HttpError",
       data: { statusCode: 403 },
@@ -341,17 +343,29 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
       scope: "project",
       cwd,
       gitOps,
+      credentialOps,
     });
 
     // assert
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Some operations have failed.\n\n⊘ urlmp-403 [project] (failed)\n  ⊘ urlmp-403 (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-403". -> HTTP 403 from fetch -> no auth provider is registered for gitlab.example.com',
+          'Some operations have failed.\n\n⊘ urlmp-403 [project] (failed)\n  ⊘ urlmp-403 (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-403". -> HTTP 403 from fetch -> no credential stored for gitlab.example.com; add one with git credential approve',
         severity: "error",
       },
     ]);
-    assert.deepStrictEqual(state.fetchCalls, [{ dir: cloneDir, remote: "origin", ref: "main" }]);
+    assert.deepStrictEqual(state.fetchCalls, [
+      {
+        dir: cloneDir,
+        remote: "origin",
+        ref: "main",
+        auth: {
+          credentialOps,
+          host: "gitlab.example.com",
+          onAuthRequired: state.fetchCalls[0]?.auth?.onAuthRequired,
+        },
+      },
+    ]);
   });
 });
 
@@ -360,6 +374,7 @@ test("marketplace update transport: classifies a providerless HTTP 500 as networ
     // arrange
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-500", ref: "main" });
     const { ctx, pi, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
     const transportError = Object.assign(new Error("HTTP 500 from fetch"), {
       code: "HttpError",
       data: { statusCode: 500 },
@@ -375,6 +390,7 @@ test("marketplace update transport: classifies a providerless HTTP 500 as networ
       scope: "project",
       cwd,
       gitOps,
+      credentialOps,
     });
 
     // assert
@@ -385,7 +401,18 @@ test("marketplace update transport: classifies a providerless HTTP 500 as networ
         severity: "error",
       },
     ]);
-    assert.deepStrictEqual(state.fetchCalls, [{ dir: cloneDir, remote: "origin", ref: "main" }]);
+    assert.deepStrictEqual(state.fetchCalls, [
+      {
+        dir: cloneDir,
+        remote: "origin",
+        ref: "main",
+        auth: {
+          credentialOps,
+          host: "gitlab.example.com",
+          onAuthRequired: state.fetchCalls[0]?.auth?.onAuthRequired,
+        },
+      },
+    ]);
   });
 });
 
@@ -455,7 +482,18 @@ test("marketplace update transport: leaves Device Flow idle for a public URL ref
     assert.deepStrictEqual(notifications, [
       { message: "● urlmp-device [project] (skipped) {up-to-date}" },
     ]);
-    assert.deepStrictEqual(state.fetchCalls, [{ dir: cloneDir, remote: "origin", ref: "main" }]);
+    assert.deepStrictEqual(state.fetchCalls, [
+      {
+        dir: cloneDir,
+        remote: "origin",
+        ref: "main",
+        auth: {
+          credentialOps,
+          host: "gitlab.example.com",
+          onAuthRequired: state.fetchCalls[0]?.auth?.onAuthRequired,
+        },
+      },
+    ]);
     assert.deepStrictEqual(credentialState, {
       fillCalls: [],
       approveCalls: [],
@@ -588,11 +626,12 @@ test("MU-4 + D-14: github source refreshes via fetch+forceUpdateRef+checkout in 
   });
 });
 
-test("MURL-03 + D-14: url source refreshes via fetch+forceUpdateRef+checkout with NO auth bundle", async () => {
+test("MURL-03 + D-14: url source refreshes via fetch+forceUpdateRef+checkout carrying its host-keyed auth bundle", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp", ref: "main" });
     const { ctx, pi } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
     const { gitOps, state } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000009" },
     });
@@ -606,6 +645,7 @@ test("MURL-03 + D-14: url source refreshes via fetch+forceUpdateRef+checkout wit
       scope: "project",
       cwd,
       gitOps,
+      credentialOps,
     });
 
     // assert
@@ -619,11 +659,14 @@ test("MURL-03 + D-14: url source refreshes via fetch+forceUpdateRef+checkout wit
     assert.equal(fur.ref, "refs/heads/main");
     assert.equal(fur.value, "abcdef0000000000000000000000000000000009");
 
-    // D-76-07: the url refresh passes NO auth bundle to fetch.
-    const fetchCall = state.fetchCalls[0];
-    assert.ok(fetchCall !== undefined);
-    assert.equal(Object.hasOwn(fetchCall, "auth"), false);
-    assert.equal(fetchCall.auth, undefined);
+    // GAUTH-03: the url refresh passes a bundle bound to the source's host, so
+    // the credential helper is consulted when the server challenges.
+    const fetchedAuth = state.fetchCalls[0]?.auth;
+    assert.deepStrictEqual(fetchedAuth, {
+      credentialOps,
+      host: "gitlab.example.com",
+      onAuthRequired: fetchedAuth?.onAuthRequired,
+    });
   });
 });
 
@@ -632,6 +675,7 @@ test("MURL-03: unpinned url refresh follows the default-branch head-advance path
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp-default" });
     const { ctx, pi } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
     const remoteSha = "abcdef0000000000000000000000000000000010";
     const { gitOps, state } = createGitOps({
       remoteRefs: {
@@ -651,6 +695,7 @@ test("MURL-03: unpinned url refresh follows the default-branch head-advance path
       scope: "project",
       cwd,
       gitOps,
+      credentialOps,
     });
 
     // assert
@@ -663,24 +708,25 @@ test("MURL-03: unpinned url refresh follows the default-branch head-advance path
     assert.ok(fur !== undefined);
     assert.equal(fur.ref, "refs/heads/main");
     assert.equal(fur.value, remoteSha);
-    const fetchCall = state.fetchCalls[0];
-    assert.ok(fetchCall !== undefined);
-    assert.equal(Object.hasOwn(fetchCall, "auth"), false);
+    const fetchedAuth = state.fetchCalls[0]?.auth;
+    assert.deepStrictEqual(fetchedAuth, {
+      credentialOps,
+      host: "gitlab.example.com",
+      onAuthRequired: fetchedAuth?.onAuthRequired,
+    });
   });
 });
 
-test("PROV-04 / D-79-03: a no-provider url refresh that 401s renders {authentication required} plus the single no-provider cause line", async () => {
+test("GAUTH-04: a cancelled credential lookup on a host with no Device Flow renders {authentication required} plus the stored-credential cause line", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp-private", ref: "main" });
     const { ctx, pi, notifications } = makeCtx();
-    // Duck-typed isomorphic-git HttpError: code === "HttpError",
-    // data.statusCode carries the HTTP status (mirrors D-76-08).
-    const httpErr = Object.assign(new Error("HTTP 401 from fetch"), {
-      code: "HttpError",
-      data: { statusCode: 401 },
-    });
-    const { gitOps, state } = createGitOps({ fetchThrows: httpErr });
+    const { credOps: credentialOps } = createCredentialOps();
+    // An empty credential helper makes onAuth return `{ cancel: true }`, which
+    // isomorphic-git throws as UserCanceledError -- NOT an HttpError 401/403.
+    const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+    const { gitOps, state } = createGitOps({ fetchThrows: authError });
 
     // act
     await updateMarketplace({
@@ -691,29 +737,157 @@ test("PROV-04 / D-79-03: a no-provider url refresh that 401s renders {authentica
       scope: "project",
       cwd,
       gitOps,
+      credentialOps,
     });
 
     // assert
-
-    // PROV-02: gitlab.example.com has no registered provider, so the fetch
-    // carried NO auth bundle (authless refresh; the 401 is structural).
-    assert.equal(state.fetchCalls.length, 1);
-    assert.equal(Object.hasOwn(state.fetchCalls[0] ?? {}, "auth"), false);
-
+    const fetchedAuth = state.fetchCalls[0]?.auth;
+    assert.deepStrictEqual(fetchedAuth, {
+      credentialOps,
+      host: "gitlab.example.com",
+      onAuthRequired: fetchedAuth?.onAuthRequired,
+    });
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
     assert.equal(first.severity, "error");
     assert.match(first.message, /^⊘ urlmp-private \[project\] \(failed\)$/m);
-    // D-79-03: the existing closed-set token -- NO new REASONS token.
+    // D-79-03: the existing closed-set token -- NO new REASONS token. It also
+    // proves the cause rides the chain TAIL: transportReason still finds the
+    // code-bearing transport error at cause-depth 1.
     assert.ok(
       first.message.includes("{authentication required}"),
       `expected the authentication-required child row, got: ${first.message}`,
     );
     assert.equal(first.message.includes("{network unreachable}"), false);
-    // D-79-03 / PROV-04: exactly one new cause line, riding the synthetic
-    // failed-plugin child's depth-5 cause-chain trailer.
-    assert.match(first.message, /cause:.*no auth provider is registered for gitlab\.example\.com/);
+    // D-1-02: exactly one new cause line, riding the synthetic failed-plugin
+    // child's cause-chain trailer.
+    assert.match(
+      first.message,
+      /cause:.*no credential stored for gitlab\.example\.com; add one with git credential approve/,
+    );
+  });
+});
+
+test("GAUTH-04: a 401 challenge on a host with no Device Flow carries the same stored-credential cause line", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedUrlMarketplace({ cwd, name: "urlmp-401", ref: "main" });
+    const { ctx, pi, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    // Duck-typed isomorphic-git HttpError: code === "HttpError",
+    // data.statusCode carries the HTTP status (mirrors D-76-08). A 403 never
+    // invokes onAuth at all, so both identities must reach the cause line.
+    const httpErr = Object.assign(new Error("HTTP 401 from fetch"), {
+      code: "HttpError",
+      data: { statusCode: 401 },
+    });
+    const { gitOps } = createGitOps({ fetchThrows: httpErr });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      pi,
+      name: "urlmp-401",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.severity, "error");
+    assert.ok(
+      first.message.includes("{authentication required}"),
+      `expected the authentication-required child row, got: ${first.message}`,
+    );
+    assert.match(
+      first.message,
+      /cause:.*no credential stored for gitlab\.example\.com; add one with git credential approve/,
+    );
+  });
+});
+
+test("GAUTH-04: a transport error that already carries a cause keeps its own chain", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedUrlMarketplace({ cwd, name: "urlmp-chained", ref: "main" });
+    const { ctx, pi, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const authError = Object.assign(new Error("cancelled"), {
+      code: "UserCanceledError",
+      cause: new Error("helper exited 128"),
+    });
+    const { gitOps } = createGitOps({ fetchThrows: authError });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      pi,
+      name: "urlmp-chained",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          'Some operations have failed.\n\n⊘ urlmp-chained [project] (failed)\n  ⊘ urlmp-chained (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-chained". -> cancelled -> helper exited 128',
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("GAUTH-05: a cancelled Device Flow on a github.com url refresh renders {authentication required} with NO stored-credential cause line", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    // The case-sensitive github.com prefix check leaves this a `url` source,
+    // but URL host parsing lowercases it to the provider-registered host.
+    await seedUrlMarketplace({ cwd, name: "urlmp-github", ref: "main", host: "GitHub.com" });
+    const { ctx, pi, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+    const { gitOps, state } = createGitOps({ fetchThrows: authError });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      pi,
+      name: "urlmp-github",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    const fetchedAuth = state.fetchCalls[0]?.auth;
+    assert.deepStrictEqual(fetchedAuth, {
+      credentialOps,
+      host: "github.com",
+      onAuthRequired: fetchedAuth?.onAuthRequired,
+    });
+    assert.equal(notifications.length, 1);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.equal(first.severity, "error");
+    assert.ok(
+      first.message.includes("{authentication required}"),
+      `expected the authentication-required child row, got: ${first.message}`,
+    );
+    // On a registry host the story is a declined or expired Device Flow, not a
+    // missing stored credential, so no cause line is attached.
+    assert.equal(first.message.includes("no credential stored for"), false);
   });
 });
 
