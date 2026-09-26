@@ -17,6 +17,7 @@ import test from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
+import { NO_STORED_CREDENTIAL_CAUSE } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { addMarketplace as addMarketplaceWithCache } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import { loadConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -2340,10 +2341,11 @@ test("cleans a URL clone after state-save failure and a second invocation conver
   });
 });
 
-test("MURL-01: url source clones source.url `.git`-suffixed with NO auth key in the clone options", async () => {
+test("MURL-01: url source clones source.url `.git`-suffixed with a bundle bound to its host", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
     const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -2356,6 +2358,7 @@ test("MURL-01: url source clones source.url `.git`-suffixed with NO auth key in 
       cwd,
       rawSource: "https://gitlab.example.com/team/mp",
       gitOps,
+      credentialOps,
     });
 
     // D-76-06: the clone URL is source.url -- no github.com reconstruction.
@@ -2366,16 +2369,20 @@ test("MURL-01: url source clones source.url `.git`-suffixed with NO auth key in 
     const cloneCall = state.cloneCalls[0];
     assert.ok(cloneCall);
     assert.equal(cloneCall.url, "https://gitlab.example.com/team/mp.git");
-    // D-76-07: public-only -- the clone options object carries NO `auth` key.
-    assert.equal(Object.hasOwn(cloneCall, "auth"), false);
-    assert.equal(cloneCall.auth, undefined);
+    // GAUTH-03: the clone carries a bundle keyed on the source's own host.
+    assert.deepStrictEqual(cloneCall.auth, {
+      credentialOps,
+      host: "gitlab.example.com",
+      onAuthRequired: cloneCall.auth?.onAuthRequired,
+    });
   });
 });
 
-test("MURL-01: url source with a #ref clones at that ref with singleBranch and still no auth", async () => {
+test("MURL-01: url source with a #ref clones at that ref with singleBranch and the same host-keyed bundle", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
     const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -2388,15 +2395,18 @@ test("MURL-01: url source with a #ref clones at that ref with singleBranch and s
       cwd,
       rawSource: "https://gitlab.example.com/team/mp#v1.0",
       gitOps,
+      credentialOps,
     });
 
     // assert
     assert.equal(state.cloneCalls.length, 1);
+    const cloneCall = state.cloneCalls[0];
+    assert.ok(cloneCall);
     assert.deepStrictEqual(
       {
-        url: state.cloneCalls[0]?.url,
-        ref: state.cloneCalls[0]?.ref,
-        singleBranch: state.cloneCalls[0]?.singleBranch,
+        url: cloneCall.url,
+        ref: cloneCall.ref,
+        singleBranch: cloneCall.singleBranch,
       },
       {
         url: "https://gitlab.example.com/team/mp.git",
@@ -2404,8 +2414,12 @@ test("MURL-01: url source with a #ref clones at that ref with singleBranch and s
         singleBranch: true,
       },
     );
-    // D-76-07: still no auth key even with a ref.
-    assert.equal(Object.hasOwn(state.cloneCalls[0] ?? {}, "auth"), false);
+    // GAUTH-03: the bundle rides the pinned-ref arm too.
+    assert.deepStrictEqual(cloneCall.auth, {
+      credentialOps,
+      host: "gitlab.example.com",
+      onAuthRequired: cloneCall.auth?.onAuthRequired,
+    });
   });
 });
 
@@ -2712,13 +2726,14 @@ test("MURL-01 regression: github source is byte-identical -- Device Flow auth st
   });
 });
 
-test("PROV-04 / D-79-03: a no-provider url add that 401s renders the bare (failed) {authentication required} row with NO cause line", async () => {
+test("D-79-03: a url add that 401s on a host with no Device Flow renders the bare (failed) {authentication required} row with NO cause line", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
-    // D-79-03: marketplace add keeps its no-child-rows invariant (D-01/D-10),
-    // so the no-provider cause line renders ONLY on the update path's
-    // cause-carrying child row -- the add row stays the bare closed-set token.
+    // D-79-03 (amended): marketplace add keeps its no-child-rows invariant
+    // (D-01/D-10), so the stored-credential cause line renders ONLY on the
+    // update path's cause-carrying child row -- the add row stays the bare
+    // closed-set token.
     const { credOps: credentialOps } = createCredentialOps();
     const httpErr = Object.assign(new Error("HTTP 401 from clone"), {
       code: "HttpError",
@@ -2747,13 +2762,15 @@ test("PROV-04 / D-79-03: a no-provider url add that 401s renders the bare (faile
       note.message.includes("(failed) {authentication required}"),
       `expected authentication-required row, got: ${note.message}`,
     );
-    // NO cause trailer and NO no-provider line on the add surface (D-79-03).
-    assert.equal(note.message.includes("no auth provider is registered"), false);
+    // NO cause trailer and NO stored-credential line on the add surface. The
+    // live constant is imported rather than spelled as a second literal, so
+    // this assertion cannot outlive the text it polices.
+    assert.equal(note.message.includes(NO_STORED_CREDENTIAL_CAUSE("gitlab.example.com")), false);
     assert.equal(note.message.includes("cause:"), false);
   });
 });
 
-test("PROV-02: a public no-provider url add clones authless -- no auth key, no credential interaction, no Device Flow prompt", async () => {
+test("PROV-02: a public url add on a host with no Device Flow carries its bundle but consults nothing -- no credential interaction, no Device Flow prompt", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
@@ -2775,11 +2792,17 @@ test("PROV-02: a public no-provider url add clones authless -- no auth key, no c
       deviceFlowHttp,
     });
 
-    // No provider for gitlab.example.com -> buildAuthForHost yields undefined
-    // -> the clone call carries NO auth key at all (PROV-02).
+    // GAUTH-03: the clone carries a host-keyed bundle, and PROV-02's surviving
+    // guarantee is that nothing in it is consulted until the server challenges.
     // assert
     assert.equal(state.cloneCalls.length, 1);
-    assert.equal(Object.hasOwn(state.cloneCalls[0] ?? {}, "auth"), false);
+    const cloneCall = state.cloneCalls[0];
+    assert.ok(cloneCall);
+    assert.deepStrictEqual(cloneCall.auth, {
+      credentialOps,
+      host: "gitlab.example.com",
+      onAuthRequired: cloneCall.auth?.onAuthRequired,
+    });
     // The public clone never touched the credential seam or the flow.
     assert.equal(credState.fillCalls.length, 0);
     assert.equal(httpState.requestCodeCalls.length, 0);

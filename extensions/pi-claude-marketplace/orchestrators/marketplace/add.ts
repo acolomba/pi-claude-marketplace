@@ -668,8 +668,9 @@ async function runAddOutcome(
  * differences are the pre-computed `cloneUrl` and the optional `auth` bundle,
  * so that subtle MA-9 discipline lives in exactly one place.
  *
- * MURL-01 / D-76-07: `auth` is spread into the clone options ONLY when defined,
- * so the public-only url path emits a clone call with no `auth` key at all.
+ * MURL-01 / GAUTH-03: every git-cloned source carries a host-keyed `auth`
+ * bundle, so the clone consults the user's git credential helper when the
+ * server challenges. A public clone never challenges, so nothing is consulted.
  */
 async function addGitClonedInGuard(args: {
   state: ExtensionState;
@@ -678,7 +679,7 @@ async function addGitClonedInGuard(args: {
   source: GitHubSource | UrlSource;
   gitOps: GitOps;
   cloneUrl: string;
-  auth?: GitAuthBundle;
+  auth: GitAuthBundle;
   cwd: string;
 }): Promise<string> {
   const { state, locations, source, gitOps, cloneUrl, auth, cwd, removalOps } = args;
@@ -690,7 +691,7 @@ async function addGitClonedInGuard(args: {
       dir: stagingDir,
       url: ensureGitSuffix(cloneUrl),
       ...(source.ref !== undefined && { ref: source.ref, singleBranch: true }),
-      ...(auth !== undefined && { auth }),
+      auth,
     });
   } catch (err) {
     // Clone itself failed -- there is no staging dir to clean up beyond a
@@ -796,7 +797,7 @@ async function addGithubInGuard(args: {
     gitOps,
     removalOps,
     cloneUrl,
-    ...(auth !== undefined && { auth }),
+    auth,
     cwd,
   });
 }
@@ -805,13 +806,12 @@ async function addGithubInGuard(args: {
  * MURL-01 / D-76-06: url-source add. `source.url` is stored as the canonical
  * identity form (parse-time `.git`-stripped) and NOT reconstructed against
  * github.com; the url actually cloned is that value passed through
- * `ensureGitSuffix`. PROV-02/03/04: the host is extracted from the
- * url and looked up in the provider registry via buildAuthForHost -- a
- * provider-registered host authenticates host-keyed; a no-provider host gets
- * NO bundle (buildAuthForHost returns undefined), so the clone runs authless
- * and a private repo fails clean on the structural 401. The
- * undefined-for-no-provider guarantee is the cross-host leak guard: a bundle
- * for an unregistered host would key another provider's credential onto it.
+ * `ensureGitSuffix`. GAUTH-03: the host is extracted from the url and
+ * `buildAuthForHost` binds a bundle to it, so a private source on any host
+ * authenticates from the user's git credential helper; the provider registry
+ * decides only whether a Device Flow runs on a helper miss (PROV-03). The
+ * bundle's host binding is enforced by the compare in
+ * `buildAuthCallbacks.onAuth` (D-1-03, T-79-04).
  */
 async function addUrlInGuard(args: {
   ctx: NotificationContext;
@@ -841,7 +841,7 @@ async function addUrlInGuard(args: {
     gitOps,
     removalOps,
     cloneUrl: source.url,
-    ...(auth !== undefined && { auth }),
+    auth,
     cwd,
   });
 }
