@@ -1,0 +1,98 @@
+# Requirements: any-git-host (milestone, workstream `git-hosts`)
+
+**Defined:** 2026-09-25
+**Core Value:** A Pi user can install a Claude plugin and load each supported component as a working Pi artifact.
+**Driver:** Review of PR #153 (jstillwa). Three of its five changes address real defects; they are
+reimplemented here rather than merged. The two Codex-layout changes are dropped — Claude Code
+2.1.274 contains no reference to `.agents/plugins/` or `.codex-plugin/` (`.claude-plugin` appears
+125 times, the other two zero), so there is no upstream contract to match.
+
+## v1 Requirements
+
+### Host-Agnostic Authentication
+
+Today `orchestrators/auth-host.ts::buildAuthForHost` returns `undefined` for any host the provider
+registry does not claim, and only `github.com` and `gitlab.com` are claimed. No bundle means
+`platform/git.ts` never builds auth callbacks, which means `credentialOps.fill(host)` — the
+`git credential fill` lookup — is never consulted. A PAT already stored in the user's credential
+helper is therefore invisible to this extension on every other host.
+
+- [ ] **GAUTH-03**: A user can clone a private marketplace or plugin source over https from any git
+  host using a credential already stored in their git credential helper, with no host-specific code.
+  No hostname literal is added to the provider registry for this to work.
+- [ ] **GAUTH-04**: When no stored credential is found for a host that has no Device Flow, the
+  command fails with a cause line naming how to store one (`git credential approve`), instead of
+  cloning authless and failing on a bare structural 401.
+- [ ] **GAUTH-05**: `github.com` and `gitlab.com` keep today's Device Flow behavior byte-for-behavior
+  — same prompt, same memoization, same `NO_PROVIDER_CAUSE` surface where it still applies.
+- [ ] **GAUTH-06**: A credential resolved for one host is never offered to a different host. When
+  isomorphic-git invokes `onAuth` for a URL whose host differs from the bundle's bound host, the
+  callback cancels instead of returning the credential. This replaces PROV-04's
+  `undefined`-for-no-provider refusal as the cross-host leak guard (T-79-04), which GAUTH-03
+  necessarily retires.
+
+### URL Forms for Non-Conventional Git Endpoints
+
+- [ ] **MURL-08**: A user can add a `url` marketplace source whose smart-HTTP endpoint serves at the
+  verbatim URL and returns 404 for the conventional `.git`-suffixed form. Both `clone` and
+  `resolveRemoteRef` resolve it.
+- [ ] **MURL-09**: A repository that is genuinely absent, private-without-credentials, or otherwise
+  failing keeps its original error identity — the fallback never masks a real failure, never
+  retries on a status that does not mean "wrong path", and never deletes a directory the caller owns.
+
+### Marketplace Add Recovery
+
+- [ ] **MA-12**: `marketplace add` succeeds when `sources/<name>/` already holds a leftover clone
+  whose `origin` URL is the source being added — the WR-07 crash window and state rebuilds no longer
+  require deleting the directory by hand before every retry.
+- [ ] **MA-13**: A leftover tree that is not a git clone, is unreadable, or whose `origin` names a
+  different URL still refuses with the MA-6 `{stale clone}` row on the marketplace subject.
+- [ ] **MA-14**: When the leftover clone cannot be fully removed, the add fails as stale with the
+  cleanup leak appended (MA-9 discipline) rather than masked, and no partially-removed destination
+  is left recorded in state.
+
+### Gate Conformance
+
+- [ ] **GATE-01**: Every type member introduced by this milestone is read by production code or
+  recorded in `scripts/check-unused-type-members.contracts.json`; `npm run check` passes whole,
+  including `test:coverage:unit` at 100% lines/functions/branches.
+
+## v2 Requirements
+
+(None.)
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| `.agents/plugins/marketplace.json` (Codex marketplace layout) | No upstream support: zero occurrences in the Claude Code 2.1.274 binary. Adding it would be a pi-only divergence to maintain forever. |
+| `.codex-plugin/plugin.json` (Codex plugin layout) | Same — no upstream contract to match. |
+| Per-host provider descriptors for self-hosted instances (Gitea, Forgejo, self-hosted GitLab) | GAUTH-03 makes them unnecessary. A hostname literal in a shipped registry serves exactly one deployment. |
+| Device Flow for hosts that do not implement RFC 8628 | There is no flow to run. The stored-credential path is the whole answer for those hosts. |
+| Runtime/per-source provider configuration | PROV-07, already deferred to v2. |
+| SSH transport | isomorphic-git over https only (D-18/D-21). Unchanged by this milestone. |
+
+## Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| GAUTH-03 | Phase 1 | Pending |
+| GAUTH-04 | Phase 1 | Pending |
+| GAUTH-05 | Phase 1 | Pending |
+| GAUTH-06 | Phase 1 | Pending |
+| MURL-08 | Phase 2 | Pending |
+| MURL-09 | Phase 2 | Pending |
+| MA-12 | Phase 3 | Pending |
+| MA-13 | Phase 3 | Pending |
+| MA-14 | Phase 3 | Pending |
+| GATE-01 | Phase 3 | Pending |
+
+**Coverage:**
+
+- v1 requirements: 10 total
+- Mapped to phases: 10
+- Unmapped: 0
+
+---
+
+*Requirements defined: 2026-09-25*
