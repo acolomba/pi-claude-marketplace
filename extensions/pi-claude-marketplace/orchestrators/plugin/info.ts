@@ -1630,7 +1630,7 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
         locations,
         cloneUrl,
         ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
-        ...(authBundle !== undefined && { auth: authBundle }),
+        auth: authBundle,
       });
     return resolveGitPluginRootWithSubdir(gitSource, mirrorRoot, resolvedSha);
   };
@@ -1643,7 +1643,7 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
       cloneUrl,
       pin,
       ...(ref !== undefined && { ref }),
-      ...(authBundle !== undefined && { auth: authBundle }),
+      auth: authBundle,
     });
     return resolveGitPluginRootWithSubdir(gitSource, cloneRoot, pin);
   };

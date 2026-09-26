@@ -61,7 +61,7 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
       locations,
       cloneUrl,
       ...(source.ref !== undefined && { ref: source.ref }),
-      ...(auth !== undefined && { auth }),
+      auth,
     });
     const result = await resolveGitPluginRootWithSubdir(
       source,
@@ -80,7 +80,7 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
     cloneUrl: pin.cloneUrl,
     pin: pin.pin,
     ...(pin.ref !== undefined && { ref: pin.ref }),
-    ...(auth !== undefined && { auth }),
+    auth,
   });
   const result = await resolveGitPluginRootWithSubdir(source, cloneRoot, pin.pin);
   return { result, resolvedSha: result.kind === "materialized" ? pin.pin : undefined };

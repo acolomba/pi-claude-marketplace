@@ -65,7 +65,7 @@ export async function probeReinstallClone(
     locations,
     cloneUrl,
     pin: recordedSha,
-    ...(auth !== undefined && { auth }),
+    auth,
   });
   if (source.kind === "git-subdir") {
     return resolveSubdir(source.path, cloneRoot, recordedSha);

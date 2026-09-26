@@ -389,7 +389,7 @@ async function materializeThroughSeam(
       locations,
       cloneUrl,
       ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
-      ...(auth !== undefined && { auth }),
+      auth,
     });
     return;
   }
@@ -401,7 +401,7 @@ async function materializeThroughSeam(
     cloneUrl,
     pin,
     ...(ref !== undefined && { ref }),
-    ...(auth !== undefined && { auth }),
+    auth,
   });
 }
 
