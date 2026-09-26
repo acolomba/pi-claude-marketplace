@@ -104,6 +104,7 @@ reference ambiguous when the two branches are read side by side.
 | 260923-b1z | Re-run PR #205 babysit review only on files changed after the prior pass | 2026-09-23 | `e8e185d7` | [260923-b1z-re-run-pr-205-babysit-review-only-on-fil](./quick/260923-b1z-re-run-pr-205-babysit-review-only-on-fil/) |
 | 260923-qwz | Raise Pi minimum to 0.86.1 and verify the unpatched workflow engine | 2026-09-23 | `f85d7eb9` | [260923-qwz-raise-pi-minimum-to-0-86-1-and-verify-un](./quick/260923-qwz-raise-pi-minimum-to-0-86-1-and-verify-un/) |
 | 260923-t30 | Record upstream workflow engine issues before merge | 2026-09-23 | `05aa97d2` | [260923-t30-record-upstream-workflow-engine-issues-b](./quick/260923-t30-record-upstream-workflow-engine-issues-b/) |
+| 260925-r98 | Use a repo-private pi for tests and scripts/pi.sh | 2026-09-25 | `398c2ea` | [260925-r98-use-a-repo-private-pi-for-tests-and-scri](./quick/260925-r98-use-a-repo-private-pi-for-tests-and-scri/) |
 | 260925-ucm | Fix #217: hook matcher pipe-OR degrades per token instead of dropping the whole group | 2026-09-25 | `a2cc7d30` | [260925-ucm-fix-217-hook-matcher-pipe-or-degrades-pe](./quick/260925-ucm-fix-217-hook-matcher-pipe-or-degrades-pe/) |
 
 Closes the last open deferred item filed by the degradation-and-documentation

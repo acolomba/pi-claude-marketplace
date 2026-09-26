@@ -358,9 +358,9 @@ test("atomically replaces staged resources and finalizes the update ledger", asy
       const record = state.marketplaces.mp?.plugins.hello;
       assert.strictEqual(record?.version, "2.0.0");
       assert.strictEqual(record?.compatibility.installable, true);
-      assert.deepStrictEqual(record?.resources.skills, ["hello:tool"]);
+      assert.deepStrictEqual(record?.resources.skills, ["hello-tool"]);
       assert.match(
-        await readFile(path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md"), "utf8"),
+        await readFile(path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"), "utf8"),
         /Body for hello 2\.0\.0\./,
       );
     } finally {
@@ -438,7 +438,7 @@ test("retains the intent ledger and old resource tree after a replacement failur
       });
       const locations = locationsFor("project", cwd);
       await mkdir(locations.skillsTargetDir, { recursive: true });
-      const skillObstacle = path.join(locations.skillsTargetDir, "hello:tool");
+      const skillObstacle = path.join(locations.skillsTargetDir, "hello-tool");
       await writeFile(skillObstacle, "old-resource-tree");
       const preflight = await preparePluginUpdate({
         plugin: "hello",

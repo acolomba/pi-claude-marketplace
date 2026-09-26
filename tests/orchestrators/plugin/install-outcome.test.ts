@@ -562,7 +562,7 @@ test("surfaces the skills staging cleanup leak and still lands the install", asy
   assert.deepStrictEqual(installed.summary.bridgeWarnings, [
     `failed to clean up skills staging directory at ${installed.stagingRoot}: staging cleanup denied`,
   ]);
-  assert.deepStrictEqual(installed.summary.stagedSkillNames, ["empty:alpha"]);
+  assert.deepStrictEqual(installed.summary.stagedSkillNames, ["empty-alpha"]);
 });
 
 test("surfaces the commands staging cleanup leak and still lands the install", async (t) => {
@@ -892,7 +892,7 @@ test("collects the per-source frontmatter degrade records from the skills and co
     ledgerOutcome.summary.frontmatterDegradations.map((record) => record.kind),
     ["skill", "command"],
   );
-  assert.deepStrictEqual(ledgerOutcome.summary.stagedSkillNames, ["empty:bad-skill"]);
+  assert.deepStrictEqual(ledgerOutcome.summary.stagedSkillNames, ["empty-bad-skill"]);
   assert.deepStrictEqual(ledgerOutcome.summary.stagedCommandNames, ["empty:bad-command"]);
 });
 
@@ -1036,7 +1036,7 @@ test("an mcp phase that cannot even prepare unwinds the hooks config the phase b
       () => false,
     );
   assert.equal(await survives(path.join(locations.hooksDir, "empty", "hooks.json")), false);
-  assert.equal(await survives(path.join(locations.skillsTargetDir, "empty:alpha")), false);
+  assert.equal(await survives(path.join(locations.skillsTargetDir, "empty-alpha")), false);
   assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
   // Every undo ran to completion; nothing was left half-unwound.
   assert.deepStrictEqual(capture.rollbackPartials, []);
@@ -1092,7 +1092,7 @@ test("a hooks.json that turns malformed after resolution unwinds the ledger", as
       () => false,
     );
   assert.equal(await survives(path.join(locations.hooksDir, "empty", "hooks.json")), false);
-  assert.equal(await survives(path.join(locations.skillsTargetDir, "empty:alpha")), false);
+  assert.equal(await survives(path.join(locations.skillsTargetDir, "empty-alpha")), false);
   assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
   assert.deepStrictEqual(capture.rollbackPartials, []);
 });
@@ -1155,7 +1155,7 @@ test("a skills prepare that refuses leaves the skills phase with nothing to undo
     prefix: "install-outcome-skills-refuse-",
     components: { skills: ["alpha"] },
     targetDir: (locations) => locations.skillsTargetDir,
-    generatedName: "empty:alpha",
+    generatedName: "empty-alpha",
   });
 });
 

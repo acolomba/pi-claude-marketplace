@@ -51,6 +51,7 @@ import type { McpReplacement, PreparedMcpStaging } from "../../bridges/mcp/index
 import type { PreparedSkillsStaging, SkillsReplacement } from "../../bridges/skills/index.ts";
 import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -127,6 +128,7 @@ export interface ReinstallReplacement {
 
 /** Inputs required to stage and atomically replace every reinstall bridge. */
 export interface ReplaceReinstalledPluginInput {
+  readonly referenceNames?: InstalledReferenceNames;
   readonly locations: ScopedLocations;
   readonly cwd: string;
   readonly marketplace: string;
@@ -404,6 +406,7 @@ async function prepareAllHandles(
       pluginRoot: input.installable.pluginRoot,
       pluginDataDir: input.pluginDataDir,
       resolved: input.installable,
+      referenceNames: input.referenceNames,
       previousSkillNames: input.oldRecord.resources.skills,
       knownWorkflowNames: input.workflowNames,
       cwd: input.cwd,
@@ -414,6 +417,7 @@ async function prepareAllHandles(
       pluginRoot: input.installable.pluginRoot,
       pluginDataDir: input.pluginDataDir,
       resolved: input.installable,
+      referenceNames: input.referenceNames,
       previousCommandNames: input.oldRecord.resources.prompts,
       cwd: input.cwd,
     });
@@ -425,6 +429,7 @@ async function prepareAllHandles(
       pluginDataDir: input.pluginDataDir,
       agentsDirs: input.agentsDirs,
       knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
+      referenceNames: input.referenceNames,
       cwd: input.cwd,
     });
     handles.mcp = await operations.prepareStageMcpServers({

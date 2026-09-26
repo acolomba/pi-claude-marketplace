@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { renameSync, watch } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -3419,26 +3418,23 @@ test("silently retains a failed changed-target cache cleanup and preserves later
   });
 });
 
-test("silently stops when the marketplace vanishes after preflight", async (testContext) => {
+test("silently stops when the marketplace vanishes after preflight", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const marketplaceRoot = path.join(cwd, "marketplace");
     await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
     await seedPathMarketplace({ cwd, name: "vanishing-mp", marketplaceRoot });
     const locations = locationsFor("project", cwd);
-    const replacementPath = path.join(locations.extensionRoot, "replacement-state.json");
-    await writeFile(replacementPath, '{\n  "schemaVersion": 2,\n  "marketplaces": {}\n}\n');
-    const stateLockName = path.basename(locations.stateLockFile);
-    let replaced = false;
-    const watcher = watch(locations.extensionRoot, (_event, filename) => {
-      if (!replaced && filename === stateLockName) {
-        replaced = true;
-        renameSync(replacementPath, locations.stateJsonPath);
-      }
-    });
-    testContext.after(() => {
-      watcher.close();
-    });
+    // The pre-guard probe reads the real state file and finds the record; the
+    // injected in-lock load does not. That asymmetry IS the concurrent
+    // removal, expressed without racing a real writer.
+    let inLockLoads = 0;
+    const stateTransaction = {
+      loadState: async (): Promise<ExtensionState> => {
+        inLockLoads += 1;
+        return await Promise.resolve({ schemaVersion: 2 as const, marketplaces: {} });
+      },
+    };
     const { ctx, pi, notifications } = makeCtx();
     const git = makeForbiddenGitOps();
 
@@ -3451,10 +3447,11 @@ test("silently stops when the marketplace vanishes after preflight", async (test
       scope: "project",
       cwd,
       gitOps: git.gitOps,
+      stateTransaction,
     });
 
     // assert
-    assert.strictEqual(replaced, true);
+    assert.strictEqual(inLockLoads, 1);
     assert.deepStrictEqual(notifications, []);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
       schemaVersion: 2,

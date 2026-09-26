@@ -1,16 +1,23 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { rewriteSkillTokens } from "../../extensions/pi-claude-marketplace/domain/skill-tokens.ts";
+import {
+  resolveSkillReference,
+  rewriteMarkdownReferences,
+} from "../../extensions/pi-claude-marketplace/domain/skill-tokens.ts";
 import { setCasePlatform } from "../platform/case-platform.ts";
 
-describe("rewriteSkillTokens", () => {
-  test("leaves an aligned reference byte-identical", () => {
+describe("rewriteMarkdownReferences", () => {
+  test("leaves an already-native reference byte-identical", () => {
     // arrange
-    const content = "Use acme:foo when linting.\n";
+    const content = "Use acme-foo when linting.\n";
 
     // act
-    const rewritten = rewriteSkillTokens(content, "acme", { skills: ["acme:foo"], workflows: [] });
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: ["acme-foo"],
+      commands: [],
+      workflows: [],
+    });
 
     // assert
     assert.strictEqual(rewritten, content);
@@ -21,22 +28,30 @@ describe("rewriteSkillTokens", () => {
     const content = "Run acme:acme-foo first.\n";
 
     // act
-    const rewritten = rewriteSkillTokens(content, "acme", { skills: ["acme:foo"], workflows: [] });
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: ["acme-foo"],
+      commands: [],
+      workflows: [],
+    });
 
     // assert
-    assert.strictEqual(rewritten, "Run acme:foo first.\n");
+    assert.strictEqual(rewritten, "Run /skill:acme-foo first.\n");
   });
 
-  test("rewrites the colon reference to the dot name on win32", (t) => {
+  test("rewrites the colon reference to the same Pi name on win32", (t) => {
     // arrange
     setCasePlatform(t, "win32");
     const content = "Use acme:foo daily.\n";
 
     // act
-    const rewritten = rewriteSkillTokens(content, "acme", { skills: ["acme.foo"], workflows: [] });
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: ["acme-foo"],
+      commands: [],
+      workflows: [],
+    });
 
     // assert
-    assert.strictEqual(rewritten, "Use acme.foo daily.\n");
+    assert.strictEqual(rewritten, "Use /skill:acme-foo daily.\n");
   });
 
   test("leaves an unknown reference verbatim", () => {
@@ -44,7 +59,26 @@ describe("rewriteSkillTokens", () => {
     const content = "See acme:ghost for details.\n";
 
     // act
-    const rewritten = rewriteSkillTokens(content, "acme", { skills: ["acme:foo"], workflows: [] });
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: ["acme-foo"],
+      commands: [],
+      workflows: [],
+    });
+
+    // assert
+    assert.strictEqual(rewritten, content);
+  });
+
+  test("leaves an explicit reference to an unknown skill verbatim", () => {
+    // arrange
+    const content = "Use /skill:ghost.\n";
+
+    // act
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: ["acme-foo"],
+      commands: [],
+      workflows: [],
+    });
 
     // assert
     assert.strictEqual(rewritten, content);
@@ -55,7 +89,11 @@ describe("rewriteSkillTokens", () => {
     const content = "See other:acme-foo for details.\n";
 
     // act
-    const rewritten = rewriteSkillTokens(content, "acme", { skills: ["acme:foo"], workflows: [] });
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: ["acme-foo"],
+      commands: [],
+      workflows: [],
+    });
 
     // assert
     assert.strictEqual(rewritten, content);
@@ -66,7 +104,11 @@ describe("rewriteSkillTokens", () => {
     const content = "See xacme:acme-foo for details.\n";
 
     // act
-    const rewritten = rewriteSkillTokens(content, "acme", { skills: ["acme:foo"], workflows: [] });
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: ["acme-foo"],
+      commands: [],
+      workflows: [],
+    });
 
     // assert
     assert.strictEqual(rewritten, content);
@@ -77,36 +119,48 @@ describe("rewriteSkillTokens", () => {
     const content = "See acme:acme- for details.\n";
 
     // act
-    const rewritten = rewriteSkillTokens(content, "acme", { skills: ["acme:foo"], workflows: [] });
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: ["acme-foo"],
+      commands: [],
+      workflows: [],
+    });
 
     // assert
     assert.strictEqual(rewritten, content);
   });
 
-  test("keeps fenced code blocks verbatim", () => {
+  test("rewrites fenced examples", () => {
     // arrange
     const content =
       "Run acme:acme-foo first.\n\n```text\nacme:acme-foo stays\n```\n\nThen acme:acme-foo again.\n";
 
     // act
-    const rewritten = rewriteSkillTokens(content, "acme", { skills: ["acme:foo"], workflows: [] });
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: ["acme-foo"],
+      commands: [],
+      workflows: [],
+    });
 
     // assert
     assert.strictEqual(
       rewritten,
-      "Run acme:foo first.\n\n```text\nacme:acme-foo stays\n```\n\nThen acme:foo again.\n",
+      "Run /skill:acme-foo first.\n\n```text\n/skill:acme-foo stays\n```\n\nThen /skill:acme-foo again.\n",
     );
   });
 
-  test("treats tilde fences like backtick fences", () => {
+  test("rewrites tilde-fenced examples", () => {
     // arrange
     const content = "~~~\nacme:acme-foo\n~~~\nacme:acme-foo\n";
 
     // act
-    const rewritten = rewriteSkillTokens(content, "acme", { skills: ["acme:foo"], workflows: [] });
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: ["acme-foo"],
+      commands: [],
+      workflows: [],
+    });
 
     // assert
-    assert.strictEqual(rewritten, "~~~\nacme:acme-foo\n~~~\nacme:foo\n");
+    assert.strictEqual(rewritten, "~~~\n/skill:acme-foo\n~~~\n/skill:acme-foo\n");
   });
 
   test("rewrites every reference on a line, including inline code", () => {
@@ -114,10 +168,14 @@ describe("rewriteSkillTokens", () => {
     const content = "Chain `acme:acme-foo` and then acme:acme-foo.\n";
 
     // act
-    const rewritten = rewriteSkillTokens(content, "acme", { skills: ["acme:foo"], workflows: [] });
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: ["acme-foo"],
+      commands: [],
+      workflows: [],
+    });
 
     // assert
-    assert.strictEqual(rewritten, "Chain `acme:foo` and then acme:foo.\n");
+    assert.strictEqual(rewritten, "Chain `/skill:acme-foo` and then /skill:acme-foo.\n");
   });
 
   test("preserves CRLF line endings", () => {
@@ -125,10 +183,14 @@ describe("rewriteSkillTokens", () => {
     const content = "First line.\r\nacme:acme-foo\r\nLast line.\r\n";
 
     // act
-    const rewritten = rewriteSkillTokens(content, "acme", { skills: ["acme:foo"], workflows: [] });
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: ["acme-foo"],
+      commands: [],
+      workflows: [],
+    });
 
     // assert
-    assert.strictEqual(rewritten, "First line.\r\nacme:foo\r\nLast line.\r\n");
+    assert.strictEqual(rewritten, "First line.\r\n/skill:acme-foo\r\nLast line.\r\n");
   });
 
   test("escapes regex metacharacters in the plugin name", () => {
@@ -136,59 +198,121 @@ describe("rewriteSkillTokens", () => {
     const content = "AcxMe:foo stays put.\n";
 
     // act
-    const rewritten = rewriteSkillTokens(content, "Ac.Me", {
-      skills: ["Ac.Me:foo"],
+    const rewritten = rewriteMarkdownReferences(content, "Ac.Me", {
+      skills: ["ac-me-foo"],
+      commands: [],
       workflows: [],
     });
 
     // assert
     assert.strictEqual(rewritten, content);
   });
+
+  test("rewrites a dotted skill source without swallowing sentence punctuation", () => {
+    // arrange
+    const content = "Use acme:review.changes.\n";
+
+    // act
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: ["acme-review-changes"],
+      commands: [],
+      workflows: [],
+    });
+
+    // assert
+    assert.strictEqual(rewritten, "Use /skill:acme-review-changes.\n");
+  });
+
+  test("rewrites cross-kind references and gives ambiguous names to commands", () => {
+    // arrange
+    const content = "Run acme:review, then /acme:build:web and /skill:review.\n";
+
+    // act
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: ["acme-review"],
+      commands: ["acme:review", "acme:build:web"],
+      workflows: [],
+    });
+
+    // assert
+    assert.strictEqual(
+      rewritten,
+      "Run /acme:review, then /acme:build:web and /skill:acme-review.\n",
+    );
+  });
+
+  test("uses the installed dot command name on Windows", (t) => {
+    // arrange
+    setCasePlatform(t, "win32");
+    const content = "Run /acme:build:web and acme:review.\n";
+
+    // act
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: ["acme-review"],
+      commands: ["acme.build.web", "acme.review"],
+      workflows: [],
+    });
+
+    // assert
+    assert.strictEqual(rewritten, "Run /acme.build.web and /acme.review.\n");
+  });
+
+  test("is stable when applied to already converted references", () => {
+    // arrange
+    const content = "Use /skill:acme-review and /acme:build:web.\n";
+    const names = { skills: ["acme-review"], commands: ["acme:build:web"], workflows: [] };
+
+    // act
+    const rewritten = rewriteMarkdownReferences(content, "acme", names);
+
+    // assert
+    assert.strictEqual(rewritten, content);
+  });
   test("converges an elidable reference onto a generated workflow name", () => {
-    // arrange -- the plugin ships no skill by that name, so only the workflow
-    // resolver can claim the token.
+    // arrange -- the plugin ships no skill or command by that name, so only
+    // the workflow resolver can claim the token.
     const content = "Run acme:acme-audit on every branch.\n";
 
     // act
-    const rewritten = rewriteSkillTokens(content, "acme", {
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
       skills: [],
+      commands: [],
       workflows: ["acme:audit"],
     });
 
     // assert
-    assert.strictEqual(rewritten, "Run acme:audit on every branch.\n");
+    assert.strictEqual(rewritten, "Run /acme:audit on every branch.\n");
   });
 
-  test("resolves a token through the workflow generator on win32, where the skill spelling differs", (t) => {
-    // arrange -- a skill would install as `acme.audit` there; the workflow
-    // keeps its colon, so the skill resolver misses and the workflow one hits.
+  test("keeps the colon workflow name on win32, where command names use dots", (t) => {
+    // arrange
     setCasePlatform(t, "win32");
     const content = "Run acme:acme-audit daily.\n";
 
     // act
-    const rewritten = rewriteSkillTokens(content, "acme", {
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
       skills: [],
+      commands: [],
       workflows: ["acme:audit"],
     });
 
     // assert
-    assert.strictEqual(rewritten, "Run acme:audit daily.\n");
+    assert.strictEqual(rewritten, "Run /acme:audit daily.\n");
   });
 
-  test("prefers the skill a token resolves to over a workflow of the same generated name", (t) => {
-    // arrange -- on win32 the two generators disagree, so which one answered
-    // first is observable in the bytes.
-    setCasePlatform(t, "win32");
+  test("prefers the skill a token resolves to over a workflow of the same source name", () => {
+    // arrange
     const content = "Run acme:audit now.\n";
 
     // act
-    const rewritten = rewriteSkillTokens(content, "acme", {
-      skills: ["acme.audit"],
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: ["acme-audit"],
+      commands: [],
       workflows: ["acme:audit"],
     });
 
     // assert
-    assert.strictEqual(rewritten, "Run acme.audit now.\n");
+    assert.strictEqual(rewritten, "Run /skill:acme-audit now.\n");
   });
 
   test("leaves a workflow reference verbatim when the plugin stages no such workflow", () => {
@@ -196,12 +320,64 @@ describe("rewriteSkillTokens", () => {
     const content = "Run acme:acme-audit on every branch.\n";
 
     // act
-    const rewritten = rewriteSkillTokens(content, "acme", {
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
       skills: [],
+      commands: [],
       workflows: ["acme:review"],
     });
 
     // assert
     assert.strictEqual(rewritten, content);
   });
+
+  test("skips a workflow candidate the workflow name generator rejects", () => {
+    // arrange -- a 200-character name exceeds the engine's 128-character cap.
+    const source = "a".repeat(200);
+    const content = `Run acme:${source}.\n`;
+
+    // act
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: [],
+      commands: [],
+      workflows: [`acme:${source}`],
+    });
+
+    // assert
+    assert.strictEqual(rewritten, content);
+  });
+});
+
+describe("resolveSkillReference", () => {
+  for (const reference of ["foo", "acme:foo", "acme: foo", "acme :foo", "acme-foo"]) {
+    test(`maps ${JSON.stringify(reference)} through the installed skill name`, () => {
+      // arrange
+      const known = new Set(["acme-foo"]);
+
+      // act
+      const resolution = resolveSkillReference("acme", reference, known);
+
+      // assert
+      assert.deepStrictEqual(resolution, { kind: "known", generatedName: "acme-foo" });
+    });
+  }
+
+  for (const { reference, expected } of [
+    { reference: "other:foo", expected: { kind: "foreign" } },
+    { reference: "acme:ghost", expected: { kind: "unknown" } },
+    {
+      reference: "acme:acme-",
+      expected: { kind: "malformed", reason: "Name must be a non-empty string." },
+    },
+  ]) {
+    test(`classifies ${JSON.stringify(reference)} without inventing a skill`, () => {
+      // arrange
+      const known = new Set(["acme-foo"]);
+
+      // act
+      const resolution = resolveSkillReference("acme", reference, known);
+
+      // assert
+      assert.deepStrictEqual(resolution, expected);
+    });
+  }
 });

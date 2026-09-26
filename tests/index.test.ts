@@ -365,6 +365,16 @@ async function loadExtension(
   })
     .thenReturn()
     .times(1);
+  when(() => {
+    pi.on("session_start", It.willCapture<EventListener<SessionStartEvent>>("skill aliases"));
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on("input", It.willCapture<EventListener<InputEvent>>("skill alias input"));
+  })
+    .thenReturn()
+    .times(1);
 
   await claudeMarketplaceExtension(pi);
 

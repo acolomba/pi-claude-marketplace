@@ -9,6 +9,7 @@ import {
   readFile,
   readdir,
   readlink,
+  realpath,
   rm,
   stat,
   symlink,
@@ -36,7 +37,7 @@ import type { AgentsReplacement } from "../../../extensions/pi-claude-marketplac
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 
 async function createStageTree(t: TestContext, prefix: string) {
-  const scopeRoot = await mkdtemp(path.join(tmpdir(), prefix));
+  const scopeRoot = await realpath(await mkdtemp(path.join(tmpdir(), prefix)));
   t.after(() => rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 }));
   const pluginRoot = path.join(scopeRoot, "plugin");
   const agentsSourceDir = path.join(pluginRoot, "agents");

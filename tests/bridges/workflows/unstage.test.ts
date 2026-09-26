@@ -134,9 +134,14 @@ test("records an unremovable name and still removes the names after it", async (
   await mkdir(blockedEnvelopePath);
   await writeFile(path.join(blockedEnvelopePath, "occupant.json"), "occupant bytes\n");
   await writeFile(path.join(savedDirectory, "acme:later.json"), '{"name":"acme:later"}\n');
+  // unlink(2) on a directory fails with EPERM on macOS and EISDIR on Linux.
+  const unlinkDirectoryFailure =
+    process.platform === "darwin"
+      ? "EPERM: operation not permitted"
+      : "EISDIR: illegal operation on a directory";
   const expectedFailure: UnstageWorkflowFailure = {
     name: "acme:blocked",
-    reason: `EISDIR: illegal operation on a directory, unlink '${blockedEnvelopePath}'`,
+    reason: `${unlinkDirectoryFailure}, unlink '${blockedEnvelopePath}'`,
   };
 
   // act

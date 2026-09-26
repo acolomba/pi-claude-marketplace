@@ -455,7 +455,7 @@ test("preserves an in-tree symlink refusal when a resolved target becomes a link
     const normalizedPluginRoot = await realpath(pluginRoot);
     const normalizedOriginalTarget = await realpath(originalTarget);
     const normalizedReplacementTarget = await realpath(replacementTarget);
-    const linkPath = path.join(hooksDirectory, "alias");
+    const linkPath = path.join(normalizedPluginRoot, "hooks", "alias");
     await createDirectoryLink(normalizedOriginalTarget, linkPath);
     let resolveInitialLink: (() => void) | undefined;
     const initialLinkResolved = new Promise<void>((resolve) => {
@@ -542,7 +542,7 @@ test("propagates a path walk failure caused by a resolved target replacement", a
     const normalizedPluginRoot = await realpath(pluginRoot);
     const normalizedOriginalTarget = await realpath(originalTarget);
     const normalizedNestedTarget = await realpath(nestedTarget);
-    const linkPath = path.join(hooksDirectory, "alias");
+    const linkPath = path.join(normalizedPluginRoot, "hooks", "alias");
     await createDirectoryLink(normalizedNestedTarget, linkPath);
     let resolveInitialLink: (() => void) | undefined;
     const initialLinkResolved = new Promise<void>((resolve) => {

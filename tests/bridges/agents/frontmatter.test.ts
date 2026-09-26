@@ -774,7 +774,7 @@ Keep the final newline.
     assert.strictEqual(generatedAgentFile, expectedGeneratedAgentFile);
   });
 
-  test("emits complete metadata, sanitized provenance, a skill legend, and exact body bytes", () => {
+  test("emits complete metadata, sanitized provenance, and exact body bytes", () => {
     // arrange
     const generatedAgent = {
       frontmatter: {
@@ -796,10 +796,6 @@ Keep the final newline.
         warnings: ["first warning\nwarningInjection: blocked", "second warning"],
       },
       body: "Review the source.",
-      legend: [
-        { token: "acme:review", generatedName: "acme-review" },
-        { token: "acme:check", generatedName: "acme-check" },
-      ],
     };
     const expectedGeneratedAgentFile = `---
 name: pi-claude-marketplace-acme-reviewer
@@ -827,13 +823,6 @@ provenance:
     - first warning warningInjection: blocked
     - second warning
 ---
-
-## Pi coding agent skill legend
-
-These instructions reference Claude skills by their original names. In this Pi session:
-
-- \`acme:review\` → skill \`acme-review\` (available on demand)
-- \`acme:check\` → skill \`acme-check\` (available on demand)
 
 Review the source.
 `;
@@ -941,7 +930,7 @@ Scout body.
     assert.strictEqual(generatedAgentFile, expectedGeneratedAgentFile);
   });
 
-  test("treats an empty legend as absent and adds only the missing trailing newline", () => {
+  test("adds the missing trailing newline", () => {
     // arrange
     const generatedAgent = {
       frontmatter: {
@@ -960,7 +949,6 @@ Scout body.
         warnings: [],
       },
       body: "\nBody lacks its final newline.",
-      legend: [],
     };
     const expectedGeneratedAgentFile = `---
 name: pi-claude-marketplace-acme-writer
