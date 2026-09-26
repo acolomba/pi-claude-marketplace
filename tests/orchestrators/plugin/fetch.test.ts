@@ -523,10 +523,10 @@ test("materializes a cold pinned URL clone at its recorded SHA", async () => {
     ]);
     assert.deepStrictEqual(cache.calls, [
       `resolve url ${cloneUrl} sha=${pin} ref=v2`,
-      `clone ${cloneUrl} pin=${pin} ref=v2 auth=-`,
+      `clone ${cloneUrl} pin=${pin} ref=v2 auth=example.com`,
     ]);
     assert.deepStrictEqual(git.schedule, [
-      `clone ${networkUrl} ref=v2 single=true auth=-`,
+      `clone ${networkUrl} ref=v2 single=true auth=example.com`,
       `checkout ${pin}`,
     ]);
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
@@ -597,9 +597,9 @@ test("refreshes an unpinned warm mirror with its ref and leaves state immutable"
     assert.deepStrictEqual(boundary.notifications, [
       { message: "● marketplace [project]\n  ○ moving (available)" },
     ]);
-    assert.deepStrictEqual(cache.calls, [`mirror ${cloneUrl} ref=main auth=-`]);
+    assert.deepStrictEqual(cache.calls, [`mirror ${cloneUrl} ref=main auth=example.com`]);
     assert.deepStrictEqual(git.schedule, [
-      "fetch remote=origin ref=main auth=-",
+      "fetch remote=origin ref=main auth=example.com",
       "resolve-local refs/remotes/origin/main",
       `force-update refs/heads/main=${head}`,
       "checkout main",
@@ -1129,7 +1129,7 @@ test("continues a manifest-ordered sweep after a network failure", async () => {
     ]);
     assert.deepStrictEqual(cache.calls, [
       `resolve url ${okUrl} sha=${okPin} ref=-`,
-      `clone ${okUrl} pin=${okPin} ref=- auth=-`,
+      `clone ${okUrl} pin=${okPin} ref=- auth=example.com`,
       `resolve url ${badUrl} sha=${badPin} ref=-`,
     ]);
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
@@ -1202,9 +1202,9 @@ test("derives partially available and unavailable git rows exactly", async () =>
     ]);
     assert.deepStrictEqual(cache.calls, [
       `resolve url ${partialUrl} sha=${partialPin} ref=-`,
-      `clone ${partialUrl} pin=${partialPin} ref=- auth=-`,
+      `clone ${partialUrl} pin=${partialPin} ref=- auth=example.com`,
       `resolve git-subdir ${subdirUrl} sha=${subdirPin} ref=-`,
-      `clone ${subdirUrl} pin=${subdirPin} ref=- auth=-`,
+      `clone ${subdirUrl} pin=${subdirPin} ref=- auth=example.com`,
     ]);
     verifyNotifications(boundary);
   });

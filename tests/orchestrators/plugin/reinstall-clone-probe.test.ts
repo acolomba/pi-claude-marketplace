@@ -181,9 +181,15 @@ test("falls back from an absent unpinned mirror to the recorded sha", async (tes
   await mkdir(cloneRoot, { recursive: true });
   const source: GitBackedSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
   const calls: unknown[] = [];
+  const pluginAuth = auth();
   const seam: ReinstallCloneCacheSeam = {
-    materializePluginClone(options) {
-      calls.push(options);
+    // The bundle carries closures, so the recorded call keeps only the two
+    // comparable fields: the bound host and the injected credential ops.
+    materializePluginClone({ auth: bundle, ...cloneOptions }) {
+      calls.push({
+        ...cloneOptions,
+        auth: { credentialOps: bundle?.credentialOps, host: bundle?.host },
+      });
       return Promise.resolve(cloneRoot);
     },
   };
@@ -194,7 +200,7 @@ test("falls back from an absent unpinned mirror to the recorded sha", async (tes
     seam,
     locations,
     recordedSha: SHA,
-    auth: auth(),
+    auth: pluginAuth,
   });
 
   // assert
@@ -203,7 +209,14 @@ test("falls back from an absent unpinned mirror to the recorded sha", async (tes
     pluginRoot: cloneRoot,
     resolvedSha: SHA,
   });
-  assert.deepStrictEqual(calls, [{ locations, cloneUrl, pin: SHA }]);
+  assert.deepStrictEqual(calls, [
+    {
+      auth: { credentialOps: pluginAuth.credentialOps, host: "example.com" },
+      cloneUrl,
+      locations,
+      pin: SHA,
+    },
+  ]);
 });
 
 test("threads provider auth while resolving a pinned git-subdir", async (testContext) => {

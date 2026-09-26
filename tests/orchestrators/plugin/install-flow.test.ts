@@ -7133,7 +7133,7 @@ test("plugin install authentication: threads a GitHub provider bundle to the pin
   });
 });
 
-test("plugin install authentication: leaves a providerless clone authless", async () => {
+test("plugin install authentication: threads a host-keyed bundle for a host the registry does not claim", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-providerless-"));
     try {
@@ -7176,16 +7176,41 @@ test("plugin install authentication: leaves a providerless clone authless", asyn
         version: "sha-a1b2c3d4e5f6",
       });
       assert.deepStrictEqual(notifications, []);
-      assert.deepStrictEqual(authCapture.calls, [{ auth: undefined, cloneUrl }]);
+      assert.deepStrictEqual(
+        authCapture.calls.map(({ auth, cloneUrl: capturedUrl }) => ({
+          authHost: auth?.host,
+          authRequiredType: typeof auth?.onAuthRequired,
+          cloneUrl: capturedUrl,
+          credentialOps: auth?.credentialOps,
+        })),
+        [
+          {
+            authHost: "gitlab.example.com",
+            authRequiredType: "function",
+            cloneUrl,
+            credentialOps: credentials.credentialOps,
+          },
+        ],
+      );
       assert.deepStrictEqual(
         git.state.cloneCalls.map(({ auth, ref, singleBranch, url }) => ({
-          auth,
+          authHost: auth?.host,
           ref,
           singleBranch,
           url,
         })),
-        [{ auth: undefined, ref: undefined, singleBranch: undefined, url: `${cloneUrl}.git` }],
+        [
+          {
+            authHost: "gitlab.example.com",
+            ref: undefined,
+            singleBranch: undefined,
+            url: `${cloneUrl}.git`,
+          },
+        ],
       );
+      // Attaching a bundle consults nothing on its own: the credential helper
+      // is queried only when the server issues a challenge, and this clone
+      // succeeds without one.
       assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     } finally {
       await rm(cwd, { force: true, recursive: true });

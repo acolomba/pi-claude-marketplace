@@ -3554,7 +3554,7 @@ test("plugin reinstall authentication: a cold GitHub cache threads one provider 
   });
 });
 
-test("plugin reinstall authentication: a non-provider host threads no auth bundle", async () => {
+test("plugin reinstall authentication: a host the registry does not claim threads a host-keyed bundle", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-auth-no-provider-"));
     try {
@@ -3597,7 +3597,13 @@ test("plugin reinstall authentication: a non-provider host threads no auth bundl
       // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.equal(captured.count, 1);
-      assert.equal(captured.auth, undefined);
+      assert.deepStrictEqual(
+        { credentialOps: captured.auth?.credentialOps, host: captured.auth?.host },
+        { credentialOps, host: "gitlab.example.com" },
+      );
+      // Attaching a bundle consults nothing on its own: the credential helper
+      // is queried only when the server issues a challenge, and this clone
+      // succeeds without one.
       assert.deepEqual(credentialCalls, { approve: [], fill: [], reject: [] });
     } finally {
       await rm(cwd, { recursive: true, force: true });

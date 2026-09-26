@@ -165,13 +165,17 @@ test("returns a missing-subdir result without exposing the resolved sha", async 
     path: "plugins/missing",
     sha: SHA,
   };
+  const pluginAuth = auth();
   const seam: InstallCloneCacheSeam = {
     resolvePluginPin() {
       return Promise.resolve({ cloneUrl: "https://example.com/mono", pin: SHA, ref: "main" });
     },
     materializePluginClone(options) {
       assert.strictEqual(options.ref, "main");
-      assert.strictEqual(options.auth, undefined);
+      assert.deepStrictEqual(
+        { credentialOps: options.auth?.credentialOps, host: options.auth?.host },
+        { credentialOps: pluginAuth.credentialOps, host: "example.com" },
+      );
       return Promise.resolve(cloneRoot);
     },
     materializeOrRefreshPluginMirror() {
@@ -180,7 +184,7 @@ test("returns a missing-subdir result without exposing the resolved sha", async 
   };
 
   // act
-  const outcome = await probeInstallClone({ source, seam, locations, auth: auth() });
+  const outcome = await probeInstallClone({ source, seam, locations, auth: pluginAuth });
 
   // assert
   assert.deepStrictEqual(outcome, {
