@@ -6,17 +6,17 @@ current_phase: 1
 current_phase_name: Private repos on any git host
 current_plan: 3
 total_plans_in_phase: 3
-status: Phase 1 plan 02 executed — ready to execute plan 03
-stopped_at: "Completed 01-02-PLAN.md; suite intentionally RED until plan 03"
-last_updated: "2026-09-26T03:55:42.004Z"
+status: Phase 1 complete (3/3 plans) — awaiting verification
+stopped_at: "Completed 01-03-PLAN.md (3 commits, 1c7d6e52..d5762e0d); npm run check exits 0"
+last_updated: "2026-09-26T04:42:43.870Z"
 last_activity: 2026-09-26
-last_activity_desc: "Executed 01-02: onAuth cancels a credential for a url on another host, proven at the factory and at the transport"
-state_head: 7780742f0c527cf8179e7c484e953e8c7fb963ea
+last_activity_desc: "Executed 01-03: the plugin and edge surfaces assert they carry a host-keyed bundle; npm run check exits 0 with 0 failing tests"
+state_head: d5762e0da783a6cb9560dcb0542d733aa9a393fe
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -37,11 +37,11 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 1 — Private repos on any git host (in progress)
+Phase: 1 — Private repos on any git host (all 3 plans executed, awaiting verification)
 Current Plan: 3
 Total Plans in Phase: 3
-Status: Plans 01 and 02 of 3 executed and summarized
-Last activity: 2026-09-26 — Executed 01-02 (2 commits, GAUTH-06)
+Status: Plans 01, 02 and 03 of 3 executed and summarized
+Last activity: 2026-09-26 — Executed 01-03 (3 commits, GAUTH-03 / GAUTH-05 on the plugin and edge surfaces)
 
 Plan 01 landed wave 1: `buildAuthForHost` returns a `GitAuthBundle` for every https host, so
 `credentialOps.fill(host)` is reached off the two-host registry; `NO_PROVIDER_CAUSE` and
@@ -55,12 +55,18 @@ difference, before `credentialOps.fill` is called, so a foreign URL causes no he
 proven twice — at the factory (`credentialOps.calls` empty) and at the transport
 (`UserCanceledError`, no `Authorization` header on any recorded request).
 
-The unit suite is intentionally RED at the whole-suite level — still exactly 20 failures, confined
-to the seven plugin and edge files plan 03 owns, with the case list recorded in `01-01-SUMMARY.md`.
-Plan 02 added none. Every other gate (lint, format, typecheck, type-members, corresponding-tests,
-fallow, direct coverage on the touched module) is green. Next step is `/gsd-execute-phase 1` for
-plan 03, which realigns the plugin and edge surfaces and takes `npm run check` green at the phase
-boundary.
+Plan 03 landed wave 3 and closed all 20 deliberately-red cases. Each one asserted that the
+extension does NOT reach the credential helper on a host the provider registry does not claim;
+each now asserts that it does, pinned to the bundle's bound host BY VALUE rather than by key
+presence. The two edge suites reduce the recorded bundle to `{ host }` through `describeClone` and
+the new `describeFetch`, so the host stays inside the byte-locked deep-equality comparison. Both
+flow cases keep their empty-`credentialOps.calls` assertion: a bundle is attached, and nothing is
+consulted until the server issues a challenge (PROV-02's surviving half).
+
+**The gate is green at the phase boundary.** `npm run check` exits 0 (`CHECK_EXIT=0`) at
+`d5762e0d`: 7261 tests, 7261 pass, 0 fail, `all files | 100.00 | 100.00 | 100.00` with an empty
+uncovered-lines cell on every row under `extensions/`, and `fallow` at `FALLOW_EXIT=0`. Next step
+is verification of Phase 1, then `/gsd-plan-phase 2` with `--skip-ui`.
 
 ## Progress
 
@@ -68,14 +74,14 @@ boundary.
 **Current Plan:** 3 of 3 (phase 1)
 
 ```
-Phase 1  [======    ]  in progress (2/3 plans)
+Phase 1  [==========]  plans complete (3/3)
 Phase 2  [          ]  not started
 Phase 3  [          ]  not started
 ```
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
-| 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | In progress (2/3 plans) |
+| 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | Plans complete (3/3), awaiting verification |
 | 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Not started |
 | 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Not started |
 
@@ -114,6 +120,16 @@ Phase 3  [          ]  not started
   `credentialOps.fill` is called, so a URL on another host causes no helper query at all. The
   `url` parameter is load-bearing and named `url`; `onAuthFailure` keeps its unused `_url`
   because the credential it evicts has already been sent (GAUTH-06, D-1-03).
+- **Edge bundle expectations use the reduced-token shape.** `describeClone` and the new
+  `describeFetch` replace a recorded `auth` bundle with `{ host }`, so the bound host stays inside
+  the byte-locked deep-equality comparison and a bundle bound to the wrong host fails the suite. A
+  bundle carries three closures, so a literal expectation cannot spell it; the host is the field a
+  wrong binding would get wrong (T-01-11).
+- **`fetch.test.ts::requiredAuth` stays.** It narrows `args.auth` read off the clone-cache seam,
+  whose parameter type is still `auth?: GitAuthBundle` because
+  `plugin/update-preflight.ts::buildBundle` returns `undefined` when it has no `ctx`. The narrow is
+  real, not dead — the same fact keeps `clone-cache.test.ts:538` legitimately asserting an absent
+  bundle.
 
 ### Source-review facts carried into planning
 
@@ -139,9 +155,11 @@ Phase 3  [          ]  not started
 - Plan Phases 2 and 3 with `--skip-ui`: the `ui_safety_gate` keyword scan false-positives on this
   project's domain vocabulary (`form`, `component`, `view`). No phase in this milestone is a UI
   phase.
-- `npm run test:coverage:unit` stays RED until plan 03 realigns the 20 cases in
-  `tests/edge/handlers/marketplace/{add,update}.test.ts` and the five
-  `tests/orchestrators/plugin/*` files. The named case list is in `01-01-SUMMARY.md`.
+- Phase 3 must amend `PROJECT.md`'s D-79-03 row. Its OUTCOME stands — only `update` carries a
+  cause line — but its stated RATIONALE ("no `onAuth` callback registered at all for no-provider
+  hosts") is false after plan 01. The now-true reason is recorded in
+  `orchestrators/plugin/install.messaging.ts`: the plugin failure grammar has no cause-chain
+  trailer slot that renders on the subject row.
 - A live end-to-end clone of a private repo on a non-registry host, against the operator's own
   credential helper, is untested by design (cases run offline with no credentials) and needs human
   UAT. Recorded as deliverable D4 in `01-01-SUMMARY.md`, and as D5 in `01-02-SUMMARY.md` for the
@@ -153,14 +171,15 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-09-26T03:55:41.954Z
+**Last session:** 2026-09-26T04:42:35.574Z
 
-**Stopped At:** Completed `01-02-PLAN.md` (2 commits, `c55a7466`..`7780742f`); whole-suite RED by design until plan 03.
-**Resume File:** `.planning/workstreams/git-hosts/phases/01-private-repos-on-any-git-host/01-03-PLAN.md`
-**Next Action:** Execute plan 03 (plugin and edge surface realignment, `npm run check` green)
+**Stopped At:** Completed `01-03-PLAN.md` (3 commits, `1c7d6e52`..`d5762e0d`); `npm run check` exits 0 with 0 failing tests.
+**Resume File:** None
+**Next Action:** Verify Phase 1, then plan Phase 2 with `--skip-ui`
 
 ## Performance Metrics
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 01 P02 | 22min | 2 tasks | 3 files |
+| Phase 01 P03 | 41min | 2 tasks | 11 files |
