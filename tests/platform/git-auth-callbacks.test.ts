@@ -197,7 +197,36 @@ describe("buildAuthCallbacks", () => {
     assert.deepStrictEqual(credential, { cancel: true });
     assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
     assert.deepStrictEqual(logged, [
-      `[auth] onAuth: url host ${OTHER_HOST} does not match the bound host ${HOST}`,
+      `[auth] onAuth: url https://${OTHER_HOST} does not match the bound https host ${HOST}`,
+    ]);
+  });
+
+  test("WR-01: cancels an http url on the bound host without querying the helper", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [[HOST, { username: "stored", password: "secret" }]],
+    });
+    const onAuthRequired: OnAuthRequiredFn = () => {
+      throw new Error("interactive auth is forbidden on a cleartext url");
+    };
+
+    const callbacks = buildAuthCallbacks({
+      credentialOps: credentials.credentialOps,
+      host: HOST,
+      evictOnFailure: true,
+      onAuthRequired,
+    });
+
+    // act
+    const credential = await callbacks.onAuth(`http://${HOST}/owner/repo.git`);
+
+    // assert
+    assert.deepStrictEqual(credential, { cancel: true });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+    assert.deepStrictEqual(logged, [
+      `[auth] onAuth: url http://${HOST} does not match the bound https host ${HOST}`,
     ]);
   });
 

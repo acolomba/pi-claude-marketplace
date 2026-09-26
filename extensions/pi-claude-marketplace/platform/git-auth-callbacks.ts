@@ -83,11 +83,17 @@ export interface BuildAuthCallbacksOpts {
  *
  * Behavior:
  *
- * - `onAuth(url)`: compare `new URL(url).host` against `opts.host` first and
- *   return `{ cancel: true }` when they differ, so a credential resolved for
- *   one host is never offered to another (GAUTH-06, D-1-03). Both sides read
- *   `URL.host`, so the port participates in the compare and the default https
- *   port normalizes away symmetrically -- `orchestrators/auth-host.ts::hostFromCloneUrl`
+ * - `onAuth(url)`: require `https:` and compare `new URL(url).host` against
+ *   `opts.host` first, returning `{ cancel: true }` on either mismatch, so a
+ *   credential resolved for one host is never offered to another and never
+ *   travels in cleartext (GAUTH-06, D-1-03). The scheme is part of the compare
+ *   because `platform/git-credential.ts::buildAttributeBlock` queries the
+ *   helper with `protocol=https`, so everything `fill` returns is an https
+ *   credential, while `domain/source.ts` validates the scheme only in the
+ *   string-form parser -- an object-form source out of a third-party
+ *   `marketplace.json` can carry `http://`. Both sides of the host compare read
+ *   `URL.host`, so the port participates and the default https port normalizes
+ *   away symmetrically -- `orchestrators/auth-host.ts::hostFromCloneUrl`
  *   produces `opts.host` the same way. On a match, consult
  *   `credentialOps.fill(opts.host)`; on hit, return the stored credential
  *   (AUTH-02 silent reuse). On miss, invoke `opts.onAuthRequired()`; success
@@ -174,12 +180,13 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
       // even cause a helper query for the bound host. `new URL` throws on an
       // unparseable value; the CP-10 catch below turns that into the same
       // cancel, which is why the compare sits inside the existing try.
-      const requestedHost = new URL(url).host;
-      if (requestedHost !== opts.host) {
-        // AUTH-09: name the parsed hosts only. The raw URL can carry userinfo,
-        // so interpolating it here could put a credential in a log line.
+      const requested = new URL(url);
+      if (requested.protocol !== "https:" || requested.host !== opts.host) {
+        // AUTH-09: name the parsed scheme and host only. The raw URL can carry
+        // userinfo, so interpolating it here could put a credential in a log
+        // line.
         hookDebugLog(
-          `onAuth: url host ${requestedHost} does not match the bound host ${opts.host}`,
+          `onAuth: url ${requested.protocol}//${requested.host} does not match the bound https host ${opts.host}`,
           "auth",
         );
         return { cancel: true };
