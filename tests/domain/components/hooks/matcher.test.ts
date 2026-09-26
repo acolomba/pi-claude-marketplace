@@ -39,7 +39,7 @@ describe("parseMatcher", () => {
     });
   }
 
-  test("maps multiple tool tokens in source order", () => {
+  test("maps multiple tool tokens to their Pi-form spellings", () => {
     // arrange
 
     // act
@@ -52,7 +52,7 @@ describe("parseMatcher", () => {
     });
   });
 
-  test("deduplicates repeated tool tokens without changing first-occurrence order", () => {
+  test("deduplicates repeated tool tokens", () => {
     // arrange
 
     // act
