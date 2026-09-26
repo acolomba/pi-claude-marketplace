@@ -203,6 +203,55 @@ test("WR-06: composeUninstalledRow keeps the data disposition as the only brace 
   assert.deepStrictEqual(row, expectedRow);
 });
 
+test("WLIF-06: composeUninstalledRow names a retired command as the only brace and drops the row to warning", () => {
+  // arrange
+  const expectedRow: PluginUninstalledMessage = {
+    status: "uninstalled",
+    name: "helper",
+    version: "1.0.0",
+    reasons: ["stale workflow command"],
+    severity: "warning",
+    needsReload: true,
+  };
+
+  // act
+  const row = composeUninstalledRow({
+    staleWorkflowCommand: true,
+    plugin: "helper",
+    version: "1.0.0",
+    keepData: false,
+    dependents: [],
+  });
+
+  // assert
+  assert.deepStrictEqual(row, expectedRow);
+  assert.equal(Object.hasOwn(row, "cause"), false);
+});
+
+test("WLIF-06: the stale-command token sits last when the data disposition already holds the brace", () => {
+  // arrange
+  const expectedRow: PluginUninstalledMessage = {
+    status: "uninstalled",
+    name: "helper",
+    version: "1.0.0",
+    reasons: ["data kept", "stale workflow command"],
+    severity: "warning",
+    needsReload: true,
+  };
+
+  // act
+  const row = composeUninstalledRow({
+    staleWorkflowCommand: true,
+    plugin: "helper",
+    version: "1.0.0",
+    keepData: true,
+    dependents: [],
+  });
+
+  // assert
+  assert.deepStrictEqual(row, expectedRow);
+});
+
 test("LOAD-03: composeUninstalledRow names the dependents on the cause line and stays an info reload row", () => {
   // act
   const row = composeUninstalledRow({

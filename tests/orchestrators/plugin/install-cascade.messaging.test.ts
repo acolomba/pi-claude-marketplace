@@ -329,6 +329,35 @@ describe("composeCascadeMemberRows", () => {
     });
   });
 
+  test("WDEP-04 a member declaring workflows marks its row when the host engine is absent", () => {
+    // arrange
+    const rows = composeCascadeMemberRows({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootRow: ROOT_ROW,
+      installed: [member({ declaresWorkflows: true })],
+      alreadyInstalled: [],
+      probe: PROBE_BOTH_LOADED,
+    });
+
+    // act
+    const emitted = emit(rows, BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "warning",
+      message: [
+        "A plugin operation needs attention.",
+        "",
+        "● official [user]",
+        "  ● formatter@tools v2.1.0 (installed) {requires pi-dynamic-workflows}",
+        "  ● helper v1.0.0 (installed)",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    });
+  });
+
   test("RESV-05 a skipped member the snapshot records no version for renders bare", () => {
     // arrange
     const rows = composeCascadeMemberRows({
