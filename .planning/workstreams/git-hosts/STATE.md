@@ -2,20 +2,22 @@
 gsd_state_version: "1.0"
 milestone: any-git-host
 milestone_name: Any Git Host
-current_plan: none
-status: Roadmap complete — ready to plan Phase 1
-stopped_at: roadmap written, no phase planned yet
-last_updated: "2026-09-25T00:00:00.000Z"
-last_activity: 2026-09-25
-last_activity_desc: "Roadmap created for milestone any-git-host (3 phases, 10/10 requirements mapped)"
+current_phase: 1
+current_phase_name: Private repos on any git host
+current_plan: 2
+total_plans_in_phase: 3
+status: Phase 1 plan 01 executed — ready to execute plan 02
+stopped_at: "Completed 01-01-PLAN.md; suite intentionally RED until plan 03"
+last_updated: "2026-09-26T03:27:21.646Z"
+last_activity: 2026-09-26
+last_activity_desc: "Executed 01-01: buildAuthForHost returns a bundle for every host, cause line re-aimed at the real failure identity"
+state_head: 3edfce6e77dcd58ed16c1409cab73dac5d941cf9
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 3
+  completed_plans: 1
   percent: 0
-current_phase: 1
-current_phase_name: Private repos on any git host
 ---
 
 # Project State
@@ -35,28 +37,37 @@ Codex-layout changes are out of scope — Claude Code 2.1.274 contains zero refe
 
 ## Current Position
 
-Phase: 1 — Private repos on any git host (not started)
-Plan: —
-Status: Roadmap complete — ready to plan Phase 1
-Last activity: 2026-09-25 — Roadmap created (3 phases, 10/10 v1 requirements mapped)
+Phase: 1 — Private repos on any git host (in progress)
+Current Plan: 2
+Total Plans in Phase: 3
+Status: Plan 01 of 3 executed and summarized
+Last activity: 2026-09-26 — Executed 01-01 (4 commits, GAUTH-03/04/05)
 
-The roadmap is written and every v1 requirement is mapped to exactly one phase. No phase directory
-exists yet and no plan has been written. Next step is `/gsd-plan-phase 1 --skip-ui`.
+Plan 01 landed wave 1: `buildAuthForHost` returns a `GitAuthBundle` for every https host, so
+`credentialOps.fill(host)` is reached off the two-host registry; `NO_PROVIDER_CAUSE` and
+`isAuthChallengeError` are retired and the `update.ts` cause attachment is re-aimed at
+`classifyGitTransportFailure` gated on `!hasDeviceFlowProvider(host)`.
+
+The unit suite is intentionally RED at the whole-suite level — 20 failures confined to the seven
+plugin and edge files plan 03 owns, with the exact case list recorded in `01-01-SUMMARY.md`. Every
+other gate (lint, format, typecheck, type-members, corresponding-tests, fallow, direct coverage on
+all three touched modules) is green. Next step is `/gsd-execute-phase 1` for plan 02, which adds the
+`onAuth` host-mismatch cancel (GAUTH-06) — the replacement for the cross-host cap plan 01 removed.
 
 ## Progress
 
 **Phases Complete:** 0 / 3
-**Current Plan:** N/A
+**Current Plan:** 2 of 3 (phase 1)
 
 ```
-Phase 1  [          ]  not started
+Phase 1  [===       ]  in progress (1/3 plans)
 Phase 2  [          ]  not started
 Phase 3  [          ]  not started
 ```
 
 | Phase | Name | Requirements | Status |
 |-------|------|--------------|--------|
-| 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | Not started |
+| 1 | Private repos on any git host | GAUTH-03, GAUTH-04, GAUTH-05, GAUTH-06 | In progress (1/3 plans) |
 | 2 | Endpoints that answer only at the verbatim URL | MURL-08, MURL-09 | Not started |
 | 3 | `marketplace add` recovers from its own leftover clone | MA-12, MA-13, MA-14, GATE-01 | Not started |
 
@@ -82,6 +93,15 @@ Phase 3  [          ]  not started
   must be green at every phase boundary.
 - **No new hostname literal in `domain/auth-registry.ts`.** Per-host descriptors for self-hosted
   instances are explicitly out of scope; GAUTH-03 is what makes them unnecessary.
+- **Cause-line wording (plan 01):** `no credential stored for ${host}; add one with git credential
+  approve`. The host is interpolated once, the command is named literally, and no credential field
+  appears (AUTH-09).
+- **`NO_PROVIDER_CAUSE` had no residual case** and was retired outright (D-1-04). Authentication is
+  now attempted on every host through the credential helper, so "no auth provider is registered for
+  {host}" is false everywhere.
+- **The `update.ts` guard reuses `classifyGitTransportFailure`** rather than a second hand-rolled
+  duck-type: it already folds `HttpError` 401/403 and `UserCanceledError` into one reason, and the
+  real failure on an empty helper is `UserCanceledError`, which the old guard could never match.
 
 ### Source-review facts carried into planning
 
@@ -104,9 +124,15 @@ Phase 3  [          ]  not started
 
 ### Open TODOs
 
-- Plan Phase 1 with `--skip-ui`: the `ui_safety_gate` keyword scan false-positives on this
+- Plan Phases 2 and 3 with `--skip-ui`: the `ui_safety_gate` keyword scan false-positives on this
   project's domain vocabulary (`form`, `component`, `view`). No phase in this milestone is a UI
   phase.
+- `npm run test:coverage:unit` stays RED until plan 03 realigns the 20 cases in
+  `tests/edge/handlers/marketplace/{add,update}.test.ts` and the five
+  `tests/orchestrators/plugin/*` files. The named case list is in `01-01-SUMMARY.md`.
+- A live end-to-end clone of a private repo on a non-registry host, against the operator's own
+  credential helper, is untested by design (cases run offline with no credentials) and needs human
+  UAT. Recorded as deliverable D4 in `01-01-SUMMARY.md`.
 
 ### Blockers
 
@@ -114,6 +140,7 @@ None.
 
 ## Session Continuity
 
-**Stopped At:** Roadmap written for `any-git-host`; no phase directory created, no plan written.
-**Resume File:** `.planning/workstreams/git-hosts/ROADMAP.md`
-**Next Action:** `/gsd-plan-phase 1 --skip-ui`
+**Stopped At:** Completed `01-01-PLAN.md` (4 commits, `96d8fe09`..`3edfce6e`); whole-suite RED by
+design until plan 03.
+**Resume File:** `.planning/workstreams/git-hosts/phases/01-private-repos-on-any-git-host/01-02-PLAN.md`
+**Next Action:** Execute plan 02 (`onAuth` host-mismatch cancel, GAUTH-06)

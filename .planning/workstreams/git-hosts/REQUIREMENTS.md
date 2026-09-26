@@ -17,13 +17,13 @@ registry does not claim, and only `github.com` and `gitlab.com` are claimed. No 
 `git credential fill` lookup — is never consulted. A PAT already stored in the user's credential
 helper is therefore invisible to this extension on every other host.
 
-- [ ] **GAUTH-03**: A user can clone a private marketplace or plugin source over https from any git
+- [x] **GAUTH-03**: A user can clone a private marketplace or plugin source over https from any git
   host using a credential already stored in their git credential helper, with no host-specific code.
   No hostname literal is added to the provider registry for this to work.
-- [ ] **GAUTH-04**: When no stored credential is found for a host that has no Device Flow, the
+- [x] **GAUTH-04**: When no stored credential is found for a host that has no Device Flow, the
   command fails with a cause line naming how to store one (`git credential approve`), instead of
   cloning authless and failing on a bare structural 401.
-- [ ] **GAUTH-05**: `github.com` and `gitlab.com` keep today's Device Flow behavior byte-for-behavior
+- [x] **GAUTH-05**: `github.com` and `gitlab.com` keep today's Device Flow behavior byte-for-behavior
   — same prompt, same memoization, same `NO_PROVIDER_CAUSE` surface where it still applies.
 - [ ] **GAUTH-06**: A credential resolved for one host is never offered to a different host. When
   `buildAuthCallbacks.onAuth` is invoked for a URL whose host differs from the bundle's bound
@@ -98,9 +98,9 @@ repo's shared counter.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GAUTH-03 | Phase 1 | Pending |
-| GAUTH-04 | Phase 1 | Pending |
-| GAUTH-05 | Phase 1 | Pending |
+| GAUTH-03 | Phase 1 | Complete |
+| GAUTH-04 | Phase 1 | Complete |
+| GAUTH-05 | Phase 1 | Complete |
 | GAUTH-06 | Phase 1 | Pending |
 | MURL-08 | Phase 2 | Pending |
 | MURL-09 | Phase 2 | Pending |

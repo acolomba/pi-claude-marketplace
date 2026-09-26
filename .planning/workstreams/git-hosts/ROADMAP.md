@@ -81,11 +81,11 @@ here. Decimal phases (1.1, 2.1) are urgent insertions only, marked `INSERTED`.
      (`orchestrators/auth-host.ts` gains no value import of `platform/git.ts`; a type-only import is
      permitted).
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 
-- [ ] 01-01-PLAN.md — `buildAuthForHost` returns a bundle for every host; the stored-credential
+- [x] 01-01-PLAN.md — `buildAuthForHost` returns a bundle for every host; the stored-credential
   cause line replaces the no-provider one and is re-aimed at the failure identity that actually
   occurs; the marketplace add/update surfaces realigned (GAUTH-03, GAUTH-04, GAUTH-05)
 - [ ] 01-02-PLAN.md — `buildAuthCallbacks.onAuth` cancels when the URL's host differs from the
@@ -182,6 +182,6 @@ Phase 3 because that is where it is finally measured, but nothing may be left re
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Private repos on any git host | 0/3 | Planned | — |
+| 1. Private repos on any git host | 1/3 | In Progress | — |
 | 2. Endpoints that answer only at the verbatim URL | 0/TBD | Not started | — |
 | 3. `marketplace add` recovers from its own leftover clone | 0/TBD | Not started | — |
