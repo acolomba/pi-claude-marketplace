@@ -16,7 +16,7 @@
 - Internal: `npm run check` now passes on macOS. It already passed on Linux.
   - Tests and the unused-type-member gate now use the resolved path of the temporary directory. On macOS that directory is a symlink, so the paths the tests built did not match the paths the code reported.
   - Tests that expect a Linux error code or a case-sensitive file system now accept the macOS result.
-  - Tests that used `fs.watch` to make a change in the middle of an operation now inject the change through the state I/O instead. macOS reports file events late, so the change arrived after the operation. The marketplace update, the plugin update operations, and the reinstall target selection accept an optional state I/O replacement for this. Production callers do not pass it.
+  - Some tests used `fs.watch` to make a change in the middle of an operation. macOS reports file events late, so the change arrived after the operation. These tests now make the change through the state I/O, the functions that read and save `state.json`. The marketplace update, the plugin update operations, and the reinstall target selection accept an optional replacement for those functions. Production callers do not pass it.
 
 ## [0.19.2] - 2026-09-24
 
