@@ -157,11 +157,11 @@ async function checkoutPinWithRefetch(
  *      staging and return cloneRoot as a warm-cache win. Any other rename
  *      errno append-leak-rethrows (MA-9).
  *
- * `auth` is an optional bundle forwarded to `gitOps.clone`. When omitted the
- * clone is byte-identical to the public-only path (PROV-02); when present the
- * bundle's credentials thread into the clone so a private source on the
- * bundle's own host authenticates, whichever host that is (PROV-03/D-79-01,
- * GAUTH-03).
+ * `auth` is forwarded to `gitOps.clone`, and the bundle's credentials thread
+ * into the clone so a private source on the bundle's own host authenticates,
+ * whichever host that is (PROV-03/D-79-01, GAUTH-03). Every install, reinstall,
+ * fetch, and `info --fetch` caller passes one; the parameter stays optional for
+ * the `ctx`-less cascade arm of `update-preflight.ts`, which supplies none.
  */
 export async function materializePluginClone(args: {
   locations: ScopedLocations;

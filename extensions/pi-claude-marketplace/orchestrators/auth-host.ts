@@ -2,10 +2,11 @@
  * Host-keyed auth bundle factory (D-79-05).
  *
  * `buildAuthForHost` is the single seam that turns a bare host into a
- * `GitAuthBundle` bound to that host's registered provider. The marketplace
- * clone path (add.ts / update.ts) calls it directly and the plugin clone
- * paths reach it through `buildCloneAuth`, instead of any of them hardcoding
- * `github.com` + `initiateDeviceFlow`.
+ * `GitAuthBundle` bound to that host: the user's credential helper on every
+ * host, plus that host's registered Device Flow when the provider registry
+ * claims it. The marketplace clone path (add.ts / update.ts) calls it directly
+ * and the plugin clone paths reach it through `buildCloneAuth`, instead of any
+ * of them hardcoding `github.com` + `initiateDeviceFlow`.
  *
  * GAUTH-03 contract: EVERY host gets a bundle, so `buildAuthCallbacks` runs
  * and its fill-first path consults `credentialOps.fill(host)` on every host.
@@ -215,7 +216,7 @@ export function buildAuthForHost(args: {
  * Shared by the install, reinstall, fetch, and `info --fetch` probes, and by
  * the pinned and unpinned arms within each, so none of those call sites needs
  * its own copy of this logic.
- * `update.ts` is the one git-plugin probe still outside it: it keeps a local
+ * `update-preflight.ts` is the one git-plugin probe outside it: it keeps a local
  * `buildBundle` because its cascade path may run with no `ctx` at all and
  * returns undefined rather than a bundle in that case.
  */

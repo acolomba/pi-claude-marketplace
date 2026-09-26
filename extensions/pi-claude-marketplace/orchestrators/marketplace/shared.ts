@@ -224,11 +224,12 @@ function isGitNotFoundError(err: unknown): boolean {
  *       fetch + checkout (resolveRef of refs/remotes/origin/<ref> fails, then
  *       checkout throws if the SHA no longer exists).
  *
- * The optional `auth` parameter is forwarded to `gitOps.fetch` so
- * private-repository refreshes can trigger Device Flow on a credential
- * miss. `gitOps.clone` is not called from here (`add.ts` is the only caller
- * of clone); the auth bundle therefore only flows into the fetch primitive
- * within this helper.
+ * The optional `auth` parameter is forwarded to `gitOps.fetch` so a
+ * private-repository refresh reaches the user's credential helper, and on a
+ * registry host a credential miss additionally triggers that provider's Device
+ * Flow (GAUTH-03). `gitOps.clone` is not called from here (`add.ts` is the only
+ * caller of clone); the auth bundle therefore only flows into the fetch
+ * primitive within this helper.
  */
 export async function refreshGitHubClone(
   cloneDir: string,

@@ -43,9 +43,11 @@ export type AuthAttemptResult =
 
 /**
  * Caller-supplied closure invoked by `buildAuthCallbacks` when
- * `credentialOps.fill` returns null (no stored credential). The
- * orchestrator binds `host`, `credentialOps`, and `notifyFn` at the call
- * site so this seam takes no parameters.
+ * `credentialOps.fill` returns null (no stored credential). The orchestrator
+ * binds whatever the host's arm needs at the call site, so this seam takes no
+ * parameters: `orchestrators/auth-host.ts`'s registry arm binds `host`,
+ * `credentialOps`, and `notifyFn` for the Device Flow, and its no-provider arm
+ * binds `host` alone to name the host in `NO_STORED_CREDENTIAL_CAUSE`.
  */
 export type OnAuthRequiredFn = () => Promise<AuthAttemptResult>;
 
@@ -117,7 +119,7 @@ export interface BuildAuthCallbacksOpts {
  *   with no `path` line, so the helper lookup is strictly host-keyed. This
  *   compare is what bounds the disclosure surface, because `buildAuthForHost`
  *   returns a bundle for every host and the bound host is therefore the only
- *   thing that decides which URL a credential may answer (PROV-04 / T-79-04).
+ *   thing that decides which URL a credential may answer (GAUTH-06 / T-79-04).
  * - `onAuthFailure` deliberately keeps an unused `_url`. It receives the
  *   credential in order to evict it, which means the credential has already
  *   been sent; a compare there would change nothing about what was disclosed.

@@ -198,14 +198,14 @@ function composeNotInstallableMessage(
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * PROV-04 / D-76-08 / D-79-03: classify a git-source clone auth challenge into
+ * D-76-08 / D-79-03: classify a git-source clone auth challenge into
  * the EXISTING closed-set `authentication required` REASON -- no new token. A
  * credential the server rejects (a still-401 after a fresh credential, D-79-02)
  * throws the isomorphic-git `HttpError` with a 401/403 status. When no
  * credential can be produced at all -- an empty helper on a host the provider
  * registry does not claim (GAUTH-03), or an unsuccessful device flow (denied /
- * expired / poll network error) -- platform/git.ts's onAuth returns
- * `{ cancel: true }`, which isomorphic-git throws as `UserCanceledError`
+ * expired / poll network error) -- `platform/git-auth-callbacks.ts::onAuth`
+ * returns `{ cancel: true }`, which isomorphic-git throws as `UserCanceledError`
  * instead. The seam append-leak-rethrows either
  * up to the install catch; both shapes narrow through the shared
  * `classifyGitTransportFailure` ladder. Install keeps ONLY its auth
@@ -300,7 +300,7 @@ export function composeInstallFailureMessage(args: {
     return failed;
   }
 
-  // Branch 4: runtime throw. A PROV-04 git-source clone auth challenge maps to
+  // Branch 4: runtime throw. A git-source clone auth challenge maps to
   // the bare `(failed) {authentication required}` row (amended D-79-03: the
   // closed-set REASON carries the classification and NO cause line renders on
   // the install subject row -- the stored-credential cause line lives only on

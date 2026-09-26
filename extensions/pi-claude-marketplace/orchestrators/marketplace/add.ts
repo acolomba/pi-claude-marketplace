@@ -379,8 +379,8 @@ async function runAddInGuard(args: {
       });
     } else if (source.kind === "url") {
       // MURL-01 / D-76-06: source.url is the stored canonical identity; the
-      // clone url is that value through `ensureGitSuffix`. Per-host provider
-      // lookup decides the auth bundle (PROV-02/03/04).
+      // clone url is that value through `ensureGitSuffix`. Every host carries an
+      // auth bundle; the provider lookup decides its Device Flow half (PROV-03).
       recordedName = await addUrlInGuard({
         ctx: opts.ctx,
         state,
