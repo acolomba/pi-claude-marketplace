@@ -212,11 +212,16 @@ test("rethrows an unlink failure after removing only earlier prompts", async (t)
   await writeFile(removedPromptPath, "removed bytes\n");
   await mkdir(blockedPromptPath);
   await writeFile(retainedPromptPath, "retained bytes\n");
+  // unlink(2) on a directory fails with EPERM on macOS and EISDIR on Linux.
+  const unlinkDirectoryFailure =
+    process.platform === "darwin"
+      ? { code: "EPERM", errno: -1, description: "operation not permitted" }
+      : { code: "EISDIR", errno: -21, description: "illegal operation on a directory" };
   const expectedError = {
     name: "Error",
-    message: `EISDIR: illegal operation on a directory, unlink '${blockedPromptPath}'`,
-    code: "EISDIR",
-    errno: -21,
+    message: `${unlinkDirectoryFailure.code}: ${unlinkDirectoryFailure.description}, unlink '${blockedPromptPath}'`,
+    code: unlinkDirectoryFailure.code,
+    errno: unlinkDirectoryFailure.errno,
     syscall: "unlink",
     path: blockedPromptPath,
   };
