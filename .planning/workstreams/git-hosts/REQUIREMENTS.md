@@ -23,8 +23,15 @@ helper is therefore invisible to this extension on every other host.
 - [x] **GAUTH-04**: When no stored credential is found for a host that has no Device Flow, the
   command fails with a cause line naming how to store one (`git credential approve`), instead of
   cloning authless and failing on a bare structural 401.
-- [x] **GAUTH-05**: `github.com` and `gitlab.com` keep today's Device Flow behavior byte-for-behavior
-  — same prompt, same memoization, same `NO_PROVIDER_CAUSE` surface where it still applies.
+- [x] **GAUTH-05**: `github.com` and `gitlab.com` keep today's Device Flow behavior
+  byte-for-behavior — same prompt, same once-per-host memoization, same failure rendering.
+
+  *Amended during Phase 1 execution:* the original wording said "same `NO_PROVIDER_CAUSE` surface
+  where it still applies". D-1-04 retired that constant outright, so the clause named a symbol
+  that no longer exists and a surface that applies nowhere. The substantive guarantee is
+  unchanged and is what the phase asserts: a declined Device Flow on a registry host still
+  renders a bare `{authentication required}` row and must NOT pick up the new stored-credential
+  cause line — which is exactly what `hasDeviceFlowProvider` in the `update.ts` guard prevents.
 - [ ] **GAUTH-06**: A credential resolved for one host is never offered to a different host. When
   `buildAuthCallbacks.onAuth` is invoked for a URL whose host differs from the bundle's bound
   `host`, it cancels instead of returning the filled credential.
