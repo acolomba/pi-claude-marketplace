@@ -108,7 +108,10 @@ import { createRemovalOps, type RemovalOps } from "../../shared/fs-utils.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
-import { withStateGuard } from "../../transaction/with-state-guard.ts";
+import {
+  withStateGuard,
+  type LockedStateTransactionDeps,
+} from "../../transaction/with-state-guard.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
 import {
@@ -155,6 +158,12 @@ export interface ThreePhaseArgsBase {
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
   readonly cleanupClones: (locations: ScopedLocations) => Promise<unknown>;
+  /**
+   * State I/O for the intent-mark and finalize guards (and the disabled-pin
+   * refresh in preflight). Production callers omit it and get the real state
+   * I/O; tests observe or reshape a save deterministically through it.
+   */
+  readonly stateTransaction?: LockedStateTransactionDeps;
 }
 
 /** Direct update replacement owns user notification context. */
@@ -540,78 +549,82 @@ async function markUpdateInProgress(
 ): Promise<void> {
   const { plugin, marketplace, locations } = args;
   const { fromVersion } = preflight;
-  await withStateGuard(locations, (s) => {
-    const sMp = s.marketplaces[marketplace];
-    if (sMp === undefined) {
-      throw new PluginUpdateConcurrencyError("marketplace-removed", plugin, marketplace);
-    }
+  await withStateGuard(
+    locations,
+    (s) => {
+      const sMp = s.marketplaces[marketplace];
+      if (sMp === undefined) {
+        throw new PluginUpdateConcurrencyError("marketplace-removed", plugin, marketplace);
+      }
 
-    const sRecord = sMp.plugins[plugin];
-    if (sRecord === undefined) {
-      throw new PluginUpdateConcurrencyError("plugin-uninstalled", plugin, marketplace);
-    }
+      const sRecord = sMp.plugins[plugin];
+      if (sRecord === undefined) {
+        throw new PluginUpdateConcurrencyError("plugin-uninstalled", plugin, marketplace);
+      }
 
-    // ST-9: stale-version check.
-    if (sRecord.version !== fromVersion) {
-      throw new PluginUpdateConcurrencyError("plugin-updated", plugin, marketplace, {
-        expectedVersion: fromVersion,
-        actualVersion: sRecord.version,
-      });
-    }
+      // ST-9: stale-version check.
+      if (sRecord.version !== fromVersion) {
+        throw new PluginUpdateConcurrencyError("plugin-updated", plugin, marketplace, {
+          expectedVersion: fromVersion,
+          actualVersion: sRecord.version,
+        });
+      }
 
-    sRecord.compatibility = {
-      installable: false,
-      notes: [UPDATE_IN_PROGRESS_NOTE],
-      // Carry forward from EXISTING sRecord, NOT from
-      // preflight.installable -- the pre-update arrays are the truthful
-      // view during the intent-mark window.
-      supported: [...sRecord.compatibility.supported],
-      unsupported: [...sRecord.compatibility.unsupported],
-    };
+      sRecord.compatibility = {
+        installable: false,
+        notes: [UPDATE_IN_PROGRESS_NOTE],
+        // Carry forward from EXISTING sRecord, NOT from
+        // preflight.installable -- the pre-update arrays are the truthful
+        // view during the intent-mark window.
+        supported: [...sRecord.compatibility.supported],
+        unsupported: [...sRecord.compatibility.unsupported],
+      };
 
-    // CR-02: `resources.workflows` is the ONE inventory this window widens, to
-    // the union of the names already recorded and the names about to be
-    // committed. Every other inventory names artifacts under a scope root,
-    // where a later sweep can still find one the record forgot; workflow
-    // envelopes live outside every scope root, so this array is the only thing
-    // that can name them at all.
-    //
-    // Over-naming is the safe direction FOR A NAME THIS PLUGIN OWNS, and that
-    // is why the union is written BEFORE the commit rather than after it:
-    // removal and re-staging are both ENOENT-tolerant (NFR-3), so an owned name
-    // that never landed costs a no-op, while a name that landed unrecorded
-    // costs the file -- permanently.
-    //
-    // CR-01: it is NOT the safe direction for a name whose target already holds
-    // content this plugin does not own, so those names are excluded here. The
-    // record is the sole ownership claim on an envelope: `unstagePluginWorkflows`
-    // unlinks by recorded name with no content check, and
-    // `displacePreviousTargets` moves every recorded name aside BEFORE
-    // `assertTargetsUnoccupied` runs, so a recorded name is never
-    // ownership-checked again. Recording a foreign name would therefore route a
-    // later uninstall, disable, update, enable or reinstall straight around the
-    // commit's occupancy refusal and delete the user's own file. The failure-exit
-    // narrow in `applyPerBridgeResources` cannot be relied on to undo it: a crash
-    // between this write and finalize -- the window the intent mark exists to
-    // survive -- leaves the union standing with nothing to re-narrow it.
-    //
-    // `unownedNames` is a prepare-time probe, so the exclusion is not exhaustive
-    // in either direction, and both residuals are bounded:
-    //  - A target occupied AFTER the probe is still refused by the commit, and
-    //    the failure exit drops the name on the ordinary (non-crash) path.
-    //  - A probed-foreign name the commit nevertheless places (the occupier
-    //    vanished in between) is recorded by the success exit from `stagedNames`.
-    //    Only a crash in that same window leaves it unrecorded, and an orphan
-    //    envelope of our own content is a smaller loss than a deleted file of
-    //    someone else's.
-    const unowned = new Set(handles.workflows.result.unownedNames);
-    sRecord.resources.workflows = [
-      ...new Set([
-        ...sRecord.resources.workflows,
-        ...handles.workflows.result.stagedNames.filter((name) => !unowned.has(name)),
-      ]),
-    ];
-  });
+      // CR-02: `resources.workflows` is the ONE inventory this window widens, to
+      // the union of the names already recorded and the names about to be
+      // committed. Every other inventory names artifacts under a scope root,
+      // where a later sweep can still find one the record forgot; workflow
+      // envelopes live outside every scope root, so this array is the only thing
+      // that can name them at all.
+      //
+      // Over-naming is the safe direction FOR A NAME THIS PLUGIN OWNS, and that
+      // is why the union is written BEFORE the commit rather than after it:
+      // removal and re-staging are both ENOENT-tolerant (NFR-3), so an owned name
+      // that never landed costs a no-op, while a name that landed unrecorded
+      // costs the file -- permanently.
+      //
+      // CR-01: it is NOT the safe direction for a name whose target already holds
+      // content this plugin does not own, so those names are excluded here. The
+      // record is the sole ownership claim on an envelope: `unstagePluginWorkflows`
+      // unlinks by recorded name with no content check, and
+      // `displacePreviousTargets` moves every recorded name aside BEFORE
+      // `assertTargetsUnoccupied` runs, so a recorded name is never
+      // ownership-checked again. Recording a foreign name would therefore route a
+      // later uninstall, disable, update, enable or reinstall straight around the
+      // commit's occupancy refusal and delete the user's own file. The failure-exit
+      // narrow in `applyPerBridgeResources` cannot be relied on to undo it: a crash
+      // between this write and finalize -- the window the intent mark exists to
+      // survive -- leaves the union standing with nothing to re-narrow it.
+      //
+      // `unownedNames` is a prepare-time probe, so the exclusion is not exhaustive
+      // in either direction, and both residuals are bounded:
+      //  - A target occupied AFTER the probe is still refused by the commit, and
+      //    the failure exit drops the name on the ordinary (non-crash) path.
+      //  - A probed-foreign name the commit nevertheless places (the occupier
+      //    vanished in between) is recorded by the success exit from `stagedNames`.
+      //    Only a crash in that same window leaves it unrecorded, and an orphan
+      //    envelope of our own content is a smaller loss than a deleted file of
+      //    someone else's.
+      const unowned = new Set(handles.workflows.result.unownedNames);
+      sRecord.resources.workflows = [
+        ...new Set([
+          ...sRecord.resources.workflows,
+          ...handles.workflows.result.stagedNames.filter((name) => !unowned.has(name)),
+        ]),
+      ];
+    },
+    args.stateTransaction,
+  );
 }
 
 /** The persisted per-plugin install record the finalize window mutates. */
@@ -815,64 +828,68 @@ async function finalizeUpdateRecord(
   const allSucceeded = phase3aFailures.length === 0;
   let invalidConfigWriteBack = false;
 
-  await withStateGuard(locations, async (s) => {
-    const sMp = s.marketplaces[marketplace];
-    if (sMp === undefined) {
-      throw new PluginUpdateConcurrencyError("marketplace-removed", plugin, marketplace, {
-        lifecycle: "finalize",
-      });
-    }
-
-    const sRecord = sMp.plugins[plugin];
-    if (sRecord === undefined) {
-      throw new PluginUpdateConcurrencyError("plugin-uninstalled", plugin, marketplace, {
-        lifecycle: "finalize",
-      });
-    }
-
-    // Anchor the per-bridge gating against the runtime tuple of known
-    // phases, so a future fifth bridge forces an explicit tuple update
-    // before landing here.
-    const failedPhases = new Set<Phase3Phase>(
-      phase3aFailures.map((f) => f.phase).filter((p) => PHASE3_FAILURE_PHASES.includes(p)),
-    );
-
-    applyPerBridgeResources(sRecord, {
-      plugin,
-      handles,
-      failedPhases,
-      installable,
-      hookEntries,
-      previousWorkflowNames: preflight.record.resources.workflows,
-      workflows,
-    });
-
-    if (allSucceeded) {
-      applyAllSuccessRecordFields(sRecord, preflight);
-    }
-
-    sRecord.updatedAt = new Date().toISOString();
-
-    // WB-01 / A7: deep-equal short-circuited config write-back on the
-    // all-success arm. SKIPPED in cascade mode (the marketplace autoupdate
-    // cascade owns its own writes; mirrors WR-09 orchestrated-mode
-    // semantics). The deep-equal gate compares the prospective
-    // `{...existing, ...patch}` shape against the existing entry; the
-    // current plugin entry shape carries no version field, so the patch is
-    // `{}` and a CHANGED update with a byte-stable existing entry produces a
-    // no-op, preserving RECON-05 mtime stability.
-    if (!args.cascade && allSucceeded) {
-      const writeResult = await maybeWritePluginConfigBack({
-        locations,
-        marketplace,
-        plugin,
-        local: args.local === true,
-      });
-      if (writeResult.invalidConfig) {
-        invalidConfigWriteBack = true;
+  await withStateGuard(
+    locations,
+    async (s) => {
+      const sMp = s.marketplaces[marketplace];
+      if (sMp === undefined) {
+        throw new PluginUpdateConcurrencyError("marketplace-removed", plugin, marketplace, {
+          lifecycle: "finalize",
+        });
       }
-    }
-  });
+
+      const sRecord = sMp.plugins[plugin];
+      if (sRecord === undefined) {
+        throw new PluginUpdateConcurrencyError("plugin-uninstalled", plugin, marketplace, {
+          lifecycle: "finalize",
+        });
+      }
+
+      // Anchor the per-bridge gating against the runtime tuple of known
+      // phases, so a future fifth bridge forces an explicit tuple update
+      // before landing here.
+      const failedPhases = new Set<Phase3Phase>(
+        phase3aFailures.map((f) => f.phase).filter((p) => PHASE3_FAILURE_PHASES.includes(p)),
+      );
+
+      applyPerBridgeResources(sRecord, {
+        plugin,
+        handles,
+        failedPhases,
+        installable,
+        hookEntries,
+        previousWorkflowNames: preflight.record.resources.workflows,
+        workflows,
+      });
+
+      if (allSucceeded) {
+        applyAllSuccessRecordFields(sRecord, preflight);
+      }
+
+      sRecord.updatedAt = new Date().toISOString();
+
+      // WB-01 / A7: deep-equal short-circuited config write-back on the
+      // all-success arm. SKIPPED in cascade mode (the marketplace autoupdate
+      // cascade owns its own writes; mirrors WR-09 orchestrated-mode
+      // semantics). The deep-equal gate compares the prospective
+      // `{...existing, ...patch}` shape against the existing entry; the
+      // current plugin entry shape carries no version field, so the patch is
+      // `{}` and a CHANGED update with a byte-stable existing entry produces a
+      // no-op, preserving RECON-05 mtime stability.
+      if (!args.cascade && allSucceeded) {
+        const writeResult = await maybeWritePluginConfigBack({
+          locations,
+          marketplace,
+          plugin,
+          local: args.local === true,
+        });
+        if (writeResult.invalidConfig) {
+          invalidConfigWriteBack = true;
+        }
+      }
+    },
+    args.stateTransaction,
+  );
 
   // Route visibility follows the state guard's durable auto-save. A failed
   // state/config write therefore leaves the lifecycle runtime untouched.

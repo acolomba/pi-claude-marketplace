@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { chmodSync, readdirSync, watch, writeFileSync } from "node:fs";
+import { chmodSync, writeFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
@@ -5836,7 +5836,6 @@ test("a post-save hook-cache read failure leaves the committed reinstall success
 test("a hooks source changed after resolve fails before state persistence", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-hooks-toctou-"));
-    let sourceWatcher: ReturnType<typeof watch> | undefined;
     try {
       // arrange
       const seeded = await seedMarketplace({
@@ -5857,17 +5856,25 @@ test("a hooks source changed after resolve fails before state persistence", asyn
       const stateBefore = await readFile(locations.stateJsonPath, "utf8");
       const installedHooksPath = path.join(locations.hooksDir, "hello", "hooks.json");
       const installedHooksBefore = await readFile(installedHooksPath, "utf8");
+      // The hooks source changes once staging has begun, after resolve read it.
       let sourceChanged = false;
-      sourceWatcher = watch(locations.skillsStagingDir, () => {
-        if (!sourceChanged) {
+      const operations: ReinstallReplaceOperations = {
+        ...REAL_REINSTALL_TRANSACTION.replaceOperations,
+        prepareStageSkills: async (...args) => {
+          const prepared = await prepareStageSkills(...args);
           sourceChanged = true;
           writeFileSync(sourceHooksPath, "{ invalid hooks", "utf8");
-        }
-      });
+          return prepared;
+        },
+      };
       const { ctx, pi } = makeCtx();
 
       // act
-      const outcome = await reinstallPlugin({
+      const outcome = await createReinstallPlugin(
+        reinstallTransactionWith(operations),
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+      )({
         ctx,
         pi,
         scope: "project",
@@ -5883,7 +5890,6 @@ test("a hooks source changed after resolve fails before state persistence", asyn
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
       assert.equal(await readFile(installedHooksPath, "utf8"), installedHooksBefore);
     } finally {
-      sourceWatcher?.close();
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -5892,7 +5898,6 @@ test("a hooks source changed after resolve fails before state persistence", asyn
 test("an abort cleanup failure reports manual recovery through the exported workflow", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-abort-cleanup-leak-"));
-    let commandsWatcher: ReturnType<typeof watch> | undefined;
     let protectedSkillsStagingRoot: string | undefined;
     try {
       // arrange
@@ -5904,21 +5909,26 @@ test("an abort cleanup failure reports manual recovery through the exported work
       });
       const locations = locationsFor("project", cwd);
       const stateBefore = await readFile(locations.stateJsonPath, "utf8");
-      commandsWatcher = watch(locations.commandsStagingDir, () => {
-        if (protectedSkillsStagingRoot !== undefined) {
-          return;
-        }
-
-        const [stagingName] = readdirSync(locations.skillsStagingDir);
-        if (stagingName !== undefined) {
-          protectedSkillsStagingRoot = path.join(locations.skillsStagingDir, stagingName);
+      // Locking the skills staging root as soon as it is prepared makes the
+      // replacement fail and the abort's cleanup of that root fail with it.
+      const operations: ReinstallReplaceOperations = {
+        ...REAL_REINSTALL_TRANSACTION.replaceOperations,
+        prepareStageSkills: async (...args) => {
+          const prepared = await prepareStageSkills(...args);
+          assert.ok(prepared.kind === "staged");
+          protectedSkillsStagingRoot = prepared.stagingRoot;
           chmodSync(protectedSkillsStagingRoot, 0o000);
-        }
-      });
+          return prepared;
+        },
+      };
       const { ctx, pi } = makeCtx();
 
       // act
-      const outcome = await reinstallPlugin({
+      const outcome = await createReinstallPlugin(
+        reinstallTransactionWith(operations),
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+      )({
         ctx,
         pi,
         scope: "project",
@@ -5927,17 +5937,12 @@ test("an abort cleanup failure reports manual recovery through the exported work
         plugin: "hello",
         render: "none",
       });
-      if (protectedSkillsStagingRoot !== undefined) {
-        chmodSync(protectedSkillsStagingRoot, 0o700);
-      }
 
       // assert
-      assert.notEqual(protectedSkillsStagingRoot, undefined);
       assert.equal(outcome.partition, "failed");
       assert.equal(outcome.failureClass, "manual-recovery");
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     } finally {
-      commandsWatcher?.close();
       if (protectedSkillsStagingRoot !== undefined) {
         chmodSync(protectedSkillsStagingRoot, 0o700);
       }

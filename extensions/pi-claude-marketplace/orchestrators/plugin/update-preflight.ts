@@ -12,7 +12,10 @@ import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
-import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import {
+  withLockedStateTransaction,
+  type LockedStateTransactionDeps,
+} from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
 
 import {
@@ -87,6 +90,8 @@ export interface PreparePluginUpdateOptions {
   readonly marketplace: string;
   readonly scope: Scope;
   readonly locations: ScopedLocations;
+  /** State I/O for the disabled-pin refresh; production callers omit it. */
+  readonly stateTransaction?: LockedStateTransactionDeps;
   readonly partial?: boolean;
   readonly ctx?: NotificationContext;
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
@@ -461,34 +466,38 @@ async function refreshDisabledRecord(
   options: PreparePluginUpdateOptions,
   preflight: PreparedPluginUpdate,
 ): Promise<boolean> {
-  return withLockedStateTransaction(options.locations, async (transaction) => {
-    const record = transaction.state.marketplaces[options.marketplace]?.plugins[options.plugin];
-    if (record === undefined) {
-      return false;
-    }
+  return withLockedStateTransaction(
+    options.locations,
+    async (transaction) => {
+      const record = transaction.state.marketplaces[options.marketplace]?.plugins[options.plugin];
+      if (record === undefined) {
+        return false;
+      }
 
-    const next = nextDisabledPin(preflight, record.resolvedSha);
-    const current = disabledPinProjection(
-      record.version,
-      record.resolvedSource,
-      record.resolvedSha,
-      record.compatibility,
-    );
-    if (next.projection === current) {
-      return false;
-    }
+      const next = nextDisabledPin(preflight, record.resolvedSha);
+      const current = disabledPinProjection(
+        record.version,
+        record.resolvedSource,
+        record.resolvedSha,
+        record.compatibility,
+      );
+      if (next.projection === current) {
+        return false;
+      }
 
-    record.version = preflight.toVersion;
-    record.resolvedSource = preflight.installable.pluginRoot;
-    if (preflight.resolvedSha !== undefined) {
-      record.resolvedSha = preflight.resolvedSha;
-    }
+      record.version = preflight.toVersion;
+      record.resolvedSource = preflight.installable.pluginRoot;
+      if (preflight.resolvedSha !== undefined) {
+        record.resolvedSha = preflight.resolvedSha;
+      }
 
-    record.compatibility = next.compatibility;
-    record.updatedAt = new Date().toISOString();
-    await transaction.save();
-    return true;
-  });
+      record.compatibility = next.compatibility;
+      record.updatedAt = new Date().toISOString();
+      await transaction.save();
+      return true;
+    },
+    options.stateTransaction,
+  );
 }
 
 async function refreshDisabledPluginUpdate(

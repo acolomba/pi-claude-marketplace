@@ -7,6 +7,9 @@ import { MarketplaceNotAddedSignal } from "./shared.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
 
+/** Reads one scope's recorded state. */
+type LoadScopeState = (scope: Scope) => Promise<ExtensionState>;
+
 /** The scope a marketplace or plugin target resolves to. */
 interface ResolvedTargetScope {
   readonly scope: Scope;
@@ -30,6 +33,12 @@ export interface SelectReinstallTargetsOptions {
   readonly cwd: string;
   readonly scope?: Scope;
   readonly target: ReinstallPluginsTarget;
+  /**
+   * State reader for every scope lookup. Production callers omit it and get
+   * `loadState`; tests use it to change a scope's state between the scope
+   * resolution and the target expansion without racing a real writer.
+   */
+  readonly loadState?: typeof loadState;
 }
 
 /** Exact target expansion and invocation-form cardinality for a reinstall request. */
@@ -43,44 +52,46 @@ export async function selectReinstallTargets(
   options: SelectReinstallTargetsOptions,
 ): Promise<ReinstallTargetSelection> {
   const cardinality = options.target.kind === "plugin" ? "single" : "plural";
+  const readState = options.loadState ?? loadState;
+  const load: LoadScopeState = (scope) => readState(locationsFor(scope, options.cwd).extensionRoot);
   const targets =
     options.target.kind === "all"
-      ? await selectAllTargets(options.cwd, options.scope)
-      : await selectMarketplaceTargets(options.cwd, options.scope, options.target);
+      ? await selectAllTargets(load, options.scope)
+      : await selectMarketplaceTargets(load, options.scope, options.target);
   return { cardinality, targets };
 }
 
 async function selectAllTargets(
-  cwd: string,
+  load: LoadScopeState,
   explicitScope: Scope | undefined,
 ): Promise<readonly SelectedReinstallTarget[]> {
   const scopes: readonly Scope[] =
     explicitScope === undefined ? ["project", "user"] : [explicitScope];
   const targets: SelectedReinstallTarget[] = [];
   for (const scope of scopes) {
-    targets.push(...(await installedTargetsForScope(cwd, scope)));
+    targets.push(...(await installedTargetsForScope(load, scope)));
   }
 
   return sortTargets(targets);
 }
 
 async function installedTargetsForScope(
-  cwd: string,
+  load: LoadScopeState,
   scope: Scope,
 ): Promise<readonly SelectedReinstallTarget[]> {
-  const state = await loadState(locationsFor(scope, cwd).extensionRoot);
+  const state = await load(scope);
   return Object.entries(state.marketplaces).flatMap(([marketplace, record]) =>
     Object.keys(record.plugins).map((plugin) => ({ plugin, marketplace, scope })),
   );
 }
 
 async function selectMarketplaceTargets(
-  cwd: string,
+  load: LoadScopeState,
   explicitScope: Scope | undefined,
   target: Extract<ReinstallPluginsTarget, { kind: "marketplace" | "plugin" }>,
 ): Promise<readonly SelectedReinstallTarget[]> {
-  const resolved = await resolveMarketplaceScope(cwd, explicitScope, target);
-  const state = await loadScopeState(cwd, resolved.scope);
+  const resolved = await resolveMarketplaceScope(load, explicitScope, target);
+  const state = await load(resolved.scope);
   const record = state.marketplaces[target.marketplace];
   if (record === undefined) {
     throw new MarketplaceNotAddedSignal(target.marketplace, explicitScope);
@@ -93,30 +104,27 @@ async function selectMarketplaceTargets(
 }
 
 async function resolveMarketplaceScope(
-  cwd: string,
+  load: LoadScopeState,
   explicitScope: Scope | undefined,
   target: Extract<ReinstallPluginsTarget, { kind: "marketplace" | "plugin" }>,
 ): Promise<ResolvedTargetScope> {
   if (target.kind === "plugin") {
-    return resolvePluginMarketplaceScope(cwd, explicitScope, target);
+    return resolvePluginMarketplaceScope(load, explicitScope, target);
   }
 
-  return resolveMarketplaceTargetScope(cwd, explicitScope, target.marketplace);
+  return resolveMarketplaceTargetScope(load, explicitScope, target.marketplace);
 }
 
 async function resolvePluginMarketplaceScope(
-  cwd: string,
+  load: LoadScopeState,
   explicitScope: Scope | undefined,
   target: Extract<ReinstallPluginsTarget, { kind: "plugin" }>,
 ): Promise<ResolvedTargetScope> {
   if (explicitScope !== undefined) {
-    return resolveExplicitPluginScope(cwd, explicitScope, target);
+    return resolveExplicitPluginScope(load, explicitScope, target);
   }
 
-  const [projectState, userState] = await Promise.all([
-    loadScopeState(cwd, "project"),
-    loadScopeState(cwd, "user"),
-  ]);
+  const [projectState, userState] = await Promise.all([load("project"), load("user")]);
   const projectRecord = projectState.marketplaces[target.marketplace];
   const userRecord = userState.marketplaces[target.marketplace];
   if (projectRecord?.plugins[target.plugin] !== undefined) {
@@ -139,18 +147,18 @@ async function resolvePluginMarketplaceScope(
 }
 
 async function resolveExplicitPluginScope(
-  cwd: string,
+  load: LoadScopeState,
   explicitScope: Scope,
   target: Extract<ReinstallPluginsTarget, { kind: "plugin" }>,
 ): Promise<ResolvedTargetScope> {
-  const requestedState = await loadScopeState(cwd, explicitScope);
+  const requestedState = await load(explicitScope);
   const requestedRecord = requestedState.marketplaces[target.marketplace];
   if (requestedRecord !== undefined) {
     return { scope: explicitScope };
   }
 
   const otherScope = explicitScope === "project" ? "user" : "project";
-  const otherState = await loadScopeState(cwd, otherScope);
+  const otherState = await load(otherScope);
   const otherRecord = otherState.marketplaces[target.marketplace];
   throw new MarketplaceNotAddedSignal(
     target.marketplace,
@@ -160,26 +168,23 @@ async function resolveExplicitPluginScope(
 }
 
 async function resolveMarketplaceTargetScope(
-  cwd: string,
+  load: LoadScopeState,
   explicitScope: Scope | undefined,
   marketplace: string,
 ): Promise<ResolvedTargetScope> {
   if (explicitScope !== undefined) {
-    const requestedState = await loadScopeState(cwd, explicitScope);
+    const requestedState = await load(explicitScope);
     const requestedRecord = requestedState.marketplaces[marketplace];
     if (requestedRecord !== undefined) {
       return { scope: explicitScope };
     }
 
     const otherScope = explicitScope === "project" ? "user" : "project";
-    await loadScopeState(cwd, otherScope);
+    await load(otherScope);
     throw new MarketplaceNotAddedSignal(marketplace, explicitScope);
   }
 
-  const [userState, projectState] = await Promise.all([
-    loadScopeState(cwd, "user"),
-    loadScopeState(cwd, "project"),
-  ]);
+  const [userState, projectState] = await Promise.all([load("user"), load("project")]);
   const projectRecord = projectState.marketplaces[marketplace];
   if (projectRecord !== undefined) {
     return { scope: "project" };
@@ -191,10 +196,6 @@ async function resolveMarketplaceTargetScope(
   }
 
   throw new MarketplaceNotAddedSignal(marketplace);
-}
-
-async function loadScopeState(cwd: string, scope: Scope): Promise<ExtensionState> {
-  return loadState(locationsFor(scope, cwd).extensionRoot);
 }
 
 function sortTargets(
