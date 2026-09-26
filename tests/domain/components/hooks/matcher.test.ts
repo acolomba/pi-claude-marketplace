@@ -34,7 +34,7 @@ describe("parseMatcher", () => {
       // assert
       assert.deepStrictEqual(matcher, {
         kind: "tool-set",
-        piTools: new Set([piTool]),
+        toolNames: new Set([piTool]),
       });
     });
   }
@@ -48,7 +48,7 @@ describe("parseMatcher", () => {
     // assert
     assert.deepStrictEqual(matcher, {
       kind: "tool-set",
-      piTools: new Set(["write", "read", "grep"]),
+      toolNames: new Set(["write", "read", "grep"]),
     });
   });
 
@@ -61,7 +61,7 @@ describe("parseMatcher", () => {
     // assert
     assert.deepStrictEqual(matcher, {
       kind: "tool-set",
-      piTools: new Set(["read", "write", "grep"]),
+      toolNames: new Set(["read", "write", "grep"]),
     });
   });
 
@@ -71,18 +71,18 @@ describe("parseMatcher", () => {
     "mcp__my-server-1__some_tool",
     "mcp__server__nested__tool",
   ]) {
-    test(`keeps the MCP literal ${literal}`, () => {
+    test(`keeps the MCP tool name ${literal} as a matcher member`, () => {
       // arrange
 
       // act
       const matcher = parseMatcher(literal);
 
       // assert
-      assert.deepStrictEqual(matcher, { kind: "mcp-literal", literal });
+      assert.deepStrictEqual(matcher, { kind: "tool-set", toolNames: new Set([literal]) });
     });
   }
 
-  test("reports the first unmapped token after a mapped token", () => {
+  test("keeps a mapped alternative beside an MCP alternative in the same matcher", () => {
     // arrange
 
     // act
@@ -90,8 +90,60 @@ describe("parseMatcher", () => {
 
     // assert
     assert.deepStrictEqual(matcher, {
+      kind: "tool-set",
+      toolNames: new Set(["edit", "mcp__server__tool", "write"]),
+    });
+  });
+
+  test("keeps a foreign alternative's mapped siblings instead of dropping the whole group (#217)", () => {
+    // arrange
+
+    // act
+    const matcher = parseMatcher("Write|Edit|apply_patch");
+
+    // assert
+    assert.deepStrictEqual(matcher, {
+      kind: "tool-set",
+      toolNames: new Set(["write", "edit"]),
+    });
+  });
+
+  test("keeps two mapped alternatives beside a foreign one", () => {
+    // arrange
+
+    // act
+    const matcher = parseMatcher("Edit|Write|MultiEdit");
+
+    // assert
+    assert.deepStrictEqual(matcher, {
+      kind: "tool-set",
+      toolNames: new Set(["edit", "write"]),
+    });
+  });
+
+  test("keeps an MCP alternative beside a foreign one", () => {
+    // arrange
+
+    // act
+    const matcher = parseMatcher("apply_patch|mcp__server__tool");
+
+    // assert
+    assert.deepStrictEqual(matcher, {
+      kind: "tool-set",
+      toolNames: new Set(["mcp__server__tool"]),
+    });
+  });
+
+  test("reports the first discarded alternative when no alternative survives", () => {
+    // arrange
+
+    // act
+    const matcher = parseMatcher("apply_patch|MultiEdit");
+
+    // assert
+    assert.deepStrictEqual(matcher, {
       kind: "unmapped",
-      token: "mcp__server__tool",
+      token: "apply_patch",
     });
   });
 
@@ -116,7 +168,7 @@ describe("parseMatcher", () => {
       // assert
       assert.deepStrictEqual(matcher, {
         kind: "unmapped",
-        token: token.includes("|") ? "mcp__server__tool" : token,
+        token,
       });
     });
   }
@@ -158,7 +210,10 @@ describe("parseMatcher", () => {
     const unsafeMatcher = parseMatcher(unsafeLiteral);
 
     // assert
-    assert.deepStrictEqual(validMatcher, { kind: "mcp-literal", literal: validLiteral });
+    assert.deepStrictEqual(validMatcher, {
+      kind: "tool-set",
+      toolNames: new Set([validLiteral]),
+    });
     assert.deepStrictEqual(unsafeMatcher, { kind: "regex" });
   });
 });

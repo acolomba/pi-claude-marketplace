@@ -104,19 +104,18 @@ export type HookExecutor = (
 
 /**
  * Tool-event matcher-fires predicate. Compares the parsed matcher's
- * piTools set against Pi's runtime `event.toolName` (lowercase literal).
- * The parser already filters regex/unmapped matchers at parse time so
- * those arms are unreachable at dispatch; defensive `false` keeps the
- * switch exhaustive.
+ * `toolNames` set -- the Pi tool literals a Claude matcher token maps to,
+ * plus the MCP tool names Pi emits verbatim -- against Pi's runtime
+ * `event.toolName`. The parser already filters regex/unmapped matchers at
+ * parse time so those arms are unreachable at dispatch; defensive `false`
+ * keeps the switch exhaustive.
  */
 function matcherFiresOnToolEvent(matcher: ParsedMatcher, toolName: string): boolean {
   switch (matcher.kind) {
     case "match-all":
       return true;
     case "tool-set":
-      return matcher.piTools.has(toolName as never);
-    case "mcp-literal":
-      return matcher.literal === toolName;
+      return matcher.toolNames.has(toolName);
     case "regex":
     case "unmapped":
       return false;

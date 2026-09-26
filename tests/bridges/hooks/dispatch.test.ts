@@ -61,7 +61,7 @@ interface ExecutorCall {
     readonly pluginId: string;
     readonly resolvedSource: string;
     readonly claudeEvent: RoutingEntry["claudeEvent"];
-    readonly matcher: { readonly kind: "tool-set"; readonly piTools: readonly string[] };
+    readonly matcher: { readonly kind: "tool-set"; readonly toolNames: readonly string[] };
     readonly rawMatcher: string;
     readonly handlerDecl: RoutingEntry["handlerDecl"];
     readonly declarationIndex: number;
@@ -138,7 +138,7 @@ function recordExecutorCall(
       pluginId: entry.pluginId,
       resolvedSource: entry.resolvedSource,
       claudeEvent: entry.claudeEvent,
-      matcher: { kind: "tool-set", piTools: [...entry.matcher.piTools] },
+      matcher: { kind: "tool-set", toolNames: [...entry.matcher.toolNames] },
       rawMatcher: entry.rawMatcher,
       handlerDecl: structuredClone(entry.handlerDecl),
       declarationIndex: entry.declarationIndex,
@@ -422,7 +422,7 @@ describe("compositeHandlerFor", () => {
           pluginId: "first-mutation",
           resolvedSource: "/plugins/first-mutation",
           claudeEvent: "PreToolUse",
-          matcher: { kind: "tool-set", piTools: ["bash"] },
+          matcher: { kind: "tool-set", toolNames: ["bash"] },
           rawMatcher: "Bash",
           handlerDecl: {
             type: "command",
@@ -454,7 +454,7 @@ describe("compositeHandlerFor", () => {
           pluginId: "second-mutation",
           resolvedSource: "/plugins/second-mutation",
           claudeEvent: "PreToolUse",
-          matcher: { kind: "tool-set", piTools: ["bash"] },
+          matcher: { kind: "tool-set", toolNames: ["bash"] },
           rawMatcher: "Bash",
           handlerDecl: {
             type: "command",
