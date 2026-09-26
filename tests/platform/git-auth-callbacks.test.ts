@@ -13,6 +13,8 @@ import type {
 
 const HOST = "git.example.invalid";
 const REMOTE_URL = `https://${HOST}/owner/repo.git`;
+const OTHER_HOST = "other.example.invalid";
+const OTHER_REMOTE_URL = `https://${OTHER_HOST}/owner/repo.git`;
 
 describe("buildAuthCallbacks", () => {
   test("returns a stored credential without requesting interactive auth", async () => {
@@ -163,6 +165,154 @@ describe("buildAuthCallbacks", () => {
       reject: [],
     });
     assert.deepStrictEqual(logged, [`[auth] onAuth threw for ${HOST}: network down`]);
+  });
+
+  test("cancels for a url on another host without querying the helper", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [[HOST, { username: "stored", password: "secret" }]],
+    });
+    const onAuthRequired: OnAuthRequiredFn = () => {
+      throw new Error("interactive auth is forbidden on a host mismatch");
+    };
+
+    const callbacks = buildAuthCallbacks({
+      credentialOps: credentials.credentialOps,
+      host: HOST,
+      onAuthRequired,
+    });
+
+    // act
+    const credential = await callbacks.onAuth(OTHER_REMOTE_URL);
+
+    // assert
+    assert.deepStrictEqual(credential, { cancel: true });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+    assert.deepStrictEqual(logged, [
+      `[auth] onAuth: url host ${OTHER_HOST} does not match the bound host ${HOST}`,
+    ]);
+  });
+
+  test("cancels a host mismatch before any interactive auth can start", async () => {
+    // arrange
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const onAuthRequired: OnAuthRequiredFn = () => {
+      throw new Error("interactive auth is forbidden on a host mismatch");
+    };
+
+    const callbacks = buildAuthCallbacks({
+      credentialOps: credentials.credentialOps,
+      host: HOST,
+      onAuthRequired,
+    });
+
+    // act
+    const credential = await callbacks.onAuth(OTHER_REMOTE_URL);
+
+    // assert
+    assert.deepStrictEqual(credential, { cancel: true });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+  });
+
+  test("treats a port-bearing bound host as different from the portless url host", async () => {
+    // arrange
+    const boundHost = `${HOST}:8443`;
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [[boundHost, { username: "stored", password: "secret" }]],
+    });
+
+    const callbacks = buildAuthCallbacks({
+      credentialOps: credentials.credentialOps,
+      host: boundHost,
+      onAuthRequired: () => {
+        throw new Error("interactive auth is forbidden on a host mismatch");
+      },
+    });
+
+    // act
+    const credential = await callbacks.onAuth(REMOTE_URL);
+
+    // assert
+    assert.deepStrictEqual(credential, { cancel: true });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+  });
+
+  test("treats a port-bearing url host as different from the portless bound host", async () => {
+    // arrange
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [[HOST, { username: "stored", password: "secret" }]],
+    });
+
+    const callbacks = buildAuthCallbacks({
+      credentialOps: credentials.credentialOps,
+      host: HOST,
+      onAuthRequired: () => {
+        throw new Error("interactive auth is forbidden on a host mismatch");
+      },
+    });
+
+    // act
+    const credential = await callbacks.onAuth(`https://${HOST}:8443/owner/repo.git`);
+
+    // assert
+    assert.deepStrictEqual(credential, { cancel: true });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+  });
+
+  test("matches a url carrying the default https port against a portless bound host", async () => {
+    // arrange
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [[HOST, { username: "stored", password: "secret" }]],
+    });
+
+    const callbacks = buildAuthCallbacks({
+      credentialOps: credentials.credentialOps,
+      host: HOST,
+      onAuthRequired: () => {
+        throw new Error("interactive auth is forbidden on a credential hit");
+      },
+    });
+
+    // act
+    const credential = await callbacks.onAuth(`https://${HOST}:443/owner/repo.git`);
+
+    // assert
+    assert.deepStrictEqual(credential, { username: "stored", password: "secret" });
+    assert.deepStrictEqual(credentials.calls, {
+      fill: [{ host: HOST }],
+      approve: [],
+      reject: [],
+    });
+  });
+
+  test("cancels and logs when the url cannot be parsed", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [[HOST, { username: "stored", password: "secret" }]],
+    });
+
+    const callbacks = buildAuthCallbacks({
+      credentialOps: credentials.credentialOps,
+      host: HOST,
+      onAuthRequired: () => {
+        throw new Error("interactive auth is forbidden on an unparseable url");
+      },
+    });
+
+    // act
+    const credential = await callbacks.onAuth("not a url");
+
+    // assert
+    assert.deepStrictEqual(credential, { cancel: true });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+    assert.deepStrictEqual(logged, [`[auth] onAuth threw for ${HOST}: Invalid URL`]);
   });
 
   test("rejects an interactive credential and cancels the operation", async () => {

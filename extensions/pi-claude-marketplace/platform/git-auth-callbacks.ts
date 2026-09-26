@@ -71,15 +71,36 @@ export interface BuildAuthCallbacksOpts {
  *
  * Behavior:
  *
- * - `onAuth(url)`: consult `credentialOps.fill(opts.host)` first; on hit,
- *   return the stored credential (AUTH-02 silent reuse). On miss, invoke
- *   `opts.onAuthRequired()`; success returns the new credential, failure
- *   returns `{ cancel: true }`.
+ * - `onAuth(url)`: compare `new URL(url).host` against `opts.host` first and
+ *   return `{ cancel: true }` when they differ, so a credential resolved for
+ *   one host is never offered to another (GAUTH-06, D-1-03). Both sides read
+ *   `URL.host`, so the port participates in the compare and the default https
+ *   port normalizes away symmetrically -- `orchestrators/auth-host.ts::hostFromCloneUrl`
+ *   produces `opts.host` the same way. On a match, consult
+ *   `credentialOps.fill(opts.host)`; on hit, return the stored credential
+ *   (AUTH-02 silent reuse). On miss, invoke `opts.onAuthRequired()`; success
+ *   returns the new credential, failure returns `{ cancel: true }`.
  * - `onAuthFailure(url, cred)`: call `credentialOps.reject(opts.host, cred)`
  *   to evict the stale credential, then return `{ cancel: true }`.
  *
  * Discipline:
  *
+ * - The host compare closes a CALLER-side host/URL mismatch: an orchestrator
+ *   that builds a bundle for one host and then clones a URL on another. It is
+ *   not a redirect guard, and the transport it sits in front of is not
+ *   leaking. isomorphic-git invokes `onAuth` only from `discover`, on status
+ *   401 or 203, and always with the caller's own URL, so a redirect target
+ *   never reaches this seam; `simple-get` deletes the `authorization` and
+ *   `cookie` headers before following a cross-host redirect; and
+ *   `platform/git-credential.ts::credentialFill` emits `protocol` and `host`
+ *   with no `path` line, so the helper lookup is strictly host-keyed. This
+ *   compare is what bounds the disclosure surface now that `buildAuthForHost`
+ *   returns a bundle for every host: PROV-04 / T-79-04 previously capped that
+ *   surface at the two hosts in the provider registry, and the compare
+ *   replaces the cap with the check the cap was standing in for.
+ * - `onAuthFailure` deliberately keeps an unused `_url`. It receives the
+ *   credential in order to evict it, which means the credential has already
+ *   been sent; a compare there would change nothing about what was disclosed.
  * - CP-9 (no infinite retry): onAuthFailure ALWAYS returns
  *   `{ cancel: true }`. Inline Device Flow retries from this seam would
  *   re-enter the same code path and loop forever; instead, isomorphic-git's
@@ -110,6 +131,7 @@ export interface BuildAuthCallbacksOpts {
  *
  * @see REQUIREMENTS.md::AUTH-01 (private repo auth via Device Flow)
  * @see REQUIREMENTS.md::AUTH-02 (silent keychain reuse on subsequent ops)
+ * @see REQUIREMENTS.md::GAUTH-06 (a credential is offered only to its bound host)
  */
 export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
   onAuth: (url: string) => Promise<GitCredentials>;
@@ -123,8 +145,23 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
   // Device Flow inline from this seam would re-enter the same code path
   // (isomorphic-git's next call invokes onAuth, which falls through to
   // Device Flow naturally on a fill miss).
-  async function onAuth(_url: string): Promise<GitCredentials> {
+  async function onAuth(url: string): Promise<GitCredentials> {
     try {
+      // GAUTH-06 / D-1-03: refuse before the lookup, so a foreign URL does not
+      // even cause a helper query for the bound host. `new URL` throws on an
+      // unparseable value; the CP-10 catch below turns that into the same
+      // cancel, which is why the compare sits inside the existing try.
+      const requestedHost = new URL(url).host;
+      if (requestedHost !== opts.host) {
+        // AUTH-09: name the parsed hosts only. The raw URL can carry userinfo,
+        // so interpolating it here could put a credential in a log line.
+        hookDebugLog(
+          `onAuth: url host ${requestedHost} does not match the bound host ${opts.host}`,
+          "auth",
+        );
+        return { cancel: true };
+      }
+
       const filled = await opts.credentialOps.fill(opts.host);
       if (filled !== null) {
         return filled;
@@ -141,7 +178,8 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
       hookDebugLog(`onAuth: Device Flow failed for ${opts.host}: ${result.reason}`, "auth");
       return { cancel: true };
     } catch (err) {
-      // CP-10: catch ANY thrown error from fill / onAuthRequired and turn
+      // CP-10: catch ANY thrown error from the URL parse / fill /
+      // onAuthRequired and turn
       // it into a cancel; isomorphic-git never sees the raw error. The
       // caught message is still routed through hookDebugLog rather than
       // dropped -- platform/git-credential.ts's own docstring pins that
