@@ -144,6 +144,13 @@ Plans:
      `npm run check` passes whole at the milestone's final HEAD: `test:coverage:unit` at 100%
      lines/functions/branches, `test:corresponding`, `lint:type-members`, `fallow`, and the
      `tests/architecture/` gates.
+  5. `PROJECT.md`'s D-79-03 row is amended. Its OUTCOME still holds — `add` and `install` show a
+     bare `(failed) {authentication required}` row and only `update` carries a cause line, which
+     is a recorded user checkpoint (2026-07-11) this milestone does not revisit. Its stated
+     RATIONALE does not: the row reads "no `onAuth` callback registered at all for no-provider
+     hosts — structural fail-clean", and Phase 1 registers one for every host. Rewrite the
+     rationale to match what the code does, or the next reader will infer a behavior that no
+     longer exists.
 
 **Plans**: TBD
 
