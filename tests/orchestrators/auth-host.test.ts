@@ -97,7 +97,9 @@ describe("NO_STORED_CREDENTIAL_CAUSE", () => {
     // assert
     assert.strictEqual(
       cause,
-      "no credential was obtained for git.example:8443; add one with git credential approve",
+      "no credential was obtained for git.example:8443; store one with: printf " +
+        "'protocol=https\\nhost=git.example:8443\\nusername=<user>\\npassword=<token>\\n\\n' " +
+        "| git credential approve",
     );
   });
 });

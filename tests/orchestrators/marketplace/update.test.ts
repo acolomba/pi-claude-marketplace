@@ -350,7 +350,7 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Some operations have failed.\n\n⊘ urlmp-403 [project] (failed)\n  ⊘ urlmp-403 (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-403". -> HTTP 403 from fetch -> no credential was obtained for gitlab.example.com; add one with git credential approve',
+          "Some operations have failed.\n\n⊘ urlmp-403 [project] (failed)\n  ⊘ urlmp-403 (failed) {authentication required}\n    cause: Failed to update marketplace \"urlmp-403\". -> HTTP 403 from fetch -> no credential was obtained for gitlab.example.com; store one with: printf 'protocol=https\\nhost=gitlab.example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
         severity: "error",
       },
     ]);
@@ -770,7 +770,7 @@ test("GAUTH-04: a cancelled credential lookup on a host with no Device Flow rend
     // child's cause-chain trailer.
     assert.match(
       first.message,
-      /cause:.*no credential was obtained for gitlab\.example\.com; add one with git credential approve/,
+      /cause:.*no credential was obtained for gitlab\.example\.com; store one with: printf /,
     );
   });
 });
@@ -813,7 +813,7 @@ test("GAUTH-04: a 401 challenge on a host with no Device Flow carries the same s
     );
     assert.match(
       first.message,
-      /cause:.*no credential was obtained for gitlab\.example\.com; add one with git credential approve/,
+      /cause:.*no credential was obtained for gitlab\.example\.com; store one with: printf /,
     );
   });
 });

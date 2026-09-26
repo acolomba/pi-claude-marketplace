@@ -91,6 +91,13 @@ export function hostFromCloneUrl(cloneUrl: string, kind: "github" | "url" | "git
  * credential, so the line names the host and the command that stores one.
  * AUTH-09: it interpolates the host and nothing else.
  *
+ * The remedy is the whole pipeline because `git credential approve` reads the
+ * git-credential wire format from stdin: run bare it waits for input and stores
+ * nothing. It must also be fed the attribute set `buildAttributeBlock` uses --
+ * `protocol=https` + `host=` + `username=` + `password=`, and NO `path=` line
+ * (`platform/git-credential.ts`) -- or a later `fill` looks under a different
+ * keychain key and misses the entry the user just stored.
+ *
  * It says "obtained" rather than "stored" because `credentialFill` collapses
  * five outcomes to `null` (`platform/git-credential.ts`): a genuine helper
  * miss, `git` absent from PATH, the credential-subprocess timeout, a non-zero
@@ -100,7 +107,7 @@ export function hostFromCloneUrl(cloneUrl: string, kind: "github" | "url" | "git
  * `hookDebugLog`.
  */
 export const NO_STORED_CREDENTIAL_CAUSE: (host: string) => string = (host) =>
-  `no credential was obtained for ${host}; add one with git credential approve`;
+  `no credential was obtained for ${host}; store one with: printf 'protocol=https\\nhost=${host}\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve`;
 
 /**
  * Whether the provider registry claims `host` with a Device Flow.
