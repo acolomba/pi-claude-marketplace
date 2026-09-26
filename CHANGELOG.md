@@ -13,6 +13,10 @@
   - Internal: the marketplace-remove test that covers the in-lock concurrent disappearance now injects the state load instead of racing a real filesystem writer, so the branch is covered on every run rather than only when the race lands. It was the intermittent cause of sub-100% coverage runs in CI.
 - Internal: the tests, the live-UAT canaries, and `scripts/pi.sh` now run the Pi version that `package-lock.json` pins. They run it from `node_modules` and no longer use the `pi` on `PATH`. Run `npm ci` first.
   - `scripts/pi.sh` installs pinned versions of pi-mcp-adapter, pi-subagents, and @quintinshaw/pi-dynamic-workflows into a private npm prefix outside the checkout (`PI_CM_RUNTIME_PREFIX`). It no longer installs them into the global npm root.
+- Internal: `npm run check` now passes on macOS. It already passed on Linux.
+  - Tests and the unused-type-member gate now use the resolved path of the temporary directory. On macOS that directory is a symlink, so the paths the tests built did not match the paths the code reported.
+  - Tests that expect a Linux error code or a case-sensitive file system now accept the macOS result.
+  - Tests that used `fs.watch` to make a change in the middle of an operation now inject the change through the state I/O instead. macOS reports file events late, so the change arrived after the operation. The marketplace update, the plugin update operations, and the reinstall target selection accept an optional state I/O replacement for this. Production callers do not pass it.
 
 ## [0.19.2] - 2026-09-24
 
