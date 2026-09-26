@@ -115,6 +115,12 @@ export interface GitAuthBundle {
   readonly credentialOps: CredentialOps;
   readonly host: string;
   readonly onAuthRequired: OnAuthRequiredFn;
+  /**
+   * Whether `platform/git-auth-callbacks.ts::onAuthFailure` may evict a
+   * server-rejected credential for `host` from the user's keychain. True only
+   * when `onAuthRequired` can mint a replacement (AUTH-07, GAUTH-04).
+   */
+  readonly evictOnFailure: boolean;
 }
 
 /**

@@ -547,6 +547,7 @@ describe("clone", () => {
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
+        evictOnFailure: true,
         onAuthRequired: () => {
           throw new Error("interactive auth is forbidden on a stored-credential hit");
         },
@@ -602,6 +603,7 @@ describe("fetch", () => {
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
+        evictOnFailure: true,
         onAuthRequired: () => {
           throw new Error("interactive auth is forbidden on a stored-credential hit");
         },
@@ -718,6 +720,7 @@ describe("resolveRemoteRef", () => {
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
+        evictOnFailure: true,
         onAuthRequired,
       },
     });
@@ -745,6 +748,7 @@ describe("resolveRemoteRef", () => {
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
+        evictOnFailure: true,
         onAuthRequired,
       },
     });
@@ -795,6 +799,7 @@ describe("resolveRemoteRef", () => {
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
+        evictOnFailure: true,
         onAuthRequired,
       },
     });
@@ -831,6 +836,7 @@ describe("resolveRemoteRef", () => {
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
+        evictOnFailure: true,
         onAuthRequired,
       },
     });

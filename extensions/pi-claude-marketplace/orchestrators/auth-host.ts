@@ -115,6 +115,12 @@ export function hasDeviceFlowProvider(host: string): boolean {
  * host the registry does not claim gets a pure closure that resolves
  * `NO_STORED_CREDENTIAL_CAUSE(host)`; it does no I/O and touches no memo.
  *
+ * The same provider lookup decides `evictOnFailure`, which is the bundle's
+ * answer to what `onAuthFailure` may destroy: a provider host re-mints on the
+ * next fill miss, so eviction is recoverable there (AUTH-07); on every other
+ * host the credential in the user's helper is the only copy, so the bundle
+ * forbids the eviction (GAUTH-04).
+ *
  * The memo caps Device Flow round-trips and cannot cap `git credential fill`:
  * `platform/git-auth-callbacks.ts::onAuth` reaches `onAuthRequired` only AFTER
  * `fill`, so `fill` runs once per auth challenge per operation. That is the
@@ -149,7 +155,14 @@ export function buildAuthForHost(args: {
         reason: NO_STORED_CREDENTIAL_CAUSE(host),
         authAttempted: true,
       });
-    return { credentialOps, host, onAuthRequired } satisfies GitAuthBundle;
+    // AUTH-07 / GAUTH-04: this closure mints nothing, so evicting a
+    // server-rejected credential here would destroy the host's only copy.
+    return {
+      credentialOps,
+      host,
+      onAuthRequired,
+      evictOnFailure: false,
+    } satisfies GitAuthBundle;
   }
 
   const notifyFn = makeRawNotifyFn(ctx);
@@ -171,7 +184,14 @@ export function buildAuthForHost(args: {
     return result;
   };
 
-  return { credentialOps, host, onAuthRequired } satisfies GitAuthBundle;
+  // AUTH-07: the provider's Device Flow re-mints on the next operation's fill
+  // miss, so evicting a credential the server rejected is recoverable.
+  return {
+    credentialOps,
+    host,
+    onAuthRequired,
+    evictOnFailure: true,
+  } satisfies GitAuthBundle;
 }
 
 /**

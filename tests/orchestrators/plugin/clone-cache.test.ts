@@ -484,6 +484,7 @@ void test("PROV-03: the recovery fetch threads the auth bundle so a private pin 
       reject: async (): Promise<void> => Promise.resolve(),
     },
     host: "gitlab.example.com",
+    evictOnFailure: false,
     onAuthRequired: async (): Promise<{ ok: false; reason: string; authAttempted: true }> =>
       Promise.resolve({ ok: false, reason: "no", authAttempted: true }),
   };
@@ -549,6 +550,7 @@ void test("PROV-03: materializePluginClone with an auth bundle threads it to git
       reject: async (): Promise<void> => Promise.resolve(),
     },
     host: "gitlab.example.com",
+    evictOnFailure: false,
     onAuthRequired: async (): Promise<{ ok: false; reason: string; authAttempted: true }> =>
       Promise.resolve({ ok: false, reason: "no", authAttempted: true }),
   };
@@ -683,6 +685,7 @@ void test("PROV-03 (Q1): resolvePluginPin forwards an auth bundle into resolveRe
       reject: async (): Promise<void> => Promise.resolve(),
     },
     host: "gitlab.example.com",
+    evictOnFailure: false,
     onAuthRequired: async (): Promise<{ ok: false; reason: string; authAttempted: true }> =>
       Promise.resolve({ ok: false, reason: "no", authAttempted: true }),
   };
@@ -766,6 +769,7 @@ void test("PROV-03: resolvePluginPin forwards auth while resolving a named priva
       reject: async (): Promise<void> => Promise.resolve(),
     },
     host: "gitlab.example.com",
+    evictOnFailure: false,
     onAuthRequired: async (): Promise<{ ok: false; reason: string; authAttempted: true }> =>
       Promise.resolve({ authAttempted: true, ok: false, reason: "denied" }),
   };
@@ -1022,6 +1026,7 @@ void test("PROV-03: a private mirror forwards auth through clone and refresh fet
       reject: async (): Promise<void> => Promise.resolve(),
     },
     host: "gitlab.example.com",
+    evictOnFailure: false,
     onAuthRequired: async (): Promise<{ ok: false; reason: string; authAttempted: true }> =>
       Promise.resolve({ authAttempted: true, ok: false, reason: "denied" }),
   };

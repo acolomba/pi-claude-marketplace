@@ -63,7 +63,12 @@ export interface CloneOptions {
    * public-only path (no network policy change for public clones; NFR-5
    * surfaces untouched).
    */
-  auth?: { credentialOps: CredentialOps; host: string; onAuthRequired: OnAuthRequiredFn };
+  auth?: {
+    credentialOps: CredentialOps;
+    host: string;
+    onAuthRequired: OnAuthRequiredFn;
+    evictOnFailure: boolean;
+  };
 }
 
 export interface FetchOptions {
@@ -72,7 +77,12 @@ export interface FetchOptions {
    * fetch() builds the callbacks when present and behaves as the
    * public-only path when omitted.
    */
-  auth?: { credentialOps: CredentialOps; host: string; onAuthRequired: OnAuthRequiredFn };
+  auth?: {
+    credentialOps: CredentialOps;
+    host: string;
+    onAuthRequired: OnAuthRequiredFn;
+    evictOnFailure: boolean;
+  };
   dir: string;
   /** Default "origin". */
   remote?: string;
@@ -109,7 +119,12 @@ export interface ResolveRemoteRefOptions {
    * unpinned private-repo HEAD resolution can authenticate (PROV-03). When
    * omitted, the resolution behaves identically to the public-only path.
    */
-  auth?: { credentialOps: CredentialOps; host: string; onAuthRequired: OnAuthRequiredFn };
+  auth?: {
+    credentialOps: CredentialOps;
+    host: string;
+    onAuthRequired: OnAuthRequiredFn;
+    evictOnFailure: boolean;
+  };
 }
 
 export interface ForceUpdateRefOptions {

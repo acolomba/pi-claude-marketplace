@@ -446,6 +446,7 @@ test("refreshGitHubClone tracks the default branch and invokes its callback afte
   const auth: GitAuthBundle = {
     credentialOps: credentials.credentialOps,
     host: "github.com",
+    evictOnFailure: true,
     onAuthRequired,
   };
   const onFetchSucceeded = () => {

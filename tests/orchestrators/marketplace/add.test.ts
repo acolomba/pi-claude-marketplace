@@ -2373,6 +2373,7 @@ test("MURL-01: url source clones source.url `.git`-suffixed with a bundle bound 
     assert.deepStrictEqual(cloneCall.auth, {
       credentialOps,
       host: "gitlab.example.com",
+      evictOnFailure: false,
       onAuthRequired: cloneCall.auth?.onAuthRequired,
     });
   });
@@ -2418,6 +2419,7 @@ test("MURL-01: url source with a #ref clones at that ref with singleBranch and t
     assert.deepStrictEqual(cloneCall.auth, {
       credentialOps,
       host: "gitlab.example.com",
+      evictOnFailure: false,
       onAuthRequired: cloneCall.auth?.onAuthRequired,
     });
   });
@@ -2719,6 +2721,7 @@ test("MURL-01 regression: github source is byte-identical -- Device Flow auth st
       buildAuthCallbacks({
         credentialOps: cloneCall.auth.credentialOps,
         host: cloneCall.auth.host,
+        evictOnFailure: cloneCall.auth.evictOnFailure,
         onAuthRequired: cloneCall.auth.onAuthRequired,
       }),
       "github auth bundle must be buildAuthCallbacks-compatible",
@@ -2801,6 +2804,7 @@ test("PROV-02: a public url add on a host with no Device Flow carries its bundle
     assert.deepStrictEqual(cloneCall.auth, {
       credentialOps,
       host: "gitlab.example.com",
+      evictOnFailure: false,
       onAuthRequired: cloneCall.auth?.onAuthRequired,
     });
     // The public clone never touched the credential seam or the flow.

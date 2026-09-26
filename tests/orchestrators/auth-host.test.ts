@@ -185,6 +185,70 @@ describe("buildAuthForHost", () => {
     verify(ctx);
   });
 
+  test("CR-01: keeps an unregistered host's rejected credential in the keychain", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    const irreplaceable = { username: "user", password: "self-hosted-token" };
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [["git.example.invalid", irreplaceable]],
+    });
+    const auth = buildAuthForHost({
+      host: "git.example.invalid",
+      credentialOps: credentials.credentialOps,
+      ctx,
+    });
+    const callbacks = buildAuthCallbacks(auth);
+
+    // act
+    const cancellation = await callbacks.onAuthFailure(
+      "https://git.example.invalid/owner/repo.git",
+      irreplaceable,
+    );
+
+    // assert
+    assert.deepStrictEqual(cancellation, { cancel: true });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+    assert.deepStrictEqual(credentials.storedCredential("git.example.invalid"), irreplaceable);
+    assert.deepStrictEqual(logged, [
+      "[auth] onAuthFailure: keeping the stored credential for git.example.invalid, nothing can re-mint it",
+    ]);
+    verify(ctx);
+  });
+
+  test("CR-01 / AUTH-07: evicts a GitHub credential the server rejected", async () => {
+    // arrange
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    const rejected = { username: "x-access-token", password: "expired-token" };
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [["github.com", rejected]],
+    });
+    const auth = buildAuthForHost({
+      host: "github.com",
+      credentialOps: credentials.credentialOps,
+      ctx,
+    });
+    const callbacks = buildAuthCallbacks(auth);
+
+    // act
+    const cancellation = await callbacks.onAuthFailure(
+      "https://github.com/owner/repo.git",
+      rejected,
+    );
+
+    // assert
+    assert.deepStrictEqual(cancellation, { cancel: true });
+    assert.deepStrictEqual(credentials.calls, {
+      fill: [],
+      approve: [],
+      reject: [{ host: "github.com", credential: rejected }],
+    });
+    assert.strictEqual(credentials.storedCredential("github.com"), null);
+    verify(ctx);
+  });
+
   test("resolves the stored-credential cause for an unregistered host without notifying", async () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
@@ -202,6 +266,7 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "git.example.invalid",
+      evictOnFailure: false,
       onAuthRequired: auth.onAuthRequired,
     });
     assert.deepStrictEqual(attempt, {
@@ -233,6 +298,7 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "github.com",
+      evictOnFailure: true,
       onAuthRequired: auth.onAuthRequired,
     });
     assert.deepStrictEqual(credential, {
@@ -264,6 +330,7 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "gitlab.com",
+      evictOnFailure: true,
       onAuthRequired: auth.onAuthRequired,
     });
     assert.strictEqual(credential, null);
@@ -328,6 +395,7 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "github.com",
+      evictOnFailure: true,
       onAuthRequired: auth.onAuthRequired,
     });
     assert.deepStrictEqual(firstAuthentication, {
@@ -412,6 +480,7 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "github.com",
+      evictOnFailure: true,
       onAuthRequired: auth.onAuthRequired,
     });
     assert.deepStrictEqual(authentication, {
@@ -477,6 +546,7 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "github.com",
+      evictOnFailure: true,
       onAuthRequired: auth.onAuthRequired,
     });
     assert.deepStrictEqual(firstAuthentication, {
@@ -575,11 +645,13 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(githubAuth, {
       credentialOps: credentials.credentialOps,
       host: "github.com",
+      evictOnFailure: true,
       onAuthRequired: githubAuth.onAuthRequired,
     });
     assert.deepStrictEqual(gitlabAuth, {
       credentialOps: credentials.credentialOps,
       host: "gitlab.com",
+      evictOnFailure: true,
       onAuthRequired: gitlabAuth.onAuthRequired,
     });
     assert.deepStrictEqual(githubAuthentication, {
@@ -713,6 +785,7 @@ describe("buildAuthForHost", () => {
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "github.com",
+      evictOnFailure: true,
       onAuthRequired: auth.onAuthRequired,
     });
     assert.deepStrictEqual(authentication, {
@@ -789,6 +862,7 @@ describe("buildCloneAuth", () => {
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "github.com",
+      evictOnFailure: true,
       onAuthRequired: auth.onAuthRequired,
     });
     assert.deepStrictEqual(authentication, {
@@ -921,6 +995,7 @@ describe("buildCloneAuth", () => {
     assert.deepStrictEqual(auth, {
       credentialOps: credentials.credentialOps,
       host: "gitlab.com:8443",
+      evictOnFailure: false,
       onAuthRequired: auth.onAuthRequired,
     });
     assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });

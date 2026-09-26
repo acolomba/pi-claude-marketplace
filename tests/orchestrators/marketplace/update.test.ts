@@ -362,6 +362,7 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
         auth: {
           credentialOps,
           host: "gitlab.example.com",
+          evictOnFailure: false,
           onAuthRequired: state.fetchCalls[0]?.auth?.onAuthRequired,
         },
       },
@@ -409,6 +410,7 @@ test("marketplace update transport: classifies a providerless HTTP 500 as networ
         auth: {
           credentialOps,
           host: "gitlab.example.com",
+          evictOnFailure: false,
           onAuthRequired: state.fetchCalls[0]?.auth?.onAuthRequired,
         },
       },
@@ -490,6 +492,7 @@ test("marketplace update transport: leaves Device Flow idle for a public URL ref
         auth: {
           credentialOps,
           host: "gitlab.example.com",
+          evictOnFailure: false,
           onAuthRequired: state.fetchCalls[0]?.auth?.onAuthRequired,
         },
       },
@@ -665,6 +668,7 @@ test("MURL-03 + D-14: url source refreshes via fetch+forceUpdateRef+checkout car
     assert.deepStrictEqual(fetchedAuth, {
       credentialOps,
       host: "gitlab.example.com",
+      evictOnFailure: false,
       onAuthRequired: fetchedAuth?.onAuthRequired,
     });
   });
@@ -712,6 +716,7 @@ test("MURL-03: unpinned url refresh follows the default-branch head-advance path
     assert.deepStrictEqual(fetchedAuth, {
       credentialOps,
       host: "gitlab.example.com",
+      evictOnFailure: false,
       onAuthRequired: fetchedAuth?.onAuthRequired,
     });
   });
@@ -745,6 +750,7 @@ test("GAUTH-04: a cancelled credential lookup on a host with no Device Flow rend
     assert.deepStrictEqual(fetchedAuth, {
       credentialOps,
       host: "gitlab.example.com",
+      evictOnFailure: false,
       onAuthRequired: fetchedAuth?.onAuthRequired,
     });
     assert.equal(notifications.length, 1);
@@ -875,6 +881,7 @@ test("GAUTH-05: a cancelled Device Flow on a github.com url refresh renders {aut
     assert.deepStrictEqual(fetchedAuth, {
       credentialOps,
       host: "github.com",
+      evictOnFailure: true,
       onAuthRequired: fetchedAuth?.onAuthRequired,
     });
     assert.equal(notifications.length, 1);

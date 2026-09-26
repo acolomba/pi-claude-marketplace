@@ -59,6 +59,18 @@ export interface BuildAuthCallbacksOpts {
   credentialOps: CredentialOps;
   host: string;
   onAuthRequired: OnAuthRequiredFn;
+  /**
+   * Whether evicting a server-rejected credential for `host` is recoverable:
+   * true when `onAuthRequired` can mint a replacement, false when the only
+   * source for this host is the credential already in the user's helper.
+   * `onAuthFailure` evicts only when it is true (AUTH-07, GAUTH-04) -- on a
+   * host with no minting path the eviction is terminal and the value is
+   * generally unrecoverable, while a stale credential left in place costs the
+   * user one manual re-store. The orchestrator computes it; this module holds
+   * no provider knowledge (`platform/README.md`: platform/ may import from
+   * shared/ only).
+   */
+  evictOnFailure: boolean;
 }
 
 /**
@@ -80,8 +92,11 @@ export interface BuildAuthCallbacksOpts {
  *   `credentialOps.fill(opts.host)`; on hit, return the stored credential
  *   (AUTH-02 silent reuse). On miss, invoke `opts.onAuthRequired()`; success
  *   returns the new credential, failure returns `{ cancel: true }`.
- * - `onAuthFailure(url, cred)`: call `credentialOps.reject(opts.host, cred)`
- *   to evict the stale credential, then return `{ cancel: true }`.
+ * - `onAuthFailure(url, cred)`: when `opts.evictOnFailure` is true, call
+ *   `credentialOps.reject(opts.host, cred)` to evict the credential the server
+ *   rejected (AUTH-07), then return `{ cancel: true }`. When it is false, skip
+ *   the eviction -- routing the skip through `hookDebugLog` -- and return
+ *   `{ cancel: true }`.
  *
  * Discipline:
  *
@@ -100,6 +115,15 @@ export interface BuildAuthCallbacksOpts {
  * - `onAuthFailure` deliberately keeps an unused `_url`. It receives the
  *   credential in order to evict it, which means the credential has already
  *   been sent; a compare there would change nothing about what was disclosed.
+ *   What the seam does decide is what the eviction destroys, and that is
+ *   `opts.evictOnFailure`: isomorphic-git routes the SECOND 401 of one
+ *   operation to `onAuthFailure` rather than `onAuth`
+ *   (`node_modules/isomorphic-git/index.cjs`: `providedAuthBefore ?
+ *   onAuthFailure : onAuth`), so a stored credential the server declines
+ *   reaches this seam on every host that carries a bundle. Where a minting
+ *   path exists the eviction clears a stale value the next `onAuth` replaces;
+ *   where none exists it deletes the user's only copy of a secret their host
+ *   displayed once.
  * - CP-9 (no infinite retry): onAuthFailure ALWAYS returns
  *   `{ cancel: true }`. Inline Device Flow retries from this seam would
  *   re-enter the same code path and loop forever; instead, isomorphic-git's
@@ -191,6 +215,17 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
   }
 
   async function onAuthFailure(_url: string, cred: GitCredentials): Promise<GitCredentials> {
+    if (!opts.evictOnFailure) {
+      // AUTH-07 / GAUTH-04: eviction is for a credential something can
+      // re-mint. Here nothing can, so the stored value stays and the user
+      // keeps a recoverable failure. AUTH-09: name the host only.
+      hookDebugLog(
+        `onAuthFailure: keeping the stored credential for ${opts.host}, nothing can re-mint it`,
+        "auth",
+      );
+      return { cancel: true };
+    }
+
     try {
       await opts.credentialOps.reject(opts.host, cred);
     } catch (err) {
