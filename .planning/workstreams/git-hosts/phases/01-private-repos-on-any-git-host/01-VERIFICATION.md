@@ -35,6 +35,21 @@ human_verification:
     why_human: "Every phase test fakes `CredentialOps` at the memory boundary, and `tests/platform/git-credential.test.ts` fakes the subprocess. No offline test ever runs the real `git credential fill` against a real helper, and this machine currently has NO `credential.helper` configured at any scope (`git config --system/--global/--local --get-all credential.helper` all return nothing), so the operator must configure one and supply a real private remote. The only remaining unproven link in the chain is helper-subprocess -> real remote."
 ---
 
+> **Amended 2026-09-26, after the review fixes.** Every verdict below still holds, but two kinds of
+> detail in the evidence column are now as-of commit `3adb12c4` rather than current:
+>
+> - The cause line is quoted as `no credential stored for <host>; add one with git credential
+>   approve`. Review finding WR-03 widened it to `no credential was obtained for <host>; store one
+>   with: printf 'protocol=https\nhost=<host>\nusername=<user>\npassword=<token>\n\n' | git
+>   credential approve` — the old text asserted a specific cause for five outcomes that
+>   `credentialFill` collapses to `null`, and the old remedy was not executable as written.
+> - `update.ts` line numbers shifted. Cited ranges are pre-fix.
+>
+> Also landed after this report: CR-01 (`onAuthFailure` now evicts only where a Device Flow can
+> re-mint — `evictOnFailure` on the bundle) and WR-01 (`onAuth` requires `https:`). Neither changes
+> a verdict here; both narrow behavior the report described as unconditional.
+
+
 # Phase 1: Private repos on any git host — Verification Report
 
 **Phase Goal:** A Pi user can clone a private marketplace or plugin source over https from any git

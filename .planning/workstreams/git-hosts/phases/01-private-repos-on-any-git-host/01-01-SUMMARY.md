@@ -41,7 +41,7 @@ key-files:
     - tests/orchestrators/marketplace/add.test.ts
 
 key-decisions:
-  - "Cause-line wording: `no credential stored for ${host}; add one with git credential approve` — host interpolated, command named literally, one line, no credential field (AUTH-09)."
+  - "Cause-line wording (SUPERSEDED by review finding WR-03 — see 01-VERIFICATION.md's amendment banner for the live text): `no credential stored for ${host}; add one with git credential approve` — host interpolated, command named literally, one line, no credential field (AUTH-09)."
   - "No residual case for NO_PROVIDER_CAUSE was found; it was retired outright (D-1-04)."
   - "The update.ts guard reuses classifyGitTransportFailure rather than a second duck-type, because it already folds HttpError 401/403 and UserCanceledError into one reason."
   - "The always-true `...(auth !== undefined && { auth })` spreads on four plugin clone paths had to be dropped: eslint no-unnecessary-condition and sonarjs/different-types-comparison fail on them once buildCloneAuth is non-nullable. The plan predicted the coverage gate tolerated them, which is true, but not the lint gate."
