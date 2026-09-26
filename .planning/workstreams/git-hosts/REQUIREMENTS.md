@@ -26,10 +26,22 @@ helper is therefore invisible to this extension on every other host.
 - [ ] **GAUTH-05**: `github.com` and `gitlab.com` keep today's Device Flow behavior byte-for-behavior
   — same prompt, same memoization, same `NO_PROVIDER_CAUSE` surface where it still applies.
 - [ ] **GAUTH-06**: A credential resolved for one host is never offered to a different host. When
-  isomorphic-git invokes `onAuth` for a URL whose host differs from the bundle's bound host, the
-  callback cancels instead of returning the credential. This replaces PROV-04's
-  `undefined`-for-no-provider refusal as the cross-host leak guard (T-79-04), which GAUTH-03
-  necessarily retires.
+  `buildAuthCallbacks.onAuth` is invoked for a URL whose host differs from the bundle's bound
+  `host`, it cancels instead of returning the filled credential.
+
+  This guards the CALLER-side binding, not the redirect path. Verified while scoping, so that the
+  guard is built against the real exposure rather than the assumed one: `onAuth` is only ever
+  invoked by isomorphic-git with the caller's own URL (`index.cjs` `discover`, on 401/203 — never
+  a redirect target), and `simple-get@4.0.1` already deletes `authorization` and `cookie` on a
+  cross-host redirect (`node_modules/simple-get/index.js:57-60`). `credentialFill` emits
+  `protocol=https` + `host=` and never `path=`, so `git credential fill` is strictly host-keyed.
+  PROV-04's `undefined`-for-no-provider refusal was therefore never the thing preventing a
+  transport-level leak.
+
+  What it DOES protect: `onAuth` ignores its `url` argument today, so a bundle constructed for
+  host A would silently authenticate a clone of host B. PROV-04 caps that blast radius at two
+  hosts; GAUTH-03 removes the cap. The guard turns a caller-side mismatch into a cancel instead
+  of a credential disclosure, and makes the previously-ignored parameter load-bearing.
 
 ### URL Forms for Non-Conventional Git Endpoints
 
@@ -67,12 +79,22 @@ helper is therefore invisible to this extension on every other host.
 |---------|--------|
 | `.agents/plugins/marketplace.json` (Codex marketplace layout) | No upstream support: zero occurrences in the Claude Code 2.1.274 binary. Adding it would be a pi-only divergence to maintain forever. |
 | `.codex-plugin/plugin.json` (Codex plugin layout) | Same — no upstream contract to match. |
-| Per-host provider descriptors for self-hosted instances (Gitea, Forgejo, self-hosted GitLab) | GAUTH-03 makes them unnecessary. A hostname literal in a shipped registry serves exactly one deployment. |
+| Per-host provider descriptors for self-hosted instances (Gitea, Forgejo, self-hosted GitLab) | GAUTH-03 makes them unnecessary. A hostname literal in a registry we ship serves exactly one deployment. |
 | Device Flow for hosts that do not implement RFC 8628 | There is no flow to run. The stored-credential path is the whole answer for those hosts. |
 | Runtime/per-source provider configuration | PROV-07, already deferred to v2. |
 | SSH transport | isomorphic-git over https only (D-18/D-21). Unchanged by this milestone. |
 
 ## Traceability
+
+Populated at roadmap creation (2026-09-25). Full phase definitions, success criteria and the
+milestone-wide gate constraints: `.planning/workstreams/git-hosts/ROADMAP.md`.
+
+Phase numbering restarts at 1 — `git-hosts` is a fresh workstream and does not continue the
+repo's shared counter.
+
+- **Phase 1** — Private repos on any git host
+- **Phase 2** — Endpoints that answer only at the verbatim URL
+- **Phase 3** — `marketplace add` recovers from its own leftover clone
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
@@ -90,8 +112,13 @@ helper is therefore invisible to this extension on every other host.
 **Coverage:**
 
 - v1 requirements: 10 total
-- Mapped to phases: 10
+- Mapped to phases: 10 (Phases 1-3)
 - Unmapped: 0
+- Duplicated across phases: 0
+
+GATE-01 is mapped to Phase 3 because that is where the whole gate surface is finally measured, but
+it is enforced as a milestone-wide constraint at every phase boundary (ROADMAP.md
+§ Milestone-wide constraints).
 
 ---
 
