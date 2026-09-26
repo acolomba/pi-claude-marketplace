@@ -86,12 +86,20 @@ export function hostFromCloneUrl(cloneUrl: string, kind: "github" | "url" | "git
 
 /**
  * The cause line for a host whose only auth path is the user's git credential
- * helper (D-1-01, GAUTH-04). The helper was consulted and returned nothing, so
- * the line names the host and the command that stores one. AUTH-09: it
- * interpolates the host and nothing else.
+ * helper (D-1-01, GAUTH-04). The helper was consulted and produced no usable
+ * credential, so the line names the host and the command that stores one.
+ * AUTH-09: it interpolates the host and nothing else.
+ *
+ * It says "obtained" rather than "stored" because `credentialFill` collapses
+ * five outcomes to `null` (`platform/git-credential.ts`): a genuine helper
+ * miss, `git` absent from PATH, the credential-subprocess timeout, a non-zero
+ * helper exit, and an exit-0 helper that emitted no username/password pair. A
+ * user whose credential IS stored behind a slow helper must not be told it is
+ * not there. Which of the five occurred is diagnosable only through
+ * `hookDebugLog`.
  */
 export const NO_STORED_CREDENTIAL_CAUSE: (host: string) => string = (host) =>
-  `no credential stored for ${host}; add one with git credential approve`;
+  `no credential was obtained for ${host}; add one with git credential approve`;
 
 /**
  * Whether the provider registry claims `host` with a Device Flow.

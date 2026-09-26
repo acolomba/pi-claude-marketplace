@@ -787,7 +787,7 @@ describe("resolveRemoteRef", () => {
       await Promise.resolve();
       return {
         ok: false,
-        reason: "no credential stored for git.example.invalid",
+        reason: "no credential was obtained for git.example.invalid",
         authAttempted: true,
       };
     };

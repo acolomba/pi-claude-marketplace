@@ -350,7 +350,7 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Some operations have failed.\n\n⊘ urlmp-403 [project] (failed)\n  ⊘ urlmp-403 (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-403". -> HTTP 403 from fetch -> no credential stored for gitlab.example.com; add one with git credential approve',
+          'Some operations have failed.\n\n⊘ urlmp-403 [project] (failed)\n  ⊘ urlmp-403 (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-403". -> HTTP 403 from fetch -> no credential was obtained for gitlab.example.com; add one with git credential approve',
         severity: "error",
       },
     ]);
@@ -770,7 +770,7 @@ test("GAUTH-04: a cancelled credential lookup on a host with no Device Flow rend
     // child's cause-chain trailer.
     assert.match(
       first.message,
-      /cause:.*no credential stored for gitlab\.example\.com; add one with git credential approve/,
+      /cause:.*no credential was obtained for gitlab\.example\.com; add one with git credential approve/,
     );
   });
 });
@@ -813,7 +813,7 @@ test("GAUTH-04: a 401 challenge on a host with no Device Flow carries the same s
     );
     assert.match(
       first.message,
-      /cause:.*no credential stored for gitlab\.example\.com; add one with git credential approve/,
+      /cause:.*no credential was obtained for gitlab\.example\.com; add one with git credential approve/,
     );
   });
 });
@@ -894,7 +894,7 @@ test("GAUTH-05: a cancelled Device Flow on a github.com url refresh renders {aut
     );
     // On a registry host the story is a declined or expired Device Flow, not a
     // missing stored credential, so no cause line is attached.
-    assert.equal(first.message.includes("no credential stored for"), false);
+    assert.equal(first.message.includes("no credential was obtained for"), false);
   });
 });
 
