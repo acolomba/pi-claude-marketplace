@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import claudeMarketplaceExtension from "../../extensions/pi-claude-marketplace/index.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { resolvePiRuntime } from "../pi-runtime.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import { PINNED_SHA } from "./_pinned-sha.ts";
@@ -177,15 +178,15 @@ export async function runPiRuntimeSmoke(): Promise<{
   const cwd = path.join(root, "project");
   const agentDir = path.join(home, ".pi", "agent");
   const sessionDir = path.join(agentDir, "sessions");
-  const bin = path.join(REPO_ROOT, "node_modules", ".bin", "pi");
   const extension = path.join(REPO_ROOT, "extensions", "pi-claude-marketplace", "index.ts");
 
   try {
     await mkdir(home, { recursive: true });
     await mkdir(cwd, { recursive: true });
+    const runtime = resolvePiRuntime(REPO_ROOT);
     const { stdout, stderr } = await execFileAsync(
-      bin,
-      ["--offline", "--no-extensions", "--extension", extension, "--help"],
+      process.execPath,
+      [runtime.cliPath, "--offline", "--no-extensions", "--extension", extension, "--help"],
       {
         cwd,
         env: {

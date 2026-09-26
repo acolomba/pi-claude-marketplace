@@ -58,6 +58,7 @@ export interface LockedStateTransactionDeps {
  *
  * @param locations  ScopedLocations for the target scope (`locationsFor(scope, cwd)`)
  * @param mutate     async or sync closure that receives the fresh state and may mutate it
+ * @param deps       optional state I/O replacements; production callers omit them
  * @returns          the closure's return value (NOT the state)
  *
  * On any throw inside `mutate`, the original error propagates and
@@ -66,11 +67,12 @@ export interface LockedStateTransactionDeps {
 export async function withStateGuard<T>(
   locations: ScopedLocations,
   mutate: (state: ExtensionState) => Promise<T> | T,
+  deps?: LockedStateTransactionDeps,
 ): Promise<T> {
   return withScopeLock(locations, async () => {
-    const fresh = await loadState(locations.extensionRoot);
+    const fresh = await (deps?.loadState ?? loadState)(locations.extensionRoot);
     const result = await mutate(fresh);
-    await saveState(locations.extensionRoot, fresh);
+    await (deps?.saveState ?? saveState)(locations.extensionRoot, fresh);
     return result;
   });
 }

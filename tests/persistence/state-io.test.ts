@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, watch, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -45,6 +46,17 @@ async function createExtensionRoot(t: TestContext, prefix: string): Promise<stri
   const extensionRoot = path.join(scopeRoot, "pi-claude-marketplace");
   await mkdir(extensionRoot, { recursive: true });
   return extensionRoot;
+}
+
+/**
+ * Waits for `loadState`'s background persist, which it does not await: the
+ * file is atomically replaced, so its bytes change exactly once. The case's
+ * own timeout bounds the wait.
+ */
+async function waitForReplacedBytes(stateJsonPath: string, storedBytes: string): Promise<void> {
+  while ((await readFile(stateJsonPath, "utf8")) === storedBytes) {
+    await delay(5);
+  }
 }
 
 test("publishes the exact frozen default state", () => {
@@ -504,28 +516,11 @@ test(
 }
 `;
     await writeFile(stateJsonPath, JSON.stringify(storedState));
-    const controller = new AbortController();
-    t.after(() => {
-      controller.abort();
-    });
-    const changes = watch(extensionRoot, { signal: controller.signal })[Symbol.asyncIterator]();
-    const stateJsonChanged = (async () => {
-      while (true) {
-        const change = await changes.next();
-        if (change.done) {
-          throw new Error("state.json watcher ended before persistence");
-        }
-
-        if (change.value.filename === "state.json") {
-          return change.value;
-        }
-      }
-    })();
+    const storedMetadata = await stat(stateJsonPath, { bigint: true });
 
     // act
     const state = await loadState(extensionRoot);
-    const change = await stateJsonChanged;
-    await changes.return?.();
+    await waitForReplacedBytes(stateJsonPath, JSON.stringify(storedState));
     const persistedBytes = await readFile(stateJsonPath, "utf8");
     const persistedMetadata = await stat(stateJsonPath, { bigint: true });
     const replayedState = await loadState(extensionRoot);
@@ -533,7 +528,8 @@ test(
     const replayedMetadata = await stat(stateJsonPath, { bigint: true });
 
     // assert
-    assert.deepStrictEqual({ ...change }, { eventType: "rename", filename: "state.json" });
+    // A new inode is the atomic rename's signature; an in-place write keeps it.
+    assert.notStrictEqual(persistedMetadata.ino, storedMetadata.ino);
     assert.deepStrictEqual(state, expectedState);
     assert.strictEqual(persistedBytes, expectedBytes);
     assert.deepStrictEqual(replayedState, expectedState);
@@ -1036,28 +1032,10 @@ test(
 `;
     await writeFile(path.join(scopeRoot, "claude-plugins.json"), "{}");
     await writeFile(stateJsonPath, JSON.stringify(storedState));
-    const controller = new AbortController();
-    t.after(() => {
-      controller.abort();
-    });
-    const changes = watch(extensionRoot, { signal: controller.signal })[Symbol.asyncIterator]();
-    const stateJsonChanged = (async () => {
-      while (true) {
-        const change = await changes.next();
-        if (change.done) {
-          throw new Error("state.json watcher ended before persistence");
-        }
-
-        if (change.value.filename === "state.json") {
-          return;
-        }
-      }
-    })();
 
     // act
     const state = await loadState(extensionRoot);
-    await stateJsonChanged;
-    await changes.return?.();
+    await waitForReplacedBytes(stateJsonPath, JSON.stringify(storedState));
     const persistedBytes = await readFile(stateJsonPath, "utf8");
 
     // assert

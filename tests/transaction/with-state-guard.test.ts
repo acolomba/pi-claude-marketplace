@@ -291,6 +291,43 @@ test("automatically saves a successful state guard callback and returns its comp
   assert.strictEqual(lockHeld, false);
 });
 
+test("routes a state guard's load and automatic save through injected state I/O", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "state-guard-injected-io-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const locations = locationsFor("project", directory);
+  const persistenceLog: string[] = [];
+  const dependencies = {
+    loadState: (extensionRoot: string): Promise<ExtensionState> => {
+      persistenceLog.push(`load ${extensionRoot}`);
+      return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
+    },
+    saveState: (extensionRoot: string, state: ExtensionState): Promise<void> => {
+      persistenceLog.push(`save ${extensionRoot} ${JSON.stringify(state)}`);
+      return Promise.resolve();
+    },
+  } satisfies LockedStateTransactionDeps;
+
+  // act
+  const callbackOutcome = await withStateGuard(
+    locations,
+    (state) => {
+      state.lastReconciledExtensionVersion = "injected-save";
+      return "committed" as const;
+    },
+    dependencies,
+  );
+  const stateBytes = await readOptionalStateBytes(locations.stateJsonPath);
+
+  // assert
+  assert.strictEqual(callbackOutcome, "committed");
+  assert.deepStrictEqual(persistenceLog, [
+    `load ${locations.extensionRoot}`,
+    `save ${locations.extensionRoot} {"schemaVersion":2,"marketplaces":{},"lastReconciledExtensionVersion":"injected-save"}`,
+  ]);
+  assert.strictEqual(stateBytes, undefined);
+});
+
 test("keeps prior bytes after a state guard callback error and releases for retry", async (t) => {
   // arrange
   const directory = await mkdtemp(path.join(tmpdir(), "state-guard-callback-error-"));

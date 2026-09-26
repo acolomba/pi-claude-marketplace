@@ -799,12 +799,14 @@ test("folds case when deduping declared paths on a case-insensitive platform", a
   // Two real directories differing only in case, each holding a script of the
   // same name: on a case-insensitive filesystem these are one directory, and
   // the folded key is what collapses them. Without the fold both scripts are
-  // discovered and collide on one generated name.
+  // discovered and collide on one generated name. Where the host filesystem
+  // is itself case-insensitive (macOS by default) the two spellings already
+  // name one directory, so the second mkdir must tolerate it.
   const lowerDir = path.join(pluginRoot, "workflows");
   const upperDir = path.join(pluginRoot, "WORKFLOWS");
   const scriptFile = path.join(lowerDir, "greet.js");
   await mkdir(lowerDir);
-  await mkdir(upperDir);
+  await mkdir(upperDir, { recursive: true });
   await writeFile(scriptFile, NAMED_GREET);
   await writeFile(path.join(upperDir, "greet.js"), NAMED_GREET);
   const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
@@ -831,6 +833,47 @@ test("folds case when deduping declared paths on a case-insensitive platform", a
   assert.deepStrictEqual(
     discovery.discovered.map((record) => record.scriptFile),
     [scriptFile],
+  );
+  assert.deepStrictEqual(discovery.warnings, []);
+});
+
+// Redefines `process.platform` like the case above, under the same sequencing
+// guarantee. The two spellings name two directories on a case-sensitive host
+// and one directory on a case-insensitive one; without a fold both are walked
+// either way, so the outcome is the same on every host.
+test("keeps case-distinct declared paths apart on a case-sensitive platform", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-case-kept-");
+  const lowerDir = path.join(pluginRoot, "workflows");
+  const upperDir = path.join(pluginRoot, "WORKFLOWS");
+  await mkdir(lowerDir);
+  await mkdir(upperDir, { recursive: true });
+  await writeFile(path.join(lowerDir, "greet.js"), NAMED_GREET);
+  await writeFile(path.join(upperDir, "greet.js"), NAMED_GREET);
+  const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
+
+  if (platformDescriptor === undefined) {
+    throw new Error("process.platform descriptor is unavailable");
+  }
+
+  t.after(() => {
+    Object.defineProperty(process, "platform", platformDescriptor);
+  });
+  Object.defineProperty(process, "platform", { ...platformDescriptor, value: "linux" });
+
+  const resolved = resolvedPlugin(pluginRoot, ["workflows", "WORKFLOWS"]);
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    discovery.discovered.map((record) => record.scriptFile),
+    [path.join(lowerDir, "greet.js"), path.join(upperDir, "greet.js")],
   );
   assert.deepStrictEqual(discovery.warnings, []);
 });

@@ -104,6 +104,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
 
 /** Runs one prepared update target for the update flow. */
@@ -977,27 +978,23 @@ async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> 
   return swapPluginUpdate(args, preflight);
 }
 
-/** Binds update enumeration, preflight, swap, cascade, and lifecycle routing once. */
+/**
+ * Binds update enumeration, preflight, swap, cascade, and lifecycle routing once.
+ * `stateTransaction` replaces the state I/O of every locked save the update
+ * makes; production callers omit it.
+ */
 export function createPluginUpdateOperations(
   hooksRouting: UpdateHooksRouting,
   completionCache: CompletionCache,
+  stateTransaction?: LockedStateTransactionDeps,
 ): PluginUpdateOperations {
+  const run: typeof runPluginUpdate =
+    stateTransaction === undefined
+      ? runPluginUpdate
+      : (args) => runPluginUpdate({ ...args, stateTransaction });
   const updatePlugins: UpdatePluginsFn = (options) =>
-    updatePluginsWith(
-      options,
-      hooksRouting,
-      completionCache,
-      runPluginUpdate,
-      composeUpdateCascade,
-    );
+    updatePluginsWith(options, hooksRouting, completionCache, run, composeUpdateCascade);
   const pluginUpdate: PluginUpdateFn = (plugin, marketplace, scope) =>
-    updateSinglePluginWith(
-      hooksRouting,
-      completionCache,
-      runPluginUpdate,
-      plugin,
-      marketplace,
-      scope,
-    );
+    updateSinglePluginWith(hooksRouting, completionCache, run, plugin, marketplace, scope);
   return { updatePlugins, pluginUpdate };
 }

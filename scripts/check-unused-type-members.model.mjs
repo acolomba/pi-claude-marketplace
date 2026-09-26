@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 
 import ts from "typescript";
@@ -183,7 +183,10 @@ function createOverlayHost(compilerOptions, replacements) {
  * failure: an analysis run over a partly-unreadable program has no verdict to give.
  */
 export function createProjectProgram({ root, overlayPath }) {
-  const projectRoot = path.resolve(root);
+  // The compiler reports module-resolved files by their real path, so a root
+  // reached through a symlink (macOS's /var -> /private/var temp directory)
+  // must be resolved too, or those files fall outside the project.
+  const projectRoot = realpathSync(path.resolve(root));
   const parsed = parseConfiguration(projectRoot);
   const replacements = readOverlay(projectRoot, overlayPath);
   const program = ts.createProgram(
