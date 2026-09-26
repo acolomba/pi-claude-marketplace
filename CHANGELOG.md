@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- A hook matcher that lists several tools now keeps the tools Pi supports and drops only the ones it does not. A matcher with no supported tool left still drops. Thanks to @fank, who reported #217. (#217)
+- A hook matcher that lists several tools now keeps the tools Pi supports and drops only the ones it does not. A matcher with no supported tool left still drops. Thanks to @fank, who reported #217. (#219)
 - Pi Coding Agent 0.86.1 is now required. This version supports workflow child tools with the current `@quintinshaw/pi-dynamic-workflows` engine.
 - A plugin that ships workflow scripts now installs them as workflows the Pi workflow engine can load. (#205)
   - The extension reports and skips a workflow script it cannot read, one with no usable metadata, one with no literal `meta.name`, or one over 512 KiB. It installs the rest of the plugin. Claude Code skips the same scripts.
