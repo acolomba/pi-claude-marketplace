@@ -94,10 +94,9 @@ export interface BuildAuthCallbacksOpts {
  *   `cookie` headers before following a cross-host redirect; and
  *   `platform/git-credential.ts::credentialFill` emits `protocol` and `host`
  *   with no `path` line, so the helper lookup is strictly host-keyed. This
- *   compare is what bounds the disclosure surface now that `buildAuthForHost`
- *   returns a bundle for every host: PROV-04 / T-79-04 previously capped that
- *   surface at the two hosts in the provider registry, and the compare
- *   replaces the cap with the check the cap was standing in for.
+ *   compare is what bounds the disclosure surface, because `buildAuthForHost`
+ *   returns a bundle for every host and the bound host is therefore the only
+ *   thing that decides which URL a credential may answer (PROV-04 / T-79-04).
  * - `onAuthFailure` deliberately keeps an unused `_url`. It receives the
  *   credential in order to evict it, which means the credential has already
  *   been sent; a compare there would change nothing about what was disclosed.

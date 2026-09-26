@@ -159,8 +159,9 @@ async function checkoutPinWithRefetch(
  *
  * `auth` is an optional bundle forwarded to `gitOps.clone`. When omitted the
  * clone is byte-identical to the public-only path (PROV-02); when present the
- * provider's credentials thread into the clone so a private source on a
- * registered host authenticates (PROV-03/D-79-01).
+ * bundle's credentials thread into the clone so a private source on the
+ * bundle's own host authenticates, whichever host that is (PROV-03/D-79-01,
+ * GAUTH-03).
  */
 export async function materializePluginClone(args: {
   locations: ScopedLocations;
