@@ -51,6 +51,8 @@ void ({} satisfies { readonly retired?: GitPlatform.ListRemotesOptions });
 
 const HOST = "git.example.invalid";
 const REMOTE_URL = `https://${HOST}/owner/repo.git`;
+const OTHER_HOST = "other.example.invalid";
+const OTHER_REMOTE_URL = `https://${OTHER_HOST}/owner/repo.git`;
 const OID_MAIN = "1111111111111111111111111111111111111111";
 const OID_DEV = "2222222222222222222222222222222222222222";
 const OID_TAG = "3333333333333333333333333333333333333333";
@@ -181,9 +183,10 @@ function response(
 function installRemoteTransport(
   t: TestContext,
   refs: readonly string[],
-  options: { readonly challengeOnce?: boolean } = {},
+  options: { readonly challengeOnce?: boolean; readonly remoteUrl?: string } = {},
 ): RecordedHttpRequest[] {
   const requests: RecordedHttpRequest[] = [];
+  const remoteUrl = options.remoteUrl ?? REMOTE_URL;
   let challenged = false;
 
   t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
@@ -195,7 +198,7 @@ function installRemoteTransport(
       body: withoutAgentPacket(body),
     });
 
-    const infoUrl = `${REMOTE_URL}/info/refs?service=git-upload-pack`;
+    const infoUrl = `${remoteUrl}/info/refs?service=git-upload-pack`;
     if (request.url === infoUrl && request.method === "GET") {
       if (options.challengeOnce === true && !challenged) {
         challenged = true;
@@ -211,7 +214,7 @@ function installRemoteTransport(
       );
     }
 
-    if (request.url === `${REMOTE_URL}/git-upload-pack` && request.method === "POST") {
+    if (request.url === `${remoteUrl}/git-upload-pack` && request.method === "POST") {
       return response(
         request.url,
         200,
@@ -379,6 +382,19 @@ function isExpectedDiscoveryError(error: unknown, caller: "git.clone" | "git.fet
     response: "offline",
   });
   return true;
+}
+
+function isUserCanceledError(error: unknown): boolean {
+  assert.ok(error instanceof git.Errors.UserCanceledError);
+  assert.strictEqual(error.code, "UserCanceledError");
+  return true;
+}
+
+/** The urls of the recorded requests that carried a credential header. */
+function requestsCarryingAuthorization(
+  requests: readonly RecordedHttpRequest[],
+): readonly string[] {
+  return requests.filter((r) => "Authorization" in r.headers).map((r) => r.url);
 }
 
 function expectedPublicRequests(): readonly [RecordedHttpRequest, RecordedHttpRequest] {
@@ -757,6 +773,78 @@ describe("resolveRemoteRef", () => {
         },
       },
     ]);
+  });
+
+  test("cancels a challenge the bundle cannot answer and sends no credential", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, FULL_ADVERTISEMENT, { challengeOnce: true });
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const onAuthRequired: OnAuthRequiredFn = async () => {
+      await Promise.resolve();
+      return {
+        ok: false,
+        reason: "no credential stored for git.example.invalid",
+        authAttempted: true,
+      };
+    };
+
+    // act
+    const resolution = resolveRemoteRef({
+      url: REMOTE_URL,
+      ref: "main",
+      auth: {
+        credentialOps: credentials.credentialOps,
+        host: HOST,
+        onAuthRequired,
+      },
+    });
+
+    // assert
+    await assert.rejects(resolution, isUserCanceledError);
+    assert.deepStrictEqual(credentials.calls, {
+      fill: [{ host: HOST }],
+      approve: [],
+      reject: [],
+    });
+    assert.deepStrictEqual(requests, [expectedPublicRequests()[0]]);
+    assert.deepStrictEqual(requestsCarryingAuthorization(requests), []);
+  });
+
+  test("cancels a challenge from a url on another host without querying the helper", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, FULL_ADVERTISEMENT, {
+      challengeOnce: true,
+      remoteUrl: OTHER_REMOTE_URL,
+    });
+    const credentials = createCredentialOpsFake({
+      boundary: "memory",
+      credentials: [[HOST, { username: "user", password: "secret" }]],
+    });
+    const onAuthRequired: OnAuthRequiredFn = () => {
+      throw new Error("interactive auth is forbidden on a host mismatch");
+    };
+
+    // act
+    const resolution = resolveRemoteRef({
+      url: OTHER_REMOTE_URL,
+      ref: "main",
+      auth: {
+        credentialOps: credentials.credentialOps,
+        host: HOST,
+        onAuthRequired,
+      },
+    });
+
+    // assert
+    await assert.rejects(resolution, isUserCanceledError);
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+    assert.deepStrictEqual(requests, [
+      {
+        ...expectedPublicRequests()[0],
+        url: `${OTHER_REMOTE_URL}/info/refs?service=git-upload-pack`,
+      },
+    ]);
+    assert.deepStrictEqual(requestsCarryingAuthorization(requests), []);
   });
 });
 
