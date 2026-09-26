@@ -77,11 +77,7 @@ export interface BuildAuthCallbacksOpts {
 
 /**
  * Build the `{ onAuth, onAuthFailure }` pair consumed by isomorphic-git's
- * `clone` and `fetch`. The factory owns a closure-scoped
- * `deviceFlowAttempted` flag (set when `onAuthRequired` returns
- * `{ ok: true }`) that documents whether interactive auth has run; the
- * flag is reference-only for clarity / future-proofing -- onAuthFailure
- * always returns `{ cancel: true }` regardless (CP-9 below).
+ * `clone` and `fetch`.
  *
  * Behavior:
  *
@@ -168,14 +164,6 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
   onAuth: (url: string) => Promise<GitCredentials>;
   onAuthFailure: (url: string, cred: GitCredentials) => Promise<GitCredentials>;
 } {
-  // CP-9 future-proofing note: `deviceFlowAttempted` is set to true after a
-  // successful onAuthRequired call so a later refinement could differentiate
-  // a stale-keychain rejection (no Device Flow yet) from a post-DF
-  // rejection. The current implementation does NOT branch on the flag --
-  // onAuthFailure unconditionally returns { cancel: true } because retrying
-  // Device Flow inline from this seam would re-enter the same code path
-  // (isomorphic-git's next call invokes onAuth, which falls through to
-  // Device Flow naturally on a fill miss).
   async function onAuth(url: string): Promise<GitCredentials> {
     try {
       // GAUTH-06 / D-1-03: refuse before the lookup, so a foreign URL does not
