@@ -155,12 +155,13 @@ Plans:
      the Device Flow's `notifyFn`, which the no-provider closure does not need, so the milestone's
      "any git host" prose is broader than what the cascade delivers. Decide explicitly.
   6. Phase 1's deferred runtime UAT is closed or explicitly carried into the next milestone.
-     `01-VERIFICATION.md` is `human_needed` on exactly one link: `DEFAULT_CREDENTIAL_OPS`
-     (`createCredentialOps({spawn: NODE_CREDENTIAL_SPAWN})`) against a REAL `git credential`
-     helper. Every automated test injects an in-memory fake, and this machine has no
-     `credential.helper` at `--system`, `--global` or `--local`, so the positive control cannot run
-     without operator setup. Only Phase 1 SC1 rests on it; SC2-SC5 do not. Paste-ready commands are
-     in `01-VERIFICATION.md`. Do not mark this passed on the strength of offline evidence.
+     The `DEFAULT_CREDENTIAL_OPS`-against-a-real-helper link is CLOSED (2026-09-26) by a
+     `GIT_CONFIG_*`-scoped throwaway `store` helper, with its negative control run first — see the
+     amendment banner in `01-VERIFICATION.md`. What remains is ONE end-to-end run: a private repo
+     on a non-registry host with a real PAT, cloned through `marketplace add` or `plugin install`.
+     Every seam in that chain is individually proven with the real component; their composition in
+     one process against one real server is not. Only Phase 1 SC1 rests on it; SC2-SC6 do not. Do
+     not mark it passed on the strength of the link-by-link evidence.
   7. `PROJECT.md`'s D-79-03 row is amended. Its OUTCOME still holds — `add` and `install` show a
      bare `(failed) {authentication required}` row and only `update` carries a cause line, which
      is a recorded user checkpoint (2026-07-11) this milestone does not revisit. Its stated

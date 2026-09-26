@@ -49,6 +49,37 @@ human_verification:
 > re-mint — `evictOnFailure` on the bundle) and WR-01 (`onAuth` requires `https:`). Neither changes
 > a verdict here; both narrow behavior the report described as unconditional.
 
+> **SC1's `DEFAULT_CREDENTIAL_OPS` link is now CLOSED (2026-09-26).** The report called this
+> untestable without operator setup because no `credential.helper` is configured at any scope. It
+> is testable without touching the operator's config: a throwaway `store` helper scoped through
+> `GIT_CONFIG_*` exercises the real `createCredentialOps({spawn: NODE_CREDENTIAL_SPAWN})` against a
+> real `git credential` subprocess. Run, with the negative control FIRST so a pass cannot be
+> vacuous:
+>
+> ```bash
+> S=$(mktemp -d); : > "$S/creds.store"; chmod 600 "$S/creds.store"
+> GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=credential.helper \
+>   GIT_CONFIG_VALUE_0="store --file=$S/creds.store" \
+>   node --experimental-strip-types <harness>   # imports DEFAULT_CREDENTIAL_OPS by absolute path
+> ```
+>
+> Measured: (A) `fill` before anything stored -> `null`; (B) `approve` then `fill` -> the exact
+> `{username, password}` pair; (C) `fill` for a DIFFERENT host -> `null`; (D) `fill` after `reject`
+> -> `null`. Exit 0. A relative import inside the harness resolves against the script's directory,
+> not the cwd — import by absolute path.
+>
+> (C) is independent evidence for the host-keying that GAUTH-06 rests on, which was previously only
+> inferred from `credentialFill` emitting no `path=` line.
+>
+> **What remains open, and why the status stays `human_needed`:** every seam in SC1's chain is now
+> proven with the REAL component — `fill` is reached for an unregistered host (call-count
+> assertions), the real helper yields a `{username, password}` pair (above), and real isomorphic-git
+> turns such a pair into an `Authorization: Basic` header (`tests/platform/git.test.ts`). What has
+> never run is the three composed in ONE process against ONE real private remote on a non-registry
+> host. That needs a repo and a PAT only the operator has. Compositions are where this milestone's
+> surprises actually lived — the dead `isAuthChallengeError` guard, the lint gate the spike never
+> ran, and the `onAuthFailure` half of a pair nobody reasoned about — so this is not a formality.
+
 
 # Phase 1: Private repos on any git host — Verification Report
 
